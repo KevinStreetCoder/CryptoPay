@@ -102,7 +102,7 @@ export function LoadingScreen() {
           letterSpacing: -0.5,
         }}
       >
-        M-Crypto
+        CryptoPay
       </Text>
 
       <Text
@@ -113,7 +113,7 @@ export function LoadingScreen() {
           marginTop: 8,
         }}
       >
-        Crypto to M-Pesa, instantly
+        Pay bills with crypto, instantly
       </Text>
     </View>
   );

@@ -1,8 +1,8 @@
-# M-Crypto
+# CryptoPay
 
 **Pay any Kenyan bill with cryptocurrency — instantly.**
 
-M-Crypto bridges cryptocurrency and Kenya's M-Pesa ecosystem, enabling users to pay Paybill numbers, Till numbers, and send money using USDT, BTC, ETH, and SOL. No more selling crypto on P2P, waiting for KES, then manually paying bills.
+CryptoPay bridges cryptocurrency and Kenya's M-Pesa ecosystem, enabling users to pay Paybill numbers, Till numbers, and send money using USDT, BTC, ETH, and SOL. No more selling crypto on P2P, waiting for KES, then manually paying bills.
 
 ```
 Paybill Number → Amount (KES) → Select Crypto → Done ✅
@@ -23,7 +23,7 @@ Kenya has **40M+ M-Pesa users** and a rapidly growing crypto community (**733K+ 
 
 ## The Solution
 
-M-Crypto reduces this to **one step, 30 seconds, 1.5% fee**:
+CryptoPay reduces this to **one step, 30 seconds, 1.5% fee**:
 
 - Enter your Paybill/Till number and amount
 - We lock the exchange rate for 30 seconds
@@ -239,7 +239,7 @@ Built with a dark-mode-first fintech design language inspired by M-Pesa, Cash Ap
 
 ## Regulatory
 
-M-Crypto is designed for compliance with Kenya's **Virtual Asset Service Providers (VASP) Act 2025**:
+CryptoPay is designed for compliance with Kenya's **Virtual Asset Service Providers (VASP) Act 2025**:
 
 - KYC tiered verification (phone → ID → KRA PIN → enhanced DD)
 - AML transaction monitoring and daily limits

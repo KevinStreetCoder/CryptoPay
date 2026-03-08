@@ -172,9 +172,9 @@ export default function ProfileScreen() {
         <Text
           className="text-textMuted text-xs font-inter text-center mt-2 mb-6"
           maxFontSizeMultiplier={1.3}
-          accessibilityLabel="M-Crypto version 1.0.0"
+          accessibilityLabel="CryptoPay version 1.0.0"
         >
-          M-Crypto v1.0.0
+          CryptoPay v1.0.0
         </Text>
       </ScrollView>
     </SafeAreaView>

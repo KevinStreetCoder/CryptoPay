@@ -1,12 +1,12 @@
 {
   "expo": {
-    "name": "M-Crypto",
-    "slug": "m-crypto",
+    "name": "CryptoPay",
+    "slug": "cryptopay",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "scheme": "mcrypto",
+    "scheme": "cryptopay",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -14,10 +14,10 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.mcrypto.app"
+      "bundleIdentifier": "com.cryptopay.app"
     },
     "android": {
-      "package": "com.mcrypto.app",
+      "package": "com.cryptopay.app",
       "adaptiveIcon": {
         "backgroundColor": "#0F172A",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -27,7 +27,8 @@
     },
     "web": {
       "favicon": "./assets/favicon.png",
-      "bundler": "metro"
+      "bundler": "metro",
+      "name": "CryptoPay"
     },
     "plugins": [
       "expo-router",

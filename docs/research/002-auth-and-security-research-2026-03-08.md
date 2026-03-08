@@ -93,7 +93,7 @@ POST /mpesa/stkpush/v1/processrequest
   "PartyA": "254712345678",  // customer phone
   "PartyB": "174379",         // your shortcode
   "PhoneNumber": "254712345678",
-  "CallBackURL": "https://api.mcrypto.co.ke/api/v1/mpesa/callback/stk/",
+  "CallBackURL": "https://api.cryptopay.co.ke/api/v1/mpesa/callback/stk/",
   "AccountReference": "MCrypto",  // max 12 chars
   "TransactionDesc": "Deposit"    // max 13 chars
 }
@@ -181,8 +181,8 @@ POST /mpesa/b2b/v1/paymentrequest
   "PartyB": "888880",                   // target Paybill
   "AccountReference": "12345678",       // account at target
   "Remarks": "CryptoPay payment",
-  "QueueTimeOutURL": "https://api.mcrypto.co.ke/api/v1/mpesa/timeout/b2b/",
-  "ResultURL": "https://api.mcrypto.co.ke/api/v1/mpesa/callback/b2b/"
+  "QueueTimeOutURL": "https://api.cryptopay.co.ke/api/v1/mpesa/timeout/b2b/",
+  "ResultURL": "https://api.cryptopay.co.ke/api/v1/mpesa/callback/b2b/"
 }
 ```
 
