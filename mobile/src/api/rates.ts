@@ -19,6 +19,17 @@ export interface Rate {
   updated_at: string;
 }
 
+export interface RateHistoryPoint {
+  timestamp: string;
+  rate: string;
+}
+
+export interface RateHistoryResponse {
+  currency: string;
+  period: string;
+  data: RateHistoryPoint[];
+}
+
 export interface Quote {
   quote_id: string;
   currency: string;
@@ -42,6 +53,8 @@ export const ratesApi = {
     api.get<Quote>("/rates/quote/", { params: { amount, from, to } }),
   lockRate: (data: { currency: string; kes_amount: string }) =>
     api.post<Quote>("/rates/quote/", data),
+  getRateHistory: (currency: string, period: string = "7d") =>
+    api.get<RateHistoryResponse>("/rates/history/", { params: { currency, period } }),
 };
 
 // Normalize API response to the Rate shape used by the app

@@ -25,7 +25,13 @@ import { useTransactions } from "../../src/hooks/useTransactions";
 import { useAuth } from "../../src/stores/auth";
 import { ratesApi, Rate, normalizeRate } from "../../src/api/rates";
 import { Transaction, getTxKesAmount } from "../../src/api/payments";
-import { colors, shadows } from "../../src/constants/theme";
+import { colors, shadows, CURRENCIES } from "../../src/constants/theme";
+import {
+  CryptoChart,
+  SparklineChart,
+  generateMockHistory,
+  ChartDataPoint,
+} from "../../src/components/CryptoChart";
 
 function useRates() {
   return useQuery<Rate[]>({
@@ -583,6 +589,192 @@ function DesktopQuickActionCard({
         {description}
       </Text>
     </Pressable>
+  );
+}
+
+/* ─── Crypto Price Charts Section (Desktop) ─── */
+const CHART_CURRENCIES: { symbol: string; name: string; color: string }[] = [
+  { symbol: "USDT", name: "Tether", color: colors.crypto.USDT },
+  { symbol: "BTC", name: "Bitcoin", color: colors.crypto.BTC },
+  { symbol: "ETH", name: "Ethereum", color: colors.crypto.ETH },
+  { symbol: "SOL", name: "Solana", color: colors.crypto.SOL },
+];
+
+function CryptoPriceChartsSection({
+  rates,
+  tickerRates,
+}: {
+  rates: Rate[];
+  tickerRates: { symbol: string; rate: number; change24h: number }[];
+}) {
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  // Generate mock history for each currency (memoized so it doesn't regenerate on re-render)
+  const mockHistories = useMemo(() => {
+    const map: Record<string, ChartDataPoint[]> = {};
+    for (const tr of tickerRates) {
+      map[tr.symbol] = generateMockHistory(tr.rate, 90); // 90 days for 3M support
+    }
+    return map;
+  }, [tickerRates.map((r) => `${r.symbol}:${r.rate}`).join(",")]);
+
+  return (
+    <View style={{ marginBottom: 24 }}>
+      <Text
+        style={{
+          color: colors.dark.muted,
+          fontSize: 11,
+          fontFamily: "Inter_600SemiBold",
+          letterSpacing: 1.2,
+          textTransform: "uppercase",
+          marginBottom: 14,
+          paddingHorizontal: 4,
+        }}
+      >
+        CRYPTO PRICES
+      </Text>
+
+      {/* Row of 4 crypto cards */}
+      <View style={{ flexDirection: "row", gap: 16, marginBottom: expanded ? 16 : 0 }}>
+        {CHART_CURRENCIES.map((cur) => {
+          const tr = tickerRates.find((r) => r.symbol === cur.symbol);
+          if (!tr) return null;
+          const isPos = tr.change24h >= 0;
+          const changeColor = isPos ? colors.primary[400] : colors.error;
+          const isExpanded = expanded === cur.symbol;
+          const sparkData = mockHistories[cur.symbol]?.slice(-24) || []; // last 24 hours
+          const iconSymbol =
+            (CURRENCIES as any)[cur.symbol]?.iconSymbol || cur.symbol[0];
+
+          return (
+            <Pressable
+              key={cur.symbol}
+              onPress={() => setExpanded(isExpanded ? null : cur.symbol)}
+              accessibilityRole="button"
+              accessibilityLabel={`${cur.name} price chart`}
+              style={({ pressed, hovered }: any) => ({
+                flex: 1,
+                backgroundColor: isExpanded
+                  ? cur.color + "0D"
+                  : Platform.OS === "web" && hovered
+                  ? colors.dark.elevated
+                  : colors.dark.card,
+                borderRadius: 16,
+                padding: 16,
+                borderWidth: 1,
+                borderColor: isExpanded
+                  ? cur.color + "33"
+                  : Platform.OS === "web" && hovered
+                  ? colors.glass.borderStrong
+                  : colors.glass.border,
+                opacity: pressed ? 0.9 : 1,
+                transform: [{ scale: pressed ? 0.98 : 1 }],
+                ...(Platform.OS === "web"
+                  ? ({ cursor: "pointer", transition: "all 0.2s ease" } as any)
+                  : {}),
+                ...shadows.sm,
+              })}
+            >
+              {/* Icon + Symbol */}
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 8,
+                  marginBottom: 10,
+                }}
+              >
+                <View
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: 10,
+                    backgroundColor: cur.color + "1A",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: cur.color,
+                      fontSize: 16,
+                      fontFamily: "Inter_700Bold",
+                    }}
+                  >
+                    {iconSymbol}
+                  </Text>
+                </View>
+                <View>
+                  <Text
+                    style={{
+                      color: colors.textPrimary,
+                      fontSize: 13,
+                      fontFamily: "Inter_600SemiBold",
+                    }}
+                  >
+                    {cur.symbol}
+                  </Text>
+                  <Text
+                    style={{
+                      color: colors.textMuted,
+                      fontSize: 10,
+                      fontFamily: "Inter_400Regular",
+                    }}
+                  >
+                    {cur.name}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Price */}
+              <Text
+                style={{
+                  color: colors.textPrimary,
+                  fontSize: 14,
+                  fontFamily: "Inter_700Bold",
+                  marginBottom: 2,
+                }}
+                numberOfLines={1}
+              >
+                KES {tr.rate >= 1000
+                  ? tr.rate.toLocaleString(undefined, { maximumFractionDigits: 2 })
+                  : tr.rate.toFixed(2)}
+              </Text>
+
+              {/* 24h change */}
+              <Text
+                style={{
+                  color: changeColor,
+                  fontSize: 11,
+                  fontFamily: "Inter_600SemiBold",
+                  marginBottom: 8,
+                }}
+              >
+                {isPos ? "+" : ""}
+                {tr.change24h.toFixed(2)}%
+              </Text>
+
+              {/* Mini sparkline */}
+              <SparklineChart data={sparkData} color={cur.color} height={48} />
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {/* Expanded full chart */}
+      {expanded && mockHistories[expanded] && (
+        <CryptoChart
+          data={mockHistories[expanded]}
+          currency={expanded}
+          color={
+            CHART_CURRENCIES.find((c) => c.symbol === expanded)?.color ||
+            colors.primary[400]
+          }
+          height={280}
+          interactive
+        />
+      )}
+    </View>
   );
 }
 
@@ -1342,6 +1534,11 @@ export default function HomeScreen() {
             />
           </View>
         </View>
+
+        {/* Row 2.5: Crypto Price Charts */}
+        {tickerRates.length > 0 && (
+          <CryptoPriceChartsSection rates={rates || []} tickerRates={tickerRates} />
+        )}
 
         {/* Row 3: Rate Ticker (full width, contained) */}
         {tickerRates.length > 0 && (
