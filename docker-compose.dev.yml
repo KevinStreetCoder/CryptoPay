@@ -1,0 +1,20 @@
+services:
+  web:
+    command: python manage.py runserver 0.0.0.0:8000
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings.development
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  celery:
+    command: celery -A config worker -l info -Q default,blockchain --concurrency=2
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings.development
+
+  celery-beat:
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings.development

@@ -1,0 +1,900 @@
+# CryptoPay: Crypto-to-M-Pesa Payment Platform — System Design
+
+## Executive Summary
+
+CryptoPay is a Kenyan fintech platform that lets users **pay any M-Pesa Paybill or Till number directly from cryptocurrency** — in one step. No P2P trading, no manual cash-out, no app-switching. Send USDT, BTC, ETH, or SOL and the recipient gets KES instantly via M-Pesa.
+
+**The Gap**: As of March 2026, zero platforms in Kenya offer direct crypto-to-Paybill/Till payment. Every competitor (Binance P2P, Yellow Card, ZendWallet, Kotani Pay) requires users to first convert crypto to M-Pesa balance, then manually pay bills. CryptoPay eliminates this friction entirely.
+
+**Market**: 733K+ crypto users in Kenya, all using M-Pesa (91% mobile money penetration). KES 40 trillion transacted on M-Pesa annually. Africa's crypto volume hit $205B in 2025 (+52% YoY). Stablecoins dominate (99% of Yellow Card volume).
+
+---
+
+## 1. Product Vision
+
+### Core User Flow (The "One-Step Pay")
+
+```
+User opens CryptoPay
+    → Selects "Pay Bill" or "Send to Till"
+    → Enters Paybill/Till number + account number + amount in KES
+    → Selects crypto to pay with (USDT, BTC, ETH, SOL, etc.)
+    → Sees exact crypto amount (with live rate + fee breakdown)
+    → Confirms with PIN/biometric
+    → Crypto deducted from CryptoPay wallet
+    → Backend converts crypto → KES in <5 seconds
+    → M-Pesa B2B/STK Push pays the Paybill/Till
+    → User gets instant confirmation + M-Pesa receipt
+```
+
+### Secondary Flows
+
+1. **Buy Crypto**: M-Pesa STK Push → KES received → Crypto credited to wallet
+2. **Sell Crypto**: Crypto → KES → B2C to user's M-Pesa
+3. **Send Crypto**: Wallet-to-wallet (internal) or on-chain withdrawal
+4. **Receive Crypto**: Deposit to personal wallet address
+5. **Send to M-Pesa**: Quick send KES to any phone number (B2C)
+6. **Pay Merchant**: Scan QR code at Till, pay with crypto
+
+### KYC Tiers
+
+| Tier | Verification | Daily Limit | Features |
+|------|-------------|-------------|----------|
+| Tier 0 | Phone + OTP only | KES 5,000 | View rates, receive only |
+| Tier 1 | National ID/Passport + Selfie | KES 50,000 | Full buy/sell/pay |
+| Tier 2 | KRA PIN + Proof of Address | KES 250,000 | Higher limits |
+| Tier 3 | Enhanced DD (source of funds) | KES 1,000,000+ | Business/institutional |
+
+---
+
+## 2. Technical Architecture
+
+### High-Level Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        CLIENTS                                   │
+│   Mobile App (React Native)  │  Web App (Next.js)  │  USSD     │
+└──────────────┬───────────────┴──────────┬───────────┴───────────┘
+               │              HTTPS/WSS   │
+┌──────────────▼──────────────────────────▼───────────────────────┐
+│                     API GATEWAY (Kong/Nginx)                     │
+│   Rate Limiting │ WAF │ Auth │ Request Signing │ DDoS Protection│
+└──────────────┬──────────────────────────────────────────────────┘
+               │
+┌──────────────▼──────────────────────────────────────────────────┐
+│                    APPLICATION LAYER                              │
+│                                                                  │
+│  ┌─────────────┐  ┌──────────────┐  ┌────────────────────────┐  │
+│  │ Auth Service │  │ Payment      │  │ Wallet Service         │  │
+│  │ (Users,KYC,  │  │ Orchestrator │  │ (Balances, Deposits,   │  │
+│  │  Sessions)   │  │ (Saga)       │  │  Withdrawals, HD keys) │  │
+│  └─────────────┘  └──────────────┘  └────────────────────────┘  │
+│                                                                  │
+│  ┌─────────────┐  ┌──────────────┐  ┌────────────────────────┐  │
+│  │ Rate Engine  │  │ M-Pesa       │  │ Blockchain Listener    │  │
+│  │ (Pricing,    │  │ Service      │  │ (Deposit detection,    │  │
+│  │  FX, Spread) │  │ (Daraja API) │  │  Confirmations)        │  │
+│  └─────────────┘  └──────────────┘  └────────────────────────┘  │
+│                                                                  │
+│  ┌─────────────┐  ┌──────────────┐  ┌────────────────────────┐  │
+│  │ Fraud       │  │ Notification │  │ Admin / Compliance     │  │
+│  │ Detection   │  │ Service      │  │ Dashboard              │  │
+│  └─────────────┘  └──────────────┘  └────────────────────────┘  │
+│                                                                  │
+└──────────────┬──────────────────────────────────────────────────┘
+               │
+┌──────────────▼──────────────────────────────────────────────────┐
+│                      DATA LAYER                                  │
+│                                                                  │
+│  PostgreSQL     │  Redis        │  Kafka/RabbitMQ  │  S3        │
+│  (Users,        │  (Sessions,   │  (Event Bus,     │  (KYC      │
+│   Transactions, │   Rate Cache, │   Tx Events,     │   Docs,    │
+│   Ledger)       │   Locks,      │   Notifications) │   Audit    │
+│                 │   Idempotency)│                   │   Logs)    │
+└─────────────────────────────────────────────────────────────────┘
+               │
+┌──────────────▼──────────────────────────────────────────────────┐
+│                   EXTERNAL INTEGRATIONS                          │
+│                                                                  │
+│  Safaricom       │  Yellow Card  │  Blockchain     │  Smile     │
+│  Daraja API      │  API (KES     │  Nodes (BTC,    │  Identity  │
+│  (STK Push,      │  off-ramp,    │  ETH, Tron,     │  (KYC      │
+│   B2C, B2B,      │  liquidity)   │  Solana)        │  Provider) │
+│   C2B)           │               │                 │            │
+│                  │  CoinGecko    │  Fireblocks     │  KRA       │
+│                  │  (Price feeds) │  (Custody @     │  (Tax      │
+│                  │               │   scale)        │  Reporting)│
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Tech Stack
+
+| Layer | Technology | Rationale |
+|-------|-----------|-----------|
+| **Mobile App** | React Native + Expo | Cross-platform (iOS + Android), large Kenyan dev community |
+| **Web App** | Next.js 14 (App Router) | SSR for SEO, shared React components with mobile web |
+| **API Gateway** | Kong or Nginx + rate limiting | Request auth, rate limits, WAF, API versioning |
+| **Backend** | Django 5 + DRF | Proven fintech framework, excellent ORM, admin panel |
+| **Task Queue** | Celery + Redis | Async M-Pesa callbacks, blockchain monitoring, notifications |
+| **Event Bus** | RabbitMQ (MVP) → Kafka (scale) | Transaction events, audit trail, service decoupling |
+| **Database** | PostgreSQL 16 | ACID transactions, double-entry ledger, JSON support |
+| **Cache** | Redis 7 | Rate caching, session store, distributed locks, idempotency |
+| **Blockchain** | ethers.js, bitcoinjs-lib, tronweb | HD wallet generation, transaction signing, balance monitoring |
+| **KYC** | Smile Identity API | Africa-focused, ID verification, liveness checks, selfie match |
+| **Monitoring** | Prometheus + Grafana + Sentry | Metrics, dashboards, error tracking |
+| **Infrastructure** | Docker + Kubernetes (prod) | Container orchestration, auto-scaling |
+| **CI/CD** | GitHub Actions | Automated testing, staging, production deploys |
+
+### Why Django (Not Go/Rust/NestJS)?
+
+1. **Speed to market** — Django's admin, ORM, auth, and DRF give us 50% of the backend for free
+2. **You already know it** — same stack as TopPerformers, no learning curve
+3. **Python ecosystem** — Celery, CCXT, web3.py, fraud detection ML all native
+4. **Good enough performance** — Gunicorn + async views handle thousands of RPS; M-Pesa's rate limits are the bottleneck, not Django
+5. **Migrate later if needed** — Extract the payment engine to Go/Rust only if profiling shows Django is the bottleneck (it won't be for years)
+
+---
+
+## 3. Database Schema (Core Tables)
+
+### Double-Entry Ledger
+
+Every financial operation creates balanced debit/credit entries. This is non-negotiable for a financial platform — it provides audit trail, reconciliation, and fraud detection.
+
+```sql
+-- Users
+CREATE TABLE users (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    phone           VARCHAR(15) UNIQUE NOT NULL,  -- +254...
+    email           VARCHAR(255) UNIQUE,
+    pin_hash        VARCHAR(255) NOT NULL,
+    kyc_tier        SMALLINT DEFAULT 0,
+    kyc_status      VARCHAR(20) DEFAULT 'pending', -- pending, verified, rejected
+    is_active       BOOLEAN DEFAULT TRUE,
+    is_suspended    BOOLEAN DEFAULT FALSE,
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Wallets (one per user per currency)
+CREATE TABLE wallets (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id         UUID REFERENCES users(id),
+    currency        VARCHAR(10) NOT NULL,  -- USDT, BTC, ETH, SOL, KES
+    balance         DECIMAL(28,8) DEFAULT 0 CHECK (balance >= 0),
+    locked_balance  DECIMAL(28,8) DEFAULT 0 CHECK (locked_balance >= 0),
+    deposit_address VARCHAR(255),  -- blockchain address for crypto wallets
+    address_index   INTEGER,       -- HD wallet derivation index
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(user_id, currency)
+);
+
+-- Ledger Entries (double-entry bookkeeping)
+CREATE TABLE ledger_entries (
+    id              BIGSERIAL PRIMARY KEY,
+    transaction_id  UUID NOT NULL,
+    wallet_id       UUID REFERENCES wallets(id),
+    entry_type      VARCHAR(10) NOT NULL,  -- DEBIT or CREDIT
+    amount          DECIMAL(28,8) NOT NULL CHECK (amount > 0),
+    balance_after   DECIMAL(28,8) NOT NULL,
+    description     TEXT,
+    created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Transactions (the core record)
+CREATE TABLE transactions (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    idempotency_key VARCHAR(64) UNIQUE NOT NULL,
+    user_id         UUID REFERENCES users(id),
+    type            VARCHAR(30) NOT NULL,
+    -- Types: DEPOSIT, WITHDRAWAL, BUY, SELL, PAYBILL_PAYMENT,
+    --        TILL_PAYMENT, SEND_MPESA, INTERNAL_TRANSFER, FEE
+    status          VARCHAR(20) DEFAULT 'pending',
+    -- Status: pending → processing → confirming → completed / failed / reversed
+    source_currency VARCHAR(10),
+    source_amount   DECIMAL(28,8),
+    dest_currency   VARCHAR(10),
+    dest_amount     DECIMAL(28,8),
+    exchange_rate   DECIMAL(18,8),
+    fee_amount      DECIMAL(28,8) DEFAULT 0,
+    fee_currency    VARCHAR(10),
+    -- M-Pesa specific
+    mpesa_paybill   VARCHAR(20),
+    mpesa_till      VARCHAR(20),
+    mpesa_account   VARCHAR(50),
+    mpesa_phone     VARCHAR(15),
+    mpesa_receipt   VARCHAR(30),
+    -- Blockchain specific
+    chain           VARCHAR(20),
+    tx_hash         VARCHAR(100),
+    confirmations   INTEGER DEFAULT 0,
+    -- Metadata
+    ip_address      INET,
+    device_id       VARCHAR(100),
+    risk_score      DECIMAL(3,2),
+    failure_reason  TEXT,
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ DEFAULT NOW(),
+    completed_at    TIMESTAMPTZ
+);
+
+-- M-Pesa Callback Records
+CREATE TABLE mpesa_callbacks (
+    id                  BIGSERIAL PRIMARY KEY,
+    transaction_id      UUID REFERENCES transactions(id),
+    merchant_request_id VARCHAR(50),
+    checkout_request_id VARCHAR(50),
+    result_code         INTEGER,
+    result_desc         TEXT,
+    mpesa_receipt       VARCHAR(30),
+    phone               VARCHAR(15),
+    amount              DECIMAL(18,2),
+    raw_payload         JSONB,
+    created_at          TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Blockchain Deposits (detected by listener)
+CREATE TABLE blockchain_deposits (
+    id              BIGSERIAL PRIMARY KEY,
+    chain           VARCHAR(20) NOT NULL,
+    tx_hash         VARCHAR(100) NOT NULL,
+    from_address    VARCHAR(100),
+    to_address      VARCHAR(100) NOT NULL,
+    amount          DECIMAL(28,8) NOT NULL,
+    currency        VARCHAR(10) NOT NULL,
+    confirmations   INTEGER DEFAULT 0,
+    required_confirmations INTEGER NOT NULL,
+    status          VARCHAR(20) DEFAULT 'detecting',
+    -- detecting → confirming → confirmed → credited
+    credited_at     TIMESTAMPTZ,
+    block_number    BIGINT,
+    block_hash      VARCHAR(100),
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(chain, tx_hash)
+);
+
+-- Audit Log (immutable)
+CREATE TABLE audit_log (
+    id              BIGSERIAL PRIMARY KEY,
+    user_id         UUID,
+    action          VARCHAR(50) NOT NULL,
+    entity_type     VARCHAR(30),
+    entity_id       VARCHAR(50),
+    details         JSONB,
+    ip_address      INET,
+    user_agent      TEXT,
+    created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- KYC Documents
+CREATE TABLE kyc_documents (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id         UUID REFERENCES users(id),
+    document_type   VARCHAR(30), -- national_id, passport, selfie, kra_pin, proof_of_address
+    file_url        VARCHAR(500),
+    status          VARCHAR(20) DEFAULT 'pending', -- pending, approved, rejected
+    rejection_reason TEXT,
+    verified_by     UUID,
+    created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+---
+
+## 4. Payment Orchestration (Saga Pattern)
+
+The Paybill payment is a distributed transaction spanning crypto, internal ledger, and M-Pesa. We use the Saga pattern with compensating transactions:
+
+```
+PAYBILL PAYMENT SAGA:
+
+Step 1: LOCK CRYPTO
+  → Deduct crypto from user wallet, add to locked_balance
+  → Compensate: Return locked crypto to user balance
+
+Step 2: CONVERT CRYPTO → KES
+  → Execute conversion at locked rate (via Yellow Card or internal pool)
+  → Compensate: Reverse conversion, return crypto
+
+Step 3: INITIATE M-PESA B2B PAYMENT
+  → Call Daraja B2B API (BusinessPayBill CommandID)
+  → Target: Paybill number + Account number
+  → Amount: KES equivalent
+  → Compensate: M-Pesa Reversal API (if payment succeeded but later step fails)
+
+Step 4: AWAIT M-PESA CALLBACK
+  → Daraja sends async callback with result
+  → If success: Mark transaction complete, update ledger
+  → If fail: Trigger compensation chain (Step 3 → 2 → 1)
+  → If no callback within 60s: Query Transaction Status API
+
+Step 5: RECORD & NOTIFY
+  → Create ledger entries (debit user crypto, credit system KES, debit system KES for payment)
+  → Send push notification + SMS confirmation
+  → Log to audit trail
+```
+
+### Timeout & Failure Handling
+
+```
+M-Pesa Callback Timeout (60s):
+  → Query Transaction Status API
+  → If completed: Process as success
+  → If failed: Trigger compensation
+  → If pending: Wait 30s more, retry status query (max 3 times)
+  → If still unknown after 3 minutes: Flag for manual review, DON'T release funds
+
+Double-Payment Prevention (3 layers):
+  1. Client: Disable button after click, show spinner
+  2. Redis: SET idempotency_key NX EX 300 (5 min lock)
+  3. PostgreSQL: UNIQUE constraint on transactions.idempotency_key
+```
+
+---
+
+## 5. M-Pesa Integration Details
+
+### Endpoints We Need
+
+| Endpoint | Purpose | When Used |
+|----------|---------|-----------|
+| **STK Push** | Collect KES from user (crypto buy) | User buys crypto with M-Pesa |
+| **B2C** | Send KES to user's M-Pesa (crypto sell) | User sells crypto, sends to phone |
+| **B2B** | Pay Paybill from our shortcode | User pays a Paybill from crypto |
+| **Transaction Status** | Verify payment status | Callback timeout fallback |
+| **Account Balance** | Monitor float | Automated float management |
+| **Reversal** | Reverse failed payments | Compensation in saga |
+| **C2B Register** | Register callback URLs | Initial setup |
+
+### Float Management
+
+CryptoPay needs a KES float in the Paybill account to execute B2B payments. This is the operational lifeblood:
+
+```
+Float Requirements:
+  - Minimum float: KES 500,000 (~$3,800) for operations
+  - Target float: KES 2,000,000 (~$15,000)
+  - Auto-alert at KES 300,000 (low float warning)
+  - Auto-top-up trigger at KES 200,000
+
+Float Sources:
+  1. User crypto sell orders (incoming KES from conversions)
+  2. Manual bank transfer top-up
+  3. Revenue from fees
+
+Float Monitoring:
+  - Check balance via Daraja Account Balance API every 5 minutes
+  - Dashboard alert when below threshold
+  - SMS/email alert to operations team
+```
+
+### Transaction Limits (Daraja)
+
+```
+Single B2B transaction: Max KES 250,000
+Daily B2B limit: KES 500,000 per shortcode (can request increase)
+STK Push: Max KES 250,000 per transaction
+B2C: Max KES 250,000 per transaction
+```
+
+---
+
+## 6. Crypto Wallet Architecture
+
+### HD Wallet System
+
+Each user gets a unique deposit address per supported chain, derived from a master seed using BIP-32/44 hierarchy:
+
+```
+Master Seed (stored in HSM / encrypted at rest)
+  └─ m/44'/0'/0'/0/0  → User 1 BTC address
+  └─ m/44'/0'/0'/0/1  → User 2 BTC address
+  └─ m/44'/60'/0'/0/0 → User 1 ETH/ERC-20 address
+  └─ m/44'/60'/0'/0/1 → User 2 ETH/ERC-20 address
+  └─ m/44'/195'/0'/0/0 → User 1 Tron/TRC-20 address
+  └─ m/44'/501'/0'/0/0 → User 1 Solana address
+```
+
+### Hot / Warm / Cold Wallet Split
+
+```
+Hot Wallet (2-5% of total assets):
+  - Automated, handles withdrawals and payments
+  - Private keys in encrypted KMS (AWS KMS or Hashicorp Vault)
+  - Max single tx: $5,000 equivalent
+  - Auto-refill from warm wallet when below threshold
+
+Warm Wallet (10-20% of total assets):
+  - Multi-sig (2-of-3) — requires 2 team members to sign
+  - Refills hot wallet on schedule or trigger
+  - Max single tx: $50,000
+
+Cold Wallet (75-90% of total assets):
+  - Air-gapped, hardware wallet (Ledger/Trezor)
+  - Multi-sig (3-of-5) — requires 3 of 5 key holders
+  - Manual process for moving to warm wallet
+  - Monthly rebalancing
+```
+
+### Supported Chains (Phased)
+
+| Phase | Chains | Tokens | Rationale |
+|-------|--------|--------|-----------|
+| **MVP** | Tron, Polygon | USDT (TRC-20), USDC (Polygon) | Cheapest fees, highest African usage |
+| **Phase 2** | Ethereum, Bitcoin | USDT/USDC (ERC-20), BTC | Major assets, higher fees |
+| **Phase 3** | Solana, BSC, Arbitrum | SOL, USDT, various | Broader ecosystem |
+
+### Blockchain Listener
+
+```python
+# Pseudocode for deposit detection
+async def monitor_deposits():
+    for chain in SUPPORTED_CHAINS:
+        latest_block = get_latest_block(chain)
+        our_addresses = get_all_deposit_addresses(chain)
+
+        for tx in get_block_transactions(latest_block):
+            if tx.to_address in our_addresses:
+                # New deposit detected
+                record_deposit(chain, tx)
+
+        # Check confirmation progress for pending deposits
+        for deposit in get_pending_deposits(chain):
+            current_confirmations = latest_block - deposit.block_number + 1
+            if current_confirmations >= REQUIRED_CONFIRMATIONS[chain]:
+                credit_user_wallet(deposit)
+
+# Required confirmations per chain
+REQUIRED_CONFIRMATIONS = {
+    'bitcoin': 3,       # ~30 min
+    'ethereum': 12,     # ~3 min
+    'tron': 19,         # ~1 min
+    'polygon': 128,     # ~5 min
+    'solana': 32,       # ~15 sec
+}
+```
+
+---
+
+## 7. Rate Engine & Pricing
+
+### Exchange Rate Composition
+
+No exchange provides a direct crypto/KES rate. We compose it:
+
+```
+Crypto/KES Rate = Crypto/USD (CoinGecko) × USD/KES (Forex rate)
+
+Example: USDT → KES
+  USDT/USD = 1.0002 (CoinGecko)
+  USD/KES = 129.50 (Yellow Card / forex API)
+  Raw rate: 1.0002 × 129.50 = 129.53 KES per USDT
+
+  + Platform spread: 1.5% = 131.47 KES
+  + Network fee: 1 TRX (~0.15 KES) — absorbed for deposits
+  + M-Pesa fee: KES 0-33 (passed through)
+
+  User sees: 1 USDT = 131.47 KES (all-in rate)
+```
+
+### Fee Structure
+
+| Operation | Fee | Notes |
+|-----------|-----|-------|
+| Crypto deposit | FREE | We absorb network fees |
+| Crypto → Paybill/Till | 1.5% spread + KES 10 flat | Competitive vs 3-8% P2P |
+| Crypto → M-Pesa (sell) | 1.5% spread | |
+| M-Pesa → Crypto (buy) | 1.5% spread | |
+| Internal transfer | FREE | Wallet-to-wallet |
+| Crypto withdrawal | Network fee only | At-cost, no markup |
+
+### Rate Locking
+
+When user initiates a payment, lock the rate for 30 seconds:
+```
+1. User requests quote → Lock rate in Redis (TTL 30s)
+2. User confirms → Check lock still valid
+3. If expired → Re-quote with fresh rate
+4. If valid → Execute at locked rate
+```
+
+---
+
+## 8. Security Architecture
+
+### Authentication Flow
+
+```
+Registration:
+  Phone → OTP (SMS) → Set 6-digit PIN → Create account
+
+Login:
+  Phone + PIN → Device check → Session token (JWT)
+
+Transaction Auth:
+  PIN confirmation → Velocity check → Fraud score → Execute
+
+High-value (>KES 50,000):
+  PIN + OTP → Additional friction for safety
+```
+
+### Fraud Detection (3 tiers)
+
+```
+Tier 1 — Rule-based (Day 1):
+  - Velocity: Max 5 Paybill payments per hour
+  - Amount: Flag if >3x user's average transaction
+  - New device: Require OTP for first transaction
+  - Geographic: Flag if IP country ≠ Kenya
+  - Rapid: Flag if <30s between transactions
+
+Tier 2 — ML-based (Month 3+):
+  - XGBoost model on transaction features
+  - Training data: historical fraud patterns
+  - Features: amount, frequency, time_of_day, device_age, kyc_tier
+  - <200ms inference time requirement
+
+Tier 3 — Graph-based (Month 6+):
+  - Neo4j fraud ring detection
+  - Identify connected accounts (shared devices, IPs, phone patterns)
+  - Alert on suspicious clusters
+```
+
+### Double-Payment Prevention (Critical)
+
+```
+Layer 1 — Client:
+  - Disable pay button after tap
+  - Show "Processing..." overlay
+  - Generate unique idempotency_key per payment attempt
+
+Layer 2 — Redis:
+  SET payment:{idempotency_key} "processing" NX EX 300
+  If key exists → Return "Payment already in progress"
+
+Layer 3 — PostgreSQL:
+  INSERT INTO transactions (idempotency_key, ...)
+  -- UNIQUE constraint prevents duplicates
+  -- If violation → Return existing transaction status
+
+Layer 4 — M-Pesa:
+  - Each B2B call gets unique OriginatorConversationID
+  - Check Transaction Status before retry
+  - Never retry without confirming previous attempt failed
+```
+
+---
+
+## 9. Regulatory Compliance
+
+### VASP Act 2025 Requirements Checklist
+
+| Requirement | How We Comply |
+|-------------|--------------|
+| Kenyan-incorporated company | Register Ltd company with Registrar of Companies |
+| Physical office in Kenya | Nairobi office (can be shared/virtual initially) |
+| Kenyan bank account | Open business account (Equity/KCB/NCBA) |
+| KYC/AML program | Smile Identity for verification, transaction monitoring |
+| Kenyan board members | At least 1 Kenyan national director |
+| Cybersecurity measures | Penetration testing, encryption, access controls |
+| VASP license application | Apply to CBK (payment processor category) |
+| Minimum capital | TBD in regulations — budget KES 5-10M |
+| Insurance/trust account | Client funds segregation |
+| FATF Travel Rule | Implement originator/beneficiary data for transfers |
+| FRC reporting | Automated STR filing system |
+
+### Tax Obligations
+
+```
+1. Excise Duty: 10% on service fees (collected from user, remitted to KRA monthly)
+   Example: User pays KES 100 fee → KES 10 excise duty added
+   Total user pays: KES 110
+
+2. Corporate Tax: 30% on company profits
+
+3. User's responsibility:
+   - Capital Gains Tax (5%) on crypto appreciation — not our collection duty
+   - We provide transaction history export for tax filing
+```
+
+### Safaricom Daraja Requirements
+
+```
+1. Registered Kenyan business
+2. Certificate of Incorporation
+3. CR12 (directors/shareholders)
+4. KRA PIN certificate
+5. Bank account letter
+6. Directors' IDs
+7. Business application form
+8. Signed Daraja Administrator form
+9. Go-live approval: 24-72 hours typically
+```
+
+---
+
+## 10. Brand Identity — CryptoPay
+
+### Name Rationale
+- "CryptoPay" — says exactly what it does: pay with crypto
+- No trademark conflict with Safaricom's "M-" prefix
+- "CryptoPay Kenya" for formal/legal use, "CryptoPay" for the app
+- Short, memorable, easy to spell in English and Swahili contexts
+- Domain options: cryptopay.co.ke, cryptopay.africa
+
+### Brand Personality
+- **Trustworthy**: Financial app = trust is everything. Clean, professional design
+- **Simple**: Not a trading platform — it's a payment tool. Think M-Pesa, not Binance
+- **Kenyan**: Designed for Kenya first. Swahili language support. Local references
+- **Modern**: Fintech aesthetic — dark mode default, smooth animations, haptic feedback
+
+### Color Palette
+
+```
+Primary:    #0052FF (Trust Blue — financial confidence)
+Secondary:  #00C853 (M-Pesa Green — familiar, success, money)
+Accent:     #FFB300 (Gold — premium, crypto association)
+Background: #0A0E17 (Deep Navy — modern fintech dark mode)
+Surface:    #141B2D (Card background)
+Text:       #FFFFFF / #8892B0 (Primary / Secondary text)
+Error:      #FF3B30
+Success:    #00C853
+```
+
+### Typography
+- **Headlines**: Inter Bold (clean, modern, excellent readability)
+- **Body**: Inter Regular
+- **Numbers/Amounts**: SF Mono or JetBrains Mono (monospace for financial figures)
+
+### Logo Concept
+```
+   ╭─────╮
+   │ C₿P  │  ← Shield shape (security + trust)
+   ╰─────╯
+   CryptoPay
+
+Alternative: "CP" monogram with chain-link connecting the letters
+Alternative: Shield icon with a crypto coin + M-Pesa green accent
+```
+
+### App Design Language
+- Card-based UI (like M-Pesa's new interface)
+- Bottom navigation: Home | Pay | Wallet | History | Profile
+- Large touch targets (48px minimum — Kenyan users often on budget phones)
+- Skeleton loading states (perceived performance)
+- Haptic feedback on transaction confirmation
+- Confetti animation on first successful payment
+
+---
+
+## 11. Mobile App Screens (Key Flows)
+
+### Home Screen
+```
+┌────────────────────────────────┐
+│ CryptoPay          🔔  ⚙️      │
+│                                │
+│ ┌────────────────────────────┐ │
+│ │  Total Balance             │ │
+│ │  KES 45,230.50             │ │
+│ │  ≈ $349.46                 │ │
+│ │                            │ │
+│ │  USDT  230.50   BTC 0.002 │ │
+│ │  ETH   0.15     SOL 2.4   │ │
+│ └────────────────────────────┘ │
+│                                │
+│  [📥 Buy]  [📤 Sell]  [💳 Pay]│
+│                                │
+│ Quick Actions                  │
+│ ┌──────┐ ┌──────┐ ┌──────┐   │
+│ │ Pay  │ │ Send │ │ Buy  │   │
+│ │ Bill │ │M-Pesa│ │Airtime│  │
+│ └──────┘ └──────┘ └──────┘   │
+│                                │
+│ Recent Transactions            │
+│ ├─ KPLC Prepaid  -KES 2,500  │
+│ ├─ Buy USDT      +50 USDT   │
+│ └─ Safaricom     -KES 1,000 │
+│                                │
+│ [Home] [Pay] [Wallet] [History]│
+└────────────────────────────────┘
+```
+
+### Pay Bill Screen
+```
+┌────────────────────────────────┐
+│ ←  Pay Bill                    │
+│                                │
+│ Paybill Number                 │
+│ ┌────────────────────────────┐ │
+│ │ 888880                     │ │
+│ │ Kenya Power (KPLC)     ✓  │ │
+│ └────────────────────────────┘ │
+│                                │
+│ Account Number                 │
+│ ┌────────────────────────────┐ │
+│ │ 12345678                   │ │
+│ └────────────────────────────┘ │
+│                                │
+│ Amount (KES)                   │
+│ ┌────────────────────────────┐ │
+│ │ 2,500                      │ │
+│ └────────────────────────────┘ │
+│                                │
+│ Pay With                       │
+│ ┌────────────────────────────┐ │
+│ │ 🟢 USDT (TRC-20)     ▼   │ │
+│ │    Balance: 230.50 USDT    │ │
+│ └────────────────────────────┘ │
+│                                │
+│ ┌────────────────────────────┐ │
+│ │ Amount:    KES 2,500.00    │ │
+│ │ Rate:      1 USDT = 131.47│ │
+│ │ Crypto:    19.02 USDT     │ │
+│ │ Fee:       KES 47.50      │ │
+│ │ Excise:    KES 4.75       │ │
+│ │ ─────────────────────────  │ │
+│ │ Total:     19.42 USDT     │ │
+│ └────────────────────────────┘ │
+│                                │
+│ ┌────────────────────────────┐ │
+│ │       PAY KES 2,500        │ │
+│ │   ████████████████████████ │ │
+│ └────────────────────────────┘ │
+│                                │
+│ → Slide to pay (haptic)       │
+└────────────────────────────────┘
+```
+
+### Payment Confirmation
+```
+┌────────────────────────────────┐
+│                                │
+│           ✅                   │
+│     Payment Successful!        │
+│                                │
+│ ┌────────────────────────────┐ │
+│ │ To:      Kenya Power       │ │
+│ │ Paybill: 888880            │ │
+│ │ Account: 12345678          │ │
+│ │ Amount:  KES 2,500.00      │ │
+│ │ Paid:    19.42 USDT        │ │
+│ │ M-Pesa:  SHK3A7B2C1       │ │
+│ │ Time:    14:32:05 EAT      │ │
+│ │ Ref:     MCR-20260307-4521 │ │
+│ └────────────────────────────┘ │
+│                                │
+│ [📋 Copy Receipt] [📤 Share]  │
+│                                │
+│ ┌────────────────────────────┐ │
+│ │        Done                │ │
+│ └────────────────────────────┘ │
+└────────────────────────────────┘
+```
+
+---
+
+## 12. Infrastructure & Deployment
+
+### MVP Infrastructure (Month 1-3)
+
+```
+Single VPS (Hetzner/Contabo — 8 CPU, 16GB RAM, 200GB SSD)
+  - Docker Compose (same pattern as TopPerformers)
+  - PostgreSQL 16
+  - Redis 7
+  - Django + Gunicorn (4 workers)
+  - Celery (2 workers: default + blockchain)
+  - Celery Beat
+  - Nginx reverse proxy
+  - Certbot (Let's Encrypt SSL)
+
+Estimated cost: $30-50/month
+```
+
+### Production Infrastructure (Month 6+)
+
+```
+Kubernetes cluster (3 nodes)
+  - API: 3 replicas, auto-scale to 10
+  - Celery workers: 2 default, 2 blockchain, 1 M-Pesa
+  - Managed PostgreSQL (RDS or equivalent)
+  - Managed Redis (ElastiCache)
+  - S3 for KYC documents
+  - CloudWatch / Prometheus monitoring
+
+Estimated cost: $200-500/month
+```
+
+---
+
+## 13. Development Phases
+
+### Phase 1: MVP (Weeks 1-8)
+**Goal: Crypto → Paybill/Till payment working end-to-end**
+
+- [ ] Django project setup with auth (phone + PIN)
+- [ ] User registration with basic KYC (Tier 1)
+- [ ] USDT (TRC-20) wallet — deposit detection, balance
+- [ ] Rate engine (CoinGecko + forex API)
+- [ ] M-Pesa Daraja integration (B2B for Paybill, STK Push for buy)
+- [ ] Payment saga orchestration
+- [ ] Double-payment prevention (3 layers)
+- [ ] Transaction history
+- [ ] React Native app — Home, Pay Bill, Wallet, History
+- [ ] Web dashboard for monitoring
+- [ ] Deploy to VPS
+
+### Phase 2: Full Product (Weeks 9-16)
+**Goal: Multi-crypto, sell flow, polish**
+
+- [ ] Add USDC (Polygon), BTC, ETH support
+- [ ] Sell flow (crypto → M-Pesa B2C)
+- [ ] Buy flow (M-Pesa STK Push → crypto)
+- [ ] Till number payments
+- [ ] Send to M-Pesa (phone number)
+- [ ] Buy airtime from crypto
+- [ ] Push notifications
+- [ ] Saved Paybills / favorites
+- [ ] Full KYC tiers (Smile Identity)
+- [ ] Admin compliance dashboard
+- [ ] Fraud detection (rule-based)
+
+### Phase 3: Scale (Weeks 17-24)
+**Goal: Growth features, regulatory compliance**
+
+- [ ] VASP license application
+- [ ] USSD interface (feature phone users)
+- [ ] Merchant QR code payments
+- [ ] Referral program
+- [ ] SOL, BSC chain support
+- [ ] ML fraud detection
+- [ ] Automated reconciliation
+- [ ] KRA tax reporting integration
+- [ ] Multi-language (English + Swahili)
+- [ ] Kubernetes migration
+
+---
+
+## 14. Revenue Model
+
+```
+Primary Revenue:
+  1. Spread on conversion: 1.5% (crypto ↔ KES)
+     At KES 10M monthly volume → KES 150,000/month revenue
+     At KES 100M monthly volume → KES 1.5M/month revenue
+
+  2. Flat fee per Paybill/Till: KES 10-20 per transaction
+     At 10,000 tx/month → KES 100,000-200,000/month
+
+Secondary Revenue:
+  3. Withdrawal fees (at-cost markup)
+  4. Premium features (higher limits, priority support)
+  5. B2B API (other apps use CryptoPay for crypto payments)
+  6. Float yield (interest on KES float in bank account)
+
+Cost Structure:
+  - M-Pesa fees: ~0.5% per B2B transaction
+  - Blockchain network fees: Variable (absorbed for deposits)
+  - Liquidity provider fees: 0.1-0.5% (Yellow Card / exchange)
+  - Infrastructure: $50-500/month
+  - KYC provider: $0.10-0.50 per verification
+  - SMS OTP: KES 0.50-1 per message
+```
+
+---
+
+## 15. Risks & Mitigations
+
+| Risk | Severity | Mitigation |
+|------|----------|-----------|
+| VASP license denied | HIGH | Start with legal counsel, regulatory sandbox, prepare documentation early |
+| Safaricom blocks crypto-related Paybills | HIGH | Register Paybill under compliant fintech category, not "crypto exchange" |
+| M-Pesa float runs out | HIGH | Automated monitoring, multi-source top-up, daily reconciliation |
+| Exchange rate volatility during payment | MEDIUM | 30-second rate lock, instant execution, hedging for large amounts |
+| Blockchain network congestion | MEDIUM | Support multiple chains (Tron+Polygon as primary — cheap+fast) |
+| User account fraud/takeover | HIGH | Device binding, PIN + OTP, velocity checks, suspicious login alerts |
+| Regulatory change | MEDIUM | Legal counsel on retainer, modular architecture (can pivot features) |
+| Competition from Yellow Card / Luno adding bill pay | MEDIUM | First-mover advantage, focus on UX, build network effects |
+| Crypto bear market | LOW | Stablecoin-first approach (USDT/USDC), not dependent on speculation |
