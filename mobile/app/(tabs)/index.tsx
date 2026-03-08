@@ -630,6 +630,7 @@ export default function HomeScreen() {
 
   const firstName = user?.full_name?.split(" ")[0] || "there";
   const initials = getInitials(user?.full_name);
+  const hasUnread = true; // TODO: derive from notifications API
 
   /* ─── MOBILE LAYOUT (unchanged) ─── */
   if (!isDesktop) {
@@ -718,22 +719,26 @@ export default function HomeScreen() {
 
             {/* Notification Bell */}
             <Pressable
-              // TODO: notifications
-              onPress={() => {}}
+              onPress={() => router.push("/settings/notifications-inbox")}
               accessibilityRole="button"
               accessibilityLabel="Notifications"
               testID="notifications-button"
-              style={({ pressed }) => ({
+              style={({ pressed, hovered }: any) => ({
                 width: 44,
                 height: 44,
                 borderRadius: 14,
-                backgroundColor: colors.dark.card,
+                backgroundColor: Platform.OS === "web" && hovered
+                  ? colors.dark.elevated
+                  : colors.dark.card,
                 alignItems: "center",
                 justifyContent: "center",
                 borderWidth: 1,
-                borderColor: colors.glass.border,
+                borderColor: Platform.OS === "web" && hovered
+                  ? colors.glass.borderStrong
+                  : colors.glass.border,
                 opacity: pressed ? 0.85 : 1,
                 transform: [{ scale: pressed ? 0.98 : 1 }],
+                ...(Platform.OS === "web" ? { cursor: "pointer", transition: "all 0.15s ease" } as any : {}),
               })}
             >
               <Ionicons
@@ -741,20 +746,22 @@ export default function HomeScreen() {
                 size={22}
                 color={colors.textSecondary}
               />
-              {/* Badge dot */}
-              <View
-                style={{
-                  position: "absolute",
-                  top: 10,
-                  right: 11,
-                  width: 8,
-                  height: 8,
-                  borderRadius: 4,
-                  backgroundColor: colors.error,
-                  borderWidth: 1.5,
-                  borderColor: colors.dark.card,
-                }}
-              />
+              {/* Unread badge dot */}
+              {hasUnread && (
+                <View
+                  style={{
+                    position: "absolute",
+                    top: 10,
+                    right: 11,
+                    width: 8,
+                    height: 8,
+                    borderRadius: 4,
+                    backgroundColor: colors.primary[400],
+                    borderWidth: 1.5,
+                    borderColor: colors.dark.card,
+                  }}
+                />
+              )}
             </Pressable>
           </View>
 
@@ -1215,22 +1222,26 @@ export default function HomeScreen() {
 
           {/* Notification Bell */}
           <Pressable
-            // TODO: notifications
-            onPress={() => {}}
+            onPress={() => router.push("/settings/notifications-inbox")}
             accessibilityRole="button"
             accessibilityLabel="Notifications"
             testID="notifications-button"
-            style={({ pressed }) => ({
+            style={({ pressed, hovered }: any) => ({
               width: 44,
               height: 44,
               borderRadius: 14,
-              backgroundColor: colors.dark.card,
+              backgroundColor: Platform.OS === "web" && hovered
+                ? colors.dark.elevated
+                : colors.dark.card,
               alignItems: "center",
               justifyContent: "center",
               borderWidth: 1,
-              borderColor: colors.glass.border,
+              borderColor: Platform.OS === "web" && hovered
+                ? colors.glass.borderStrong
+                : colors.glass.border,
               opacity: pressed ? 0.85 : 1,
               transform: [{ scale: pressed ? 0.98 : 1 }],
+              ...(Platform.OS === "web" ? { cursor: "pointer", transition: "all 0.15s ease" } as any : {}),
             })}
           >
             <Ionicons
@@ -1238,19 +1249,22 @@ export default function HomeScreen() {
               size={22}
               color={colors.textSecondary}
             />
-            <View
-              style={{
-                position: "absolute",
-                top: 10,
-                right: 11,
-                width: 8,
-                height: 8,
-                borderRadius: 4,
-                backgroundColor: colors.error,
-                borderWidth: 1.5,
-                borderColor: colors.dark.card,
-              }}
-            />
+            {/* Unread badge dot */}
+            {hasUnread && (
+              <View
+                style={{
+                  position: "absolute",
+                  top: 10,
+                  right: 11,
+                  width: 8,
+                  height: 8,
+                  borderRadius: 4,
+                  backgroundColor: colors.primary[400],
+                  borderWidth: 1.5,
+                  borderColor: colors.dark.card,
+                }}
+              />
+            )}
           </Pressable>
         </View>
 

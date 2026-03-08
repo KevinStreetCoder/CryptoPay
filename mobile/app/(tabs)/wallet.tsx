@@ -27,9 +27,7 @@ import { ratesApi, Rate, normalizeRate } from "../../src/api/rates";
 import { walletsApi } from "../../src/api/wallets";
 import { CURRENCIES, CurrencyCode, colors, shadows } from "../../src/constants/theme";
 import { getTxKesAmount, getTxRecipient } from "../../src/api/payments";
-import { storage } from "../../src/utils/storage";
-
-const BALANCE_HIDDEN_KEY = "cryptopay_balance_hidden";
+import { useBalanceVisibility } from "../../src/stores/balance";
 const SUPPORTED_CRYPTOS: CurrencyCode[] = ["USDT", "BTC", "ETH", "SOL"];
 
 function useRates() {
@@ -150,7 +148,7 @@ export default function WalletScreen() {
   const [hoverSend, setHoverSend] = useState(false);
   const [hoverClose, setHoverClose] = useState(false);
   const [generatingAddress, setGeneratingAddress] = useState<string | null>(null);
-  const [balanceHidden, setBalanceHidden] = useState(false);
+  const { balanceHidden, toggleBalance, formatAmount, formatCrypto } = useBalanceVisibility();
   const [modalCurrency, setModalCurrency] = useState<CurrencyCode>("USDT");
   const queryClient = useQueryClient();
   const toast = useToast();
@@ -158,19 +156,6 @@ export default function WalletScreen() {
   // Modal slide-up animation
   const modalSlide = useRef(new Animated.Value(400)).current;
   const modalOpacity = useRef(new Animated.Value(0)).current;
-
-  // Load balance hidden preference
-  useEffect(() => {
-    storage.getItemAsync(BALANCE_HIDDEN_KEY).then((val) => {
-      if (val === "true") setBalanceHidden(true);
-    });
-  }, []);
-
-  const toggleBalanceHidden = useCallback(async () => {
-    const newVal = !balanceHidden;
-    setBalanceHidden(newVal);
-    await storage.setItemAsync(BALANCE_HIDDEN_KEY, newVal ? "true" : "false");
-  }, [balanceHidden]);
 
   // Animate modal in/out
   useEffect(() => {
@@ -306,16 +291,6 @@ export default function WalletScreen() {
 
   const getCurrencyColor = (currency: string) =>
     colors.crypto[currency] || colors.primary[400];
-
-  const formatBalance = (value: number, opts?: { minimumFractionDigits?: number; maximumFractionDigits?: number }) => {
-    if (balanceHidden) return "****";
-    return value.toLocaleString("en-KE", opts);
-  };
-
-  const formatCryptoBalance = (value: number, decimals: number) => {
-    if (balanceHidden) return "****";
-    return value.toFixed(decimals);
-  };
 
   // ── Currency Tabs for Modal ──
   const renderCurrencyTabs = (isDesktopDialog: boolean) => {
@@ -873,7 +848,7 @@ export default function WalletScreen() {
   // ── Eye Toggle Button ──
   const renderEyeToggle = () => (
     <Pressable
-      onPress={toggleBalanceHidden}
+      onPress={toggleBalance}
       accessibilityRole="button"
       accessibilityLabel={balanceHidden ? "Show balance" : "Hide balance"}
       style={({ pressed }) => ({
@@ -984,7 +959,7 @@ export default function WalletScreen() {
                   marginBottom: 2,
                 }}
               >
-                {formatCryptoBalance(balance, info?.decimals ?? 4)}
+                {formatCrypto(balance, info?.decimals ?? 4)}
               </Text>
               {kesValue > 0 && (
                 <Text
@@ -1022,7 +997,7 @@ export default function WalletScreen() {
                       fontFamily: "Inter_500Medium",
                     }}
                   >
-                    {formatCryptoBalance(locked, info?.decimals ?? 4)} locked
+                    {formatCrypto(locked, info?.decimals ?? 4)} locked
                   </Text>
                 </View>
               )}
@@ -1277,11 +1252,8 @@ export default function WalletScreen() {
     );
   };
 
-  // Content max width for large screens
-  const contentMaxWidth = isLargeDesktop ? 1100 : undefined;
-  const contentStyle = contentMaxWidth
-    ? { maxWidth: contentMaxWidth, alignSelf: "center" as const, width: "100%" as const }
-    : {};
+  // Use full available width — no cap
+  const contentStyle = {};
 
   // ══════════════════════════════════════════
   //  DESKTOP LAYOUT (width >= 900)
@@ -1301,44 +1273,20 @@ export default function WalletScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={contentStyle}>
-            {/* Header */}
-            <View style={{ paddingHorizontal: hPad + 4, paddingTop: 16, paddingBottom: 6 }}>
-              <Text
-                style={{
-                  color: "#FFFFFF",
-                  fontSize: 32,
-                  fontFamily: "Inter_700Bold",
-                  letterSpacing: -0.5,
-                }}
-              >
-                Wallet
-              </Text>
-              <Text
-                style={{
-                  color: colors.textSecondary,
-                  fontSize: 15,
-                  fontFamily: "Inter_400Regular",
-                  marginTop: 4,
-                }}
-              >
-                Manage your crypto assets
-              </Text>
-            </View>
+            {/* Top spacing */}
+            <View style={{ height: 8 }} />
 
-            {/* ── Portfolio + Actions Grid ── */}
+            {/* ── Portfolio + Actions (single card) ── */}
             <View
               style={{
-                flexDirection: "row",
                 paddingHorizontal: hPad,
-                marginTop: 12,
-                marginBottom: 24,
-                gap: 20,
+                marginTop: 8,
+                marginBottom: 16,
               }}
             >
-              {/* Left: Portfolio Value Card (60%) */}
               <View
                 style={{
-                  flex: 6,
+                  flexDirection: "row",
                   backgroundColor: colors.dark.card,
                   borderRadius: 20,
                   padding: 24,
@@ -1348,121 +1296,90 @@ export default function WalletScreen() {
                   ...shadows.sm,
                 }}
               >
-                {/* Decorative accent line */}
-                <View
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 24,
-                    right: 24,
-                    height: 3,
-                    borderBottomLeftRadius: 2,
-                    borderBottomRightRadius: 2,
-                    backgroundColor: colors.primary[500],
-                  }}
-                />
-
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    marginBottom: 10,
-                    marginTop: 4,
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: colors.textMuted,
-                      fontSize: 12,
-                      fontFamily: "Inter_600SemiBold",
-                      textTransform: "uppercase",
-                      letterSpacing: 1.2,
-                    }}
-                  >
-                    Total Portfolio
-                  </Text>
-                  {renderEyeToggle()}
-                </View>
-                <Text
-                  style={{
-                    color: "#FFFFFF",
-                    fontSize: 40,
-                    fontFamily: "Inter_700Bold",
-                    letterSpacing: -1,
-                    marginBottom: 4,
-                  }}
-                >
-                  {balanceHidden
-                    ? "KSh ****"
-                    : `KSh ${grandTotal.toLocaleString("en-KE", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}`}
-                </Text>
-                {kesBalance > 0 && (
-                  <Text
-                    style={{
-                      color: colors.textMuted,
-                      fontSize: 13,
-                      fontFamily: "Inter_400Regular",
-                      marginBottom: 4,
-                    }}
-                  >
-                    {balanceHidden
-                      ? "KES Balance: KSh ****"
-                      : `KES Balance: KSh ${kesBalance.toLocaleString("en-KE", {
-                          minimumFractionDigits: 2,
-                        })}`}
-                  </Text>
-                )}
-                <View style={{ flexDirection: "row", alignItems: "center", marginTop: 6, gap: 6 }}>
+                {/* Left: Portfolio Value */}
+                <View style={{ flex: 6 }}>
                   <View
                     style={{
-                      backgroundColor: colors.success + "20",
-                      borderRadius: 8,
-                      paddingHorizontal: 8,
-                      paddingVertical: 3,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      marginBottom: 10,
                     }}
                   >
                     <Text
                       style={{
-                        color: colors.success,
+                        color: colors.textMuted,
                         fontSize: 12,
                         fontFamily: "Inter_600SemiBold",
+                        textTransform: "uppercase",
+                        letterSpacing: 1.2,
                       }}
                     >
-                      {cryptoWallets.length} asset{cryptoWallets.length !== 1 ? "s" : ""}
+                      Total Portfolio
                     </Text>
+                    {renderEyeToggle()}
+                  </View>
+                  <Text
+                    style={{
+                      color: "#FFFFFF",
+                      fontSize: 40,
+                      fontFamily: "Inter_700Bold",
+                      letterSpacing: -1,
+                      marginBottom: 4,
+                    }}
+                  >
+                    {balanceHidden
+                      ? "KSh ****"
+                      : `KSh ${grandTotal.toLocaleString("en-KE", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}`}
+                  </Text>
+                  {kesBalance > 0 && (
+                    <Text
+                      style={{
+                        color: colors.textMuted,
+                        fontSize: 13,
+                        fontFamily: "Inter_400Regular",
+                        marginBottom: 4,
+                      }}
+                    >
+                      {balanceHidden
+                        ? "KES Balance: KSh ****"
+                        : `KES Balance: KSh ${kesBalance.toLocaleString("en-KE", {
+                            minimumFractionDigits: 2,
+                          })}`}
+                    </Text>
+                  )}
+                  <View style={{ flexDirection: "row", alignItems: "center", marginTop: 6, gap: 6 }}>
+                    <View
+                      style={{
+                        backgroundColor: colors.success + "20",
+                        borderRadius: 8,
+                        paddingHorizontal: 8,
+                        paddingVertical: 3,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: colors.success,
+                          fontSize: 12,
+                          fontFamily: "Inter_600SemiBold",
+                        }}
+                      >
+                        {cryptoWallets.length} asset{cryptoWallets.length !== 1 ? "s" : ""}
+                      </Text>
+                    </View>
                   </View>
                 </View>
-              </View>
 
-              {/* Right: Actions Card (40%) */}
-              <View
-                style={{
-                  flex: 4,
-                  backgroundColor: colors.dark.card,
-                  borderRadius: 20,
-                  padding: 24,
-                  borderWidth: 1,
-                  borderColor: colors.glass.border,
-                  justifyContent: "center",
-                  alignItems: "center",
-                  ...shadows.sm,
-                }}
-              >
-                <Text
+                {/* Right: Action Buttons */}
+                <View
                   style={{
-                    color: colors.textMuted,
-                    fontSize: 12,
-                    fontFamily: "Inter_600SemiBold",
-                    textTransform: "uppercase",
-                    letterSpacing: 1.2,
-                    marginBottom: 20,
+                    flex: 4,
+                    justifyContent: "center",
+                    alignItems: "center",
                   }}
                 >
-                  Quick Actions
-                </Text>
                 <View style={{ flexDirection: "row", gap: 16 }}>
                   {/* Receive Button */}
                   <Pressable
@@ -1565,57 +1482,18 @@ export default function WalletScreen() {
                 </View>
               </View>
             </View>
+            </View>
 
             {/* ── Assets Section ── */}
             <View
               style={{
                 paddingHorizontal: hPad,
-                marginBottom: 24,
+                marginBottom: 16,
               }}
             >
-              {/* Section header */}
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  marginBottom: 16,
-                  gap: 10,
-                }}
-              >
-                <Text
-                  style={{
-                    color: colors.textSecondary,
-                    fontSize: 12,
-                    fontFamily: "Inter_600SemiBold",
-                    textTransform: "uppercase",
-                    letterSpacing: 1.2,
-                  }}
-                >
-                  Assets
-                </Text>
-                <View
-                  style={{
-                    backgroundColor: colors.primary[500] + "20",
-                    borderRadius: 10,
-                    paddingHorizontal: 10,
-                    paddingVertical: 3,
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: colors.primary[400],
-                      fontSize: 11,
-                      fontFamily: "Inter_600SemiBold",
-                    }}
-                  >
-                    {cryptoWallets.length} {cryptoWallets.length === 1 ? "coin" : "coins"}
-                  </Text>
-                </View>
-              </View>
-
               {/* Assets Grid - 2 cols default, 3 cols on large desktop */}
               {walletsLoading ? (
-                <View style={{ flexDirection: "row", gap: 20, flexWrap: "wrap" }}>
+                <View style={{ flexDirection: "row", gap: 16, flexWrap: "wrap" }}>
                   <View style={{ flex: 1, minWidth: 300 }}>
                     <WalletCardSkeleton />
                   </View>
@@ -1677,7 +1555,9 @@ export default function WalletScreen() {
                   style={{
                     flexDirection: "row",
                     flexWrap: "wrap",
-                    gap: 20,
+                    gap: 16,
+                    // @ts-ignore web-only CSS
+                    transition: "all 0.2s ease",
                   }}
                 >
                   {cryptoWallets.map((w, i) => (
@@ -1703,16 +1583,14 @@ export default function WalletScreen() {
                 style={{
                   flexDirection: "row",
                   alignItems: "center",
-                  marginBottom: 16,
+                  marginBottom: 12,
                 }}
               >
                 <Text
                   style={{
                     color: colors.textSecondary,
-                    fontSize: 12,
-                    fontFamily: "Inter_600SemiBold",
-                    textTransform: "uppercase",
-                    letterSpacing: 1.2,
+                    fontSize: 14,
+                    fontFamily: "Inter_500Medium",
                   }}
                 >
                   Recent Activity
@@ -1892,36 +1770,12 @@ export default function WalletScreen() {
         }
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
-        <View style={{ paddingHorizontal: hPad + 4, paddingTop: 8, paddingBottom: 6 }}>
-          <Text
-            style={{
-              color: "#FFFFFF",
-              fontSize: 28,
-              fontFamily: "Inter_700Bold",
-              letterSpacing: -0.5,
-            }}
-          >
-            Wallet
-          </Text>
-          <Text
-            style={{
-              color: colors.textSecondary,
-              fontSize: 14,
-              fontFamily: "Inter_400Regular",
-              marginTop: 4,
-            }}
-          >
-            Manage your crypto assets
-          </Text>
-        </View>
-
         {/* Portfolio Value Card */}
         <View
           style={{
             marginHorizontal: hPad,
-            marginTop: 8,
-            marginBottom: 20,
+            marginTop: 6,
+            marginBottom: 16,
             backgroundColor: colors.dark.card,
             borderRadius: 28,
             padding: 24,
@@ -1930,26 +1784,11 @@ export default function WalletScreen() {
             overflow: "hidden",
           }}
         >
-          {/* Decorative accent line at top */}
-          <View
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 24,
-              right: 24,
-              height: 3,
-              borderBottomLeftRadius: 2,
-              borderBottomRightRadius: 2,
-              backgroundColor: colors.primary[500],
-            }}
-          />
-
           <View
             style={{
               flexDirection: "row",
               alignItems: "center",
               marginBottom: 10,
-              marginTop: 4,
             }}
           >
             <Text
@@ -2180,7 +2019,7 @@ export default function WalletScreen() {
         )}
 
         {/* Transaction History */}
-        <View style={{ marginTop: 28 }}>
+        <View style={{ marginTop: 20 }}>
           <View
             style={{
               flexDirection: "row",

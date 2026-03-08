@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,35 +7,32 @@ import {
   Pressable,
   StyleSheet,
   useWindowDimensions,
-  NativeSyntheticEvent,
-  NativeScrollEvent,
+  Modal,
   ViewToken,
   Platform,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { storage } from "../src/utils/storage";
 
-// ── Theme ──────────────────────────────────────────────────────────────────────
-const COLORS = {
+const isWeb = Platform.OS === "web";
+
+const C = {
   bg: "#060E1F",
   card: "#0C1A2E",
   elevated: "#162742",
   border: "#1E3350",
   primary: "#10B981",
-  primaryLight: "#34D399",
   primaryDark: "#059669",
-  accent: "#F59E0B",
   textPrimary: "#F0F4F8",
   textSecondary: "#8899AA",
   textMuted: "#556B82",
   white: "#FFFFFF",
+  backdrop: "rgba(0,0,0,0.7)",
 };
 
 export const ONBOARDING_COMPLETED_KEY = "cryptopay_onboarding_completed";
 
-// ── Slide data ─────────────────────────────────────────────────────────────────
+// ── Slide data ───────────────────────────────────────────────────────────────
 interface Slide {
   id: string;
   icon: keyof typeof Ionicons.glyphMap;
@@ -43,7 +40,6 @@ interface Slide {
   iconBg: string;
   title: string;
   description: string;
-  isLast?: boolean;
 }
 
 const slides: Slide[] = [
@@ -54,16 +50,16 @@ const slides: Slide[] = [
     iconBg: "rgba(16, 185, 129, 0.15)",
     title: "Pay Bills with Crypto",
     description:
-      "Convert USDT, BTC, or ETH and pay any M-Pesa bill instantly. No bank account needed — just your crypto wallet and a phone number.",
+      "Convert USDT, BTC, or ETH and pay any M-Pesa bill instantly. No bank account needed.",
   },
   {
     id: "2",
     icon: "flash",
     iconColor: "#F59E0B",
     iconBg: "rgba(245, 158, 11, 0.15)",
-    title: "Instant M-Pesa Integration",
+    title: "Instant M-Pesa",
     description:
-      "Pay Safaricom M-Pesa Paybill and Till numbers directly from your crypto balance. Settlements arrive in seconds, not days.",
+      "Pay Safaricom Paybill and Till numbers directly from crypto. Settlements in seconds.",
   },
   {
     id: "3",
@@ -72,154 +68,111 @@ const slides: Slide[] = [
     iconBg: "rgba(59, 130, 246, 0.15)",
     title: "Bank-Grade Security",
     description:
-      "Your funds are protected with PIN authentication, biometric verification, and end-to-end encryption. Your keys, your crypto.",
+      "PIN authentication, biometric verification, and end-to-end encryption protect your funds.",
   },
   {
     id: "4",
     icon: "rocket",
     iconColor: "#A78BFA",
     iconBg: "rgba(167, 139, 250, 0.15)",
-    title: "Get Started",
+    title: "You're All Set!",
     description:
-      "Create your free account in under a minute. Start paying bills, sending money, and managing crypto — all from one app.",
-    isLast: true,
+      "Start paying bills, sending money, and managing crypto — all from one app.",
   },
 ];
 
-// ── Pagination dot ─────────────────────────────────────────────────────────────
-function PaginationDot({
+// ── Pagination dot ───────────────────────────────────────────────────────────
+function Dot({
   index,
   scrollX,
-  width,
+  itemWidth,
 }: {
   index: number;
   scrollX: Animated.Value;
-  width: number;
+  itemWidth: number;
 }) {
-  const inputRange = [(index - 1) * width, index * width, (index + 1) * width];
-
-  const dotWidth = scrollX.interpolate({
+  const inputRange = [
+    (index - 1) * itemWidth,
+    index * itemWidth,
+    (index + 1) * itemWidth,
+  ];
+  const w = scrollX.interpolate({
     inputRange,
-    outputRange: [8, 28, 8],
+    outputRange: [8, 24, 8],
     extrapolate: "clamp",
   });
-
-  const opacity = scrollX.interpolate({
+  const bg = scrollX.interpolate({
     inputRange,
-    outputRange: [0.3, 1, 0.3],
+    outputRange: [C.textMuted, C.primary, C.textMuted],
     extrapolate: "clamp",
   });
-
-  const backgroundColor = scrollX.interpolate({
+  const o = scrollX.interpolate({
     inputRange,
-    outputRange: [COLORS.textMuted, COLORS.primary, COLORS.textMuted],
+    outputRange: [0.35, 1, 0.35],
     extrapolate: "clamp",
   });
-
-  return (
-    <Animated.View
-      style={[
-        styles.dot,
-        {
-          width: dotWidth,
-          opacity,
-          backgroundColor,
-        },
-      ]}
-    />
-  );
+  return <Animated.View style={[s.dot, { width: w, backgroundColor: bg, opacity: o }]} />;
 }
 
-// ── Slide renderer ─────────────────────────────────────────────────────────────
-function SlideItem({
-  item,
-  width,
-  onGetStarted,
-}: {
-  item: Slide;
-  width: number;
-  onGetStarted: () => void;
-}) {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.8)).current;
-
-  // Animate in when the component mounts
-  useState(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        friction: 8,
-        tension: 40,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  });
-
+// ── Web popup card slide ─────────────────────────────────────────────────────
+function WebSlide({ item }: { item: Slide }) {
   return (
-    <View
-      style={[styles.slideContainer, { width }]}
-      accessibilityRole="summary"
-      accessibilityLabel={`Onboarding slide: ${item.title}. ${item.description}`}
-    >
-      <Animated.View
-        style={[
-          styles.slideContent,
-          { opacity: fadeAnim, transform: [{ scale: scaleAnim }] },
-        ]}
-      >
-        {/* Icon circle */}
-        <View
-          style={[
-            styles.iconCircle,
-            { backgroundColor: item.iconBg },
-          ]}
-        >
-          <Ionicons name={item.icon} size={80} color={item.iconColor} />
-        </View>
-
-        {/* Title */}
-        <Text style={styles.slideTitle}>{item.title}</Text>
-
-        {/* Description */}
-        <Text style={styles.slideDescription}>{item.description}</Text>
-
-        {/* CTA on last slide */}
-        {item.isLast && (
-          <Pressable
-            onPress={onGetStarted}
-            style={({ pressed }) => [
-              styles.ctaButton,
-              pressed && styles.ctaButtonPressed,
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Get started — create your account"
-          >
-            <Ionicons
-              name="rocket"
-              size={20}
-              color={COLORS.white}
-              style={{ marginRight: 8 }}
-            />
-            <Text style={styles.ctaButtonText}>Get Started</Text>
-          </Pressable>
-        )}
-      </Animated.View>
+    <View style={s.webSlide}>
+      <View style={[s.iconCircle, { backgroundColor: item.iconBg }]}>
+        <Ionicons name={item.icon} size={48} color={item.iconColor} />
+      </View>
+      <Text style={s.webTitle}>{item.title}</Text>
+      <Text style={s.webDesc}>{item.description}</Text>
     </View>
   );
 }
 
-// ── Main screen ────────────────────────────────────────────────────────────────
-export default function OnboardingScreen() {
-  const { width } = useWindowDimensions();
-  const router = useRouter();
-  const flatListRef = useRef<FlatList>(null);
+// ── Mobile slide ─────────────────────────────────────────────────────────────
+function MobileSlide({ item, width }: { item: Slide; width: number }) {
+  return (
+    <View style={[s.mobileSlide, { width }]}>
+      <View style={[s.iconCircleLarge, { backgroundColor: item.iconBg }]}>
+        <Ionicons name={item.icon} size={72} color={item.iconColor} />
+      </View>
+      <Text style={s.mobileTitle}>{item.title}</Text>
+      <Text style={s.mobileDesc}>{item.description}</Text>
+    </View>
+  );
+}
+
+// ── Main Onboarding Modal ────────────────────────────────────────────────────
+export function OnboardingModal({
+  visible,
+  onComplete,
+}: {
+  visible: boolean;
+  onComplete: () => void;
+}) {
+  const { width: screenW, height: screenH } = useWindowDimensions();
+  const isDesktop = isWeb && screenW >= 768;
   const scrollX = useRef(new Animated.Value(0)).current;
+  const flatListRef = useRef<FlatList>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const backdropAnim = useRef(new Animated.Value(0)).current;
+  const cardAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.timing(backdropAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.spring(cardAnim, {
+          toValue: 1,
+          friction: 8,
+          tension: 50,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [visible]);
 
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
@@ -233,10 +186,10 @@ export default function OnboardingScreen() {
     viewAreaCoveragePercentThreshold: 50,
   }).current;
 
-  const completeOnboarding = useCallback(async () => {
+  const handleFinish = useCallback(async () => {
     await storage.setItemAsync(ONBOARDING_COMPLETED_KEY, "true");
-    router.replace("/auth/login");
-  }, [router]);
+    onComplete();
+  }, [onComplete]);
 
   const handleNext = useCallback(() => {
     if (currentIndex < slides.length - 1) {
@@ -245,153 +198,340 @@ export default function OnboardingScreen() {
         animated: true,
       });
     } else {
-      completeOnboarding();
+      handleFinish();
     }
-  }, [currentIndex, completeOnboarding]);
+  }, [currentIndex, handleFinish]);
 
-  const handleSkip = useCallback(() => {
-    completeOnboarding();
-  }, [completeOnboarding]);
+  const isLast = currentIndex === slides.length - 1;
 
-  const isLastSlide = currentIndex === slides.length - 1;
+  if (!visible) return null;
 
-  return (
-    <SafeAreaView style={styles.container}>
-      {/* Header with Skip button */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Ionicons name="diamond" size={22} color={COLORS.primary} />
-          <Text style={styles.logoText}>CryptoPay</Text>
-        </View>
-        {!isLastSlide && (
+  // ── Web: centered popup card ───────────────────────────────────────────────
+  if (isDesktop) {
+    const CARD_W = 480;
+    return (
+      <View style={s.webOverlay}>
+        <Animated.View style={[s.webBackdrop, { opacity: backdropAnim }]}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={handleFinish} />
+        </Animated.View>
+
+        <Animated.View
+          style={[
+            s.webCard,
+            {
+              width: CARD_W,
+              transform: [
+                {
+                  scale: cardAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.85, 1],
+                  }),
+                },
+              ],
+              opacity: cardAnim,
+            },
+          ]}
+        >
+          {/* Step indicator */}
+          <View style={s.webStepRow}>
+            <Text style={s.webStepLabel}>
+              {currentIndex + 1} of {slides.length}
+            </Text>
+            {!isLast && (
+              <Pressable onPress={handleFinish} hitSlop={12}>
+                <Text style={s.webSkipText}>Skip</Text>
+              </Pressable>
+            )}
+          </View>
+
+          {/* Slide content */}
+          <WebSlide item={slides[currentIndex]} />
+
+          {/* Dots */}
+          <View style={s.webDots}>
+            {slides.map((_, i) => (
+              <View
+                key={i}
+                style={[
+                  s.webDot,
+                  i === currentIndex && s.webDotActive,
+                ]}
+              />
+            ))}
+          </View>
+
+          {/* Button */}
           <Pressable
-            onPress={handleSkip}
-            hitSlop={12}
+            onPress={() => {
+              if (isLast) handleFinish();
+              else setCurrentIndex((prev) => Math.min(prev + 1, slides.length - 1));
+            }}
             style={({ pressed }) => [
-              styles.skipButton,
-              pressed && { opacity: 0.6 },
+              s.webButton,
+              pressed && { backgroundColor: C.primaryDark },
             ]}
-            accessibilityRole="button"
-            accessibilityLabel="Skip onboarding"
           >
-            <Text style={styles.skipText}>Skip</Text>
+            <Text style={s.webButtonText}>
+              {isLast ? "Let's Go!" : "Next"}
+            </Text>
             <Ionicons
-              name="chevron-forward"
-              size={16}
-              color={COLORS.textSecondary}
+              name={isLast ? "checkmark-circle" : "arrow-forward"}
+              size={18}
+              color={C.white}
             />
           </Pressable>
-        )}
+        </Animated.View>
       </View>
+    );
+  }
 
-      {/* Slide list */}
-      <FlatList
-        ref={flatListRef}
-        data={slides}
-        keyExtractor={(item) => item.id}
-        horizontal
-        pagingEnabled
-        bounces={false}
-        showsHorizontalScrollIndicator={false}
-        onScroll={Animated.event(
-          [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-          { useNativeDriver: false }
-        )}
-        scrollEventThrottle={16}
-        onViewableItemsChanged={onViewableItemsChanged}
-        viewabilityConfig={viewabilityConfig}
-        renderItem={({ item }) => (
-          <SlideItem
-            item={item}
-            width={width}
-            onGetStarted={completeOnboarding}
-          />
-        )}
-        getItemLayout={(_, index) => ({
-          length: width,
-          offset: width * index,
-          index,
-        })}
-        accessibilityRole="adjustable"
-        accessibilityLabel="Onboarding slides"
-      />
+  // ── Mobile: full-screen swipeable modal ────────────────────────────────────
+  const slideWidth = screenW;
 
-      {/* Bottom: pagination + next button */}
-      <View style={styles.footer}>
-        {/* Dots */}
-        <View style={styles.pagination}>
-          {slides.map((_, index) => (
-            <PaginationDot
-              key={index}
-              index={index}
-              scrollX={scrollX}
-              width={width}
-            />
-          ))}
+  return (
+    <Modal
+      visible={visible}
+      animationType="fade"
+      transparent
+      statusBarTranslucent
+    >
+      <View style={s.mobileOverlay}>
+        {/* Header */}
+        <View style={s.mobileHeader}>
+          <View style={s.mobileLogoRow}>
+            <Ionicons name="diamond" size={20} color={C.primary} />
+            <Text style={s.mobileLogo}>CryptoPay</Text>
+          </View>
+          {!isLast && (
+            <Pressable
+              onPress={handleFinish}
+              hitSlop={12}
+              style={({ pressed }) => [
+                s.mobileSkipBtn,
+                pressed && { opacity: 0.6 },
+              ]}
+            >
+              <Text style={s.mobileSkipText}>Skip</Text>
+              <Ionicons name="chevron-forward" size={14} color={C.textSecondary} />
+            </Pressable>
+          )}
         </View>
 
-        {/* Next / Get Started button */}
-        {!isLastSlide ? (
+        {/* Slides */}
+        <FlatList
+          ref={flatListRef}
+          data={slides}
+          keyExtractor={(item) => item.id}
+          horizontal
+          pagingEnabled
+          bounces={false}
+          showsHorizontalScrollIndicator={false}
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+            { useNativeDriver: false }
+          )}
+          scrollEventThrottle={16}
+          onViewableItemsChanged={onViewableItemsChanged}
+          viewabilityConfig={viewabilityConfig}
+          renderItem={({ item }) => (
+            <MobileSlide item={item} width={slideWidth} />
+          )}
+          getItemLayout={(_, index) => ({
+            length: slideWidth,
+            offset: slideWidth * index,
+            index,
+          })}
+        />
+
+        {/* Footer */}
+        <View style={s.mobileFooter}>
+          <View style={s.mobileDots}>
+            {slides.map((_, i) => (
+              <Dot key={i} index={i} scrollX={scrollX} itemWidth={slideWidth} />
+            ))}
+          </View>
+
           <Pressable
             onPress={handleNext}
             style={({ pressed }) => [
-              styles.nextButton,
-              pressed && styles.nextButtonPressed,
+              s.mobileNextBtn,
+              isLast && s.mobileFinishBtn,
+              pressed && { backgroundColor: C.primaryDark, transform: [{ scale: 0.97 }] },
             ]}
-            accessibilityRole="button"
-            accessibilityLabel={`Go to slide ${currentIndex + 2}`}
           >
-            <Text style={styles.nextButtonText}>Next</Text>
-            <Ionicons name="arrow-forward" size={18} color={COLORS.white} />
+            <Text style={s.mobileNextText}>
+              {isLast ? "Let's Go!" : "Next"}
+            </Text>
+            <Ionicons
+              name={isLast ? "checkmark-circle" : "arrow-forward"}
+              size={18}
+              color={C.white}
+            />
           </Pressable>
-        ) : (
-          <Pressable
-            onPress={completeOnboarding}
-            style={({ pressed }) => [
-              styles.nextButton,
-              styles.getStartedButton,
-              pressed && styles.nextButtonPressed,
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Get started — create your account"
-          >
-            <Text style={styles.nextButtonText}>Get Started</Text>
-            <Ionicons name="arrow-forward" size={18} color={COLORS.white} />
-          </Pressable>
-        )}
+        </View>
       </View>
-    </SafeAreaView>
+    </Modal>
   );
 }
 
-// ── Styles ─────────────────────────────────────────────────────────────────────
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.bg,
+// ── Keep default export for the route (redirects away) ───────────────────────
+export default function OnboardingScreen() {
+  return null;
+}
+
+// ── Styles ───────────────────────────────────────────────────────────────────
+const s = StyleSheet.create({
+  // ── Web overlay ──
+  webOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 9999,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  webBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: C.backdrop,
+  },
+  webCard: {
+    backgroundColor: C.card,
+    borderRadius: 24,
+    padding: 40,
+    borderWidth: 1,
+    borderColor: C.border,
+    alignItems: "center",
+    ...(isWeb
+      ? ({ boxShadow: "0 25px 80px rgba(0,0,0,0.6)" } as any)
+      : {}),
+  },
+  webStepRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    width: "100%",
+    marginBottom: 28,
+  },
+  webStepLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: C.textMuted,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  webSkipText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: C.textSecondary,
+  },
+  webSlide: {
+    alignItems: "center",
+    paddingHorizontal: 8,
+  },
+  webTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: C.textPrimary,
+    textAlign: "center",
+    marginBottom: 12,
+    letterSpacing: -0.3,
+  },
+  webDesc: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: C.textSecondary,
+    textAlign: "center",
+    maxWidth: 360,
+  },
+  webDots: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 28,
+    marginBottom: 24,
+  },
+  webDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: C.textMuted,
+    opacity: 0.4,
+  },
+  webDotActive: {
+    width: 24,
+    backgroundColor: C.primary,
+    opacity: 1,
+  },
+  webButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: C.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 36,
+    borderRadius: 14,
+    width: "100%",
+    ...(isWeb ? ({ cursor: "pointer" } as any) : {}),
+  },
+  webButtonText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: C.white,
   },
 
-  // Header
-  header: {
+  // ── Shared ──
+  iconCircle: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  iconCircleLarge: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 36,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  dot: {
+    height: 7,
+    borderRadius: 3.5,
+  },
+
+  // ── Mobile ──
+  mobileOverlay: {
+    flex: 1,
+    backgroundColor: C.bg,
+  },
+  mobileHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 24,
-    paddingTop: Platform.OS === "android" ? 12 : 8,
+    paddingTop: Platform.OS === "android" ? 48 : 56,
     paddingBottom: 8,
   },
-  headerLeft: {
+  mobileLogoRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
-  logoText: {
+  mobileLogo: {
     fontSize: 18,
     fontWeight: "700",
-    color: COLORS.textPrimary,
+    color: C.textPrimary,
     letterSpacing: 0.3,
   },
-  skipButton: {
+  mobileSkipBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 2,
@@ -400,108 +540,60 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: "rgba(255,255,255,0.05)",
   },
-  skipText: {
+  mobileSkipText: {
     fontSize: 14,
     fontWeight: "600",
-    color: COLORS.textSecondary,
+    color: C.textSecondary,
   },
-
-  // Slide
-  slideContainer: {
+  mobileSlide: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 40,
   },
-  slideContent: {
-    alignItems: "center",
-    maxWidth: 360,
-  },
-  iconCircle: {
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 40,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
-  },
-  slideTitle: {
-    fontSize: 28,
+  mobileTitle: {
+    fontSize: 26,
     fontWeight: "800",
-    color: COLORS.textPrimary,
+    color: C.textPrimary,
     textAlign: "center",
-    marginBottom: 16,
+    marginBottom: 14,
     letterSpacing: -0.3,
   },
-  slideDescription: {
-    fontSize: 16,
-    lineHeight: 24,
-    color: COLORS.textSecondary,
+  mobileDesc: {
+    fontSize: 15,
+    lineHeight: 23,
+    color: C.textSecondary,
     textAlign: "center",
-    paddingHorizontal: 8,
+    maxWidth: 340,
   },
-
-  // CTA on last slide
-  ctaButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: COLORS.primary,
-    paddingVertical: 16,
-    paddingHorizontal: 36,
-    borderRadius: 16,
-    marginTop: 36,
-    minWidth: 200,
-  },
-  ctaButtonPressed: {
-    backgroundColor: COLORS.primaryDark,
-    transform: [{ scale: 0.97 }],
-  },
-  ctaButtonText: {
-    fontSize: 17,
-    fontWeight: "700",
-    color: COLORS.white,
-  },
-
-  // Footer
-  footer: {
+  mobileFooter: {
     paddingHorizontal: 24,
-    paddingBottom: Platform.OS === "android" ? 24 : 16,
+    paddingBottom: Platform.OS === "android" ? 24 : 32,
     paddingTop: 16,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  pagination: {
+  mobileDots: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
-  dot: {
-    height: 8,
-    borderRadius: 4,
-  },
-  nextButton: {
+  mobileNextBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: COLORS.primary,
+    backgroundColor: C.primary,
     paddingVertical: 14,
     paddingHorizontal: 28,
     borderRadius: 14,
   },
-  nextButtonPressed: {
-    backgroundColor: COLORS.primaryDark,
-    transform: [{ scale: 0.97 }],
-  },
-  getStartedButton: {
+  mobileFinishBtn: {
     paddingHorizontal: 32,
   },
-  nextButtonText: {
+  mobileNextText: {
     fontSize: 16,
     fontWeight: "700",
-    color: COLORS.white,
+    color: C.white,
   },
 });

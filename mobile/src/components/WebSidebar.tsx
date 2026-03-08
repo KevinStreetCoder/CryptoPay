@@ -44,13 +44,13 @@ const SECONDARY_ITEMS = [
     key: "settings",
     label: "Settings",
     icon: "settings-outline" as const,
-    path: "/settings/change-pin",
+    path: "/settings",
   },
   {
     key: "help",
     label: "Help & Support",
     icon: "help-circle-outline" as const,
-    path: null,
+    path: "/settings/help",
   },
 ];
 

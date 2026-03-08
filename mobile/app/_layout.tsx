@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { View } from "react-native";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -13,8 +13,8 @@ import { ToastProvider } from "../src/components/Toast";
 import { DashboardLayout } from "../src/components/WebSidebar";
 import { usePushNotifications } from "../src/hooks/usePushNotifications";
 import { storage } from "../src/utils/storage";
-import { ONBOARDING_COMPLETED_KEY } from "./onboarding";
-// Keep splash screen visible until we decide what to show
+import { OnboardingModal, ONBOARDING_COMPLETED_KEY } from "./onboarding";
+
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const queryClient = new QueryClient({
@@ -28,52 +28,57 @@ function RootNavigator() {
   const segments = useSegments();
   const router = useRouter();
   const [appReady, setAppReady] = useState(false);
-  const [onboardingCompleted, setOnboardingCompleted] = useState<
-    boolean | null
-  >(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
-  // Register for push notifications when the user is authenticated
   const { expoPushToken } = usePushNotifications();
 
   useEffect(() => {
     const init = async () => {
-      const [, onboardingFlag] = await Promise.all([
-        bootstrap(),
-        storage.getItemAsync(ONBOARDING_COMPLETED_KEY),
-      ]);
-      setOnboardingCompleted(onboardingFlag === "true");
+      await bootstrap();
       setAppReady(true);
       await SplashScreen.hideAsync().catch(() => {});
     };
     init();
   }, [bootstrap]);
 
-  // Auth gate: redirect based on onboarding + auth state
+  // Check onboarding status when user logs in
   useEffect(() => {
-    if (!appReady || onboardingCompleted === null) return;
+    if (!user) {
+      setShowOnboarding(false);
+      return;
+    }
+    (async () => {
+      const flag = await storage.getItemAsync(ONBOARDING_COMPLETED_KEY);
+      if (flag !== "true") {
+        setShowOnboarding(true);
+      }
+    })();
+  }, [user]);
+
+  // Auth gate
+  useEffect(() => {
+    if (!appReady) return;
 
     const inAuthGroup = segments[0] === "auth";
     const inOnboarding = segments[0] === "onboarding";
 
-    // If onboarding not completed, redirect there (unless already on it)
-    if (!onboardingCompleted && !inOnboarding) {
-      router.replace("/onboarding");
+    // Skip onboarding route — redirect to proper place
+    if (inOnboarding) {
+      if (user) router.replace("/(tabs)");
+      else router.replace("/auth/login");
       return;
     }
 
-    // If onboarding is done but user is still on the onboarding screen, move on
-    if (onboardingCompleted && inOnboarding) {
-      router.replace("/auth/login");
-      return;
-    }
-
-    // Normal auth gating (only when onboarding is complete)
-    if (onboardingCompleted && !user && !inAuthGroup && !inOnboarding) {
+    if (!user && !inAuthGroup) {
       router.replace("/auth/login");
     } else if (user && inAuthGroup) {
       router.replace("/(tabs)");
     }
-  }, [user, segments, appReady, onboardingCompleted, router]);
+  }, [user, segments, appReady, router]);
+
+  const handleOnboardingComplete = useCallback(() => {
+    setShowOnboarding(false);
+  }, []);
 
   if (!appReady) {
     return <LoadingScreen />;
@@ -82,59 +87,37 @@ function RootNavigator() {
   const inAuthGroup = segments[0] === "auth";
   const showDashboard = !!user && !inAuthGroup;
 
+  const stackContent = (
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: "#060E1F" },
+        animation: "slide_from_right",
+      }}
+    >
+      <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="onboarding" options={{ animation: "fade" }} />
+      <Stack.Screen name="auth" options={{ animation: "slide_from_bottom" }} />
+      <Stack.Screen name="payment" />
+      <Stack.Screen name="settings" options={{ animation: "slide_from_bottom" }} />
+    </Stack>
+  );
+
   return (
     <View style={{ flex: 1, backgroundColor: "#060E1F" }}>
       <NetworkStatus />
       <StatusBar style="light" />
       {showDashboard ? (
-        <DashboardLayout>
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              contentStyle: { backgroundColor: "#060E1F" },
-              animation: "slide_from_right",
-            }}
-          >
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen
-              name="onboarding"
-              options={{ animation: "fade" }}
-            />
-            <Stack.Screen
-              name="auth"
-              options={{ animation: "slide_from_bottom" }}
-            />
-            <Stack.Screen name="payment" />
-            <Stack.Screen
-              name="settings"
-              options={{ animation: "slide_from_bottom" }}
-            />
-          </Stack>
-        </DashboardLayout>
+        <DashboardLayout>{stackContent}</DashboardLayout>
       ) : (
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            contentStyle: { backgroundColor: "#060E1F" },
-            animation: "slide_from_right",
-          }}
-        >
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen
-            name="onboarding"
-            options={{ animation: "fade" }}
-          />
-          <Stack.Screen
-            name="auth"
-            options={{ animation: "slide_from_bottom" }}
-          />
-          <Stack.Screen name="payment" />
-          <Stack.Screen
-            name="settings"
-            options={{ animation: "slide_from_bottom" }}
-          />
-        </Stack>
+        stackContent
       )}
+
+      {/* Onboarding popup — shown once after first login */}
+      <OnboardingModal
+        visible={showOnboarding}
+        onComplete={handleOnboardingComplete}
+      />
     </View>
   );
 }
