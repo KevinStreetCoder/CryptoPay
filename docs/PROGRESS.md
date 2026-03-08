@@ -37,33 +37,33 @@
 | Audit logging | ✅ Done | Immutable AuditLog, middleware for request context |
 | Production settings | ✅ Done | SSL, HSTS, WhiteNoise, Sentry, JSON logging, DB pooling |
 | Docker Compose | ✅ Done | PostgreSQL 16, Redis 7, web, celery, celery-beat, health checks |
-| Tests (35+) | ✅ Done | Auth, wallets, saga, idempotency, daily limits, rates |
+| Tests (66) | ✅ Done | Auth, wallets, saga, idempotency, daily limits, rates, address gen, deposits |
 
 ### Frontend (React Native + Expo) — COMPLETE ✅
 
 | Component | Status | Notes |
 |-----------|--------|-------|
 | Expo project setup | ✅ Done | Expo SDK 55, TypeScript, expo-router |
-| NativeWind + Tailwind | ✅ Done | Custom color palette, metro config, babel config |
+| ~~NativeWind~~ Inline styles | ✅ Done | NativeWind removed (caused text node errors on web), all styles are inline |
 | EAS Build config | ✅ Done | Development, preview, production profiles |
-| Design system | ✅ Done | Dark theme, teal primary, amber accent, Inter font |
+| Design system | ✅ Done | Premium dark theme, emerald primary (#10B981), glassmorphism, Inter font |
 | API client (axios) | ✅ Done | JWT auto-refresh, platform-aware base URLs |
 | Auth store | ✅ Done | SecureStore tokens, login/register/logout |
 | Error boundary | ✅ Done | Friendly error UI with retry |
 | Network status banner | ✅ Done | Offline detection with connectivity check |
 | Loading screen | ✅ Done | Branded splash with animated logo |
 | Auth gate | ✅ Done | Redirect to login if unauthenticated |
-| **Home screen** | ✅ Done | Balance card, promo banner, rate ticker, quick actions, recent transactions |
-| **Pay screen** | ✅ Done | Pay Bill, Buy Goods, Send M-Pesa options with "how it works" |
-| **Wallet screen** | ✅ Done | Portfolio value, crypto cards with KES equivalent, deposit modal, QR placeholder, copy address |
-| **Profile screen** | ✅ Done | User card, KYC tier display, settings menu, logout |
-| **Login screen** | ✅ Done | Phone → PIN two-step flow |
-| **Register screen** | ✅ Done | Phone → OTP → Name → PIN with step indicator |
+| **Home screen** | ✅ Done | Premium balance card, glass cards, rate ticker with pulsing LIVE indicator, quick actions with spring animations |
+| **Pay screen** | ✅ Done | Glass payment cards with press animations, "how it works" timeline, provider pills |
+| **Wallet screen** | ✅ Done | Glass portfolio card, crypto brand color icons (no emoji), deposit modal, copy address |
+| **Profile screen** | ✅ Done | Premium user card, KYC tier progress, colored icon menu items |
+| **Login screen** | ✅ Done | Phone → PIN two-step flow, KE badge (no emoji flag), glow logo |
+| **Register screen** | ✅ Done | Phone → OTP → Name → PIN with premium step indicator, KE badge |
 | **Pay Bill flow** | ✅ Done | Paybill + account + amount + crypto selector + rate lock |
 | **Pay Till flow** | ✅ Done | Till number + amount + crypto selector + rate lock |
-| **Confirm payment** | ✅ Done | Review summary + PIN confirmation with haptics |
-| **Success screen** | ✅ Done | Success animation with payment details |
-| Reusable components | ✅ Done | PinInput, BalanceCard, TransactionItem, Button, QuickAction, AmountInput, CurrencySelector, StatusBadge, Header, RateTicker |
+| **Confirm payment** | ✅ Done | Glass receipt card + PIN confirmation with glow shadows |
+| **Success screen** | ✅ Done | 3-layer animated checkmark, glass receipt card |
+| Reusable components | ✅ Done | PinInput, BalanceCard, TransactionItem, Button (with glow shadows), QuickAction (spring press), AmountInput, CurrencySelector, StatusBadge, Header, RateTicker (pulsing LIVE dot) |
 | Biometric auth hook | ✅ Done | expo-local-authentication wrapper |
 
 ---
@@ -72,13 +72,13 @@
 
 | Finding | Status | Implementation |
 |---------|--------|---------------|
-| Skeleton loaders | ✅ Done | `Skeleton.tsx` — BalanceCardSkeleton, TransactionSkeleton, WalletCardSkeleton replacing "Loading..." text |
+| Skeleton loaders | ✅ Done | `Skeleton.tsx` — BalanceCardSkeleton, TransactionSkeleton, WalletCardSkeleton with smooth 1500ms shimmer |
 | Toast notification system | ✅ Done | `Toast.tsx` — ToastProvider + useToast() hook with success/error/warning/info types, haptic feedback, auto-dismiss |
 | API error normalization | ✅ Done | `apiErrors.ts` — `normalizeError()` extracts structured errors from Axios, network errors, timeouts, field validation |
 | Alert.alert → Toast migration | ✅ Done | All screens (login, register, paybill, till, confirm) now use Toast instead of Alert.alert |
 | Accessibility labels | ✅ Done | `accessibilityRole`, `accessibilityLabel`, `accessibilityHint`, `accessibilityState` on all interactive elements |
 | Font scaling support | ✅ Done | `maxFontSizeMultiplier={1.2-1.3}` on all text and inputs to prevent layout breaks |
-| Screenshot prevention | ✅ Done | `useScreenSecurity` hook — prevents screenshots on PIN entry and sensitive screens (uses expo-screen-capture when available) |
+| Screenshot prevention | ✅ Done | `useScreenSecurity` hook — prevents screenshots on PIN entry and sensitive screens |
 | Clipboard security | ✅ Done | Auto-clear clipboard 30s after copying deposit addresses |
 | Console.log stripping | ✅ Done | `babel-plugin-transform-remove-console` in production (preserves console.error/warn) |
 | testID props | ✅ Done | Added `testID` on all interactive elements for E2E testing readiness |
@@ -88,35 +88,166 @@
 
 ---
 
-## What's NOT Done Yet (Phase 1 Remaining)
+## Premium UI/UX Redesign — IMPLEMENTED ✅
+
+**Last updated:** 2026-03-08
+
+| Change | Status | Details |
+|--------|--------|---------|
+| Deep premium color palette | ✅ Done | Background `#060E1F`, card `#0C1A2E`, elevated `#162742`, border `#1E3350` — richer, deeper navy |
+| Glassmorphism effects | ✅ Done | Glass bg/border/highlight tokens, semi-transparent surfaces with 8-14% white borders |
+| Primary color upgrade | ✅ Done | Vibrant emerald `#10B981` (500) with full 50-900 scale |
+| Shadow system | ✅ Done | `shadows.sm/md/lg/glow()` presets with platform-aware shadow/elevation |
+| Emoji removal | ✅ Done | Flag emoji `🇰🇪` replaced with styled "KE" text badge. Currency emoji `💵/◎` replaced with Unicode symbols |
+| Currency icon system | ✅ Done | `CURRENCIES[x].iconSymbol` (₿, Ξ, $, S, K) rendered in crypto-brand-colored circles |
+| Tab bar glassmorphism | ✅ Done | Semi-transparent tab bar with pill-shaped active indicator |
+| Button glow shadows | ✅ Done | Primary buttons have `shadows.glow()` effect, spring-based press animation `scale(0.97)` |
+| Press micro-animations | ✅ Done | All interactive cards: `scale(0.98)`, `opacity(0.85)` on press via Animated spring |
+| QuickAction spring press | ✅ Done | `scale(0.92)` spring animation, 52x52 icon containers with colored borders |
+| RateTicker LIVE pulse | ✅ Done | Pulsing green dot animation, smoother crossfade, colored change pills |
+| Transaction status pills | ✅ Done | Colored dot + label in tinted background pill |
+| Premium balance card | ✅ Done | `borderRadius: 28`, decorative circles, uppercase label, crypto dot indicators |
+| Premium portfolio card | ✅ Done | Glass borders, accent top line, glow shadow on Receive button |
+| Glass receipt card | ✅ Done | Confirm screen: 60px payment icon, dashed dividers, green "Paying with" pill |
+| 3-layer success animation | ✅ Done | Pulsing glow rings (140/110/92px) with spring bounce checkmark |
+| Premium auth screens | ✅ Done | 3-ring logo glow, glass input borders, glow shadow on focused inputs |
+| Step indicator upgrade | ✅ Done | Colored circles with glass connectors, completed checkmarks |
+| OTP input boxes | ✅ Done | 50x58 rounded-xl, themed fill states, green success indicator |
+| PinInput redesign | ✅ Done | 50x58 rounded-xl boxes, green dot indicators, themed fill states |
+| Profile menu icons | ✅ Done | 42x42 colored icon containers (shield=green, lock=blue, fingerprint=amber) |
+| Splash/config colors | ✅ Done | `app.json` splash bg updated to `#060E1F` |
+
+---
+
+## Web Platform & Error Handling Fixes — IMPLEMENTED ✅
+
+**Last updated:** 2026-03-08
+
+| Change | Status | Details |
+|--------|--------|---------|
+| CORS configuration | ✅ Fixed | Added `localhost:8081`, `:19006`, `127.0.0.1:8081` to allowed origins |
+| SSL redirect for dev | ✅ Fixed | Made `SECURE_SSL_REDIRECT` env-configurable, disabled in local `.env` |
+| NetworkStatus false positive | ✅ Fixed | Module-level dev detection — returns `null` on localhost, no hooks mounted |
+| PinInput error reset | ✅ Fixed | Auto-clears PIN on error, re-focuses input. Error borders only show when empty |
+| Wallet API pagination | ✅ Fixed | `useWallets` hook handles both paginated `{results:[]}` and direct array responses |
+| BalanceCard defensive | ✅ Fixed | Added `Array.isArray()` guard — prevents `wallets.find is not a function` crash |
+| ErrorBoundary redesign | ✅ Done | Updated to new theme colors `#060E1F`, debug info panel, spring retry button |
+| Auth split layout (web) | ✅ Done | Desktop ≥900px: BrandPanel (logo + features) on left, form card on right |
+| ~~WebContainer~~ DashboardLayout | ✅ Done | WebContainer removed, replaced with DashboardLayout (collapsible sidebar) at root layout |
+| Profile logout (web) | ✅ Fixed | Custom overlay confirm dialog on web (Alert.alert doesn't work on web) |
+| Haptics web safety | ✅ Fixed | All `Haptics.*` calls wrapped in `Platform.OS !== "web"` check |
+| Auth layout bg color | ✅ Fixed | Updated from `#0F172A` to `#060E1F` |
+| Payment layout bg color | ✅ Fixed | Updated from `#0F172A` to `#060E1F` |
+
+---
+
+## Web Dashboard & Data Integrity — IMPLEMENTED ✅
+
+**Last updated:** 2026-03-08
+
+| Change | Status | Details |
+|--------|--------|---------|
+| Collapsible sidebar | ✅ Done | `WebSidebar.tsx` — 260px expanded / 68px collapsed, CSS transition, tooltips in collapsed mode |
+| DashboardLayout at root | ✅ Done | Wraps all authenticated screens, sidebar persists across navigation |
+| Desktop Home dashboard | ✅ Done | Two-column grid: BalanceCard + PortfolioChart, QuickActions, RateTicker, Transactions + TransactionSummary |
+| Portfolio chart (real data) | ✅ Done | View-based line chart derived from real transaction history (last 7 days) |
+| Dynamic 24h change % | ✅ Done | Computed from real transaction volumes, no more hardcoded "+4.2%" |
+| Transaction categorization | ✅ Done | Groups by Payments/Deposits/Conversions with counts and KES totals |
+| Desktop Wallet redesign | ✅ Done | Portfolio + Actions grid (60/40), 2-column assets, table-like transactions |
+| Desktop Profile two-column | ✅ Done | User card + KYC on left, Security + Support on right |
+| Transaction detail screen | ✅ Done | `payment/detail.tsx` — full detail view with type icon, status badge, receipt info |
+| TransactionItem navigation | ✅ Done | Clicking a transaction navigates to detail screen |
+| Transaction interface aligned | ✅ Done | Frontend `Transaction` type matches backend serializer fields exactly |
+| Payment API interfaces aligned | ✅ Done | `PayBillData`, `PayTillData` match backend `PayBillSerializer`, `PayTillSerializer` |
+| Helper functions | ✅ Done | `getTxKesAmount()`, `getTxCrypto()`, `getTxRecipient()` for field abstraction |
+| All mock data removed | ✅ Done | No more `Math.random()`, hardcoded chart points, or placeholder values |
+| Quote interface aligned | ✅ Done | Frontend `Quote` matches backend: `exchange_rate`, `fee_kes`, `crypto_amount`, `total_kes` |
+| API URL mismatch fixed | ✅ Done | Frontend `/payments/paybill/` → `/payments/pay-bill/` (matching backend hyphenated URLs) |
+| Web input focus styling | ✅ Done | Custom focus glow (`boxShadow`), transitions, `outlineStyle: none` across all inputs |
+| PIN input web glow | ✅ Done | Active/filled/error states with `boxShadow` glow, smooth CSS transitions, larger boxes on web |
+| Auth screen input styling | ✅ Done | Login/register inputs with focus glow and outline removal on web |
+| NativeWind removed | ✅ Done | Was causing "Unexpected text node: ." errors on web |
+| Cross-platform shadows | ✅ Done | `makeShadow()` utility — `boxShadow` on web, `shadow*` props on native |
+| useNativeDriver fixed | ✅ Done | `Platform.OS !== "web"` across all 13+ animated components |
+| pointerEvents fixed | ✅ Done | Moved from prop to style object |
+| Profile handlers implemented | ✅ Done | Verify Identity (toast), Biometric (platform-aware toast), Help (mailto), Terms/Privacy (URLs) |
+| Web logout dialog | ✅ Done | Custom overlay dialog on web (Alert.alert doesn't work on web) |
+| Share receipt (web) | ✅ Done | Clipboard copy on web, native Share API on mobile |
+| Toast web improvements | ✅ Done | Centered, max-width 440px, backdrop blur, web-safe haptics |
+
+---
+
+## Deposit/Receive Flow — IMPLEMENTED ✅
+
+**Last updated:** 2026-03-08
+
+| Change | Status | Details |
+|--------|--------|---------|
+| Address generation service | ✅ Done | Deterministic HMAC-SHA256 derivation per user/currency/index, realistic chain-specific formats |
+| Generate address endpoint | ✅ Done | `POST /wallets/{id}/generate-address/` — on-demand address generation, idempotent |
+| Deposit history endpoint | ✅ Done | `GET /wallets/deposits/` — paginated list of user's blockchain deposits with status |
+| BlockchainDeposit serializer | ✅ Done | Full serialization: chain, tx_hash, amount, confirmations, status, timestamps |
+| TronGrid listener | ✅ Done | `monitor_tron_deposits()` — polls TRC-20 USDT transfers via TronGrid API |
+| Confirmation tracker | ✅ Done | `update_tron_confirmations()` — queries current block, calculates confirmations |
+| Deposit crediting | ✅ Done | `process_pending_deposits()` — credits wallet via WalletService when confirmed |
+| QR code deposit modal | ✅ Done | `react-native-qrcode-svg` — QR code displayed in both desktop and mobile deposit modals |
+| On-demand address generation | ✅ Done | Receive button generates address if none exists, with loading spinner |
+| Generate Address button | ✅ Done | Asset cards show "Generate Deposit Address" dashed button when no address |
+| NativeWind cleanup | ✅ Done | Removed `nativewind-env.d.ts`, cleaned `tsconfig.json` and `tailwind.config.js` |
+| Shadow deprecation fixes | ✅ Done | All `shadow*` props wrapped in Platform guards, `boxShadow` on web |
+| Tests (15 new) | ✅ Done | Address generation (7), API endpoints (5), deposit list (3) — total 66 tests |
+
+---
+
+## Production Hardening — IMPLEMENTED ✅
+
+**Last updated:** 2026-03-08
+
+| Component | Status | Details |
+|-----------|--------|---------|
+| Admin test balances | ✅ Done | `create_admin` seeds USDT 500, BTC 0.05, ETH 1.5, KES 50,000 via WalletService.credit() |
+| Celery Beat schedule | ✅ Done | 5 periodic tasks: rate refresh (30s), Tron monitor (15s), confirmations (10s), deposits (10s), float check (5min) |
+| Swagger/OpenAPI docs | ✅ Done | `drf-spectacular` at `/api/docs/` (Swagger) and `/api/redoc/` (ReDoc) |
+| M-Pesa STK Push buy flow | ✅ Done | `BuyCryptoView` with PIN verify, idempotency, quote validation, daily limits, fallback poll |
+| M-Pesa task polling | ✅ Done | `poll_stk_status` Celery task with 3 retries at 30s intervals |
+| Biometric unlock | ✅ Done | App launch: if biometric enabled, authenticateAsync before loading profile |
+| Biometric toggle | ✅ Done | Profile screen Switch component, saves preference to storage |
+| KYC document upload API | ✅ Done | `POST /api/v1/auth/kyc/documents/` — upload, replace pending, reject if approved |
+| KYC verification screen | ✅ Done | `settings/kyc.tsx` — 5 document types, upload/re-upload, status badges |
+| Google Sign-In (mobile) | ✅ Done | `expo-auth-session` Google provider, login + register screens, auth store |
+| Admin stats dashboard | ✅ Done | D3.js v7 charts at `/admin/stats/` — users, transactions, KYC, regions, crypto holdings |
+| Settings: Change PIN | ✅ Done | `settings/change-pin` screen with current/new PIN flow |
+
+---
+
+## Phase 2 — IMPLEMENTED ✅
+
+**Last updated:** 2026-03-08
+
+| Component | Status | Details |
+|-----------|--------|---------|
+| Push notifications | ✅ Done | Expo push tokens, `PushToken` model, backend registration API, Celery send task, auto-cleanup of invalid tokens |
+| Buy crypto screen | ✅ Done | `payment/buy-crypto.tsx` — 3-step flow (form → preview → PIN), live rate quotes with debounce, STK Push |
+| Smile Identity KYC | ✅ Done | `kyc_service.py` — ID verify, document+selfie verify, webhook callback, auto tier upgrade |
+| Email notifications | ✅ Done | 4 email types (welcome, receipt, KYC status, security alert), HTML templates, Celery tasks with retry |
+| CI/CD pipeline | ✅ Done | `.github/workflows/ci.yml` — backend tests + deploy check, frontend TS + web build, Docker build |
+| Onboarding tour | ✅ Done | 4-slide swipeable onboarding with animated pagination, stored completion flag |
+| Localization | ✅ Done | English + Swahili (i18n-js + expo-localization), language picker in profile |
+| Notification preferences | ✅ Done | `settings/notifications.tsx` — 5 toggle categories, stored in local storage |
+
+---
+
+## What's NOT Done Yet (Phase 3 — Infrastructure & Polish)
 
 ### Backend
-- [ ] **Blockchain listener implementation** — `monitor_tron_deposits()` is TODO (needs TronGrid API polling)
-- [ ] **HD wallet derivation** — Generate deposit addresses per user (BIP-44 for BTC, Tron address derivation)
-- [ ] **KYC document upload** — Model exists but no upload endpoint yet
-- [ ] **KYC verification integration** — Smile Identity API integration
-- [ ] **M-Pesa STK Push for deposits** — Client method exists, needs deposit flow view
-- [ ] **Float monitoring alerts** — `check_float_balance` command exists, needs Celery scheduling + alerts
-- [ ] **Email notifications** — No email service configured yet
-- [ ] **Swagger/OpenAPI docs** — No API documentation endpoint (add `drf-spectacular`)
-- [ ] **CI/CD pipeline** — No GitHub Actions yet
-
-### Frontend
-- [ ] **Google Sign-In integration** — Backend ready, mobile needs `@react-native-google-signin`
-- [ ] **Biometric unlock** — Hook exists, needs integration into app launch flow
-- [ ] **Push notifications** — No push notification setup yet
-- [ ] **Transaction detail screen** — Clicking a transaction should show full details
-- [ ] **QR code generation** — Using placeholder icon, needs `react-native-qrcode-svg`
-- [ ] **Deposit flow** — Needs crypto deposit instructions + address sharing
-- [ ] **KYC verification flow** — Photo capture + document upload screens
-- [ ] **Settings screens** — Change PIN, biometric toggle, notification preferences
-- [ ] **Onboarding tour** — First-time user walkthrough
-- [ ] **Localization** — English + Swahili support
+- [ ] **HD wallet (production)** — Replace HMAC derivation with BIP-32/44 or Fireblocks custody API
+- [ ] **Webhook retry queue** — Dead letter queue for failed M-Pesa callbacks
+- [ ] **Rate limiting (API)** — DRF throttling per-endpoint tuning
 
 ### Infrastructure
 - [ ] **VPS deployment** — Hetzner/Contabo setup
 - [ ] **SSL certificates** — Cloudflare or Let's Encrypt
-- [ ] **Domain setup** — cryptopay.co.ke / cryptopay.co.ke
+- [ ] **Domain setup** — cryptopay.co.ke
 - [ ] **Monitoring** — Sentry (config ready), Grafana/Prometheus
 - [ ] **Backup strategy** — PostgreSQL automated backups
 - [ ] **Rate limiting at proxy** — Nginx/Cloudflare rate limiting
@@ -163,7 +294,7 @@
 
 ## Test Results
 
-**Backend: 35+ tests passing**
+**Backend: 66 tests passing**
 - 4 auth tests (PIN hash, normalization, superuser, lockout)
 - 4 Google OAuth tests (valid token, invalid token, new user, existing user)
 - 4 device tests (registration, list, duplicate, untrusted)
@@ -176,6 +307,9 @@
 - 4 rate composition tests
 - 2 spread calculation tests
 - 3 quote locking tests
+- 7 address generation tests (chain formats, determinism, uniqueness)
+- 5 generate-address API tests (success, idempotent, KES rejection, auth)
+- 3 deposit list API tests (empty, user deposits, isolation)
 
 ---
 

@@ -28,6 +28,7 @@ THIRD_PARTY_APPS = [
     "corsheaders",
     "django_filters",
     "django_celery_beat",
+    "drf_spectacular",
 ]
 
 LOCAL_APPS = [
@@ -121,6 +122,28 @@ CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = "Africa/Nairobi"
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
+CELERY_BEAT_SCHEDULE = {
+    "refresh-exchange-rates": {
+        "task": "apps.rates.tasks.refresh_rates",
+        "schedule": 120.0,  # Every 2 minutes (CoinGecko free tier rate limit)
+    },
+    "monitor-tron-deposits": {
+        "task": "apps.blockchain.tasks.monitor_tron_deposits",
+        "schedule": 15.0,  # Every 15 seconds
+    },
+    "update-tron-confirmations": {
+        "task": "apps.blockchain.tasks.update_tron_confirmations",
+        "schedule": 10.0,  # Every 10 seconds
+    },
+    "process-pending-deposits": {
+        "task": "apps.blockchain.tasks.process_pending_deposits",
+        "schedule": 10.0,  # Every 10 seconds
+    },
+    "check-float-balance": {
+        "task": "apps.mpesa.tasks.check_float_balance",
+        "schedule": 300.0,  # Every 5 minutes
+    },
+}
 
 # --- DRF ---
 REST_FRAMEWORK = {
@@ -144,6 +167,23 @@ REST_FRAMEWORK = {
         "anon": "30/minute",
         "user": "120/minute",
     },
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+# --- OpenAPI / Swagger ---
+SPECTACULAR_SETTINGS = {
+    "TITLE": "CryptoPay API",
+    "DESCRIPTION": "Crypto-to-M-Pesa payment platform API. Pay any Paybill or Till number directly from cryptocurrency.",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "COMPONENT_SPLIT_REQUEST": True,
+    "TAGS": [
+        {"name": "Auth", "description": "Authentication, registration, OTP, PIN management"},
+        {"name": "Wallets", "description": "Multi-currency wallets, deposit addresses, blockchain deposits"},
+        {"name": "Payments", "description": "Paybill, Till, M-Pesa send, transaction history"},
+        {"name": "Rates", "description": "Exchange rates and payment quotes"},
+        {"name": "KYC", "description": "Identity verification and document upload"},
+    ],
 }
 
 # --- JWT ---
@@ -157,7 +197,17 @@ SIMPLE_JWT = {
 }
 
 # --- CORS ---
-CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=["http://localhost:3000"])
+CORS_ALLOWED_ORIGINS = env.list(
+    "CORS_ALLOWED_ORIGINS",
+    default=[
+        "http://localhost:3000",
+        "http://localhost:8081",
+        "http://localhost:19006",
+        "http://127.0.0.1:8081",
+        "http://127.0.0.1:19006",
+    ],
+)
+CORS_ALLOW_CREDENTIALS = True
 
 # --- M-Pesa ---
 MPESA_ENVIRONMENT = env("MPESA_ENVIRONMENT", default="sandbox")
@@ -190,7 +240,7 @@ COINGECKO_API_KEY = env("COINGECKO_API_KEY", default="")
 GOOGLE_CLIENT_ID = env("GOOGLE_CLIENT_ID", default="")
 
 # --- Rate Engine ---
-RATE_LOCK_TTL_SECONDS = 30
+RATE_LOCK_TTL_SECONDS = 90
 PLATFORM_SPREAD_PERCENT = 1.5
 FLAT_FEE_KES = 10
 
@@ -205,6 +255,141 @@ REQUIRED_CONFIRMATIONS = {
     "bitcoin": 3,
     "solana": 32,
 }
+
+# --- Logging ---
+LOG_DIR = BASE_DIR / "logs"
+LOG_DIR.mkdir(exist_ok=True)
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "[{asctime}] {levelname} {name} {module}.{funcName}:{lineno} — {message}",
+            "style": "{",
+            "datefmt": "%Y-%m-%d %H:%M:%S",
+        },
+        "simple": {
+            "format": "[{asctime}] {levelname} {name} — {message}",
+            "style": "{",
+            "datefmt": "%H:%M:%S",
+        },
+        "json": {
+            "format": '{{"time":"{asctime}","level":"{levelname}","logger":"{name}","module":"{module}","func":"{funcName}","line":{lineno},"message":"{message}"}}',
+            "style": "{",
+            "datefmt": "%Y-%m-%dT%H:%M:%S%z",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "simple",
+            "level": "DEBUG",
+        },
+        "file_app": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": str(LOG_DIR / "app.log"),
+            "maxBytes": 10 * 1024 * 1024,  # 10 MB
+            "backupCount": 5,
+            "formatter": "verbose",
+            "level": "INFO",
+            "encoding": "utf-8",
+        },
+        "file_error": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": str(LOG_DIR / "error.log"),
+            "maxBytes": 10 * 1024 * 1024,
+            "backupCount": 5,
+            "formatter": "verbose",
+            "level": "ERROR",
+            "encoding": "utf-8",
+        },
+        "file_payments": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": str(LOG_DIR / "payments.log"),
+            "maxBytes": 10 * 1024 * 1024,
+            "backupCount": 5,
+            "formatter": "verbose",
+            "level": "INFO",
+            "encoding": "utf-8",
+        },
+        "file_security": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": str(LOG_DIR / "security.log"),
+            "maxBytes": 10 * 1024 * 1024,
+            "backupCount": 5,
+            "formatter": "verbose",
+            "level": "INFO",
+            "encoding": "utf-8",
+        },
+    },
+    "root": {
+        "handlers": ["console", "file_app", "file_error"],
+        "level": "INFO",
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console", "file_app"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+        "django.request": {
+            "handlers": ["console", "file_app", "file_error"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "django.security": {
+            "handlers": ["console", "file_security", "file_error"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "apps": {
+            "handlers": ["console", "file_app", "file_error"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "apps.payments": {
+            "handlers": ["console", "file_payments", "file_error"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "apps.mpesa": {
+            "handlers": ["console", "file_payments", "file_error"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "apps.accounts": {
+            "handlers": ["console", "file_security", "file_error"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "apps.rates": {
+            "handlers": ["console", "file_app", "file_error"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "apps.blockchain": {
+            "handlers": ["console", "file_payments", "file_error"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "celery": {
+            "handlers": ["console", "file_app"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+}
+
+# --- Email ---
+EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+DEFAULT_FROM_EMAIL = "CryptoPay <noreply@cryptopay.co.ke>"
+SERVER_EMAIL = "CryptoPay Alerts <alerts@cryptopay.co.ke>"
+
+# --- Smile Identity KYC ---
+SMILE_IDENTITY_PARTNER_ID = env("SMILE_IDENTITY_PARTNER_ID", default="")
+SMILE_IDENTITY_API_KEY = env("SMILE_IDENTITY_API_KEY", default="")
+SMILE_IDENTITY_CALLBACK_URL = env("SMILE_IDENTITY_CALLBACK_URL", default="")
 
 # --- KYC Tiers ---
 KYC_DAILY_LIMITS = {

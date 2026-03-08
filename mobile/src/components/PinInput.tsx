@@ -1,5 +1,5 @@
-import { useRef, useState } from "react";
-import { View, TextInput, Pressable } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { View, TextInput, Pressable, Platform } from "react-native";
 import * as Haptics from "expo-haptics";
 
 interface PinInputProps {
@@ -13,11 +13,22 @@ export function PinInput({ length = 6, onComplete, error, testID }: PinInputProp
   const [pin, setPin] = useState("");
   const inputRef = useRef<TextInput>(null);
 
+  // Reset PIN when error changes to true so user can retry
+  useEffect(() => {
+    if (error) {
+      setPin("");
+      // Re-focus the hidden input after clearing
+      setTimeout(() => inputRef.current?.focus(), 100);
+    }
+  }, [error]);
+
   const handleChange = (text: string) => {
     const cleaned = text.replace(/[^0-9]/g, "").slice(0, length);
     setPin(cleaned);
     if (cleaned.length === length) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      if (Platform.OS !== "web") {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
       onComplete(cleaned);
     }
   };
@@ -28,26 +39,56 @@ export function PinInput({ length = 6, onComplete, error, testID }: PinInputProp
       accessibilityRole="none"
       accessibilityLabel={`PIN entry, ${pin.length} of ${length} digits entered`}
     >
-      <View className="flex-row justify-center gap-3">
-        {Array.from({ length }).map((_, i) => (
-          <View
-            key={i}
-            className={`w-12 h-14 rounded-xl items-center justify-center border-2 ${
-              error
-                ? "border-error bg-error/10"
-                : pin.length === i
-                ? "border-primary-500 bg-dark-elevated"
-                : pin.length > i
-                ? "border-primary-500/50 bg-dark-elevated"
-                : "border-dark-border bg-dark-card"
-            }`}
-            accessibilityLabel={pin.length > i ? "Digit entered" : "Empty digit"}
-          >
-            {pin.length > i && (
-              <View className="w-3 h-3 rounded-full bg-primary-400" />
-            )}
-          </View>
-        ))}
+      <View style={{ flexDirection: "row", justifyContent: "center", gap: 12 }}>
+        {Array.from({ length }).map((_, i) => {
+          const isFilled = pin.length > i;
+          const isActive = pin.length === i;
+          const showError = error && pin.length === 0;
+
+          return (
+            <View
+              key={i}
+              style={{
+                width: Platform.OS === 'web' ? 54 : 50,
+                height: Platform.OS === 'web' ? 62 : 58,
+                borderRadius: 14,
+                borderWidth: 2,
+                alignItems: "center",
+                justifyContent: "center",
+                borderColor: showError
+                  ? "rgba(239, 68, 68, 0.4)"
+                  : isActive
+                  ? "#10B981"
+                  : isFilled
+                  ? "rgba(16, 185, 129, 0.4)"
+                  : "rgba(255, 255, 255, 0.08)",
+                backgroundColor: showError
+                  ? "rgba(239, 68, 68, 0.06)"
+                  : isFilled
+                  ? "rgba(16, 185, 129, 0.06)"
+                  : isActive
+                  ? "#162742"
+                  : "#0C1A2E",
+                ...(Platform.OS === 'web' ? { transition: 'all 0.2s ease' } as any : {}),
+                ...(isActive && Platform.OS === 'web' ? { boxShadow: '0 0 0 3px rgba(16, 185, 129, 0.2), 0 0 12px rgba(16, 185, 129, 0.1)' } as any : {}),
+                ...(isFilled && Platform.OS === 'web' ? { boxShadow: '0 0 0 2px rgba(16, 185, 129, 0.12)' } as any : {}),
+                ...(showError && Platform.OS === 'web' ? { boxShadow: '0 0 0 3px rgba(239, 68, 68, 0.2), 0 0 12px rgba(239, 68, 68, 0.1)' } as any : {}),
+              }}
+              accessibilityLabel={isFilled ? "Digit entered" : "Empty digit"}
+            >
+              {isFilled && (
+                <View
+                  style={{
+                    width: 14,
+                    height: 14,
+                    borderRadius: 7,
+                    backgroundColor: "#34D399",
+                  }}
+                />
+              )}
+            </View>
+          );
+        })}
       </View>
       <TextInput
         ref={inputRef}
@@ -56,7 +97,13 @@ export function PinInput({ length = 6, onComplete, error, testID }: PinInputProp
         keyboardType="number-pad"
         maxLength={length}
         autoFocus
-        className="absolute opacity-0 h-0 w-0"
+        style={{
+          position: "absolute",
+          opacity: 0,
+          height: 1,
+          width: 1,
+          ...(Platform.OS === "web" ? { outline: "none", border: "none", caretColor: "transparent" } as any : {}),
+        }}
         secureTextEntry
         accessibilityLabel="PIN input"
         accessibilityHint={`Enter your ${length}-digit PIN`}

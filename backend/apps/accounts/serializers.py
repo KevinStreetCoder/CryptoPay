@@ -9,6 +9,7 @@ class RegisterSerializer(serializers.Serializer):
     phone = serializers.CharField(max_length=15)
     pin = serializers.CharField(min_length=6, max_length=6, write_only=True)
     otp = serializers.CharField(max_length=6, write_only=True)
+    full_name = serializers.CharField(max_length=150, required=False, default="")
 
     def validate_phone(self, value):
         # Normalize Kenyan phone: 07XX → +2547XX
@@ -92,8 +93,43 @@ class DeviceModelSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class ChangePINSerializer(serializers.Serializer):
+    current_pin = serializers.CharField(max_length=6, write_only=True)
+    new_pin = serializers.CharField(min_length=6, max_length=6, write_only=True)
+
+    def validate_new_pin(self, value):
+        if not value.isdigit():
+            raise serializers.ValidationError("PIN must be 6 digits")
+        return value
+
+
+class KYCDocumentSerializer(serializers.ModelSerializer):
+    class Meta:
+        from .models import KYCDocument
+
+        model = KYCDocument
+        fields = ("id", "document_type", "file_url", "status", "rejection_reason", "created_at")
+        read_only_fields = ("id", "status", "rejection_reason", "created_at")
+
+
+class KYCUploadSerializer(serializers.Serializer):
+    document_type = serializers.ChoiceField(choices=[
+        ("national_id", "National ID"),
+        ("passport", "Passport"),
+        ("selfie", "Selfie"),
+        ("kra_pin", "KRA PIN"),
+        ("proof_of_address", "Proof of Address"),
+    ])
+    file_url = serializers.URLField(max_length=500)
+
+
+class PushTokenSerializer(serializers.Serializer):
+    token = serializers.CharField(max_length=255)
+    platform = serializers.ChoiceField(choices=[("ios", "iOS"), ("android", "Android")])
+
+
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ("id", "phone", "email", "kyc_tier", "kyc_status", "created_at")
+        fields = ("id", "phone", "email", "full_name", "kyc_tier", "kyc_status", "created_at")
         read_only_fields = fields

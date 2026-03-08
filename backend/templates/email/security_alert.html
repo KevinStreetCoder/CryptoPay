@@ -1,0 +1,51 @@
+{% extends "email/base.html" %}
+
+{% block title %}Security Alert — {{ event_label }}{% endblock %}
+
+{% block content %}
+<h2>Security Alert</h2>
+
+<p>Hi {{ full_name }}, we detected the following activity on your CryptoPay account:</p>
+
+<div class="alert-box">
+  <p><strong>{{ event_label }}</strong></p>
+</div>
+
+<div class="info-card">
+  <table role="presentation" cellpadding="0" cellspacing="0">
+    <tr>
+      <td class="label">Event</td>
+      <td class="value">{{ event_label }}</td>
+    </tr>
+    <tr>
+      <td class="label">IP Address</td>
+      <td class="value">{{ ip_address }}</td>
+    </tr>
+    <tr>
+      <td class="label">Device</td>
+      <td class="value">{{ device_info }}</td>
+    </tr>
+  </table>
+</div>
+
+{% if event_type == "new_device" %}
+<p>A new device was used to sign in to your account. If this was you, no action is needed.</p>
+{% elif event_type == "suspicious_login" %}
+<p><strong style="color: #ef4444;">If this was not you, secure your account immediately.</strong> Change your PIN and contact support.</p>
+{% elif event_type == "password_change" or event_type == "pin_change" %}
+<p>Your credentials were recently changed. If you did not make this change, please contact support immediately.</p>
+{% elif event_type == "account_locked" %}
+<p>Your account has been locked due to multiple failed authentication attempts. Please contact support to unlock your account.</p>
+{% else %}
+<p>If you recognize this activity, no action is needed. Otherwise, secure your account immediately.</p>
+{% endif %}
+
+<p style="text-align: center; padding-top: 8px;">
+  <a href="https://cryptopay.co.ke/support" class="btn">Contact Support</a>
+</p>
+
+<p style="font-size: 13px; color: #94a3b8;">
+  We take security seriously. This alert was sent to protect your account.
+  If you did not perform this action, please change your PIN and contact support.
+</p>
+{% endblock %}

@@ -16,6 +16,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     phone = models.CharField(max_length=15, unique=True, db_index=True)
     email = models.EmailField(blank=True, null=True, unique=True)
+    full_name = models.CharField(max_length=150, blank=True, default="")
     pin_hash = models.CharField(max_length=255, blank=True)
     kyc_tier = models.SmallIntegerField(default=0)
     kyc_status = models.CharField(
@@ -106,6 +107,27 @@ class Device(models.Model):
 
     def __str__(self):
         return f"{self.user.phone} - {self.device_name or self.device_id}"
+
+
+class PushToken(models.Model):
+    """Expo push notification tokens for user devices."""
+
+    class Platform(models.TextChoices):
+        IOS = "ios"
+        ANDROID = "android"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="push_tokens")
+    token = models.CharField(max_length=255, db_index=True)
+    platform = models.CharField(max_length=10, choices=Platform.choices)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "push_tokens"
+        unique_together = ("user", "token")
+
+    def __str__(self):
+        return f"{self.user.phone} - {self.platform} - {self.token[:20]}..."
 
 
 class AuditLog(models.Model):

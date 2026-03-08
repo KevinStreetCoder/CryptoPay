@@ -1,5 +1,5 @@
 import React, { Component, ErrorInfo, ReactNode } from "react";
-import { View, Text, Pressable } from "react-native";
+import { View, Text, Pressable, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 interface Props {
@@ -23,7 +23,6 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    // Log to error reporting service in production
     console.error("ErrorBoundary caught:", error, errorInfo);
   }
 
@@ -41,34 +40,47 @@ export class ErrorBoundary extends Component<Props, State> {
         <View
           style={{
             flex: 1,
-            backgroundColor: "#0F172A",
+            backgroundColor: "#060E1F",
             alignItems: "center",
             justifyContent: "center",
-            padding: 24,
+            padding: 32,
           }}
         >
-          {/* Error icon */}
+          {/* Error icon with glow layers */}
           <View
             style={{
-              width: 80,
-              height: 80,
-              borderRadius: 40,
-              backgroundColor: "rgba(239, 68, 68, 0.15)",
+              width: 100,
+              height: 100,
+              borderRadius: 32,
+              backgroundColor: "rgba(239, 68, 68, 0.06)",
               alignItems: "center",
               justifyContent: "center",
-              marginBottom: 24,
+              marginBottom: 8,
             }}
           >
-            <Ionicons name="warning-outline" size={40} color="#EF4444" />
+            <View
+              style={{
+                width: 72,
+                height: 72,
+                borderRadius: 24,
+                backgroundColor: "rgba(239, 68, 68, 0.12)",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Ionicons name="warning-outline" size={36} color="#EF4444" />
+            </View>
           </View>
 
           <Text
             style={{
-              color: "#FFFFFF",
-              fontSize: 20,
+              color: "#F0F4F8",
+              fontSize: 22,
               fontFamily: "Inter_700Bold",
               marginBottom: 8,
+              marginTop: 16,
               textAlign: "center",
+              letterSpacing: -0.3,
             }}
           >
             Something went wrong
@@ -76,12 +88,13 @@ export class ErrorBoundary extends Component<Props, State> {
 
           <Text
             style={{
-              color: "#94A3B8",
-              fontSize: 14,
+              color: "#8899AA",
+              fontSize: 15,
               fontFamily: "Inter_400Regular",
               textAlign: "center",
               marginBottom: 32,
-              lineHeight: 20,
+              lineHeight: 22,
+              maxWidth: 300,
             }}
           >
             We encountered an unexpected error.{"\n"}
@@ -92,20 +105,46 @@ export class ErrorBoundary extends Component<Props, State> {
           {__DEV__ && this.state.error && (
             <View
               style={{
-                backgroundColor: "#1E293B",
-                borderRadius: 12,
+                backgroundColor: "#0C1A2E",
+                borderRadius: 16,
                 padding: 16,
-                marginBottom: 24,
+                marginBottom: 28,
                 width: "100%",
+                maxWidth: 400,
+                borderWidth: 1,
+                borderColor: "rgba(239, 68, 68, 0.2)",
               }}
             >
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 6,
+                  marginBottom: 8,
+                }}
+              >
+                <Ionicons name="bug-outline" size={14} color="#EF4444" />
+                <Text
+                  style={{
+                    color: "#EF4444",
+                    fontSize: 11,
+                    fontFamily: "Inter_600SemiBold",
+                    letterSpacing: 0.5,
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Debug Info
+                </Text>
+              </View>
               <Text
                 style={{
-                  color: "#EF4444",
-                  fontSize: 12,
+                  color: "#F87171",
+                  fontSize: 13,
                   fontFamily: "Inter_400Regular",
+                  lineHeight: 18,
                 }}
-                numberOfLines={5}
+                numberOfLines={6}
+                selectable
               >
                 {this.state.error.message}
               </Text>
@@ -115,17 +154,27 @@ export class ErrorBoundary extends Component<Props, State> {
           {/* Retry button */}
           <Pressable
             onPress={this.handleRetry}
-            style={{
-              backgroundColor: "#0D9F6E",
-              paddingHorizontal: 32,
-              paddingVertical: 14,
-              borderRadius: 16,
+            style={({ pressed }) => ({
+              backgroundColor: "#10B981",
+              paddingHorizontal: 36,
+              paddingVertical: 16,
+              borderRadius: 18,
               flexDirection: "row",
               alignItems: "center",
-              gap: 8,
-              minWidth: 160,
+              gap: 10,
+              minWidth: 180,
               justifyContent: "center",
-            }}
+              opacity: pressed ? 0.9 : 1,
+              transform: [{ scale: pressed ? 0.98 : 1 }],
+              ...(Platform.OS === "web"
+                ? ({
+                    shadowColor: "#10B981",
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: 0.3,
+                    shadowRadius: 16,
+                  } as any)
+                : { elevation: 8 }),
+            })}
           >
             <Ionicons name="refresh" size={20} color="#FFFFFF" />
             <Text
@@ -133,6 +182,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 color: "#FFFFFF",
                 fontSize: 16,
                 fontFamily: "Inter_600SemiBold",
+                letterSpacing: 0.3,
               }}
             >
               Try Again

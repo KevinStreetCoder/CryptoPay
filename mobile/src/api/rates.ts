@@ -1,5 +1,16 @@
 import { api } from "./client";
 
+export interface RateApiResponse {
+  currency: string;
+  crypto_usd: string;
+  usd_kes: string;
+  raw_rate: string;
+  spread_percent: number;
+  final_rate: string;
+  flat_fee_kes: number;
+}
+
+// Normalized rate used throughout the app
 export interface Rate {
   currency: string;
   usd_rate: string;
@@ -11,16 +22,35 @@ export interface Rate {
 export interface Quote {
   quote_id: string;
   currency: string;
-  rate: string;
+  exchange_rate: string;
+  final_rate: string;
   crypto_amount: string;
   kes_amount: string;
-  fee: string;
-  total_crypto: string;
-  expires_at: string;
+  fee_kes: string;
+  total_kes: string;
+  crypto_usd: string;
+  usd_kes: string;
+  raw_rate: string;
+  spread_percent: number;
+  flat_fee_kes: number;
 }
 
 export const ratesApi = {
-  getRate: (currency: string) => api.get<Rate>("/rates/", { params: { currency } }),
+  getRate: (currency: string) =>
+    api.get<RateApiResponse>("/rates/", { params: { currency } }),
+  getQuote: (amount: string, from: string, to: string) =>
+    api.get<Quote>("/rates/quote/", { params: { amount, from, to } }),
   lockRate: (data: { currency: string; kes_amount: string }) =>
     api.post<Quote>("/rates/quote/", data),
 };
+
+// Normalize API response to the Rate shape used by the app
+export function normalizeRate(raw: RateApiResponse): Rate {
+  return {
+    currency: raw.currency,
+    usd_rate: raw.crypto_usd || "0",
+    kes_rate: raw.final_rate || raw.raw_rate || "0",
+    spread: String(raw.spread_percent ?? 0),
+    updated_at: new Date().toISOString(),
+  };
+}

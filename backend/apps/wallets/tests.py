@@ -4,8 +4,11 @@ import uuid
 from decimal import Decimal
 
 from django.test import TestCase
+from rest_framework.test import APIClient, APITestCase
 
 from apps.accounts.models import User
+from apps.blockchain.models import BlockchainDeposit
+from apps.blockchain.services import generate_deposit_address
 
 from .models import LedgerEntry, Wallet
 from .services import InsufficientBalanceError, WalletService
@@ -99,3 +102,129 @@ class WalletServiceTest(TestCase):
         currencies = {w.currency for w in wallets}
         self.assertIn("USDT", currencies)
         self.assertIn("KES", currencies)
+
+
+class AddressGenerationTest(TestCase):
+    """Tests for deterministic deposit address generation."""
+
+    def test_usdt_generates_tron_address(self):
+        addr = generate_deposit_address("user1", "USDT", 0)
+        self.assertTrue(addr.startswith("T"))
+        self.assertGreater(len(addr), 30)
+
+    def test_btc_generates_bitcoin_address(self):
+        addr = generate_deposit_address("user1", "BTC", 0)
+        self.assertTrue(addr.startswith("1") or addr.startswith("3"))
+
+    def test_eth_generates_hex_address(self):
+        addr = generate_deposit_address("user1", "ETH", 0)
+        self.assertTrue(addr.startswith("0x"))
+        self.assertEqual(len(addr), 42)  # 0x + 40 hex chars
+
+    def test_sol_generates_base58_address(self):
+        addr = generate_deposit_address("user1", "SOL", 0)
+        self.assertGreater(len(addr), 20)
+
+    def test_same_inputs_give_same_address(self):
+        addr1 = generate_deposit_address("user1", "USDT", 0)
+        addr2 = generate_deposit_address("user1", "USDT", 0)
+        self.assertEqual(addr1, addr2)
+
+    def test_different_users_give_different_addresses(self):
+        addr1 = generate_deposit_address("user1", "USDT", 0)
+        addr2 = generate_deposit_address("user2", "USDT", 0)
+        self.assertNotEqual(addr1, addr2)
+
+    def test_different_index_gives_different_address(self):
+        addr1 = generate_deposit_address("user1", "USDT", 0)
+        addr2 = generate_deposit_address("user1", "USDT", 1)
+        self.assertNotEqual(addr1, addr2)
+
+
+class GenerateDepositAddressAPITest(APITestCase):
+    """Tests for the generate-address endpoint."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(phone="+254712345678", pin="123456")
+        self.wallet = Wallet.objects.create(user=self.user, currency="USDT")
+        self.kes_wallet = Wallet.objects.create(user=self.user, currency="KES")
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def test_generate_address_success(self):
+        response = self.client.post(f"/api/v1/wallets/{self.wallet.id}/generate-address/")
+        self.assertEqual(response.status_code, 201)
+        self.assertIn("deposit_address", response.data)
+        self.assertTrue(response.data["deposit_address"].startswith("T"))
+
+    def test_generate_address_returns_existing(self):
+        self.wallet.deposit_address = "TExistingAddress123"
+        self.wallet.save()
+        response = self.client.post(f"/api/v1/wallets/{self.wallet.id}/generate-address/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["deposit_address"], "TExistingAddress123")
+
+    def test_kes_wallet_rejects(self):
+        response = self.client.post(f"/api/v1/wallets/{self.kes_wallet.id}/generate-address/")
+        self.assertEqual(response.status_code, 400)
+
+    def test_other_user_wallet_404(self):
+        other_user = User.objects.create_user(phone="+254700000000", pin="654321")
+        other_wallet = Wallet.objects.create(user=other_user, currency="BTC")
+        response = self.client.post(f"/api/v1/wallets/{other_wallet.id}/generate-address/")
+        self.assertEqual(response.status_code, 404)
+
+    def test_unauthenticated_rejected(self):
+        self.client.force_authenticate(user=None)
+        response = self.client.post(f"/api/v1/wallets/{self.wallet.id}/generate-address/")
+        self.assertEqual(response.status_code, 401)
+
+
+class DepositListAPITest(APITestCase):
+    """Tests for the deposits list endpoint."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(phone="+254712345678", pin="123456")
+        self.wallet = Wallet.objects.create(
+            user=self.user, currency="USDT", deposit_address="TTestAddr123"
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def test_list_deposits_empty(self):
+        response = self.client.get("/api/v1/wallets/deposits/")
+        self.assertEqual(response.status_code, 200)
+
+    def test_list_deposits_returns_user_deposits(self):
+        BlockchainDeposit.objects.create(
+            chain="tron",
+            tx_hash="abc123",
+            to_address="TTestAddr123",
+            amount=Decimal("50.00"),
+            currency="USDT",
+            confirmations=19,
+            required_confirmations=19,
+            status="credited",
+        )
+        response = self.client.get("/api/v1/wallets/deposits/")
+        self.assertEqual(response.status_code, 200)
+        results = response.data.get("results", response.data)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["tx_hash"], "abc123")
+
+    def test_does_not_return_other_user_deposits(self):
+        other_user = User.objects.create_user(phone="+254700000000", pin="654321")
+        Wallet.objects.create(user=other_user, currency="USDT", deposit_address="TOtherAddr456")
+        BlockchainDeposit.objects.create(
+            chain="tron",
+            tx_hash="other123",
+            to_address="TOtherAddr456",
+            amount=Decimal("100.00"),
+            currency="USDT",
+            confirmations=0,
+            required_confirmations=19,
+        )
+        response = self.client.get("/api/v1/wallets/deposits/")
+        self.assertEqual(response.status_code, 200)
+        results = response.data.get("results", response.data)
+        self.assertEqual(len(results), 0)

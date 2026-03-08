@@ -10,7 +10,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0F172A"
+      "backgroundColor": "#060E1F"
     },
     "ios": {
       "supportsTablet": false,
@@ -19,7 +19,7 @@
     "android": {
       "package": "com.cryptopay.app",
       "adaptiveIcon": {
-        "backgroundColor": "#0F172A",
+        "backgroundColor": "#060E1F",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -30,10 +30,20 @@
       "bundler": "metro",
       "name": "CryptoPay"
     },
+    "extra": {
+      "googleWebClientId": "",
+      "googleAndroidClientId": "",
+      "googleIosClientId": "",
+      "eas": {
+        "projectId": ""
+      }
+    },
     "plugins": [
       "expo-router",
       "expo-secure-store",
-      "expo-local-authentication"
+      "expo-local-authentication",
+      "expo-web-browser",
+      "expo-notifications"
     ]
   }
 }

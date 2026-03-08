@@ -12,12 +12,16 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.wallets.services import WalletService
 
-from .models import AuditLog, Device, User
+from .models import AuditLog, Device, KYCDocument, PushToken, User
 from .serializers import (
+    ChangePINSerializer,
     DeviceModelSerializer,
     DeviceSerializer,
     GoogleLoginSerializer,
+    KYCDocumentSerializer,
+    KYCUploadSerializer,
     LoginSerializer,
+    PushTokenSerializer,
     RegisterSerializer,
     RequestOTPSerializer,
     UserSerializer,
@@ -97,8 +101,10 @@ class RegisterView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        full_name = serializer.validated_data.get("full_name", "")
+
         # Create user
-        user = User.objects.create_user(phone=phone, pin=pin)
+        user = User.objects.create_user(phone=phone, pin=pin, full_name=full_name)
         cache.delete(f"otp:{phone}")
 
         # Create default wallets
@@ -358,3 +364,174 @@ class DeviceListView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
         return Response({"message": "Device removed"}, status=status.HTTP_200_OK)
+
+
+class ChangePINView(APIView):
+    """Change the authenticated user's transaction PIN."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = ChangePINSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = request.user
+        current_pin = serializer.validated_data["current_pin"]
+        new_pin = serializer.validated_data["new_pin"]
+
+        if not user.check_pin(current_pin):
+            return Response(
+                {"error": "Current PIN is incorrect"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user.set_pin(new_pin)
+        user.save(update_fields=["pin_hash"])
+
+        AuditLog.objects.create(
+            user=user,
+            action="CHANGE_PIN",
+            entity_type="user",
+            entity_id=str(user.id),
+            ip_address=self._get_client_ip(request),
+        )
+
+        return Response({"message": "PIN changed successfully"})
+
+    def _get_client_ip(self, request):
+        xff = request.META.get("HTTP_X_FORWARDED_FOR")
+        if xff:
+            return xff.split(",")[0].strip()
+        return request.META.get("REMOTE_ADDR")
+
+
+class KYCDocumentListView(APIView):
+    """List and upload KYC documents for identity verification."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        docs = KYCDocument.objects.filter(user=request.user).order_by("-created_at")
+        return Response(KYCDocumentSerializer(docs, many=True).data)
+
+    def post(self, request):
+        serializer = KYCUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        doc_type = serializer.validated_data["document_type"]
+        file_url = serializer.validated_data["file_url"]
+
+        # Check if a document of this type already exists and is pending/approved
+        existing = KYCDocument.objects.filter(
+            user=request.user,
+            document_type=doc_type,
+            status__in=["pending", "approved"],
+        ).first()
+
+        if existing:
+            if existing.status == "approved":
+                return Response(
+                    {"error": f"{doc_type} already approved"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            # Replace pending document
+            existing.file_url = file_url
+            existing.save(update_fields=["file_url"])
+            doc = existing
+        else:
+            doc = KYCDocument.objects.create(
+                user=request.user,
+                document_type=doc_type,
+                file_url=file_url,
+            )
+
+        AuditLog.objects.create(
+            user=request.user,
+            action="KYC_UPLOAD",
+            entity_type="kyc_document",
+            entity_id=str(doc.id),
+            details={"document_type": doc_type},
+            ip_address=self._get_client_ip(request),
+        )
+
+        return Response(
+            KYCDocumentSerializer(doc).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    def _get_client_ip(self, request):
+        xff = request.META.get("HTTP_X_FORWARDED_FOR")
+        if xff:
+            return xff.split(",")[0].strip()
+        return request.META.get("REMOTE_ADDR")
+
+
+class RegisterPushTokenView(APIView):
+    """Register or update an Expo push notification token for the authenticated user."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = PushTokenSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        token = serializer.validated_data["token"]
+        platform = serializer.validated_data["platform"]
+
+        push_token, created = PushToken.objects.update_or_create(
+            user=request.user,
+            token=token,
+            defaults={"platform": platform},
+        )
+
+        logger.info(
+            f"Push token {'registered' if created else 'updated'} "
+            f"for user {request.user.phone} ({platform})"
+        )
+
+        return Response(
+            {"message": "Push token registered", "created": created},
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+
+class KYCCallbackView(APIView):
+    """
+    Handle Smile Identity webhook callbacks for KYC verification results.
+
+    This endpoint is called by Smile Identity servers when a verification
+    job completes.  It is unauthenticated (no JWT) but protected by
+    HMAC-SHA256 signature verification.
+    """
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        from .kyc_service import SmileIdentityService
+
+        payload = request.data
+
+        service = SmileIdentityService()
+
+        # Verify the callback signature to ensure it came from Smile Identity
+        if not service.verify_callback_signature(payload):
+            logger.warning(
+                "KYC callback with invalid signature from %s",
+                self._get_client_ip(request),
+            )
+            return Response(
+                {"error": "Invalid signature"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        result = service.handle_callback(payload)
+
+        logger.info("KYC callback processed: %s", result)
+
+        return Response(result, status=status.HTTP_200_OK)
+
+    def _get_client_ip(self, request):
+        xff = request.META.get("HTTP_X_FORWARDED_FOR")
+        if xff:
+            return xff.split(",")[0].strip()
+        return request.META.get("REMOTE_ADDR")

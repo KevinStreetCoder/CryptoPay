@@ -19,6 +19,9 @@ djangorestframework-simplejwt==5.4.0
 bcrypt==4.2.1
 cryptography==44.0.0
 
+# API Documentation
+drf-spectacular==0.28.0
+
 # Google OAuth
 google-auth==2.37.0
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, createContext, useContext, useCallback } from "react";
-import { View, Text, Animated, Pressable, Dimensions } from "react-native";
+import { View, Text, Animated, Pressable, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
@@ -72,24 +72,26 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
   const config = TOAST_CONFIG[toast.type];
 
   useEffect(() => {
-    // Haptic feedback
-    if (toast.type === "error") {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    } else if (toast.type === "success") {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    // Haptic feedback (native only)
+    if (Platform.OS !== "web") {
+      if (toast.type === "error") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      } else if (toast.type === "success") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
     }
 
     Animated.parallel([
       Animated.spring(translateY, {
         toValue: 0,
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== "web",
         tension: 80,
         friction: 10,
       }),
       Animated.timing(opacity, {
         toValue: 1,
         duration: 200,
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== "web",
       }),
     ]).start();
 
@@ -105,12 +107,12 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
       Animated.timing(translateY, {
         toValue: -100,
         duration: 200,
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== "web",
       }),
       Animated.timing(opacity, {
         toValue: 0,
         duration: 200,
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== "web",
       }),
     ]).start(() => onDismiss(toast.id));
   };
@@ -136,6 +138,12 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
           paddingVertical: 12,
           marginHorizontal: 16,
           gap: 12,
+          ...(Platform.OS === "web" ? {
+            maxWidth: 440,
+            width: "100%",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.3)",
+            backdropFilter: "blur(12px)",
+          } as any : {}),
         }}
         accessibilityRole="alert"
         accessibilityLabel={`${toast.type}: ${toast.title}${toast.message ? `. ${toast.message}` : ""}`}
@@ -202,12 +210,13 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       <View
         style={{
           position: "absolute",
-          top: insets.top + 8,
+          top: Platform.OS === "web" ? 16 : insets.top + 8,
           left: 0,
           right: 0,
           zIndex: 9999,
+          alignItems: Platform.OS === "web" ? "center" : "stretch",
+          pointerEvents: "box-none",
         }}
-        pointerEvents="box-none"
       >
         {toasts.map((toast) => (
           <ToastItem key={toast.id} toast={toast} onDismiss={dismissToast} />
