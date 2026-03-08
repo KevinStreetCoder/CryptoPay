@@ -235,33 +235,38 @@ export default function ProfileScreen() {
           paddingBottom: 32,
         }}
       >
-        {/* Header */}
-        <View style={{ paddingHorizontal: hPad + 4, paddingTop: isDesktop ? 16 : 8, paddingBottom: 6 }}>
-          <Text
-            style={{
-              color: colors.textPrimary,
-              fontSize: isDesktop ? 32 : 28,
-              fontFamily: "Inter_700Bold",
-              letterSpacing: -0.5,
-            }}
-          >
-            Profile
-          </Text>
-        </View>
+        {/* Header - hidden on desktop since sidebar already shows it */}
+        {!isDesktop && (
+          <View style={{ paddingHorizontal: hPad + 4, paddingTop: 8, paddingBottom: 6 }}>
+            <Text
+              style={{
+                color: colors.textPrimary,
+                fontSize: 28,
+                fontFamily: "Inter_700Bold",
+                letterSpacing: -0.5,
+              }}
+            >
+              Profile
+            </Text>
+          </View>
+        )}
 
         {/* Desktop: two-column layout for user card + security */}
         {isDesktop ? (
           <View
             style={{
               flexDirection: "row",
-              paddingHorizontal: hPad,
-              gap: 20,
+              maxWidth: 1400,
+              width: "100%",
+              alignSelf: "center",
+              paddingHorizontal: 32,
+              gap: 24,
               marginTop: 12,
               marginBottom: 20,
             }}
           >
             {/* Left column: User Card */}
-            <View style={{ flex: 1 }}>
+            <View style={{ flex: 1, maxWidth: "50%" }}>
               <View
                 style={{
                   backgroundColor: colors.dark.card,
@@ -460,7 +465,7 @@ export default function ProfileScreen() {
             </View>
 
             {/* Right column: Security + Support */}
-            <View style={{ flex: 1 }}>
+            <View style={{ flex: 1, maxWidth: "50%" }}>
               {/* Security Section */}
               <View style={{ marginBottom: 4 }}>
                 <Text

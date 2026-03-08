@@ -251,7 +251,8 @@ export default function HelpScreen() {
     Linking.openURL("https://x.com/CryptoPayKE");
   };
 
-  const contentMaxW = isDesktop ? 680 : undefined;
+  const contentMaxW = isDesktop ? 860 : undefined;
+  const isLargeDesktop = isWeb && width >= 1100;
 
   const content = (
     <ScrollView
@@ -351,124 +352,133 @@ export default function HelpScreen() {
         )}
       </View>
 
-      {/* FAQ Section */}
-      <View style={{ marginBottom: 28 }}>
-        <Text
-          style={{
-            color: colors.textMuted,
-            fontSize: 12,
-            fontWeight: "600",
-            letterSpacing: 0.8,
-            textTransform: "uppercase",
-            paddingHorizontal: 4,
-            marginBottom: 10,
-          }}
-        >
-          Frequently Asked Questions
-        </Text>
-        <View
-          style={{
-            backgroundColor: colors.dark.card,
-            borderRadius: 18,
-            borderWidth: 1,
-            borderColor: colors.glass.border,
-            overflow: "hidden",
-            ...shadows.sm,
-          }}
-        >
-          {filteredFAQ.length === 0 ? (
-            <View
-              style={{
-                paddingVertical: 32,
-                alignItems: "center",
-              }}
-            >
-              <Ionicons
-                name="search-outline"
-                size={32}
-                color={colors.textMuted}
-              />
-              <Text
+      {/* FAQ + Contact Sections */}
+      <View
+        style={{
+          ...(isLargeDesktop
+            ? { flexDirection: "row" as const, gap: 24 }
+            : {}),
+        }}
+      >
+        {/* FAQ Section */}
+        <View style={{ marginBottom: 28, ...(isLargeDesktop ? { flex: 6 } : {}) }}>
+          <Text
+            style={{
+              color: colors.textMuted,
+              fontSize: 12,
+              fontWeight: "600",
+              letterSpacing: 0.8,
+              textTransform: "uppercase",
+              paddingHorizontal: 4,
+              marginBottom: 10,
+            }}
+          >
+            Frequently Asked Questions
+          </Text>
+          <View
+            style={{
+              backgroundColor: colors.dark.card,
+              borderRadius: 18,
+              borderWidth: 1,
+              borderColor: colors.glass.border,
+              overflow: "hidden",
+              ...shadows.sm,
+            }}
+          >
+            {filteredFAQ.length === 0 ? (
+              <View
                 style={{
-                  color: colors.textMuted,
-                  fontSize: 14,
-                  marginTop: 10,
+                  paddingVertical: 32,
+                  alignItems: "center",
                 }}
               >
-                No results found for "{searchQuery}"
-              </Text>
-            </View>
-          ) : (
-            filteredFAQ.map((item, index) => {
-              // Use original index to keep expanded state consistent during filtering
-              const originalIndex = FAQ_DATA.indexOf(item);
-              return (
-                <View key={item.question}>
-                  {index > 0 && (
-                    <View
-                      style={{
-                        height: 1,
-                        backgroundColor: colors.glass.border,
-                        marginLeft: isDesktop ? 20 : 16,
-                      }}
+                <Ionicons
+                  name="search-outline"
+                  size={32}
+                  color={colors.textMuted}
+                />
+                <Text
+                  style={{
+                    color: colors.textMuted,
+                    fontSize: 14,
+                    marginTop: 10,
+                  }}
+                >
+                  No results found for "{searchQuery}"
+                </Text>
+              </View>
+            ) : (
+              filteredFAQ.map((item, index) => {
+                // Use original index to keep expanded state consistent during filtering
+                const originalIndex = FAQ_DATA.indexOf(item);
+                return (
+                  <View key={item.question}>
+                    {index > 0 && (
+                      <View
+                        style={{
+                          height: 1,
+                          backgroundColor: colors.glass.border,
+                          marginLeft: isDesktop ? 20 : 16,
+                        }}
+                      />
+                    )}
+                    <AccordionItem
+                      item={item}
+                      isExpanded={expandedIndex === originalIndex}
+                      onToggle={() => handleToggle(originalIndex)}
+                      isDesktop={isDesktop}
                     />
-                  )}
-                  <AccordionItem
-                    item={item}
-                    isExpanded={expandedIndex === originalIndex}
-                    onToggle={() => handleToggle(originalIndex)}
-                    isDesktop={isDesktop}
-                  />
-                </View>
-              );
-            })
-          )}
+                  </View>
+                );
+              })
+            )}
+          </View>
         </View>
-      </View>
 
-      {/* Contact Section */}
-      <View style={{ marginBottom: 28 }}>
-        <Text
-          style={{
-            color: colors.textMuted,
-            fontSize: 12,
-            fontWeight: "600",
-            letterSpacing: 0.8,
-            textTransform: "uppercase",
-            paddingHorizontal: 4,
-            marginBottom: 10,
-          }}
-        >
-          Contact Us
-        </Text>
-        <View style={{ gap: 10 }}>
-          <ContactCard
-            icon="mail-outline"
-            iconColor={colors.primary[400]}
-            iconBg={colors.primary[500] + "18"}
-            label="Email"
-            value="support@cryptopay.co.ke"
-            onPress={handleEmail}
-            isDesktop={isDesktop}
-          />
-          <ContactCard
-            icon="logo-whatsapp"
-            iconColor="#25D366"
-            iconBg="rgba(37,211,102,0.15)"
-            label="WhatsApp"
-            value="+254700000000"
-            onPress={handleWhatsApp}
-            isDesktop={isDesktop}
-          />
-          <ContactCard
-            icon="logo-twitter"
-            iconColor="#1DA1F2"
-            iconBg="rgba(29,161,242,0.15)"
-            label="Twitter / X"
-            value="@CryptoPayKE"
-            onPress={handleTwitter}
-            isDesktop={isDesktop}
-          />
+        {/* Contact Section */}
+        <View style={{ marginBottom: 28, ...(isLargeDesktop ? { flex: 4 } : {}) }}>
+          <Text
+            style={{
+              color: colors.textMuted,
+              fontSize: 12,
+              fontWeight: "600",
+              letterSpacing: 0.8,
+              textTransform: "uppercase",
+              paddingHorizontal: 4,
+              marginBottom: 10,
+            }}
+          >
+            Contact Us
+          </Text>
+          <View style={{ gap: 10 }}>
+            <ContactCard
+              icon="mail-outline"
+              iconColor={colors.primary[400]}
+              iconBg={colors.primary[500] + "18"}
+              label="Email"
+              value="support@cryptopay.co.ke"
+              onPress={handleEmail}
+              isDesktop={isDesktop}
+            />
+            <ContactCard
+              icon="logo-whatsapp"
+              iconColor="#25D366"
+              iconBg="rgba(37,211,102,0.15)"
+              label="WhatsApp"
+              value="+254700000000"
+              onPress={handleWhatsApp}
+              isDesktop={isDesktop}
+            />
+            <ContactCard
+              icon="logo-twitter"
+              iconColor="#1DA1F2"
+              iconBg="rgba(29,161,242,0.15)"
+              label="Twitter / X"
+              value="@CryptoPayKE"
+              onPress={handleTwitter}
+              isDesktop={isDesktop}
+            />
+          </View>
         </View>
       </View>
 

@@ -460,7 +460,10 @@ function fmtShort(n) {
 // ═══════════════════════════════════════════════════════════════════════
 (function() {
     const container = d3.select('#daily-volume-chart');
-    if (!dailyVolume.length) { container.html('<div class="no-data">No transaction data for the last 30 days</div>'); return; }
+    if (!dailyVolume.length) {
+        container.html('<div class="no-data" style="padding:60px 20px"><div style="font-size:40px;margin-bottom:12px;opacity:0.4">&#x1F4C8;</div><div style="font-size:15px;font-weight:600;margin-bottom:4px">No Transaction Data</div><div style="font-size:13px;color:var(--text-muted)">Transactions from the last 30 days will appear here</div></div>');
+        return;
+    }
 
     const margin = { top: 20, right: 30, bottom: 40, left: 60 };
     const width = container.node().clientWidth - margin.left - margin.right;
@@ -516,7 +519,8 @@ function fmtShort(n) {
 // ═══════════════════════════════════════════════════════════════════════
 (function() {
     const container = d3.select('#volume-type-chart');
-    if (!volumeByType.length) { container.html('<div class="no-data">No transactions yet</div>'); return; }
+    const volumeData = volumeByType.filter(d => d.count > 0);
+    if (!volumeData.length) { container.html('<div class="no-data">No transactions yet</div>'); return; }
 
     const margin = { top: 10, right: 20, bottom: 50, left: 50 };
     const width = container.node().clientWidth - margin.left - margin.right;
@@ -526,12 +530,12 @@ function fmtShort(n) {
         .attr('viewBox', `0 0 ${width + margin.left + margin.right} ${height + margin.top + margin.bottom}`)
         .append('g').attr('transform', `translate(${margin.left},${margin.top})`);
 
-    const x = d3.scaleBand().domain(volumeByType.map(d => d.type)).range([0, width]).padding(0.35);
-    const y = d3.scaleLinear().domain([0, d3.max(volumeByType, d => d.count) * 1.15]).nice().range([height, 0]);
+    const x = d3.scaleBand().domain(volumeData.map(d => d.type)).range([0, width]).padding(0.35);
+    const y = d3.scaleLinear().domain([0, d3.max(volumeData, d => d.count) * 1.15]).nice().range([height, 0]);
 
     svg.append('g').attr('class', 'grid').call(d3.axisLeft(y).ticks(5).tickSize(-width).tickFormat(''));
 
-    svg.selectAll('.bar').data(volumeByType).join('rect')
+    svg.selectAll('.bar').data(volumeData).join('rect')
         .attr('x', d => x(d.type)).attr('width', x.bandwidth())
         .attr('y', height).attr('height', 0)
         .attr('rx', 4).attr('fill', (d, i) => CHART_COLORS[i % CHART_COLORS.length])
@@ -561,31 +565,47 @@ function fmtShort(n) {
         .attr('viewBox', `0 0 ${size} ${size}`)
         .append('g').attr('transform', `translate(${size/2},${size/2})`);
 
-    const pie = d3.pie().value(d => d.count).sort(null).padAngle(0.02);
-    const arc = d3.arc().innerRadius(0).outerRadius(radius);
-    const arcHover = d3.arc().innerRadius(0).outerRadius(radius + 6);
+    // Filter out zero-count entries
+    const statusData = statusDistribution.filter(d => d.count > 0);
+    if (!statusData.length) { container.html('<div class="no-data">No transactions yet</div>'); return; }
 
-    const arcs = svg.selectAll('.arc').data(pie(statusDistribution)).join('g').attr('class', 'arc');
+    // Single-segment fix: draw a full circle to avoid invalid arc flag in D3
+    if (statusData.length === 1) {
+        svg.append('circle')
+            .attr('r', radius)
+            .attr('fill', STATUS_COLORS[statusData[0].status] || '#666')
+            .attr('stroke', '#060E1F').attr('stroke-width', 2)
+            .style('opacity', 0)
+            .on('mouseover', (e) => showTooltip(e, `<div class="tooltip-label">${statusData[0].status.toUpperCase()}</div><div class="tooltip-value">${fmt(statusData[0].count)}</div>`))
+            .on('mouseout', hideTooltip)
+            .transition().duration(800).style('opacity', 1);
+    } else {
+        const pie = d3.pie().value(d => d.count).sort(null).padAngle(0.02);
+        const arc = d3.arc().innerRadius(0).outerRadius(radius);
+        const arcHover = d3.arc().innerRadius(0).outerRadius(radius + 6);
 
-    arcs.append('path')
-        .attr('fill', d => STATUS_COLORS[d.data.status] || '#666')
-        .attr('stroke', '#060E1F').attr('stroke-width', 2)
-        .on('mouseover', function(e, d) {
-            d3.select(this).transition().duration(150).attr('d', arcHover);
-            showTooltip(e, `<div class="tooltip-label">${d.data.status.toUpperCase()}</div><div class="tooltip-value">${fmt(d.data.count)}</div>`);
-        })
-        .on('mouseout', function(e, d) {
-            d3.select(this).transition().duration(150).attr('d', arc);
-            hideTooltip();
-        })
-        .transition().duration(800).attrTween('d', function(d) {
-            const i = d3.interpolate({ startAngle: 0, endAngle: 0 }, d);
-            return t => arc(i(t));
-        });
+        const arcs = svg.selectAll('.arc').data(pie(statusData)).join('g').attr('class', 'arc');
+
+        arcs.append('path')
+            .attr('fill', d => STATUS_COLORS[d.data.status] || '#666')
+            .attr('stroke', '#060E1F').attr('stroke-width', 2)
+            .on('mouseover', function(e, d) {
+                d3.select(this).transition().duration(150).attr('d', arcHover);
+                showTooltip(e, `<div class="tooltip-label">${d.data.status.toUpperCase()}</div><div class="tooltip-value">${fmt(d.data.count)}</div>`);
+            })
+            .on('mouseout', function(e, d) {
+                d3.select(this).transition().duration(150).attr('d', arc);
+                hideTooltip();
+            })
+            .transition().duration(800).attrTween('d', function(d) {
+                const i = d3.interpolate({ startAngle: 0, endAngle: 0 }, d);
+                return t => arc(i(t));
+            });
+    }
 
     // Legend
     const legend = container.append('div').style('display', 'flex').style('flex-wrap', 'wrap').style('gap', '8px 16px').style('margin-top', '12px').style('justify-content', 'center');
-    statusDistribution.forEach(d => {
+    statusData.forEach(d => {
         legend.append('div').style('display', 'flex').style('align-items', 'center').style('gap', '6px').style('font-size', '12px')
             .html(`<span style="width:10px;height:10px;border-radius:3px;background:${STATUS_COLORS[d.status] || '#666'};display:inline-block"></span>${d.status} (${d.count})`);
     });
@@ -607,7 +627,11 @@ function fmtShort(n) {
         .attr('viewBox', `0 0 ${size} ${size}`)
         .append('g').attr('transform', `translate(${size/2},${size/2})`);
 
-    const total = d3.sum(kycDistribution, d => d.count);
+    // Filter out zero-count entries
+    const kycData = kycDistribution.filter(d => d.count > 0);
+    if (!kycData.length) { container.html('<div class="no-data">No user data</div>'); return; }
+
+    const total = d3.sum(kycData, d => d.count);
 
     // Center text
     svg.append('text').attr('text-anchor', 'middle').attr('dy', '-0.2em')
@@ -615,34 +639,47 @@ function fmtShort(n) {
     svg.append('text').attr('text-anchor', 'middle').attr('dy', '1.2em')
         .attr('fill', 'var(--text-muted)').attr('font-size', '12px').text('Total Users');
 
-    const pie = d3.pie().value(d => d.count).sort(null).padAngle(0.03);
-    const arc = d3.arc().innerRadius(innerRadius).outerRadius(radius).cornerRadius(4);
-    const arcHover = d3.arc().innerRadius(innerRadius).outerRadius(radius + 6).cornerRadius(4);
-
     const kycColors = [COLORS.danger, COLORS.accent, COLORS.info, COLORS.primary];
 
-    const arcs = svg.selectAll('.arc').data(pie(kycDistribution)).join('g').attr('class', 'arc');
-    arcs.append('path')
-        .attr('fill', (d, i) => kycColors[i % kycColors.length])
-        .attr('stroke', '#060E1F').attr('stroke-width', 2)
-        .on('mouseover', function(e, d) {
-            d3.select(this).transition().duration(150).attr('d', arcHover);
-            showTooltip(e, `<div class="tooltip-label">${d.data.label}</div><div class="tooltip-value">${fmt(d.data.count)} users</div><div style="color:var(--text-muted);font-size:12px">${(d.data.count / total * 100).toFixed(1)}%</div>`);
-        })
-        .on('mouseout', function(e, d) {
-            d3.select(this).transition().duration(150).attr('d', arc);
-            hideTooltip();
-        })
-        .transition().duration(800).attrTween('d', function(d) {
-            const i = d3.interpolate({ startAngle: 0, endAngle: 0 }, d);
-            return t => arc(i(t));
-        });
+    // Single-segment fix: draw a full donut ring to avoid invalid arc flag in D3
+    if (kycData.length === 1) {
+        svg.append('path')
+            .attr('d', d3.arc()({innerRadius: innerRadius, outerRadius: radius, startAngle: 0, endAngle: 2 * Math.PI}))
+            .attr('fill', kycColors[kycDistribution.indexOf(kycData[0]) % kycColors.length])
+            .attr('stroke', '#060E1F').attr('stroke-width', 2)
+            .style('opacity', 0)
+            .on('mouseover', (e) => showTooltip(e, `<div class="tooltip-label">${kycData[0].label}</div><div class="tooltip-value">${fmt(kycData[0].count)} users</div><div style="color:var(--text-muted);font-size:12px">100%</div>`))
+            .on('mouseout', hideTooltip)
+            .transition().duration(800).style('opacity', 1);
+    } else {
+        const pie = d3.pie().value(d => d.count).sort(null).padAngle(0.03);
+        const arc = d3.arc().innerRadius(innerRadius).outerRadius(radius).cornerRadius(4);
+        const arcHover = d3.arc().innerRadius(innerRadius).outerRadius(radius + 6).cornerRadius(4);
+
+        const arcs = svg.selectAll('.arc').data(pie(kycData)).join('g').attr('class', 'arc');
+        arcs.append('path')
+            .attr('fill', (d, i) => kycColors[kycDistribution.indexOf(d.data) % kycColors.length])
+            .attr('stroke', '#060E1F').attr('stroke-width', 2)
+            .on('mouseover', function(e, d) {
+                d3.select(this).transition().duration(150).attr('d', arcHover);
+                showTooltip(e, `<div class="tooltip-label">${d.data.label}</div><div class="tooltip-value">${fmt(d.data.count)} users</div><div style="color:var(--text-muted);font-size:12px">${(d.data.count / total * 100).toFixed(1)}%</div>`);
+            })
+            .on('mouseout', function(e, d) {
+                d3.select(this).transition().duration(150).attr('d', arc);
+                hideTooltip();
+            })
+            .transition().duration(800).attrTween('d', function(d) {
+                const i = d3.interpolate({ startAngle: 0, endAngle: 0 }, d);
+                return t => arc(i(t));
+            });
+    }
 
     // Legend
     const legend = container.append('div').style('display', 'flex').style('flex-wrap', 'wrap').style('gap', '8px 16px').style('margin-top', '12px').style('justify-content', 'center');
-    kycDistribution.forEach((d, i) => {
+    kycData.forEach((d) => {
+        const colorIdx = kycDistribution.indexOf(d) % kycColors.length;
         legend.append('div').style('display', 'flex').style('align-items', 'center').style('gap', '6px').style('font-size', '12px')
-            .html(`<span style="width:10px;height:10px;border-radius:3px;background:${kycColors[i % kycColors.length]};display:inline-block"></span>${d.label} (${d.count})`);
+            .html(`<span style="width:10px;height:10px;border-radius:3px;background:${kycColors[colorIdx]};display:inline-block"></span>${d.label} (${d.count})`);
     });
 })();
 

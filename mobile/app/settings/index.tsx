@@ -390,7 +390,8 @@ export default function SettingsScreen() {
     }
   };
 
-  const contentMaxW = isDesktop ? 680 : undefined;
+  const contentMaxW = isDesktop ? 860 : undefined;
+  const isLargeDesktop = isWeb && width >= 1100;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.dark.bg }}>
@@ -498,74 +499,169 @@ export default function SettingsScreen() {
         </View>
 
         {/* Settings sections */}
-        {sections.map((section) => (
-          <View key={section.title} style={{ marginBottom: 20 }}>
-            <Text
-              style={{
-                color: colors.textMuted,
-                fontSize: 12,
-                fontWeight: "600",
-                letterSpacing: 0.8,
-                textTransform: "uppercase",
-                paddingHorizontal: isDesktop ? 18 : 16,
-                marginBottom: 8,
-              }}
-            >
-              {section.title}
-            </Text>
-            <View
-              style={{
-                backgroundColor: colors.dark.card,
-                borderRadius: 18,
-                borderWidth: 1,
-                borderColor: colors.glass.border,
-                overflow: "hidden",
-                ...shadows.sm,
-              }}
-            >
-              {section.items.map((item, idx) => {
-                const isToggle = item.key === "hide-balance" || item.key === "biometric";
-                const showDivider = idx < section.items.length - 1;
-
-                return (
-                  <View key={item.key}>
-                    {isToggle ? (
-                      <ToggleItem
-                        item={item}
-                        isDesktop={isDesktop}
-                        value={
-                          item.key === "hide-balance"
-                            ? balanceHidden
-                            : biometricEnabled
-                        }
-                        onToggle={
-                          item.key === "hide-balance"
-                            ? toggleBalance
-                            : toggleBiometric
-                        }
-                      />
-                    ) : (
-                      <SettingsItem
-                        item={item}
-                        isDesktop={isDesktop}
-                        onPress={() => handleItemPress(item)}
-                      />
-                    )}
-                    {showDivider && (
-                      <View
-                        style={{
-                          height: 1,
-                          backgroundColor: colors.glass.border,
-                          marginLeft: isDesktop ? 74 : 72,
-                        }}
-                      />
-                    )}
+        {isLargeDesktop ? (
+          <View style={{ flexDirection: "row", gap: 20 }}>
+            {/* Left column: Account + Preferences */}
+            <View style={{ flex: 1 }}>
+              {sections.filter((s) => s.title === "Account" || s.title === "Preferences").map((section) => (
+                <View key={section.title} style={{ marginBottom: 20 }}>
+                  <Text
+                    style={{
+                      color: colors.textMuted,
+                      fontSize: 12,
+                      fontWeight: "600",
+                      letterSpacing: 0.8,
+                      textTransform: "uppercase",
+                      paddingHorizontal: 18,
+                      marginBottom: 8,
+                    }}
+                  >
+                    {section.title}
+                  </Text>
+                  <View
+                    style={{
+                      backgroundColor: colors.dark.card,
+                      borderRadius: 18,
+                      borderWidth: 1,
+                      borderColor: colors.glass.border,
+                      overflow: "hidden",
+                      ...shadows.sm,
+                    }}
+                  >
+                    {section.items.map((item, idx) => {
+                      const isToggle = item.key === "hide-balance" || item.key === "biometric";
+                      const showDivider = idx < section.items.length - 1;
+                      return (
+                        <View key={item.key}>
+                          {isToggle ? (
+                            <ToggleItem item={item} isDesktop={isDesktop} value={item.key === "hide-balance" ? balanceHidden : biometricEnabled} onToggle={item.key === "hide-balance" ? toggleBalance : toggleBiometric} />
+                          ) : (
+                            <SettingsItem item={item} isDesktop={isDesktop} onPress={() => handleItemPress(item)} />
+                          )}
+                          {showDivider && <View style={{ height: 1, backgroundColor: colors.glass.border, marginLeft: 74 }} />}
+                        </View>
+                      );
+                    })}
                   </View>
-                );
-              })}
+                </View>
+              ))}
+            </View>
+            {/* Right column: Security + About */}
+            <View style={{ flex: 1 }}>
+              {sections.filter((s) => s.title === "Security" || s.title === "About").map((section) => (
+                <View key={section.title} style={{ marginBottom: 20 }}>
+                  <Text
+                    style={{
+                      color: colors.textMuted,
+                      fontSize: 12,
+                      fontWeight: "600",
+                      letterSpacing: 0.8,
+                      textTransform: "uppercase",
+                      paddingHorizontal: 18,
+                      marginBottom: 8,
+                    }}
+                  >
+                    {section.title}
+                  </Text>
+                  <View
+                    style={{
+                      backgroundColor: colors.dark.card,
+                      borderRadius: 18,
+                      borderWidth: 1,
+                      borderColor: colors.glass.border,
+                      overflow: "hidden",
+                      ...shadows.sm,
+                    }}
+                  >
+                    {section.items.map((item, idx) => {
+                      const isToggle = item.key === "hide-balance" || item.key === "biometric";
+                      const showDivider = idx < section.items.length - 1;
+                      return (
+                        <View key={item.key}>
+                          {isToggle ? (
+                            <ToggleItem item={item} isDesktop={isDesktop} value={item.key === "hide-balance" ? balanceHidden : biometricEnabled} onToggle={item.key === "hide-balance" ? toggleBalance : toggleBiometric} />
+                          ) : (
+                            <SettingsItem item={item} isDesktop={isDesktop} onPress={() => handleItemPress(item)} />
+                          )}
+                          {showDivider && <View style={{ height: 1, backgroundColor: colors.glass.border, marginLeft: 74 }} />}
+                        </View>
+                      );
+                    })}
+                  </View>
+                </View>
+              ))}
             </View>
           </View>
-        ))}
+        ) : (
+          sections.map((section) => (
+            <View key={section.title} style={{ marginBottom: 20 }}>
+              <Text
+                style={{
+                  color: colors.textMuted,
+                  fontSize: 12,
+                  fontWeight: "600",
+                  letterSpacing: 0.8,
+                  textTransform: "uppercase",
+                  paddingHorizontal: isDesktop ? 18 : 16,
+                  marginBottom: 8,
+                }}
+              >
+                {section.title}
+              </Text>
+              <View
+                style={{
+                  backgroundColor: colors.dark.card,
+                  borderRadius: 18,
+                  borderWidth: 1,
+                  borderColor: colors.glass.border,
+                  overflow: "hidden",
+                  ...shadows.sm,
+                }}
+              >
+                {section.items.map((item, idx) => {
+                  const isToggle = item.key === "hide-balance" || item.key === "biometric";
+                  const showDivider = idx < section.items.length - 1;
+
+                  return (
+                    <View key={item.key}>
+                      {isToggle ? (
+                        <ToggleItem
+                          item={item}
+                          isDesktop={isDesktop}
+                          value={
+                            item.key === "hide-balance"
+                              ? balanceHidden
+                              : biometricEnabled
+                          }
+                          onToggle={
+                            item.key === "hide-balance"
+                              ? toggleBalance
+                              : toggleBiometric
+                          }
+                        />
+                      ) : (
+                        <SettingsItem
+                          item={item}
+                          isDesktop={isDesktop}
+                          onPress={() => handleItemPress(item)}
+                        />
+                      )}
+                      {showDivider && (
+                        <View
+                          style={{
+                            height: 1,
+                            backgroundColor: colors.glass.border,
+                            marginLeft: isDesktop ? 74 : 72,
+                          }}
+                        />
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          ))
+        )}
       </ScrollView>
     </SafeAreaView>
   );
