@@ -231,26 +231,49 @@
 | Smile Identity KYC | ✅ Done | `kyc_service.py` — ID verify, document+selfie verify, webhook callback, auto tier upgrade |
 | Email notifications | ✅ Done | 4 email types (welcome, receipt, KYC status, security alert), HTML templates, Celery tasks with retry |
 | CI/CD pipeline | ✅ Done | `.github/workflows/ci.yml` — backend tests + deploy check, frontend TS + web build, Docker build |
-| Onboarding tour | ✅ Done | 4-slide swipeable onboarding with animated pagination, stored completion flag |
+| Onboarding tour | ✅ Done | Popup modal onboarding with animated pagination, stored completion flag |
 | Localization | ✅ Done | English + Swahili (i18n-js + expo-localization), language picker in profile |
 | Notification preferences | ✅ Done | `settings/notifications.tsx` — 5 toggle categories, stored in local storage |
+| Google Sign-In | ✅ Done | `expo-auth-session` Google provider, login + register screens, auth store |
+| Biometric unlock | ✅ Done | App launch biometric gate, toggle in profile, `expo-local-authentication` |
+| Settings: Change PIN | ✅ Done | `settings/change-pin` screen with current/new PIN verification flow |
+| Settings: KYC verification | ✅ Done | `settings/kyc.tsx` — 5 document types, upload/re-upload, status badges |
+| Admin stats dashboard | ✅ Done | D3.js v7 charts at `/admin/stats/` — users, transactions, KYC, regions, crypto holdings |
+| Swagger/OpenAPI docs | ✅ Done | `drf-spectacular` at `/api/docs/` (Swagger) and `/api/redoc/` (ReDoc) |
+| Settings hub | ✅ Done | Unified settings screen with notifications, KYC, change PIN, language, and help sections |
+| Help & support | ✅ Done | Help screen with FAQ, mailto support link, and terms/privacy URLs |
+| Notification inbox | ✅ Done | In-app notification list with read/unread state, category filtering, and push integration |
+
+### Phase 2 Design Improvements ✅
+
+| Change | Status | Details |
+|--------|--------|---------|
+| BrandedSpinner | ✅ Done | Custom loading spinner component for all loading states |
+| Button hover/ripple animations | ✅ Done | Hover effects and ripple feedback on interactive elements |
+| Desktop glass card PIN entry | ✅ Done | Glassmorphism-styled PIN input for desktop web |
+| Wallet page redesign | ✅ Done | Merged portfolio + actions sections, removed visual clutter |
+| Balance hide/show toggle | ✅ Done | Session-based toggle, default hidden for privacy |
+| Receive modal with wallet switcher | ✅ Done | Currency selector within the receive/deposit modal |
+| Stagger fade-in animations | ✅ Done | Sequential fade-in on list items and dashboard cards |
+| Responsive desktop layouts | ✅ Done | Adaptive grid layouts for desktop-width viewports |
 
 ---
 
-## What's NOT Done Yet (Phase 3 — Infrastructure & Polish)
+## What's NOT Done Yet (Phase 3 — Infrastructure & Launch)
 
-### Backend
-- [ ] **HD wallet (production)** — Replace HMAC derivation with BIP-32/44 or Fireblocks custody API
-- [ ] **Webhook retry queue** — Dead letter queue for failed M-Pesa callbacks
-- [ ] **Rate limiting (API)** — DRF throttling per-endpoint tuning
+### Backend / Blockchain
+- [ ] **Production HD wallets** — Replace HMAC derivation with BIP-32/44 or Fireblocks custody API
+- [ ] **External wallet connection** — WalletConnect / Phantom deep link integration
+- [ ] **SOL/ETH/BTC deposit monitoring** — Only Tron deposit listener implemented so far
 
 ### Infrastructure
-- [ ] **VPS deployment** — Hetzner/Contabo setup
-- [ ] **SSL certificates** — Cloudflare or Let's Encrypt
-- [ ] **Domain setup** — cryptopay.co.ke
+- [ ] **VPS deployment + SSL + domain** — Hetzner/Contabo, Cloudflare/Let's Encrypt, cryptopay.co.ke
 - [ ] **Monitoring** — Sentry (config ready), Grafana/Prometheus
-- [ ] **Backup strategy** — PostgreSQL automated backups
-- [ ] **Rate limiting at proxy** — Nginx/Cloudflare rate limiting
+- [ ] **Rate limiting at proxy level** — Nginx/Cloudflare rate limiting
+- [ ] **Database backups** — PostgreSQL automated backup strategy
+
+### Launch
+- [ ] **App Store / Play Store submission** — EAS production builds, store listings, review
 
 ---
 

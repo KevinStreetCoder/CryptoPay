@@ -9,9 +9,13 @@ export default function SettingsLayout() {
         animation: "slide_from_bottom",
       }}
     >
+      <Stack.Screen name="index" />
       <Stack.Screen name="change-pin" />
       <Stack.Screen name="kyc" />
       <Stack.Screen name="notifications" />
+      <Stack.Screen name="language" />
+      <Stack.Screen name="help" />
+      <Stack.Screen name="notifications-inbox" />
     </Stack>
   );
 }

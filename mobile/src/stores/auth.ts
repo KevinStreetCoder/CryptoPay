@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Platform } from "react-native";
 import { storage } from "../utils/storage";
 import { authApi, User } from "../api/auth";
+import { resetBalanceVisibility } from "./balance";
 
 let _user: User | null = null;
 let _listeners: Set<() => void> = new Set();
@@ -115,6 +116,7 @@ export function useAuth() {
     await storage.deleteItemAsync("access_token");
     await storage.deleteItemAsync("refresh_token");
     _user = null;
+    resetBalanceVisibility();
     notify();
   }, []);
 
