@@ -8,6 +8,7 @@ import { BalanceCard } from "../../src/components/BalanceCard";
 import { QuickAction } from "../../src/components/QuickAction";
 import { TransactionItem } from "../../src/components/TransactionItem";
 import { RateTicker } from "../../src/components/RateTicker";
+import { BalanceCardSkeleton, TransactionSkeleton } from "../../src/components/Skeleton";
 import { useWallets } from "../../src/hooks/useWallets";
 import { useTransactions } from "../../src/hooks/useTransactions";
 import { useAuth } from "../../src/stores/auth";
@@ -85,13 +86,18 @@ export default function HomeScreen() {
               {user?.full_name || "User"}
             </Text>
           </View>
-          <View className="w-10 h-10 rounded-full bg-dark-card items-center justify-center">
+          <Pressable
+            className="w-10 h-10 rounded-full bg-dark-card items-center justify-center"
+            accessibilityRole="button"
+            accessibilityLabel="Notifications"
+            testID="notifications-button"
+          >
             <Ionicons
               name="notifications-outline"
               size={22}
               color={colors.textSecondary}
             />
-          </View>
+          </Pressable>
         </View>
 
         {/* Promotional Banner */}
@@ -181,11 +187,7 @@ export default function HomeScreen() {
 
         {/* Balance Card */}
         {wallets && <BalanceCard wallets={wallets} />}
-        {walletsLoading && (
-          <View className="bg-dark-card rounded-2xl p-5 mx-4 h-40 items-center justify-center">
-            <Text className="text-textMuted font-inter">Loading...</Text>
-          </View>
-        )}
+        {walletsLoading && <BalanceCardSkeleton />}
 
         {/* Quick Actions */}
         <View className="flex-row px-4 mt-6 mb-2">

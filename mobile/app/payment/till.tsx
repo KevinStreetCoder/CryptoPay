@@ -6,15 +6,16 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Alert,
   Pressable,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Button } from "../../src/components/Button";
+import { useToast } from "../../src/components/Toast";
 import { useWallets } from "../../src/hooks/useWallets";
 import { ratesApi, Quote } from "../../src/api/rates";
+import { normalizeError } from "../../src/utils/apiErrors";
 import { CURRENCIES, CurrencyCode, colors } from "../../src/constants/theme";
 
 const CRYPTO_OPTIONS: CurrencyCode[] = ["USDT", "BTC", "ETH"];
@@ -31,9 +32,11 @@ export default function PayTillScreen() {
   const selectedWallet = wallets?.find((w) => w.currency === selectedCrypto);
   const balance = selectedWallet ? parseFloat(selectedWallet.balance) : 0;
 
+  const toast = useToast();
+
   const handleGetQuote = async () => {
     if (!tillNumber || !amount) {
-      Alert.alert("Error", "Please fill in all fields");
+      toast.warning("Missing Fields", "Please fill in all fields");
       return;
     }
     setLoading(true);
@@ -43,8 +46,9 @@ export default function PayTillScreen() {
         kes_amount: amount,
       });
       setQuote(data);
-    } catch (err: any) {
-      Alert.alert("Error", err.response?.data?.error || "Failed to get rate");
+    } catch (err: unknown) {
+      const appError = normalizeError(err);
+      toast.error(appError.title, appError.message);
     } finally {
       setLoading(false);
     }
@@ -96,6 +100,9 @@ export default function PayTillScreen() {
               placeholderTextColor={colors.dark.muted}
               keyboardType="number-pad"
               className="bg-dark-card text-white text-base font-inter rounded-xl border border-dark-border px-4 py-3.5 mb-4"
+              accessibilityLabel="Till Number"
+              testID="till-number-input"
+              maxFontSizeMultiplier={1.3}
             />
 
             {/* Amount */}

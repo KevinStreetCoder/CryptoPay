@@ -120,6 +120,13 @@ export function AmountInput({
             paddingVertical: 16,
           }}
           maxLength={12}
+          maxFontSizeMultiplier={1.2}
+          accessibilityLabel={label}
+          accessibilityHint={`Enter amount between ${minAmount.toLocaleString()} and ${maxAmount.toLocaleString()} KES`}
+          accessibilityValue={{
+            text: displayValue ? `${displayValue} Kenyan Shillings` : "empty",
+          }}
+          testID="amount-input"
         />
       </View>
 
@@ -154,6 +161,10 @@ export function AmountInput({
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               onChangeValue(amount.toString());
             }}
+            accessibilityRole="button"
+            accessibilityLabel={`${amount.toLocaleString()} KES`}
+            accessibilityState={{ selected: numericValue === amount }}
+            testID={`amount-pill-${amount}`}
             style={{
               flex: 1,
               backgroundColor:

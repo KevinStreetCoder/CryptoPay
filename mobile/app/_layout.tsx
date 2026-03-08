@@ -10,6 +10,7 @@ import { useAuth } from "../src/stores/auth";
 import { ErrorBoundary } from "../src/components/ErrorBoundary";
 import { NetworkStatus } from "../src/components/NetworkStatus";
 import { LoadingScreen } from "../src/components/LoadingScreen";
+import { ToastProvider } from "../src/components/Toast";
 
 // Keep splash screen visible until we decide what to show
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -79,7 +80,9 @@ export default function RootLayout() {
     <ErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <QueryClientProvider client={queryClient}>
-          <RootNavigator />
+          <ToastProvider>
+            <RootNavigator />
+          </ToastProvider>
         </QueryClientProvider>
       </GestureHandlerRootView>
     </ErrorBoundary>

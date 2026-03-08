@@ -6,9 +6,10 @@ interface PinInputProps {
   length?: number;
   onComplete: (pin: string) => void;
   error?: boolean;
+  testID?: string;
 }
 
-export function PinInput({ length = 6, onComplete, error }: PinInputProps) {
+export function PinInput({ length = 6, onComplete, error, testID }: PinInputProps) {
   const [pin, setPin] = useState("");
   const inputRef = useRef<TextInput>(null);
 
@@ -22,7 +23,11 @@ export function PinInput({ length = 6, onComplete, error }: PinInputProps) {
   };
 
   return (
-    <Pressable onPress={() => inputRef.current?.focus()}>
+    <Pressable
+      onPress={() => inputRef.current?.focus()}
+      accessibilityRole="none"
+      accessibilityLabel={`PIN entry, ${pin.length} of ${length} digits entered`}
+    >
       <View className="flex-row justify-center gap-3">
         {Array.from({ length }).map((_, i) => (
           <View
@@ -36,6 +41,7 @@ export function PinInput({ length = 6, onComplete, error }: PinInputProps) {
                 ? "border-primary-500/50 bg-dark-elevated"
                 : "border-dark-border bg-dark-card"
             }`}
+            accessibilityLabel={pin.length > i ? "Digit entered" : "Empty digit"}
           >
             {pin.length > i && (
               <View className="w-3 h-3 rounded-full bg-primary-400" />
@@ -52,6 +58,9 @@ export function PinInput({ length = 6, onComplete, error }: PinInputProps) {
         autoFocus
         className="absolute opacity-0 h-0 w-0"
         secureTextEntry
+        accessibilityLabel="PIN input"
+        accessibilityHint={`Enter your ${length}-digit PIN`}
+        testID={testID || "pin-input"}
       />
     </Pressable>
   );
