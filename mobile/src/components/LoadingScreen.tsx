@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { View, Text, Animated, Easing } from "react-native";
+import { View, Text, Animated, Easing, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 export function LoadingScreen() {
@@ -82,11 +82,15 @@ export function LoadingScreen() {
               }),
             },
           ],
-          shadowColor: "#0D9F6E",
-          shadowOffset: { width: 0, height: 0 },
-          shadowOpacity: 0.4,
-          shadowRadius: 20,
-          elevation: 10,
+          ...(Platform.OS === "web"
+            ? { boxShadow: "0 0 20px rgba(13, 159, 110, 0.4)" }
+            : {
+                shadowColor: "#0D9F6E",
+                shadowOffset: { width: 0, height: 0 },
+                shadowOpacity: 0.4,
+                shadowRadius: 20,
+                elevation: 10,
+              }) as any,
         }}
       >
         <Ionicons name="wallet" size={40} color="#fff" />

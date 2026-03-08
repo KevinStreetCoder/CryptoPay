@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import * as SecureStore from "expo-secure-store";
+import { storage } from "../utils/storage";
 import { authApi, User } from "../api/auth";
 
 let _user: User | null = null;
@@ -21,15 +21,15 @@ export function useAuth() {
 
   const bootstrap = useCallback(async () => {
     try {
-      const token = await SecureStore.getItemAsync("access_token");
+      const token = await storage.getItemAsync("access_token");
       if (token) {
         const { data } = await authApi.getProfile();
         _user = data;
         notify();
       }
     } catch {
-      await SecureStore.deleteItemAsync("access_token");
-      await SecureStore.deleteItemAsync("refresh_token");
+      await storage.deleteItemAsync("access_token");
+      await storage.deleteItemAsync("refresh_token");
       _user = null;
       notify();
     } finally {
@@ -39,8 +39,8 @@ export function useAuth() {
 
   const login = useCallback(async (phone: string, pin: string) => {
     const { data } = await authApi.login({ phone, pin });
-    await SecureStore.setItemAsync("access_token", data.tokens.access);
-    await SecureStore.setItemAsync("refresh_token", data.tokens.refresh);
+    await storage.setItemAsync("access_token", data.tokens.access);
+    await storage.setItemAsync("refresh_token", data.tokens.refresh);
     _user = data.user;
     notify();
     return data;
@@ -54,8 +54,8 @@ export function useAuth() {
         otp,
         full_name: fullName,
       });
-      await SecureStore.setItemAsync("access_token", data.tokens.access);
-      await SecureStore.setItemAsync("refresh_token", data.tokens.refresh);
+      await storage.setItemAsync("access_token", data.tokens.access);
+      await storage.setItemAsync("refresh_token", data.tokens.refresh);
       _user = data.user;
       notify();
       return data;
@@ -64,8 +64,8 @@ export function useAuth() {
   );
 
   const logout = useCallback(async () => {
-    await SecureStore.deleteItemAsync("access_token");
-    await SecureStore.deleteItemAsync("refresh_token");
+    await storage.deleteItemAsync("access_token");
+    await storage.deleteItemAsync("refresh_token");
     _user = null;
     notify();
   }, []);
