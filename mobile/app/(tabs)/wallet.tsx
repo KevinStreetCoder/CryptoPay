@@ -5,20 +5,32 @@ import {
   Pressable,
   RefreshControl,
   Modal,
+  Platform,
+  ActivityIndicator,
+  useWindowDimensions,
+  Animated,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useState } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
+import { useRouter } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import QRCode from "react-native-qrcode-svg";
 import { useWallets } from "../../src/hooks/useWallets";
 import { useTransactions } from "../../src/hooks/useTransactions";
 import { TransactionItem } from "../../src/components/TransactionItem";
-import { StatusBadge } from "../../src/components/StatusBadge";
 import { WalletCardSkeleton, TransactionSkeleton } from "../../src/components/Skeleton";
-import { ratesApi, Rate } from "../../src/api/rates";
-import { CURRENCIES, CurrencyCode, colors } from "../../src/constants/theme";
+import { useToast } from "../../src/components/Toast";
+import { ratesApi, Rate, normalizeRate } from "../../src/api/rates";
+import { walletsApi } from "../../src/api/wallets";
+import { CURRENCIES, CurrencyCode, colors, shadows } from "../../src/constants/theme";
+import { getTxKesAmount, getTxRecipient } from "../../src/api/payments";
+import { storage } from "../../src/utils/storage";
+
+const BALANCE_HIDDEN_KEY = "cryptopay_balance_hidden";
+const SUPPORTED_CRYPTOS: CurrencyCode[] = ["USDT", "BTC", "ETH", "SOL"];
 
 function useRates() {
   return useQuery<Rate[]>({
@@ -29,7 +41,7 @@ function useRates() {
         currencies.map(async (c) => {
           try {
             const { data } = await ratesApi.getRate(c);
-            return data;
+            return normalizeRate(data);
           } catch {
             return null;
           }
@@ -41,9 +53,92 @@ function useRates() {
   });
 }
 
+// Type config for desktop transaction table
+const TX_TYPE_CONFIG: Record<string, { icon: string; label: string; color: string }> = {
+  PAYBILL_PAYMENT: { icon: "receipt-outline", label: "Pay Bill", color: colors.primary[400] },
+  TILL_PAYMENT: { icon: "cart-outline", label: "Buy Goods", color: colors.info },
+  DEPOSIT: { icon: "arrow-down-circle-outline", label: "Deposit", color: colors.success },
+  WITHDRAWAL: { icon: "arrow-up-circle-outline", label: "Withdraw", color: colors.warning },
+  SEND_MPESA: { icon: "phone-portrait-outline", label: "Send M-Pesa", color: colors.accent },
+  BUY: { icon: "swap-horizontal-outline", label: "Buy", color: colors.primary[400] },
+  SELL: { icon: "swap-vertical-outline", label: "Sell", color: colors.accentDark },
+  FEE: { icon: "pricetag-outline", label: "Fee", color: colors.dark.muted },
+};
+
+const TX_STATUS_CONFIG: Record<string, { color: string; bg: string }> = {
+  completed: { color: colors.success, bg: colors.success + "1F" },
+  pending: { color: colors.warning, bg: colors.warning + "1F" },
+  processing: { color: colors.info, bg: colors.info + "1F" },
+  failed: { color: colors.error, bg: colors.error + "1F" },
+  reversed: { color: colors.dark.muted, bg: colors.dark.muted + "1F" },
+};
+
+// ── Animated Asset Card Wrapper ──
+function AnimatedAssetCard({
+  children,
+  index,
+  isDesktop,
+}: {
+  children: React.ReactNode;
+  index: number;
+  isDesktop: boolean;
+}) {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(16)).current;
+  const isWeb = Platform.OS === "web";
+  const [hovered, setHovered] = useState(false);
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 400,
+        delay: index * 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(translateY, {
+        toValue: 0,
+        duration: 400,
+        delay: index * 100,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [fadeAnim, translateY, index]);
+
+  const hoverStyle =
+    isWeb && isDesktop
+      ? {
+          transition: "box-shadow 0.2s ease, transform 0.2s ease",
+          ...(hovered
+            ? { boxShadow: "0 8px 32px rgba(16, 185, 129, 0.12)", transform: "translateY(-2px)" }
+            : {}),
+        }
+      : {};
+
+  return (
+    <Animated.View
+      style={[{ opacity: fadeAnim, transform: [{ translateY }] }, hoverStyle as any]}
+      {...(isWeb
+        ? {
+            onMouseEnter: () => setHovered(true),
+            onMouseLeave: () => setHovered(false),
+          }
+        : {})}
+    >
+      {children}
+    </Animated.View>
+  );
+}
+
 export default function WalletScreen() {
-  const { data: wallets, refetch: refetchWallets } = useWallets();
-  const { data: txData, refetch: refetchTx } = useTransactions();
+  const router = useRouter();
+  const { width } = useWindowDimensions();
+  const isWeb = Platform.OS === "web";
+  const isDesktop = isWeb && width >= 900;
+  const isLargeDesktop = isWeb && width >= 1200;
+  const hPad = isDesktop ? 32 : 16;
+  const { data: wallets, isLoading: walletsLoading, refetch: refetchWallets } = useWallets();
+  const { data: txData, isLoading: txLoading, refetch: refetchTx } = useTransactions();
   const { data: rates } = useRates();
   const [refreshing, setRefreshing] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -51,6 +146,130 @@ export default function WalletScreen() {
     address: string;
     currency: string;
   } | null>(null);
+  const [hoverReceive, setHoverReceive] = useState(false);
+  const [hoverSend, setHoverSend] = useState(false);
+  const [hoverClose, setHoverClose] = useState(false);
+  const [generatingAddress, setGeneratingAddress] = useState<string | null>(null);
+  const [balanceHidden, setBalanceHidden] = useState(false);
+  const [modalCurrency, setModalCurrency] = useState<CurrencyCode>("USDT");
+  const queryClient = useQueryClient();
+  const toast = useToast();
+
+  // Modal slide-up animation
+  const modalSlide = useRef(new Animated.Value(400)).current;
+  const modalOpacity = useRef(new Animated.Value(0)).current;
+
+  // Load balance hidden preference
+  useEffect(() => {
+    storage.getItemAsync(BALANCE_HIDDEN_KEY).then((val) => {
+      if (val === "true") setBalanceHidden(true);
+    });
+  }, []);
+
+  const toggleBalanceHidden = useCallback(async () => {
+    const newVal = !balanceHidden;
+    setBalanceHidden(newVal);
+    await storage.setItemAsync(BALANCE_HIDDEN_KEY, newVal ? "true" : "false");
+  }, [balanceHidden]);
+
+  // Animate modal in/out
+  useEffect(() => {
+    if (depositModal) {
+      modalSlide.setValue(400);
+      modalOpacity.setValue(0);
+      Animated.parallel([
+        Animated.spring(modalSlide, {
+          toValue: 0,
+          tension: 65,
+          friction: 11,
+          useNativeDriver: true,
+        }),
+        Animated.timing(modalOpacity, {
+          toValue: 1,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [depositModal, modalSlide, modalOpacity]);
+
+  const closeModalAnimated = useCallback(
+    (callback?: () => void) => {
+      Animated.parallel([
+        Animated.timing(modalSlide, {
+          toValue: 400,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(modalOpacity, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        setDepositModal(null);
+        callback?.();
+      });
+    },
+    [modalSlide, modalOpacity]
+  );
+
+  const handleReceive = useCallback(
+    async (wallet: { id: string; deposit_address: string | null; currency: string }) => {
+      if (wallet.deposit_address) {
+        setModalCurrency(wallet.currency as CurrencyCode);
+        setDepositModal({ address: wallet.deposit_address, currency: wallet.currency });
+        return;
+      }
+      // Generate address on demand
+      setGeneratingAddress(wallet.id);
+      try {
+        const { data } = await walletsApi.generateAddress(wallet.id);
+        queryClient.invalidateQueries({ queryKey: ["wallets"] });
+        if (data.deposit_address) {
+          setModalCurrency(data.currency as CurrencyCode);
+          setDepositModal({ address: data.deposit_address, currency: data.currency });
+        }
+      } catch {
+        toast.error("Address Error", "Failed to generate deposit address. Please try again.");
+      } finally {
+        setGeneratingAddress(null);
+      }
+    },
+    [queryClient, toast]
+  );
+
+  // Open receive modal without specific wallet (shows wallet switcher)
+  const handleReceiveGeneric = useCallback(() => {
+    const safeW = Array.isArray(wallets) ? wallets : [];
+    const firstCrypto = safeW.find(
+      (w) => SUPPORTED_CRYPTOS.includes(w.currency as CurrencyCode) && w.deposit_address
+    );
+    if (firstCrypto && firstCrypto.deposit_address) {
+      setModalCurrency(firstCrypto.currency as CurrencyCode);
+      setDepositModal({ address: firstCrypto.deposit_address, currency: firstCrypto.currency });
+    } else if (safeW.length > 0) {
+      const first = safeW.find((w) => SUPPORTED_CRYPTOS.includes(w.currency as CurrencyCode));
+      if (first) handleReceive(first);
+    }
+  }, [wallets, handleReceive]);
+
+  // Switch currency in modal
+  const switchModalCurrency = useCallback(
+    (currency: CurrencyCode) => {
+      const safeW = Array.isArray(wallets) ? wallets : [];
+      const wallet = safeW.find((w) => w.currency === currency);
+      if (wallet) {
+        setModalCurrency(currency);
+        if (wallet.deposit_address) {
+          setDepositModal({ address: wallet.deposit_address, currency: wallet.currency });
+        } else {
+          handleReceive(wallet);
+        }
+      }
+    },
+    [wallets, handleReceive]
+  );
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -60,33 +279,1608 @@ export default function WalletScreen() {
 
   const copyAddress = async (address: string, id: string) => {
     await Clipboard.setStringAsync(address);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    if (Platform.OS !== "web") {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
-    // Clear clipboard after 30s for security
     setTimeout(() => {
       Clipboard.setStringAsync("").catch(() => {});
     }, 30000);
   };
 
-  const cryptoWallets = wallets?.filter((w) => w.currency !== "KES") || [];
+  const safeWallets = Array.isArray(wallets) ? wallets : [];
+  const cryptoWallets = safeWallets.filter((w) => w.currency !== "KES");
   const transactions = txData?.results || [];
 
-  // Calculate total portfolio value in KES
   const totalKES = cryptoWallets.reduce((sum, w) => {
-    const balance = parseFloat(w.balance);
+    const balance = parseFloat(w.balance) || 0;
     const rate = rates?.find((r) => r.currency === w.currency);
-    const kesRate = rate ? parseFloat(rate.kes_rate) : 0;
+    const kesRate = rate ? parseFloat(rate.kes_rate) || 0 : 0;
     return sum + balance * kesRate;
   }, 0);
 
-  // Add KES wallet balance
-  const kesWallet = wallets?.find((w) => w.currency === "KES");
-  const kesBalance = kesWallet ? parseFloat(kesWallet.balance) : 0;
+  const kesWallet = safeWallets.find((w) => w.currency === "KES");
+  const kesBalance = kesWallet ? parseFloat(kesWallet.balance) || 0 : 0;
   const grandTotal = totalKES + kesBalance;
 
+  const getCurrencyColor = (currency: string) =>
+    colors.crypto[currency] || colors.primary[400];
+
+  const formatBalance = (value: number, opts?: { minimumFractionDigits?: number; maximumFractionDigits?: number }) => {
+    if (balanceHidden) return "****";
+    return value.toLocaleString("en-KE", opts);
+  };
+
+  const formatCryptoBalance = (value: number, decimals: number) => {
+    if (balanceHidden) return "****";
+    return value.toFixed(decimals);
+  };
+
+  // ── Currency Tabs for Modal ──
+  const renderCurrencyTabs = (isDesktopDialog: boolean) => {
+    return (
+      <View
+        style={{
+          flexDirection: "row",
+          alignSelf: "center",
+          backgroundColor: colors.dark.bg,
+          borderRadius: 14,
+          padding: 4,
+          marginBottom: isDesktopDialog ? 20 : 24,
+          borderWidth: 1,
+          borderColor: colors.glass.border,
+        }}
+      >
+        {SUPPORTED_CRYPTOS.map((c) => {
+          const isActive = modalCurrency === c;
+          const cColor = getCurrencyColor(c);
+          return (
+            <Pressable
+              key={c}
+              onPress={() => switchModalCurrency(c)}
+              style={{
+                paddingHorizontal: isDesktopDialog ? 16 : 14,
+                paddingVertical: 8,
+                borderRadius: 10,
+                backgroundColor: isActive ? cColor + "25" : "transparent",
+                borderWidth: isActive ? 1 : 0,
+                borderColor: isActive ? cColor + "40" : "transparent",
+              }}
+            >
+              <Text
+                style={{
+                  color: isActive ? cColor : colors.textMuted,
+                  fontSize: 13,
+                  fontFamily: isActive ? "Inter_700Bold" : "Inter_500Medium",
+                }}
+              >
+                {c}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    );
+  };
+
+  // ── Desktop Deposit Dialog ──
+  const renderDesktopDepositDialog = () => {
+    if (!depositModal) return null;
+    const activeCurrency = modalCurrency;
+    const cColor = getCurrencyColor(activeCurrency);
+
+    return (
+      <View
+        style={{
+          position: "fixed" as any,
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: "rgba(0,0,0,0.6)",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 1000,
+        }}
+      >
+        <Pressable
+          onPress={() => closeModalAnimated()}
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+          }}
+        />
+        <Animated.View
+          style={{
+            backgroundColor: colors.dark.card,
+            borderRadius: 24,
+            width: "100%",
+            maxWidth: 480,
+            padding: 36,
+            borderWidth: 1,
+            borderColor: colors.glass.borderStrong,
+            overflow: "hidden",
+            opacity: modalOpacity,
+            transform: [{ translateY: modalSlide }],
+            ...shadows.lg,
+          }}
+        >
+          {/* Glass highlight at top */}
+          <View
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              height: 120,
+              backgroundColor: colors.glass.highlight,
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+            }}
+          />
+
+          {/* Close button */}
+          <Pressable
+            onPress={() => closeModalAnimated()}
+            onHoverIn={() => setHoverClose(true)}
+            onHoverOut={() => setHoverClose(false)}
+            style={{
+              position: "absolute",
+              top: 16,
+              right: 16,
+              width: 36,
+              height: 36,
+              borderRadius: 18,
+              backgroundColor: hoverClose ? colors.dark.elevated : "transparent",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 1,
+            }}
+          >
+            <Ionicons name="close" size={20} color={colors.textSecondary} />
+          </Pressable>
+
+          <Text
+            style={{
+              color: "#FFFFFF",
+              fontSize: 24,
+              fontFamily: "Inter_700Bold",
+              textAlign: "center",
+              marginBottom: 6,
+            }}
+          >
+            Receive Crypto
+          </Text>
+          <Text
+            style={{
+              color: colors.textMuted,
+              fontSize: 14,
+              fontFamily: "Inter_400Regular",
+              textAlign: "center",
+              marginBottom: 20,
+            }}
+          >
+            Select a wallet and scan or copy the address
+          </Text>
+
+          {/* Currency Tabs */}
+          {renderCurrencyTabs(true)}
+
+          {/* QR Code - larger on desktop */}
+          <View
+            style={{
+              alignSelf: "center",
+              backgroundColor: "#FFFFFF",
+              borderRadius: 20,
+              padding: 20,
+              marginBottom: 24,
+              ...shadows.md,
+            }}
+          >
+            <QRCode
+              value={depositModal.address}
+              size={200}
+              backgroundColor="#FFFFFF"
+              color="#060E1F"
+            />
+          </View>
+
+          {/* Deposit Address Display */}
+          <View
+            style={{
+              backgroundColor: colors.dark.bg,
+              borderRadius: 16,
+              padding: 20,
+              alignSelf: "center",
+              marginBottom: 24,
+              width: "100%",
+              maxWidth: 400,
+              borderWidth: 1,
+              borderColor: colors.glass.border,
+            }}
+          >
+            <Text
+              style={{
+                color: colors.textMuted,
+                fontSize: 11,
+                fontFamily: "Inter_600SemiBold",
+                textTransform: "uppercase",
+                letterSpacing: 1,
+                textAlign: "center",
+                marginBottom: 12,
+              }}
+            >
+              {activeCurrency} Deposit Address
+            </Text>
+            <Text
+              style={{
+                color: colors.textPrimary,
+                fontSize: 13,
+                fontFamily: Platform.OS === "web" ? "monospace" : "Courier",
+                textAlign: "center",
+                lineHeight: 22,
+                letterSpacing: 0.5,
+              }}
+              selectable
+            >
+              {depositModal.address}
+            </Text>
+          </View>
+
+          {/* Copy Address Button */}
+          <Pressable
+            onPress={() => {
+              if (depositModal.address) {
+                Clipboard.setStringAsync(depositModal.address);
+                if (Platform.OS !== "web") {
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                }
+                setCopiedId("desktop-deposit");
+                setTimeout(() => setCopiedId(null), 2000);
+                setTimeout(() => {
+                  Clipboard.setStringAsync("").catch(() => {});
+                }, 30000);
+              }
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Copy deposit address"
+            accessibilityHint="Copies the address to clipboard. It will be cleared after 30 seconds."
+            style={({ pressed }) => ({
+              backgroundColor: copiedId === "desktop-deposit" ? colors.success : cColor,
+              borderRadius: 14,
+              paddingVertical: 14,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              opacity: pressed ? 0.85 : 1,
+              ...(isWeb
+                ? ({ transition: "background-color 0.2s ease" } as any)
+                : {}),
+            })}
+          >
+            <Ionicons
+              name={copiedId === "desktop-deposit" ? "checkmark-circle" : "copy-outline"}
+              size={18}
+              color="#FFFFFF"
+            />
+            <Text
+              style={{
+                color: "#FFFFFF",
+                fontSize: 15,
+                fontFamily: "Inter_600SemiBold",
+              }}
+            >
+              {copiedId === "desktop-deposit" ? "Copied!" : "Copy Address"}
+            </Text>
+          </Pressable>
+
+          {/* Warning */}
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "flex-start",
+              backgroundColor: colors.warning + "10",
+              borderRadius: 14,
+              padding: 14,
+              marginTop: 16,
+              gap: 10,
+              borderWidth: 1,
+              borderColor: colors.warning + "18",
+            }}
+          >
+            <Ionicons name="warning" size={18} color={colors.warning} style={{ marginTop: 1 }} />
+            <Text
+              style={{
+                color: colors.warning,
+                fontSize: 12,
+                fontFamily: "Inter_400Regular",
+                flex: 1,
+                lineHeight: 18,
+              }}
+            >
+              Only send {activeCurrency} to this address. Sending other tokens may result in
+              permanent loss.
+            </Text>
+          </View>
+        </Animated.View>
+      </View>
+    );
+  };
+
+  // ── Mobile Deposit Modal (bottom sheet with spring animation) ──
+  const renderMobileDepositModal = () => (
+    <Modal
+      visible={!!depositModal}
+      animationType="none"
+      transparent
+      onRequestClose={() => closeModalAnimated()}
+    >
+      <Animated.View
+        style={{
+          flex: 1,
+          backgroundColor: "rgba(0,0,0,0.7)",
+          justifyContent: "flex-end",
+          opacity: modalOpacity,
+        }}
+      >
+        <Pressable
+          onPress={() => closeModalAnimated()}
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+          }}
+        />
+        <Animated.View
+          style={{
+            backgroundColor: colors.dark.card,
+            borderTopLeftRadius: 28,
+            borderTopRightRadius: 28,
+            paddingHorizontal: 24,
+            paddingTop: 12,
+            paddingBottom: 44,
+            borderWidth: 1,
+            borderBottomWidth: 0,
+            borderColor: colors.glass.borderStrong,
+            overflow: "hidden",
+            transform: [{ translateY: modalSlide }],
+          }}
+        >
+          {/* Glass highlight */}
+          <View
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              height: 100,
+              backgroundColor: colors.glass.highlight,
+              borderTopLeftRadius: 28,
+              borderTopRightRadius: 28,
+            }}
+          />
+
+          {/* Handle */}
+          <View
+            style={{
+              width: 40,
+              height: 4,
+              borderRadius: 2,
+              backgroundColor: colors.dark.elevated,
+              alignSelf: "center",
+              marginBottom: 20,
+            }}
+          />
+
+          <Text
+            style={{
+              color: "#FFFFFF",
+              fontSize: 22,
+              fontFamily: "Inter_700Bold",
+              textAlign: "center",
+              marginBottom: 6,
+            }}
+          >
+            Receive Crypto
+          </Text>
+          <Text
+            style={{
+              color: colors.textMuted,
+              fontSize: 14,
+              fontFamily: "Inter_400Regular",
+              textAlign: "center",
+              marginBottom: 16,
+            }}
+          >
+            Select a wallet and scan or copy the address
+          </Text>
+
+          {/* Currency Tabs */}
+          {renderCurrencyTabs(false)}
+
+          {/* QR Code */}
+          <View
+            style={{
+              alignSelf: "center",
+              backgroundColor: "#FFFFFF",
+              borderRadius: 16,
+              padding: 16,
+              marginBottom: 20,
+            }}
+          >
+            <QRCode
+              value={depositModal?.address || ""}
+              size={200}
+              backgroundColor="#FFFFFF"
+              color="#060E1F"
+            />
+          </View>
+
+          {/* Deposit Address Display */}
+          <View
+            style={{
+              backgroundColor: colors.dark.bg,
+              borderRadius: 20,
+              padding: 20,
+              alignSelf: "center",
+              marginBottom: 24,
+              width: "100%",
+              borderWidth: 1,
+              borderColor: colors.glass.border,
+            }}
+          >
+            <Text
+              style={{
+                color: colors.textMuted,
+                fontSize: 11,
+                fontFamily: "Inter_600SemiBold",
+                textTransform: "uppercase",
+                letterSpacing: 1,
+                textAlign: "center",
+                marginBottom: 14,
+              }}
+            >
+              {modalCurrency} Deposit Address
+            </Text>
+            <Text
+              style={{
+                color: colors.textPrimary,
+                fontSize: 13,
+                fontFamily: Platform.OS === "web" ? "monospace" : "Courier",
+                textAlign: "center",
+                lineHeight: 22,
+                letterSpacing: 0.5,
+              }}
+              selectable
+            >
+              {depositModal?.address}
+            </Text>
+          </View>
+
+          {/* Copy Address Button */}
+          <Pressable
+            onPress={() => {
+              if (depositModal?.address) {
+                Clipboard.setStringAsync(depositModal.address);
+                if (Platform.OS !== "web") {
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                }
+                setCopiedId("mobile-deposit");
+                setTimeout(() => setCopiedId(null), 2000);
+                setTimeout(() => {
+                  Clipboard.setStringAsync("").catch(() => {});
+                }, 30000);
+              }
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Copy deposit address"
+            accessibilityHint="Copies the address to clipboard. It will be cleared after 30 seconds."
+            style={({ pressed }) => ({
+              backgroundColor:
+                copiedId === "mobile-deposit"
+                  ? colors.success
+                  : getCurrencyColor(modalCurrency),
+              borderRadius: 16,
+              paddingVertical: 16,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              opacity: pressed ? 0.85 : 1,
+            })}
+          >
+            <Ionicons
+              name={copiedId === "mobile-deposit" ? "checkmark-circle" : "copy-outline"}
+              size={20}
+              color="#FFFFFF"
+            />
+            <Text
+              style={{
+                color: "#FFFFFF",
+                fontSize: 16,
+                fontFamily: "Inter_600SemiBold",
+              }}
+            >
+              {copiedId === "mobile-deposit" ? "Copied!" : "Copy Address"}
+            </Text>
+          </Pressable>
+
+          {/* Warning */}
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "flex-start",
+              backgroundColor: colors.warning + "10",
+              borderRadius: 14,
+              padding: 14,
+              marginTop: 16,
+              gap: 10,
+              borderWidth: 1,
+              borderColor: colors.warning + "18",
+            }}
+          >
+            <Ionicons name="warning" size={18} color={colors.warning} style={{ marginTop: 1 }} />
+            <Text
+              style={{
+                color: colors.warning,
+                fontSize: 12,
+                fontFamily: "Inter_400Regular",
+                flex: 1,
+                lineHeight: 18,
+              }}
+            >
+              Only send {modalCurrency} to this address. Sending other tokens may result in
+              permanent loss.
+            </Text>
+          </View>
+
+          {/* Done button */}
+          <Pressable
+            onPress={() => closeModalAnimated()}
+            style={({ pressed }) => ({
+              backgroundColor: pressed ? colors.dark.border : colors.dark.elevated,
+              borderRadius: 16,
+              paddingVertical: 16,
+              alignItems: "center",
+              marginTop: 20,
+              borderWidth: 1,
+              borderColor: colors.glass.border,
+              opacity: pressed ? 0.85 : 1,
+            })}
+          >
+            <Text
+              style={{
+                color: "#FFFFFF",
+                fontSize: 16,
+                fontFamily: "Inter_600SemiBold",
+              }}
+            >
+              Done
+            </Text>
+          </Pressable>
+        </Animated.View>
+      </Animated.View>
+    </Modal>
+  );
+
+  // ── Eye Toggle Button ──
+  const renderEyeToggle = () => (
+    <Pressable
+      onPress={toggleBalanceHidden}
+      accessibilityRole="button"
+      accessibilityLabel={balanceHidden ? "Show balance" : "Hide balance"}
+      style={({ pressed }) => ({
+        width: 36,
+        height: 36,
+        borderRadius: 12,
+        backgroundColor: colors.dark.elevated,
+        alignItems: "center",
+        justifyContent: "center",
+        borderWidth: 1,
+        borderColor: colors.glass.border,
+        opacity: pressed ? 0.7 : 1,
+        marginLeft: 12,
+      })}
+    >
+      <Ionicons
+        name={balanceHidden ? "eye-off-outline" : "eye-outline"}
+        size={18}
+        color={colors.textMuted}
+      />
+    </Pressable>
+  );
+
+  // ── Asset Card (shared between mobile and desktop) ──
+  const renderAssetCard = (w: (typeof cryptoWallets)[0], index: number) => {
+    const info = CURRENCIES[w.currency as CurrencyCode];
+    const balance = parseFloat(w.balance);
+    const locked = parseFloat(w.locked_balance);
+    const rate = rates?.find((r) => r.currency === w.currency);
+    const kesValue = rate ? balance * parseFloat(rate.kes_rate) : 0;
+    const currencyColor = getCurrencyColor(w.currency);
+
+    return (
+      <AnimatedAssetCard key={w.id} index={index} isDesktop={isDesktop}>
+        <View
+          style={{
+            backgroundColor: colors.dark.card,
+            borderRadius: 20,
+            padding: isDesktop ? 22 : 18,
+            borderWidth: 1,
+            borderColor: colors.glass.border,
+            ...(isDesktop ? shadows.md : {}),
+          }}
+        >
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: 14,
+            }}
+          >
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              {/* Currency icon with brand color circle */}
+              <View
+                style={{
+                  width: isDesktop ? 52 : 46,
+                  height: isDesktop ? 52 : 46,
+                  borderRadius: isDesktop ? 16 : 14,
+                  backgroundColor: currencyColor + "1F",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginRight: 14,
+                  borderWidth: 1.5,
+                  borderColor: currencyColor + "33",
+                }}
+              >
+                <Text
+                  style={{
+                    fontSize: isDesktop ? 24 : 22,
+                    fontFamily: "Inter_700Bold",
+                    color: currencyColor,
+                    lineHeight: isDesktop ? 28 : 26,
+                  }}
+                >
+                  {info?.iconSymbol || "?"}
+                </Text>
+              </View>
+              <View>
+                <Text
+                  style={{
+                    color: "#FFFFFF",
+                    fontSize: isDesktop ? 16 : 15,
+                    fontFamily: "Inter_600SemiBold",
+                    marginBottom: 2,
+                  }}
+                >
+                  {info?.name || w.currency}
+                </Text>
+                <Text
+                  style={{
+                    color: colors.textMuted,
+                    fontSize: 12,
+                    fontFamily: "Inter_500Medium",
+                  }}
+                >
+                  {info?.symbol || w.currency}
+                </Text>
+              </View>
+            </View>
+
+            <View style={{ alignItems: "flex-end" }}>
+              <Text
+                style={{
+                  color: "#FFFFFF",
+                  fontSize: isDesktop ? 18 : 16,
+                  fontFamily: "Inter_700Bold",
+                  marginBottom: 2,
+                }}
+              >
+                {formatCryptoBalance(balance, info?.decimals ?? 4)}
+              </Text>
+              {kesValue > 0 && (
+                <Text
+                  style={{
+                    color: colors.textSecondary,
+                    fontSize: 13,
+                    fontFamily: "Inter_500Medium",
+                  }}
+                >
+                  {balanceHidden
+                    ? "~KSh ****"
+                    : `~KSh ${kesValue.toLocaleString("en-KE", {
+                        maximumFractionDigits: 0,
+                      })}`}
+                </Text>
+              )}
+              {locked > 0 && (
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    backgroundColor: colors.warning + "18",
+                    borderRadius: 8,
+                    paddingHorizontal: 8,
+                    paddingVertical: 3,
+                    gap: 4,
+                    marginTop: 4,
+                  }}
+                >
+                  <Ionicons name="lock-closed" size={10} color={colors.warning} />
+                  <Text
+                    style={{
+                      color: colors.warning,
+                      fontSize: 11,
+                      fontFamily: "Inter_500Medium",
+                    }}
+                  >
+                    {formatCryptoBalance(locked, info?.decimals ?? 4)} locked
+                  </Text>
+                </View>
+              )}
+            </View>
+          </View>
+
+          {/* Deposit Address Row */}
+          {w.deposit_address ? (
+            <Pressable
+              onPress={() => copyAddress(w.deposit_address!, w.id)}
+              onLongPress={() => {
+                setModalCurrency(w.currency as CurrencyCode);
+                setDepositModal({
+                  address: w.deposit_address!,
+                  currency: w.currency,
+                });
+              }}
+              style={({ pressed }) => ({
+                backgroundColor: colors.dark.bg,
+                borderRadius: 14,
+                paddingHorizontal: 14,
+                paddingVertical: 12,
+                flexDirection: "row",
+                alignItems: "center",
+                borderWidth: 1,
+                borderColor: pressed ? colors.primary[500] + "40" : colors.glass.border,
+              })}
+            >
+              <Ionicons name="wallet-outline" size={14} color={colors.textMuted} />
+              <Text
+                style={{
+                  color: colors.textMuted,
+                  fontSize: 12,
+                  fontFamily: "Inter_400Regular",
+                  marginLeft: 8,
+                  flex: 1,
+                }}
+                numberOfLines={1}
+              >
+                {w.deposit_address}
+              </Text>
+              <View
+                style={{
+                  backgroundColor:
+                    copiedId === w.id ? colors.success + "20" : colors.primary[500] + "15",
+                  borderRadius: 10,
+                  paddingHorizontal: 10,
+                  paddingVertical: 5,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 4,
+                  marginLeft: 8,
+                }}
+              >
+                <Ionicons
+                  name={copiedId === w.id ? "checkmark" : "copy-outline"}
+                  size={13}
+                  color={copiedId === w.id ? colors.success : colors.primary[400]}
+                />
+                <Text
+                  style={{
+                    color: copiedId === w.id ? colors.success : colors.primary[400],
+                    fontSize: 11,
+                    fontFamily: "Inter_500Medium",
+                  }}
+                >
+                  {copiedId === w.id ? "Copied" : "Copy"}
+                </Text>
+              </View>
+            </Pressable>
+          ) : (
+            <Pressable
+              onPress={() => handleReceive(w)}
+              disabled={generatingAddress === w.id}
+              style={({ pressed }) => ({
+                backgroundColor: colors.dark.bg,
+                borderRadius: 14,
+                paddingHorizontal: 14,
+                paddingVertical: 12,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                borderWidth: 1,
+                borderColor: colors.primary[500] + "30",
+                borderStyle: "dashed" as const,
+                opacity: pressed ? 0.85 : generatingAddress === w.id ? 0.6 : 1,
+                gap: 8,
+              })}
+            >
+              {generatingAddress === w.id ? (
+                <ActivityIndicator size="small" color={colors.primary[400]} />
+              ) : (
+                <Ionicons name="add-circle-outline" size={16} color={colors.primary[400]} />
+              )}
+              <Text
+                style={{
+                  color: colors.primary[400],
+                  fontSize: 13,
+                  fontFamily: "Inter_500Medium",
+                }}
+              >
+                {generatingAddress === w.id ? "Generating address..." : "Generate Deposit Address"}
+              </Text>
+            </Pressable>
+          )}
+        </View>
+      </AnimatedAssetCard>
+    );
+  };
+
+  // ── Desktop Transaction Table Row ──
+  const renderDesktopTransactionRow = (tx: (typeof transactions)[0], index: number) => {
+    const config = TX_TYPE_CONFIG[tx.type] || {
+      icon: "ellipsis-horizontal",
+      label: tx.type,
+      color: colors.dark.muted,
+    };
+    const statusConfig = TX_STATUS_CONFIG[tx.status] || {
+      color: colors.dark.muted,
+      bg: colors.dark.muted + "1F",
+    };
+    const kesAmount = getTxKesAmount(tx);
+    const date = new Date(tx.created_at);
+    const timeStr = date.toLocaleTimeString("en-KE", { hour: "2-digit", minute: "2-digit" });
+    const dateStr = date.toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" });
+    const recipient = getTxRecipient(tx);
+
+    return (
+      <View
+        key={tx.id}
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          paddingHorizontal: 20,
+          paddingVertical: 14,
+          borderBottomWidth: index < transactions.length - 1 ? 1 : 0,
+          borderBottomColor: colors.glass.border,
+        }}
+      >
+        {/* Type */}
+        <View style={{ flexDirection: "row", alignItems: "center", width: "22%", minWidth: 140 }}>
+          <View
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 10,
+              backgroundColor: config.color + "1A",
+              alignItems: "center",
+              justifyContent: "center",
+              marginRight: 10,
+            }}
+          >
+            <Ionicons name={config.icon as any} size={18} color={config.color} />
+          </View>
+          <Text
+            style={{
+              color: colors.textPrimary,
+              fontSize: 14,
+              fontFamily: "Inter_600SemiBold",
+            }}
+          >
+            {config.label}
+          </Text>
+        </View>
+
+        {/* Details */}
+        <View style={{ flex: 1, minWidth: 100 }}>
+          <Text
+            style={{
+              color: colors.textSecondary,
+              fontSize: 13,
+              fontFamily: "Inter_400Regular",
+            }}
+            numberOfLines={1}
+          >
+            {recipient || "--"}
+          </Text>
+        </View>
+
+        {/* Amount */}
+        <View style={{ width: "18%", minWidth: 120, alignItems: "flex-end" }}>
+          <Text
+            style={{
+              color: "#FFFFFF",
+              fontSize: 14,
+              fontFamily: "Inter_700Bold",
+            }}
+          >
+            {balanceHidden
+              ? "KSh ****"
+              : `KSh ${kesAmount.toLocaleString("en-KE", { minimumFractionDigits: 0 })}`}
+          </Text>
+        </View>
+
+        {/* Status */}
+        <View style={{ width: "14%", minWidth: 100, alignItems: "center" }}>
+          <View
+            style={{
+              backgroundColor: statusConfig.bg,
+              borderRadius: 10,
+              paddingHorizontal: 10,
+              paddingVertical: 4,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 4,
+            }}
+          >
+            <View
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: 3,
+                backgroundColor: statusConfig.color,
+              }}
+            />
+            <Text
+              style={{
+                color: statusConfig.color,
+                fontSize: 12,
+                fontFamily: "Inter_500Medium",
+                textTransform: "capitalize",
+              }}
+            >
+              {tx.status}
+            </Text>
+          </View>
+        </View>
+
+        {/* Date */}
+        <View style={{ width: "16%", minWidth: 110, alignItems: "flex-end" }}>
+          <Text
+            style={{
+              color: colors.textMuted,
+              fontSize: 13,
+              fontFamily: "Inter_400Regular",
+            }}
+          >
+            {dateStr}
+          </Text>
+          <Text
+            style={{
+              color: colors.dark.muted,
+              fontSize: 11,
+              fontFamily: "Inter_400Regular",
+              marginTop: 1,
+            }}
+          >
+            {timeStr}
+          </Text>
+        </View>
+      </View>
+    );
+  };
+
+  // Content max width for large screens
+  const contentMaxWidth = isLargeDesktop ? 1100 : undefined;
+  const contentStyle = contentMaxWidth
+    ? { maxWidth: contentMaxWidth, alignSelf: "center" as const, width: "100%" as const }
+    : {};
+
+  // ══════════════════════════════════════════
+  //  DESKTOP LAYOUT (width >= 900)
+  // ══════════════════════════════════════════
+  if (isDesktop) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.dark.bg }}>
+        <ScrollView
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.primary[400]}
+              progressBackgroundColor={colors.dark.card}
+            />
+          }
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={contentStyle}>
+            {/* Header */}
+            <View style={{ paddingHorizontal: hPad + 4, paddingTop: 16, paddingBottom: 6 }}>
+              <Text
+                style={{
+                  color: "#FFFFFF",
+                  fontSize: 32,
+                  fontFamily: "Inter_700Bold",
+                  letterSpacing: -0.5,
+                }}
+              >
+                Wallet
+              </Text>
+              <Text
+                style={{
+                  color: colors.textSecondary,
+                  fontSize: 15,
+                  fontFamily: "Inter_400Regular",
+                  marginTop: 4,
+                }}
+              >
+                Manage your crypto assets
+              </Text>
+            </View>
+
+            {/* ── Portfolio + Actions Grid ── */}
+            <View
+              style={{
+                flexDirection: "row",
+                paddingHorizontal: hPad,
+                marginTop: 12,
+                marginBottom: 24,
+                gap: 20,
+              }}
+            >
+              {/* Left: Portfolio Value Card (60%) */}
+              <View
+                style={{
+                  flex: 6,
+                  backgroundColor: colors.dark.card,
+                  borderRadius: 20,
+                  padding: 24,
+                  borderWidth: 1,
+                  borderColor: colors.glass.border,
+                  overflow: "hidden",
+                  ...shadows.sm,
+                }}
+              >
+                {/* Decorative accent line */}
+                <View
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 24,
+                    right: 24,
+                    height: 3,
+                    borderBottomLeftRadius: 2,
+                    borderBottomRightRadius: 2,
+                    backgroundColor: colors.primary[500],
+                  }}
+                />
+
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    marginBottom: 10,
+                    marginTop: 4,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: colors.textMuted,
+                      fontSize: 12,
+                      fontFamily: "Inter_600SemiBold",
+                      textTransform: "uppercase",
+                      letterSpacing: 1.2,
+                    }}
+                  >
+                    Total Portfolio
+                  </Text>
+                  {renderEyeToggle()}
+                </View>
+                <Text
+                  style={{
+                    color: "#FFFFFF",
+                    fontSize: 40,
+                    fontFamily: "Inter_700Bold",
+                    letterSpacing: -1,
+                    marginBottom: 4,
+                  }}
+                >
+                  {balanceHidden
+                    ? "KSh ****"
+                    : `KSh ${grandTotal.toLocaleString("en-KE", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}`}
+                </Text>
+                {kesBalance > 0 && (
+                  <Text
+                    style={{
+                      color: colors.textMuted,
+                      fontSize: 13,
+                      fontFamily: "Inter_400Regular",
+                      marginBottom: 4,
+                    }}
+                  >
+                    {balanceHidden
+                      ? "KES Balance: KSh ****"
+                      : `KES Balance: KSh ${kesBalance.toLocaleString("en-KE", {
+                          minimumFractionDigits: 2,
+                        })}`}
+                  </Text>
+                )}
+                <View style={{ flexDirection: "row", alignItems: "center", marginTop: 6, gap: 6 }}>
+                  <View
+                    style={{
+                      backgroundColor: colors.success + "20",
+                      borderRadius: 8,
+                      paddingHorizontal: 8,
+                      paddingVertical: 3,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: colors.success,
+                        fontSize: 12,
+                        fontFamily: "Inter_600SemiBold",
+                      }}
+                    >
+                      {cryptoWallets.length} asset{cryptoWallets.length !== 1 ? "s" : ""}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Right: Actions Card (40%) */}
+              <View
+                style={{
+                  flex: 4,
+                  backgroundColor: colors.dark.card,
+                  borderRadius: 20,
+                  padding: 24,
+                  borderWidth: 1,
+                  borderColor: colors.glass.border,
+                  justifyContent: "center",
+                  alignItems: "center",
+                  ...shadows.sm,
+                }}
+              >
+                <Text
+                  style={{
+                    color: colors.textMuted,
+                    fontSize: 12,
+                    fontFamily: "Inter_600SemiBold",
+                    textTransform: "uppercase",
+                    letterSpacing: 1.2,
+                    marginBottom: 20,
+                  }}
+                >
+                  Quick Actions
+                </Text>
+                <View style={{ flexDirection: "row", gap: 16 }}>
+                  {/* Receive Button */}
+                  <Pressable
+                    onPress={handleReceiveGeneric}
+                    disabled={generatingAddress !== null}
+                    onHoverIn={() => setHoverReceive(true)}
+                    onHoverOut={() => setHoverReceive(false)}
+                    style={({ pressed }) => ({
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      backgroundColor: hoverReceive
+                        ? colors.primary[400]
+                        : colors.primary[500],
+                      borderRadius: 14,
+                      height: 48,
+                      width: 170,
+                      maxWidth: 180,
+                      gap: 8,
+                      opacity: pressed ? 0.85 : generatingAddress ? 0.7 : 1,
+                      transform: [{ scale: pressed ? 0.97 : 1 }],
+                      ...shadows.glow(colors.primary[500], 0.3),
+                    })}
+                  >
+                    {generatingAddress ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <View
+                        style={{
+                          width: 28,
+                          height: 28,
+                          borderRadius: 14,
+                          backgroundColor: "rgba(255,255,255,0.15)",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <Ionicons name="arrow-down" size={14} color="#FFFFFF" />
+                      </View>
+                    )}
+                    <Text
+                      style={{
+                        color: "#FFFFFF",
+                        fontSize: 14,
+                        fontFamily: "Inter_600SemiBold",
+                      }}
+                    >
+                      {generatingAddress ? "Generating..." : "Receive"}
+                    </Text>
+                  </Pressable>
+
+                  {/* Send Button */}
+                  <Pressable
+                    onPress={() => router.push("/payment/send")}
+                    onHoverIn={() => setHoverSend(true)}
+                    onHoverOut={() => setHoverSend(false)}
+                    style={({ pressed }) => ({
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      backgroundColor: hoverSend
+                        ? colors.dark.border
+                        : colors.dark.elevated,
+                      borderRadius: 14,
+                      height: 48,
+                      width: 170,
+                      maxWidth: 180,
+                      gap: 8,
+                      borderWidth: 1,
+                      borderColor: hoverSend
+                        ? colors.glass.borderStrong
+                        : colors.glass.border,
+                      opacity: pressed ? 0.85 : 1,
+                      transform: [{ scale: pressed ? 0.97 : 1 }],
+                      ...shadows.sm,
+                    })}
+                  >
+                    <View
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 14,
+                        backgroundColor: "rgba(255,255,255,0.1)",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <Ionicons name="arrow-up" size={14} color="#FFFFFF" />
+                    </View>
+                    <Text
+                      style={{
+                        color: "#FFFFFF",
+                        fontSize: 14,
+                        fontFamily: "Inter_600SemiBold",
+                      }}
+                    >
+                      Send
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+
+            {/* ── Assets Section ── */}
+            <View
+              style={{
+                paddingHorizontal: hPad,
+                marginBottom: 24,
+              }}
+            >
+              {/* Section header */}
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  marginBottom: 16,
+                  gap: 10,
+                }}
+              >
+                <Text
+                  style={{
+                    color: colors.textSecondary,
+                    fontSize: 12,
+                    fontFamily: "Inter_600SemiBold",
+                    textTransform: "uppercase",
+                    letterSpacing: 1.2,
+                  }}
+                >
+                  Assets
+                </Text>
+                <View
+                  style={{
+                    backgroundColor: colors.primary[500] + "20",
+                    borderRadius: 10,
+                    paddingHorizontal: 10,
+                    paddingVertical: 3,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: colors.primary[400],
+                      fontSize: 11,
+                      fontFamily: "Inter_600SemiBold",
+                    }}
+                  >
+                    {cryptoWallets.length} {cryptoWallets.length === 1 ? "coin" : "coins"}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Assets Grid - 2 cols default, 3 cols on large desktop */}
+              {walletsLoading ? (
+                <View style={{ flexDirection: "row", gap: 20, flexWrap: "wrap" }}>
+                  <View style={{ flex: 1, minWidth: 300 }}>
+                    <WalletCardSkeleton />
+                  </View>
+                  <View style={{ flex: 1, minWidth: 300 }}>
+                    <WalletCardSkeleton />
+                  </View>
+                </View>
+              ) : cryptoWallets.length === 0 ? (
+                <View
+                  style={{
+                    backgroundColor: colors.dark.card,
+                    borderRadius: 20,
+                    padding: 48,
+                    alignItems: "center",
+                    borderWidth: 1,
+                    borderColor: colors.glass.border,
+                    maxWidth: 480,
+                    ...shadows.sm,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 80,
+                      height: 80,
+                      borderRadius: 24,
+                      backgroundColor: colors.primary[500] + "15",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      marginBottom: 20,
+                    }}
+                  >
+                    <Ionicons name="wallet-outline" size={36} color={colors.primary[400]} />
+                  </View>
+                  <Text
+                    style={{
+                      color: "#FFFFFF",
+                      fontSize: 18,
+                      fontFamily: "Inter_600SemiBold",
+                      marginBottom: 8,
+                    }}
+                  >
+                    No crypto yet
+                  </Text>
+                  <Text
+                    style={{
+                      color: colors.textMuted,
+                      fontSize: 14,
+                      fontFamily: "Inter_400Regular",
+                      textAlign: "center",
+                      lineHeight: 22,
+                      maxWidth: 260,
+                    }}
+                  >
+                    Deposit crypto to start paying bills instantly with M-Pesa
+                  </Text>
+                </View>
+              ) : (
+                <View
+                  style={{
+                    flexDirection: "row",
+                    flexWrap: "wrap",
+                    gap: 20,
+                  }}
+                >
+                  {cryptoWallets.map((w, i) => (
+                    <View
+                      key={w.id}
+                      style={{
+                        flex: 1,
+                        minWidth: isLargeDesktop ? 300 : 340,
+                        maxWidth: isLargeDesktop ? ("32%" as any) : ("49%" as any),
+                      }}
+                    >
+                      {renderAssetCard(w, i)}
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+
+            {/* ── Transaction History ── */}
+            <View style={{ paddingHorizontal: hPad, marginBottom: 32 }}>
+              {/* Section header */}
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  marginBottom: 16,
+                }}
+              >
+                <Text
+                  style={{
+                    color: colors.textSecondary,
+                    fontSize: 12,
+                    fontFamily: "Inter_600SemiBold",
+                    textTransform: "uppercase",
+                    letterSpacing: 1.2,
+                  }}
+                >
+                  Recent Activity
+                </Text>
+              </View>
+
+              {txLoading ? (
+                <TransactionSkeleton />
+              ) : (
+                <View
+                  style={{
+                    backgroundColor: colors.dark.card,
+                    borderRadius: 20,
+                    overflow: "hidden",
+                    borderWidth: 1,
+                    borderColor: colors.glass.border,
+                    ...shadows.sm,
+                  }}
+                >
+                  {transactions.length === 0 ? (
+                    <View
+                      style={{
+                        paddingVertical: 48,
+                        alignItems: "center",
+                        maxWidth: 320,
+                        alignSelf: "center",
+                      }}
+                    >
+                      <View
+                        style={{
+                          width: 64,
+                          height: 64,
+                          borderRadius: 20,
+                          backgroundColor: colors.dark.elevated + "60",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          marginBottom: 16,
+                        }}
+                      >
+                        <Ionicons name="time-outline" size={28} color={colors.dark.muted} />
+                      </View>
+                      <Text
+                        style={{
+                          color: colors.textSecondary,
+                          fontSize: 15,
+                          fontFamily: "Inter_500Medium",
+                          marginBottom: 4,
+                        }}
+                      >
+                        No transactions yet
+                      </Text>
+                      <Text
+                        style={{
+                          color: colors.textMuted,
+                          fontSize: 13,
+                          fontFamily: "Inter_400Regular",
+                          textAlign: "center",
+                        }}
+                      >
+                        Your activity will appear here
+                      </Text>
+                    </View>
+                  ) : (
+                    <>
+                      {/* Table Header */}
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          paddingHorizontal: 20,
+                          paddingVertical: 12,
+                          borderBottomWidth: 1,
+                          borderBottomColor: colors.glass.border,
+                          backgroundColor: colors.dark.elevated + "40",
+                        }}
+                      >
+                        <Text
+                          style={{
+                            width: "22%",
+                            minWidth: 140,
+                            color: colors.textMuted,
+                            fontSize: 11,
+                            fontFamily: "Inter_600SemiBold",
+                            textTransform: "uppercase",
+                            letterSpacing: 0.8,
+                          }}
+                        >
+                          Type
+                        </Text>
+                        <Text
+                          style={{
+                            flex: 1,
+                            minWidth: 100,
+                            color: colors.textMuted,
+                            fontSize: 11,
+                            fontFamily: "Inter_600SemiBold",
+                            textTransform: "uppercase",
+                            letterSpacing: 0.8,
+                          }}
+                        >
+                          Details
+                        </Text>
+                        <Text
+                          style={{
+                            width: "18%",
+                            minWidth: 120,
+                            color: colors.textMuted,
+                            fontSize: 11,
+                            fontFamily: "Inter_600SemiBold",
+                            textTransform: "uppercase",
+                            letterSpacing: 0.8,
+                            textAlign: "right",
+                          }}
+                        >
+                          Amount
+                        </Text>
+                        <Text
+                          style={{
+                            width: "14%",
+                            minWidth: 100,
+                            color: colors.textMuted,
+                            fontSize: 11,
+                            fontFamily: "Inter_600SemiBold",
+                            textTransform: "uppercase",
+                            letterSpacing: 0.8,
+                            textAlign: "center",
+                          }}
+                        >
+                          Status
+                        </Text>
+                        <Text
+                          style={{
+                            width: "16%",
+                            minWidth: 110,
+                            color: colors.textMuted,
+                            fontSize: 11,
+                            fontFamily: "Inter_600SemiBold",
+                            textTransform: "uppercase",
+                            letterSpacing: 0.8,
+                            textAlign: "right",
+                          }}
+                        >
+                          Date
+                        </Text>
+                      </View>
+                      {/* Table Rows */}
+                      {transactions.map((tx, index) => renderDesktopTransactionRow(tx, index))}
+                    </>
+                  )}
+                </View>
+              )}
+            </View>
+
+            <View style={{ height: 32 }} />
+          </View>
+        </ScrollView>
+
+        {/* Desktop Deposit Dialog */}
+        {renderDesktopDepositDialog()}
+      </SafeAreaView>
+    );
+  }
+
+  // ══════════════════════════════════════════
+  //  MOBILE LAYOUT
+  // ══════════════════════════════════════════
   return (
-    <SafeAreaView className="flex-1 bg-dark-bg">
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.dark.bg }}>
       <ScrollView
         refreshControl={
           <RefreshControl
@@ -99,100 +1893,190 @@ export default function WalletScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Header */}
-        <View className="px-5 pt-2 pb-4">
-          <Text className="text-white text-2xl font-inter-bold">Wallet</Text>
-          <Text className="text-textSecondary text-sm font-inter mt-1">
+        <View style={{ paddingHorizontal: hPad + 4, paddingTop: 8, paddingBottom: 6 }}>
+          <Text
+            style={{
+              color: "#FFFFFF",
+              fontSize: 28,
+              fontFamily: "Inter_700Bold",
+              letterSpacing: -0.5,
+            }}
+          >
+            Wallet
+          </Text>
+          <Text
+            style={{
+              color: colors.textSecondary,
+              fontSize: 14,
+              fontFamily: "Inter_400Regular",
+              marginTop: 4,
+            }}
+          >
             Manage your crypto assets
           </Text>
         </View>
 
-        {/* Total Portfolio Value */}
+        {/* Portfolio Value Card */}
         <View
           style={{
-            marginHorizontal: 16,
-            marginBottom: 16,
-            borderRadius: 20,
+            marginHorizontal: hPad,
+            marginTop: 8,
+            marginBottom: 20,
             backgroundColor: colors.dark.card,
-            padding: 20,
+            borderRadius: 28,
+            padding: 24,
             borderWidth: 1,
-            borderColor: colors.dark.border,
+            borderColor: colors.glass.border,
+            overflow: "hidden",
           }}
         >
-          <Text
+          {/* Decorative accent line at top */}
+          <View
             style={{
-              color: colors.textMuted,
-              fontSize: 13,
-              fontFamily: "Inter_500Medium",
-              marginBottom: 4,
+              position: "absolute",
+              top: 0,
+              left: 24,
+              right: 24,
+              height: 3,
+              borderBottomLeftRadius: 2,
+              borderBottomRightRadius: 2,
+              backgroundColor: colors.primary[500],
+            }}
+          />
+
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              marginBottom: 10,
+              marginTop: 4,
             }}
           >
-            Total Portfolio Value
-          </Text>
+            <Text
+              style={{
+                color: colors.textMuted,
+                fontSize: 12,
+                fontFamily: "Inter_600SemiBold",
+                textTransform: "uppercase",
+                letterSpacing: 1.2,
+              }}
+            >
+              Total Portfolio
+            </Text>
+            {renderEyeToggle()}
+          </View>
           <Text
             style={{
               color: "#FFFFFF",
-              fontSize: 32,
+              fontSize: 38,
               fontFamily: "Inter_700Bold",
-              marginBottom: 8,
+              letterSpacing: -1,
+              marginBottom: 4,
             }}
           >
-            KSh{" "}
-            {grandTotal.toLocaleString("en-KE", {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}
+            {balanceHidden
+              ? "KSh ****"
+              : `KSh ${grandTotal.toLocaleString("en-KE", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}`}
           </Text>
-          <View style={{ flexDirection: "row", gap: 10 }}>
-            <Pressable
-              onPress={() => {
-                // Open deposit for first crypto wallet
-                if (cryptoWallets.length > 0 && cryptoWallets[0].deposit_address) {
-                  setDepositModal({
-                    address: cryptoWallets[0].deposit_address,
-                    currency: cryptoWallets[0].currency,
-                  });
-                }
-              }}
+          {kesBalance > 0 && (
+            <Text
               style={{
+                color: colors.textMuted,
+                fontSize: 13,
+                fontFamily: "Inter_400Regular",
+                marginBottom: 8,
+              }}
+            >
+              {balanceHidden
+                ? "KES Balance: KSh ****"
+                : `KES Balance: KSh ${kesBalance.toLocaleString("en-KE", {
+                    minimumFractionDigits: 2,
+                  })}`}
+            </Text>
+          )}
+
+          {/* Action Buttons */}
+          <View style={{ flexDirection: "row", gap: 12, marginTop: 14 }}>
+            <Pressable
+              onPress={handleReceiveGeneric}
+              disabled={generatingAddress !== null}
+              style={({ pressed }) => ({
                 flex: 1,
                 flexDirection: "row",
                 alignItems: "center",
                 justifyContent: "center",
                 backgroundColor: colors.primary[500],
-                borderRadius: 14,
-                paddingVertical: 12,
-                gap: 6,
-              }}
+                borderRadius: 16,
+                height: 52,
+                gap: 8,
+                opacity: pressed ? 0.85 : generatingAddress ? 0.7 : 1,
+                transform: [{ scale: pressed ? 0.98 : 1 }],
+                ...shadows.glow(colors.primary[500], 0.3),
+              })}
             >
-              <Ionicons name="arrow-down-circle" size={18} color="#FFFFFF" />
+              {generatingAddress ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <View
+                  style={{
+                    width: 30,
+                    height: 30,
+                    borderRadius: 15,
+                    backgroundColor: "rgba(255,255,255,0.15)",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Ionicons name="arrow-down" size={16} color="#FFFFFF" />
+                </View>
+              )}
               <Text
                 style={{
                   color: "#FFFFFF",
-                  fontSize: 14,
+                  fontSize: 15,
                   fontFamily: "Inter_600SemiBold",
                 }}
               >
-                Receive
+                {generatingAddress ? "Generating..." : "Receive"}
               </Text>
             </Pressable>
+
             <Pressable
-              onPress={() => {}}
-              style={{
+              onPress={() => router.push("/payment/send")}
+              style={({ pressed }) => ({
                 flex: 1,
                 flexDirection: "row",
                 alignItems: "center",
                 justifyContent: "center",
                 backgroundColor: colors.dark.elevated,
-                borderRadius: 14,
-                paddingVertical: 12,
-                gap: 6,
-              }}
+                borderRadius: 16,
+                height: 52,
+                gap: 8,
+                borderWidth: 1,
+                borderColor: colors.glass.border,
+                opacity: pressed ? 0.85 : 1,
+                transform: [{ scale: pressed ? 0.98 : 1 }],
+              })}
             >
-              <Ionicons name="arrow-up-circle" size={18} color="#FFFFFF" />
+              <View
+                style={{
+                  width: 30,
+                  height: 30,
+                  borderRadius: 15,
+                  backgroundColor: "rgba(255,255,255,0.15)",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Ionicons name="arrow-up" size={16} color="#FFFFFF" />
+              </View>
               <Text
                 style={{
                   color: "#FFFFFF",
-                  fontSize: 14,
+                  fontSize: 15,
                   fontFamily: "Inter_600SemiBold",
                 }}
               >
@@ -202,36 +2086,76 @@ export default function WalletScreen() {
           </View>
         </View>
 
+        {/* Assets Section Label */}
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+            paddingHorizontal: hPad + 4,
+            marginBottom: 12,
+          }}
+        >
+          <Text
+            style={{
+              color: colors.textSecondary,
+              fontSize: 12,
+              fontFamily: "Inter_600SemiBold",
+              textTransform: "uppercase",
+              letterSpacing: 1.2,
+            }}
+          >
+            Assets
+          </Text>
+          <Text
+            style={{
+              color: colors.textMuted,
+              fontSize: 12,
+              fontFamily: "Inter_400Regular",
+            }}
+          >
+            {cryptoWallets.length} {cryptoWallets.length === 1 ? "coin" : "coins"}
+          </Text>
+        </View>
+
         {/* Crypto Wallets */}
-        {cryptoWallets.length === 0 ? (
+        {walletsLoading ? (
+          <View style={{ paddingHorizontal: hPad, gap: 12 }}>
+            <WalletCardSkeleton />
+            <WalletCardSkeleton />
+            <WalletCardSkeleton />
+          </View>
+        ) : cryptoWallets.length === 0 ? (
           <View
             style={{
-              marginHorizontal: 16,
+              marginHorizontal: hPad,
               backgroundColor: colors.dark.card,
-              borderRadius: 20,
-              padding: 32,
+              borderRadius: 24,
+              padding: 40,
               alignItems: "center",
+              borderWidth: 1,
+              borderColor: colors.glass.border,
             }}
           >
             <View
               style={{
-                width: 72,
-                height: 72,
-                borderRadius: 36,
-                backgroundColor: "rgba(13, 159, 110, 0.1)",
+                width: 80,
+                height: 80,
+                borderRadius: 24,
+                backgroundColor: colors.primary[500] + "15",
                 alignItems: "center",
                 justifyContent: "center",
-                marginBottom: 16,
+                marginBottom: 20,
               }}
             >
-              <Ionicons name="wallet-outline" size={32} color={colors.primary[400]} />
+              <Ionicons name="wallet-outline" size={36} color={colors.primary[400]} />
             </View>
             <Text
               style={{
                 color: "#FFFFFF",
-                fontSize: 16,
+                fontSize: 18,
                 fontFamily: "Inter_600SemiBold",
-                marginBottom: 6,
+                marginBottom: 8,
               }}
             >
               No crypto yet
@@ -242,299 +2166,105 @@ export default function WalletScreen() {
                 fontSize: 14,
                 fontFamily: "Inter_400Regular",
                 textAlign: "center",
-                lineHeight: 20,
+                lineHeight: 22,
+                maxWidth: 260,
               }}
             >
-              Deposit crypto to start paying bills with M-Pesa
+              Deposit crypto to start paying bills instantly with M-Pesa
             </Text>
           </View>
         ) : (
-          <View className="px-4 gap-3">
-            {cryptoWallets.map((w) => {
-              const info = CURRENCIES[w.currency as CurrencyCode];
-              const balance = parseFloat(w.balance);
-              const locked = parseFloat(w.locked_balance);
-              const rate = rates?.find((r) => r.currency === w.currency);
-              const kesValue = rate
-                ? balance * parseFloat(rate.kes_rate)
-                : 0;
-
-              return (
-                <View key={w.id} className="bg-dark-card rounded-2xl p-4">
-                  <View className="flex-row items-center justify-between mb-3">
-                    <View className="flex-row items-center">
-                      <View className="w-10 h-10 rounded-full bg-primary-500/15 items-center justify-center mr-3">
-                        <Text className="text-lg">{info?.icon || "?"}</Text>
-                      </View>
-                      <View>
-                        <Text className="text-white text-base font-inter-semibold">
-                          {info?.name || w.currency}
-                        </Text>
-                        <Text className="text-textMuted text-xs font-inter">
-                          {info?.symbol || w.currency}
-                        </Text>
-                      </View>
-                    </View>
-                    <View className="items-end">
-                      <Text className="text-white text-base font-inter-bold">
-                        {balance.toFixed(info?.decimals ?? 4)}
-                      </Text>
-                      {kesValue > 0 && (
-                        <Text
-                          style={{
-                            color: colors.textMuted,
-                            fontSize: 11,
-                            fontFamily: "Inter_400Regular",
-                          }}
-                        >
-                          ~KSh {kesValue.toLocaleString("en-KE", { maximumFractionDigits: 0 })}
-                        </Text>
-                      )}
-                      {locked > 0 && (
-                        <Text className="text-warning text-xs font-inter">
-                          {locked.toFixed(info?.decimals ?? 4)} locked
-                        </Text>
-                      )}
-                    </View>
-                  </View>
-
-                  {/* Deposit Address */}
-                  {w.deposit_address && (
-                    <Pressable
-                      onPress={() => copyAddress(w.deposit_address!, w.id)}
-                      onLongPress={() =>
-                        setDepositModal({
-                          address: w.deposit_address!,
-                          currency: w.currency,
-                        })
-                      }
-                      className="bg-dark-bg rounded-xl px-3 py-2.5 flex-row items-center"
-                    >
-                      <Ionicons
-                        name="wallet-outline"
-                        size={16}
-                        color={colors.textMuted}
-                      />
-                      <Text
-                        className="text-textMuted text-xs font-inter ml-2 flex-1"
-                        numberOfLines={1}
-                      >
-                        {w.deposit_address}
-                      </Text>
-                      <Ionicons
-                        name={
-                          copiedId === w.id
-                            ? "checkmark-circle"
-                            : "copy-outline"
-                        }
-                        size={16}
-                        color={
-                          copiedId === w.id
-                            ? colors.success
-                            : colors.primary[400]
-                        }
-                      />
-                    </Pressable>
-                  )}
-                </View>
-              );
-            })}
+          <View style={{ paddingHorizontal: hPad, gap: 12 }}>
+            {cryptoWallets.map((w, i) => renderAssetCard(w, i))}
           </View>
         )}
 
         {/* Transaction History */}
-        <View className="mt-6">
-          <Text className="text-white text-lg font-inter-semibold px-5 mb-3">
-            Transaction History
-          </Text>
-          <View className="bg-dark-card rounded-2xl mx-4 overflow-hidden">
-            {transactions.length === 0 ? (
-              <View className="py-12 items-center">
-                <Ionicons
-                  name="time-outline"
-                  size={40}
-                  color={colors.dark.muted}
-                />
-                <Text className="text-textMuted text-sm font-inter mt-3">
-                  No transactions yet
-                </Text>
-              </View>
-            ) : (
-              transactions.map((tx) => (
-                <TransactionItem key={tx.id} transaction={tx} />
-              ))
-            )}
-          </View>
-        </View>
-
-        <View className="h-8" />
-      </ScrollView>
-
-      {/* Deposit Modal - shows address for receiving */}
-      <Modal
-        visible={!!depositModal}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setDepositModal(null)}
-      >
-        <View
-          style={{
-            flex: 1,
-            backgroundColor: "rgba(0,0,0,0.6)",
-            justifyContent: "flex-end",
-          }}
-        >
+        <View style={{ marginTop: 28 }}>
           <View
             style={{
-              backgroundColor: colors.dark.card,
-              borderTopLeftRadius: 24,
-              borderTopRightRadius: 24,
-              padding: 24,
-              paddingBottom: 40,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              paddingHorizontal: hPad + 4,
+              marginBottom: 12,
             }}
           >
-            {/* Handle */}
-            <View
-              style={{
-                width: 40,
-                height: 4,
-                borderRadius: 2,
-                backgroundColor: colors.dark.elevated,
-                alignSelf: "center",
-                marginBottom: 20,
-              }}
-            />
-
             <Text
               style={{
-                color: "#FFFFFF",
-                fontSize: 20,
-                fontFamily: "Inter_700Bold",
-                textAlign: "center",
-                marginBottom: 8,
-              }}
-            >
-              Receive {depositModal?.currency}
-            </Text>
-            <Text
-              style={{
-                color: colors.textMuted,
-                fontSize: 14,
-                fontFamily: "Inter_400Regular",
-                textAlign: "center",
-                marginBottom: 24,
-              }}
-            >
-              Send {depositModal?.currency} to this address to deposit
-            </Text>
-
-            {/* QR Code placeholder - actual QR would use react-native-qrcode-svg */}
-            <View
-              style={{
-                width: 200,
-                height: 200,
-                borderRadius: 16,
-                backgroundColor: "#FFFFFF",
-                alignSelf: "center",
-                marginBottom: 20,
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <Ionicons name="qr-code" size={120} color={colors.dark.bg} />
-              <Text
-                style={{
-                  color: colors.dark.muted,
-                  fontSize: 10,
-                  fontFamily: "Inter_400Regular",
-                  position: "absolute",
-                  bottom: 8,
-                }}
-              >
-                QR Code
-              </Text>
-            </View>
-
-            {/* Address */}
-            <Pressable
-              onPress={() => {
-                if (depositModal?.address) {
-                  Clipboard.setStringAsync(depositModal.address);
-                  Haptics.notificationAsync(
-                    Haptics.NotificationFeedbackType.Success
-                  );
-                  // Clear clipboard after 30s for security
-                  setTimeout(() => {
-                    Clipboard.setStringAsync("").catch(() => {});
-                  }, 30000);
-                }
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Copy deposit address"
-              accessibilityHint="Copies the address to clipboard. It will be cleared after 30 seconds."
-              style={{
-                backgroundColor: colors.dark.bg,
-                borderRadius: 12,
-                padding: 16,
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 8,
-              }}
-            >
-              <Text
-                style={{
-                  color: colors.textSecondary,
-                  fontSize: 13,
-                  fontFamily: "Inter_400Regular",
-                  flex: 1,
-                }}
-                numberOfLines={2}
-              >
-                {depositModal?.address}
-              </Text>
-              <Ionicons
-                name="copy-outline"
-                size={20}
-                color={colors.primary[400]}
-              />
-            </Pressable>
-
-            <Text
-              style={{
-                color: colors.warning,
+                color: colors.textSecondary,
                 fontSize: 12,
-                fontFamily: "Inter_400Regular",
-                textAlign: "center",
-                marginTop: 16,
+                fontFamily: "Inter_600SemiBold",
+                textTransform: "uppercase",
+                letterSpacing: 1.2,
               }}
             >
-              Only send {depositModal?.currency} to this address.{"\n"}Sending
-              other tokens may result in permanent loss.
+              Recent Activity
             </Text>
+          </View>
 
-            <Pressable
-              onPress={() => setDepositModal(null)}
+          {txLoading ? (
+            <View style={{ marginHorizontal: hPad }}>
+              <TransactionSkeleton />
+            </View>
+          ) : (
+            <View
               style={{
-                backgroundColor: colors.dark.elevated,
-                borderRadius: 16,
-                paddingVertical: 14,
-                alignItems: "center",
-                marginTop: 20,
+                backgroundColor: colors.dark.card,
+                borderRadius: 20,
+                marginHorizontal: hPad,
+                overflow: "hidden",
+                borderWidth: 1,
+                borderColor: colors.glass.border,
               }}
             >
-              <Text
-                style={{
-                  color: "#FFFFFF",
-                  fontSize: 16,
-                  fontFamily: "Inter_600SemiBold",
-                }}
-              >
-                Done
-              </Text>
-            </Pressable>
-          </View>
+              {transactions.length === 0 ? (
+                <View style={{ paddingVertical: 48, alignItems: "center" }}>
+                  <View
+                    style={{
+                      width: 64,
+                      height: 64,
+                      borderRadius: 20,
+                      backgroundColor: colors.dark.elevated + "60",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      marginBottom: 16,
+                    }}
+                  >
+                    <Ionicons name="time-outline" size={28} color={colors.dark.muted} />
+                  </View>
+                  <Text
+                    style={{
+                      color: colors.textSecondary,
+                      fontSize: 15,
+                      fontFamily: "Inter_500Medium",
+                      marginBottom: 4,
+                    }}
+                  >
+                    No transactions yet
+                  </Text>
+                  <Text
+                    style={{
+                      color: colors.textMuted,
+                      fontSize: 13,
+                      fontFamily: "Inter_400Regular",
+                    }}
+                  >
+                    Your activity will appear here
+                  </Text>
+                </View>
+              ) : (
+                transactions.map((tx) => <TransactionItem key={tx.id} transaction={tx} />)
+              )}
+            </View>
+          )}
         </View>
-      </Modal>
+
+        <View style={{ height: 32 }} />
+      </ScrollView>
+
+      {/* Mobile Deposit Modal */}
+      {renderMobileDepositModal()}
     </SafeAreaView>
   );
 }

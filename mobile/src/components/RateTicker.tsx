@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { View, Text, Animated, Easing } from "react-native";
+import { View, Text, Animated, Easing, StyleSheet, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { colors } from "../constants/theme";
+import { colors, shadows } from "../constants/theme";
+
+const useNative = Platform.OS !== "web";
 
 interface RateItem {
   symbol: string;
@@ -17,25 +19,45 @@ interface RateTickerProps {
 export function RateTicker({ rates, speed = 4000 }: RateTickerProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const fadeAnim = useRef(new Animated.Value(1)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
 
+  // Pulsing green dot animation
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 0.3,
+          duration: 1000,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: useNative,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1000,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: useNative,
+        }),
+      ])
+    ).start();
+  }, [pulseAnim]);
+
+  // Rate cycling with crossfade
   useEffect(() => {
     if (rates.length <= 1) return;
 
     const interval = setInterval(() => {
-      // Fade out
       Animated.timing(fadeAnim, {
         toValue: 0,
-        duration: 300,
-        easing: Easing.inOut(Easing.ease),
-        useNativeDriver: true,
+        duration: 250,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: useNative,
       }).start(() => {
         setActiveIndex((prev) => (prev + 1) % rates.length);
-        // Fade in
         Animated.timing(fadeAnim, {
           toValue: 1,
-          duration: 300,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
+          duration: 350,
+          easing: Easing.in(Easing.ease),
+          useNativeDriver: useNative,
         }).start();
       });
     }, speed);
@@ -47,93 +69,50 @@ export function RateTicker({ rates, speed = 4000 }: RateTickerProps) {
 
   const current = rates[activeIndex];
   const isPositive = (current.change24h ?? 0) >= 0;
+  const changeColor = isPositive ? colors.success : colors.error;
 
   return (
-    <View
-      style={{
-        backgroundColor: colors.dark.card,
-        borderRadius: 12,
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-      }}
-    >
+    <View style={[styles.container, shadows.sm]}>
       {/* Left: Live indicator */}
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-        <View
-          style={{
-            width: 6,
-            height: 6,
-            borderRadius: 3,
-            backgroundColor: colors.success,
-          }}
+      <View style={styles.liveContainer}>
+        <Animated.View
+          style={[
+            styles.liveDot,
+            { opacity: pulseAnim },
+          ]}
         />
-        <Text
-          style={{
-            color: colors.textMuted,
-            fontSize: 11,
-            fontFamily: "Inter_500Medium",
-          }}
-        >
-          LIVE
-        </Text>
+        <Text style={styles.liveText}>LIVE</Text>
       </View>
 
       {/* Center: Rate */}
-      <Animated.View
-        style={{
-          opacity: fadeAnim,
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 8,
-        }}
-      >
-        <Text
-          style={{
-            color: "#FFFFFF",
-            fontSize: 14,
-            fontFamily: "Inter_600SemiBold",
-          }}
-        >
-          {current.symbol}/KES
-        </Text>
-        <Text
-          style={{
-            color: "#FFFFFF",
-            fontSize: 14,
-            fontFamily: "Inter_700Bold",
-          }}
-        >
-          {current.rate.toLocaleString("en-KE", {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })}
+      <Animated.View style={[styles.rateContainer, { opacity: fadeAnim }]}>
+        <Text style={styles.symbolText}>{current.symbol}/KES</Text>
+        <Text style={styles.rateText}>
+          {isNaN(current.rate)
+            ? "--"
+            : current.rate.toLocaleString("en-KE", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
         </Text>
       </Animated.View>
 
-      {/* Right: Change */}
+      {/* Right: Change pill */}
       <Animated.View
-        style={{
-          opacity: fadeAnim,
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 2,
-        }}
+        style={[
+          styles.changePill,
+          {
+            backgroundColor: changeColor + "1F", // 12% opacity
+            opacity: fadeAnim,
+          },
+        ]}
       >
         <Ionicons
           name={isPositive ? "trending-up" : "trending-down"}
-          size={14}
-          color={isPositive ? colors.success : colors.error}
+          size={13}
+          color={changeColor}
         />
-        <Text
-          style={{
-            color: isPositive ? colors.success : colors.error,
-            fontSize: 12,
-            fontFamily: "Inter_500Medium",
-          }}
-        >
+        <Text style={[styles.changeText, { color: changeColor }]}>
           {current.change24h !== undefined
             ? `${isPositive ? "+" : ""}${current.change24h.toFixed(1)}%`
             : "--"}
@@ -142,3 +121,61 @@ export function RateTicker({ rates, speed = 4000 }: RateTickerProps) {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    backgroundColor: colors.dark.card,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1,
+    borderColor: colors.glass.border,
+  },
+  liveContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  liveDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: colors.success,
+  },
+  liveText: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    letterSpacing: 1,
+  },
+  rateContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  symbolText: {
+    color: colors.textSecondary,
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+  },
+  rateText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontFamily: "Inter_700Bold",
+  },
+  changePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+  },
+  changeText: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+  },
+});

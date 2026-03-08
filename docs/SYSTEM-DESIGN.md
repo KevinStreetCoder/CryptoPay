@@ -629,23 +629,42 @@ Layer 4 — M-Pesa:
 - **Kenyan**: Designed for Kenya first. Swahili language support. Local references
 - **Modern**: Fintech aesthetic — dark mode default, smooth animations, haptic feedback
 
-### Color Palette
+### Color Palette (Premium Dark Theme v2.0)
 
 ```
-Primary:    #0052FF (Trust Blue — financial confidence)
-Secondary:  #00C853 (M-Pesa Green — familiar, success, money)
-Accent:     #FFB300 (Gold — premium, crypto association)
-Background: #0A0E17 (Deep Navy — modern fintech dark mode)
-Surface:    #141B2D (Card background)
-Text:       #FFFFFF / #8892B0 (Primary / Secondary text)
-Error:      #FF3B30
-Success:    #00C853
+Background:     #060E1F (Deep space navy — premium dark mode)
+Card Surface:   #0C1A2E (Glass card base)
+Elevated:       #162742 (Pressed/hover states)
+Border:         #1E3350 (Subtle structural borders)
+
+Primary:        #10B981 (Emerald 500 — vibrant, trustworthy, money-green)
+Primary Light:  #34D399 (Emerald 400 — accent, active states)
+Primary Dark:   #059669 (Emerald 600 — pressed primary)
+
+Accent:         #F59E0B (Amber gold — premium, crypto association)
+Info:           #3B82F6 (Blue — informational, secondary CTAs)
+Error:          #EF4444 (Red — destructive, errors)
+Success:        #10B981 (Same as primary — consistent success messaging)
+Warning:        #F59E0B (Same as accent — alerts)
+
+Text Primary:   #F0F4F8 (Near-white — headings, important content)
+Text Secondary: #8899AA (Muted — body text, descriptions)
+Text Muted:     #556B82 (Dim — hints, placeholders, captions)
+
+Glass BG:       rgba(12, 26, 46, 0.8)  (Glassmorphism surfaces)
+Glass Border:   rgba(255, 255, 255, 0.08) (Subtle card edges)
+Glass Strong:   rgba(255, 255, 255, 0.14) (Focus rings, active borders)
+
+Crypto Brands:
+  USDT: #26A17B, BTC: #F7931A, ETH: #627EEA, SOL: #9945FF, KES: #10B981
 ```
 
 ### Typography
-- **Headlines**: Inter Bold (clean, modern, excellent readability)
-- **Body**: Inter Regular
-- **Numbers/Amounts**: SF Mono or JetBrains Mono (monospace for financial figures)
+- **Headlines**: Inter Bold (28-38px, letter-spacing -0.5 to -1)
+- **Body**: Inter Regular/Medium (14-16px)
+- **Captions**: Inter Medium (11-12px, uppercase, letter-spacing 1-1.2)
+- **Amounts**: Inter Bold (large sizes for financial figures)
+- Font scaling: `maxFontSizeMultiplier={1.2-1.3}` to prevent layout breaks
 
 ### Logo Concept
 ```
@@ -654,17 +673,24 @@ Success:    #00C853
    ╰─────╯
    CryptoPay
 
-Alternative: "CP" monogram with chain-link connecting the letters
-Alternative: Shield icon with a crypto coin + M-Pesa green accent
+Rendered: Wallet icon in 64x64 rounded-2xl emerald container
+with 3-layer glow rings (96px, 76px, 64px) on auth screens
 ```
 
-### App Design Language
-- Card-based UI (like M-Pesa's new interface)
-- Bottom navigation: Home | Pay | Wallet | History | Profile
-- Large touch targets (48px minimum — Kenyan users often on budget phones)
-- Skeleton loading states (perceived performance)
-- Haptic feedback on transaction confirmation
-- Confetti animation on first successful payment
+### App Design Language (Premium v2.0)
+- **Glassmorphism**: Semi-transparent card surfaces with subtle white borders
+- **Glass cards**: borderRadius 20-28, `rgba(255,255,255,0.08)` borders
+- **Glow shadows**: Primary buttons emit green glow via `shadows.glow()`
+- **Micro-animations**: Spring-based press states (scale 0.97-0.98, opacity 0.85-0.9)
+- **Icon system**: Ionicons only — NO emoji characters. Kenya flag = "KE" text badge
+- **Currency icons**: Unicode symbols (₿, Ξ, $, S, K) in crypto-brand-colored circles
+- **Tab bar**: Glassmorphism with pill-shaped active indicator
+- **Bottom navigation**: Home | Pay | Wallet | Profile (4 tabs)
+- **Large touch targets**: 44-48px minimum (budget phone friendly)
+- **Skeleton loading**: Smooth 1500ms shimmer pulse animations
+- **Haptic feedback**: On PIN entry, transaction confirmation, clipboard copy
+- **Pull-to-refresh**: On Home and Wallet screens
+- **Rate ticker**: Pulsing LIVE dot, smooth crossfade between currencies
 
 ---
 

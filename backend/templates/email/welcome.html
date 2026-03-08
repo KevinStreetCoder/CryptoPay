@@ -1,0 +1,58 @@
+{% extends "email/base.html" %}
+
+{% block title %}Welcome to CryptoPay{% endblock %}
+
+{% block content %}
+<h2>Welcome to CryptoPay, {{ full_name }}!</h2>
+
+<p>Your account has been created successfully. You're now part of the fastest way to convert crypto to M-Pesa in Kenya.</p>
+
+<div class="info-card">
+  <table role="presentation" cellpadding="0" cellspacing="0">
+    <tr>
+      <td class="label">Account Phone</td>
+      <td class="value">{{ phone }}</td>
+    </tr>
+  </table>
+</div>
+
+<p><strong style="color: #f1f5f9;">Get started in 3 steps:</strong></p>
+
+<table role="presentation" cellpadding="0" cellspacing="0" style="margin: 16px 0;">
+  <tr>
+    <td style="padding: 8px 16px 8px 0; vertical-align: top;">
+      <span style="display: inline-block; width: 28px; height: 28px; background-color: #10B981; color: #fff; border-radius: 50%; text-align: center; line-height: 28px; font-family: -apple-system, sans-serif; font-size: 14px; font-weight: 700;">1</span>
+    </td>
+    <td style="padding: 8px 0; font-family: -apple-system, sans-serif; font-size: 15px; color: #cbd5e1; line-height: 1.5;">
+      <strong style="color: #f1f5f9;">Complete KYC</strong><br>
+      Verify your identity to unlock higher transaction limits.
+    </td>
+  </tr>
+  <tr>
+    <td style="padding: 8px 16px 8px 0; vertical-align: top;">
+      <span style="display: inline-block; width: 28px; height: 28px; background-color: #10B981; color: #fff; border-radius: 50%; text-align: center; line-height: 28px; font-family: -apple-system, sans-serif; font-size: 14px; font-weight: 700;">2</span>
+    </td>
+    <td style="padding: 8px 0; font-family: -apple-system, sans-serif; font-size: 15px; color: #cbd5e1; line-height: 1.5;">
+      <strong style="color: #f1f5f9;">Deposit Crypto</strong><br>
+      Send USDT, BTC, ETH or other supported tokens to your wallet.
+    </td>
+  </tr>
+  <tr>
+    <td style="padding: 8px 16px 8px 0; vertical-align: top;">
+      <span style="display: inline-block; width: 28px; height: 28px; background-color: #10B981; color: #fff; border-radius: 50%; text-align: center; line-height: 28px; font-family: -apple-system, sans-serif; font-size: 14px; font-weight: 700;">3</span>
+    </td>
+    <td style="padding: 8px 0; font-family: -apple-system, sans-serif; font-size: 15px; color: #cbd5e1; line-height: 1.5;">
+      <strong style="color: #f1f5f9;">Pay via M-Pesa</strong><br>
+      Send to any Paybill, Till number, or phone number instantly.
+    </td>
+  </tr>
+</table>
+
+<p style="text-align: center; padding-top: 8px;">
+  <a href="https://cryptopay.co.ke" class="btn">Open CryptoPay</a>
+</p>
+
+<p style="font-size: 13px; color: #94a3b8;">
+  If you did not create this account, you can safely ignore this email.
+</p>
+{% endblock %}

@@ -1,0 +1,145 @@
+name: CryptoPay CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ──────────────────────────────────────────────
+  # Backend: Django 5 + DRF
+  # ──────────────────────────────────────────────
+  backend:
+    name: Backend CI
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: cryptopay_test
+          POSTGRES_USER: cryptopay
+          POSTGRES_PASSWORD: cryptopay
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cryptopay -d cryptopay_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgres://cryptopay:cryptopay@localhost:5432/cryptopay_test
+      REDIS_URL: redis://localhost:6379/0
+      CELERY_BROKER_URL: redis://localhost:6379/1
+      SECRET_KEY: ci-test-secret-key-not-for-production
+      DJANGO_SETTINGS_MODULE: config.settings.base
+      DEBUG: "true"
+      ALLOWED_HOSTS: localhost,127.0.0.1
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libpq-dev
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Django system checks
+        run: python manage.py check
+
+      - name: Run Django deployment checks
+        run: python manage.py check --deploy --fail-level WARNING
+        continue-on-error: true
+
+      - name: Run migrations
+        run: python manage.py migrate --no-input
+
+      - name: Run tests
+        run: pytest -v --override-ini="DJANGO_SETTINGS_MODULE=config.settings.base"
+
+  # ──────────────────────────────────────────────
+  # Frontend: React Native + Expo SDK 55
+  # ──────────────────────────────────────────────
+  frontend:
+    name: Frontend CI
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: mobile
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: TypeScript check
+        run: npx tsc --noEmit
+
+      - name: Verify Expo web build
+        run: npx expo export --platform web
+
+  # ──────────────────────────────────────────────
+  # Docker: verify backend image builds
+  # ──────────────────────────────────────────────
+  docker-build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          file: backend/Dockerfile
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          tags: cryptopay-backend:${{ github.sha }}

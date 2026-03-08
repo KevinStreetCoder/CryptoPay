@@ -7,6 +7,7 @@ import {
   Platform,
   ScrollView,
   Pressable,
+  useWindowDimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -22,12 +23,16 @@ const CRYPTO_OPTIONS: CurrencyCode[] = ["USDT", "BTC", "ETH"];
 
 export default function PayTillScreen() {
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const isDesktop = Platform.OS === "web" && width >= 768;
   const { data: wallets } = useWallets();
   const [tillNumber, setTillNumber] = useState("");
   const [amount, setAmount] = useState("");
   const [selectedCrypto, setSelectedCrypto] = useState<CurrencyCode>("USDT");
   const [quote, setQuote] = useState<Quote | null>(null);
   const [loading, setLoading] = useState(false);
+  const [tillFocused, setTillFocused] = useState(false);
+  const [amountFocused, setAmountFocused] = useState(false);
 
   const selectedWallet = wallets?.find((w) => w.currency === selectedCrypto);
   const balance = selectedWallet ? parseFloat(selectedWallet.balance) : 0;
@@ -64,33 +69,77 @@ export default function PayTillScreen() {
         amount_kes: amount,
         crypto_currency: selectedCrypto,
         quote_id: quote.quote_id,
-        crypto_amount: quote.total_crypto,
-        rate: quote.rate,
-        fee: quote.fee,
+        crypto_amount: quote.crypto_amount,
+        rate: quote.exchange_rate,
+        fee: quote.fee_kes,
       },
     });
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-dark-bg">
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.dark.bg }}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        className="flex-1"
+        style={{ flex: 1 }}
       >
-        <ScrollView className="flex-1" keyboardShouldPersistTaps="handled">
+        <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
           {/* Header */}
-          <View className="flex-row items-center px-4 py-3">
-            <Pressable onPress={() => router.back()} hitSlop={12} className="p-2">
-              <Ionicons name="arrow-back" size={24} color="#fff" />
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              paddingHorizontal: 16,
+              paddingVertical: 12,
+            }}
+          >
+            <Pressable
+              onPress={() => router.back()}
+              hitSlop={12}
+              style={{ padding: 8 }}
+            >
+              <Ionicons name="arrow-back" size={24} color={colors.white} />
             </Pressable>
-            <Text className="text-white text-lg font-inter-semibold ml-2">
-              Buy Goods & Services
+            <Text
+              style={{
+                color: colors.white,
+                fontSize: 18,
+                fontWeight: "600",
+                marginLeft: 8,
+              }}
+            >
+              Buy Goods
             </Text>
           </View>
 
-          <View className="px-5 mt-2">
+          {/* Main Content — centered card on desktop */}
+          <View
+            style={
+              isDesktop
+                ? {
+                    alignSelf: "center",
+                    width: "100%",
+                    maxWidth: 560,
+                    backgroundColor: colors.dark.card,
+                    borderRadius: 20,
+                    padding: 32,
+                    marginTop: 16,
+                    marginBottom: 32,
+                  }
+                : {
+                    paddingHorizontal: 20,
+                    marginTop: 8,
+                  }
+            }
+          >
             {/* Till Number */}
-            <Text className="text-textSecondary text-sm font-inter-medium mb-2">
+            <Text
+              style={{
+                color: colors.textSecondary,
+                fontSize: 14,
+                fontWeight: "500",
+                marginBottom: 8,
+              }}
+            >
               Till Number
             </Text>
             <TextInput
@@ -99,18 +148,63 @@ export default function PayTillScreen() {
               placeholder="e.g. 5678901"
               placeholderTextColor={colors.dark.muted}
               keyboardType="number-pad"
-              className="bg-dark-card text-white text-base font-inter rounded-xl border border-dark-border px-4 py-3.5 mb-4"
+              onFocus={() => setTillFocused(true)}
+              onBlur={() => setTillFocused(false)}
+              style={{
+                backgroundColor: colors.dark.card,
+                color: colors.white,
+                fontSize: 16,
+                borderRadius: 16,
+                borderWidth: 1,
+                borderColor: tillFocused
+                  ? colors.primary[500]
+                  : colors.dark.border,
+                paddingHorizontal: 16,
+                paddingVertical: 14,
+                marginBottom: 16,
+                ...(Platform.OS === 'web' ? { outlineStyle: 'none' } as any : {}),
+                ...(Platform.OS === 'web' ? { transition: 'border-color 0.2s ease, box-shadow 0.2s ease' } as any : {}),
+                ...(tillFocused && Platform.OS === 'web' ? { boxShadow: '0 0 0 3px rgba(16, 185, 129, 0.15)' } as any : {}),
+              }}
               accessibilityLabel="Till Number"
               testID="till-number-input"
               maxFontSizeMultiplier={1.3}
             />
 
             {/* Amount */}
-            <Text className="text-textSecondary text-sm font-inter-medium mb-2">
+            <Text
+              style={{
+                color: colors.textSecondary,
+                fontSize: 14,
+                fontWeight: "500",
+                marginBottom: 8,
+              }}
+            >
               Amount (KES)
             </Text>
-            <View className="flex-row items-center bg-dark-card rounded-xl border border-dark-border px-4">
-              <Text className="text-textSecondary text-lg font-inter-bold mr-1">
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                backgroundColor: colors.dark.card,
+                borderRadius: 16,
+                borderWidth: 1,
+                borderColor: amountFocused
+                  ? colors.primary[500]
+                  : colors.dark.border,
+                paddingHorizontal: 16,
+                ...(Platform.OS === 'web' ? { transition: 'border-color 0.2s ease, box-shadow 0.2s ease' } as any : {}),
+                ...(amountFocused && Platform.OS === 'web' ? { boxShadow: '0 0 0 3px rgba(16, 185, 129, 0.15)' } as any : {}),
+              }}
+            >
+              <Text
+                style={{
+                  color: colors.textSecondary,
+                  fontSize: 18,
+                  fontWeight: "700",
+                  marginRight: 4,
+                }}
+              >
                 KSh
               </Text>
               <TextInput
@@ -119,15 +213,32 @@ export default function PayTillScreen() {
                 placeholder="0"
                 placeholderTextColor={colors.dark.muted}
                 keyboardType="numeric"
-                className="flex-1 text-white text-2xl font-inter-bold py-3"
+                onFocus={() => setAmountFocused(true)}
+                onBlur={() => setAmountFocused(false)}
+                style={{
+                  flex: 1,
+                  color: colors.white,
+                  fontSize: 24,
+                  fontWeight: "700",
+                  paddingVertical: 12,
+                  ...(Platform.OS === 'web' ? { outlineStyle: 'none' } as any : {}),
+                }}
               />
             </View>
 
             {/* Crypto Selector */}
-            <Text className="text-textSecondary text-sm font-inter-medium mt-5 mb-2">
+            <Text
+              style={{
+                color: colors.textSecondary,
+                fontSize: 14,
+                fontWeight: "500",
+                marginTop: 20,
+                marginBottom: 8,
+              }}
+            >
               Pay with
             </Text>
-            <View className="flex-row gap-2">
+            <View style={{ flexDirection: "row", gap: 8 }}>
               {CRYPTO_OPTIONS.map((crypto) => {
                 const info = CURRENCIES[crypto];
                 const isSelected = selectedCrypto === crypto;
@@ -141,20 +252,38 @@ export default function PayTillScreen() {
                       setSelectedCrypto(crypto);
                       setQuote(null);
                     }}
-                    className={`flex-1 rounded-xl p-3 border ${
-                      isSelected
-                        ? "border-primary-500 bg-primary-500/10"
-                        : "border-dark-border bg-dark-card"
-                    }`}
+                    style={{
+                      flex: 1,
+                      borderRadius: 12,
+                      padding: 12,
+                      borderWidth: 1,
+                      borderColor: isSelected
+                        ? colors.primary[500]
+                        : colors.dark.border,
+                      backgroundColor: isSelected
+                        ? "rgba(16, 185, 129, 0.1)"
+                        : colors.dark.card,
+                      ...(Platform.OS === 'web' ? { cursor: 'pointer', transition: 'all 0.15s ease' } as any : {}),
+                    }}
                   >
                     <Text
-                      className={`text-sm font-inter-semibold ${
-                        isSelected ? "text-primary-400" : "text-white"
-                      }`}
+                      style={{
+                        fontSize: 14,
+                        fontWeight: "600",
+                        color: isSelected
+                          ? colors.primary[400]
+                          : colors.white,
+                      }}
                     >
                       {info.symbol}
                     </Text>
-                    <Text className="text-textMuted text-xs font-inter mt-0.5">
+                    <Text
+                      style={{
+                        color: colors.textMuted,
+                        fontSize: 12,
+                        marginTop: 2,
+                      }}
+                    >
                       {bal.toFixed(info.decimals > 4 ? 4 : info.decimals)}
                     </Text>
                   </Pressable>
@@ -164,42 +293,124 @@ export default function PayTillScreen() {
 
             {/* Quote Display */}
             {quote && (
-              <View className="bg-dark-card rounded-xl border border-primary-500/30 p-4 mt-5">
-                <View className="flex-row justify-between mb-2">
-                  <Text className="text-textMuted text-sm font-inter">Rate</Text>
-                  <Text className="text-white text-sm font-inter-medium">
+              <View
+                style={{
+                  backgroundColor: colors.dark.card,
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: "rgba(16, 185, 129, 0.3)",
+                  padding: 16,
+                  marginTop: 20,
+                }}
+              >
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    marginBottom: 8,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: colors.textMuted,
+                      fontSize: 14,
+                    }}
+                  >
+                    Rate
+                  </Text>
+                  <Text
+                    style={{
+                      color: colors.white,
+                      fontSize: 14,
+                      fontWeight: "500",
+                    }}
+                  >
                     1 {selectedCrypto} = KSh{" "}
-                    {parseFloat(quote.rate).toLocaleString()}
+                    {parseFloat(quote.exchange_rate).toLocaleString()}
                   </Text>
                 </View>
-                <View className="flex-row justify-between mb-2">
-                  <Text className="text-textMuted text-sm font-inter">Fee</Text>
-                  <Text className="text-white text-sm font-inter-medium">
-                    {quote.fee} {selectedCrypto}
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    marginBottom: 8,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: colors.textMuted,
+                      fontSize: 14,
+                    }}
+                  >
+                    Fee
+                  </Text>
+                  <Text
+                    style={{
+                      color: colors.white,
+                      fontSize: 14,
+                      fontWeight: "500",
+                    }}
+                  >
+                    KSh {quote.fee_kes}
                   </Text>
                 </View>
-                <View className="h-px bg-dark-border my-2" />
-                <View className="flex-row justify-between">
-                  <Text className="text-textSecondary text-sm font-inter-medium">
+                <View
+                  style={{
+                    height: 1,
+                    backgroundColor: colors.dark.border,
+                    marginVertical: 8,
+                  }}
+                />
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: colors.textSecondary,
+                      fontSize: 14,
+                      fontWeight: "500",
+                    }}
+                  >
                     Total
                   </Text>
-                  <Text className="text-primary-400 text-base font-inter-bold">
-                    {quote.total_crypto} {selectedCrypto}
+                  <Text
+                    style={{
+                      color: colors.primary[400],
+                      fontSize: 16,
+                      fontWeight: "700",
+                    }}
+                  >
+                    {quote.crypto_amount} {selectedCrypto}
                   </Text>
                 </View>
-                {parseFloat(quote.total_crypto) > balance && (
-                  <Text className="text-error text-xs font-inter mt-2">
+                {parseFloat(quote.crypto_amount) > balance && (
+                  <Text
+                    style={{
+                      color: colors.error,
+                      fontSize: 12,
+                      marginTop: 8,
+                    }}
+                  >
                     Insufficient {selectedCrypto} balance
                   </Text>
                 )}
-                <Text className="text-textMuted text-xs font-inter mt-2">
+                <Text
+                  style={{
+                    color: colors.textMuted,
+                    fontSize: 12,
+                    marginTop: 8,
+                  }}
+                >
                   Rate locked for 30 seconds
                 </Text>
               </View>
             )}
 
             {/* Action Button */}
-            <View className="mt-6 mb-8">
+            <View style={{ marginTop: 24, marginBottom: 32 }}>
               {!quote ? (
                 <Button
                   title="Get Quote"
@@ -212,7 +423,7 @@ export default function PayTillScreen() {
                 <Button
                   title="Confirm Payment"
                   onPress={handleConfirm}
-                  disabled={parseFloat(quote.total_crypto) > balance}
+                  disabled={parseFloat(quote.crypto_amount) > balance}
                   size="lg"
                 />
               )}

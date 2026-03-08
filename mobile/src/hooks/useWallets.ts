@@ -1,12 +1,22 @@
 import { useQuery } from "@tanstack/react-query";
 import { walletsApi, Wallet } from "../api/wallets";
 
+interface PaginatedResponse {
+  results: Wallet[];
+  count: number;
+}
+
 export function useWallets() {
   return useQuery<Wallet[]>({
     queryKey: ["wallets"],
     queryFn: async () => {
       const { data } = await walletsApi.list();
-      return data;
+      // Handle both paginated and direct array responses
+      if (Array.isArray(data)) return data;
+      if (data && typeof data === "object" && "results" in (data as any)) {
+        return (data as unknown as PaginatedResponse).results;
+      }
+      return [];
     },
     refetchInterval: 30000,
   });

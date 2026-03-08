@@ -5,7 +5,6 @@ module.exports = {
     "./app/**/*.{js,jsx,ts,tsx}",
     "./src/**/*.{js,jsx,ts,tsx}",
   ],
-  presets: [require("nativewind/preset")],
   theme: {
     extend: {
       colors: {
@@ -15,17 +14,18 @@ module.exports = {
           200: "#A7F3D0",
           300: "#6EE7B7",
           400: "#34D399",
-          500: "#0D9F6E",
+          500: "#10B981",
           600: "#059669",
           700: "#047857",
           800: "#065F46",
           900: "#064E3B",
         },
         dark: {
-          bg: "#0F172A",
-          card: "#1E293B",
-          elevated: "#334155",
-          border: "#475569",
+          bg: "#060E1F",
+          card: "#0C1A2E",
+          elevated: "#162742",
+          border: "#1E3350",
+          muted: "#556B82",
         },
         accent: {
           DEFAULT: "#F59E0B",
@@ -36,6 +36,9 @@ module.exports = {
         error: "#EF4444",
         warning: "#F59E0B",
         info: "#3B82F6",
+        textPrimary: "#F0F4F8",
+        textSecondary: "#8899AA",
+        textMuted: "#556B82",
       },
       fontFamily: {
         inter: ["Inter_400Regular"],

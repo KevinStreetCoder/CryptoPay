@@ -1,0 +1,58 @@
+{% extends "email/base.html" %}
+
+{% block title %}Transaction Receipt — {{ reference }}{% endblock %}
+
+{% block content %}
+<h2>Transaction Receipt</h2>
+
+<p>Hi {{ full_name }}, here is your transaction summary.</p>
+
+<div class="info-card">
+  <table role="presentation" cellpadding="0" cellspacing="0">
+    <tr>
+      <td class="label">Reference</td>
+      <td class="value">{{ reference }}</td>
+    </tr>
+    <tr>
+      <td class="label">Type</td>
+      <td class="value">{{ tx_type|title }}</td>
+    </tr>
+    <tr>
+      <td class="label">Amount</td>
+      <td class="value">{{ amount }} {{ currency }}</td>
+    </tr>
+    <tr>
+      <td class="label">Status</td>
+      <td class="value">
+        {% if status == "completed" or status == "success" %}
+          <span class="status-approved">{{ status|title }}</span>
+        {% elif status == "failed" or status == "reversed" %}
+          <span class="status-rejected">{{ status|title }}</span>
+        {% else %}
+          <span class="status-pending">{{ status|title }}</span>
+        {% endif %}
+      </td>
+    </tr>
+    <tr>
+      <td class="label">Date &amp; Time</td>
+      <td class="value">{{ timestamp }}</td>
+    </tr>
+  </table>
+</div>
+
+{% if status == "completed" or status == "success" %}
+<p>Your transaction has been processed successfully. Funds have been delivered to the recipient.</p>
+{% elif status == "pending" %}
+<p>Your transaction is being processed. You will receive another email once it is complete.</p>
+{% elif status == "failed" %}
+<p>Your transaction could not be completed. If funds were debited, they will be refunded to your wallet automatically.</p>
+{% endif %}
+
+<p style="text-align: center; padding-top: 8px;">
+  <a href="https://cryptopay.co.ke" class="btn">View in App</a>
+</p>
+
+<p style="font-size: 13px; color: #94a3b8;">
+  If you did not initiate this transaction, please contact support immediately and secure your account.
+</p>
+{% endblock %}

@@ -1,12 +1,26 @@
 import { useCallback, useEffect, useState } from "react";
+import { Platform } from "react-native";
 import { storage } from "../utils/storage";
 import { authApi, User } from "../api/auth";
 
 let _user: User | null = null;
 let _listeners: Set<() => void> = new Set();
+let _biometricEnabled: boolean = false;
 
 function notify() {
   _listeners.forEach((l) => l());
+}
+
+/** Check if user has enabled biometric login */
+export async function isBiometricEnabled(): Promise<boolean> {
+  const val = await storage.getItemAsync("biometric_enabled");
+  return val === "true";
+}
+
+/** Enable or disable biometric login */
+export async function setBiometricEnabled(enabled: boolean): Promise<void> {
+  await storage.setItemAsync("biometric_enabled", enabled ? "true" : "false");
+  _biometricEnabled = enabled;
 }
 
 export function useAuth() {
@@ -23,6 +37,31 @@ export function useAuth() {
     try {
       const token = await storage.getItemAsync("access_token");
       if (token) {
+        // Check biometric preference
+        _biometricEnabled = await isBiometricEnabled();
+
+        // If biometric is enabled on native, require auth before proceeding
+        if (_biometricEnabled && Platform.OS !== "web") {
+          const LocalAuth = require("expo-local-authentication");
+          const compatible = await LocalAuth.hasHardwareAsync();
+          const enrolled = await LocalAuth.isEnrolledAsync();
+
+          if (compatible && enrolled) {
+            const result = await LocalAuth.authenticateAsync({
+              promptMessage: "Unlock CryptoPay",
+              cancelLabel: "Use PIN",
+              disableDeviceFallback: false,
+              fallbackLabel: "Enter PIN",
+            });
+
+            if (!result.success) {
+              // Biometric failed — don't auto-login, force PIN entry
+              setLoading(false);
+              return;
+            }
+          }
+        }
+
         const { data } = await authApi.getProfile();
         _user = data;
         notify();
@@ -63,6 +102,15 @@ export function useAuth() {
     []
   );
 
+  const googleLogin = useCallback(async (idToken: string) => {
+    const { data } = await authApi.googleLogin(idToken);
+    await storage.setItemAsync("access_token", data.tokens.access);
+    await storage.setItemAsync("refresh_token", data.tokens.refresh);
+    _user = data.user;
+    notify();
+    return data;
+  }, []);
+
   const logout = useCallback(async () => {
     await storage.deleteItemAsync("access_token");
     await storage.deleteItemAsync("refresh_token");
@@ -70,5 +118,5 @@ export function useAuth() {
     notify();
   }, []);
 
-  return { user, loading, bootstrap, login, register, logout };
+  return { user, loading, bootstrap, login, register, googleLogin, logout };
 }

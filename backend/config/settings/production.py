@@ -5,7 +5,7 @@ import os
 DEBUG = False
 
 # --- Security ---
-SECURE_SSL_REDIRECT = True
+SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=True)  # noqa: F405
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 SECURE_HSTS_SECONDS = 31536000
@@ -57,53 +57,25 @@ if SENTRY_DSN:
         environment=env("SENTRY_ENVIRONMENT", default="production"),  # noqa: F405
     )
 
-# --- Structured JSON Logging ---
-LOGGING = {
-    "version": 1,
-    "disable_existing_loggers": False,
-    "formatters": {
-        "json": {
-            "()": "django.utils.log.ServerFormatter",
-            "format": "%(levelname)s %(asctime)s %(name)s %(message)s",
-        },
-        "structured": {
-            "format": '{"time":"%(asctime)s","level":"%(levelname)s","logger":"%(name)s","message":"%(message)s"}',
-            "datefmt": "%Y-%m-%dT%H:%M:%S%z",
-        },
-    },
-    "handlers": {
-        "console": {
-            "class": "logging.StreamHandler",
-            "formatter": "structured",
-        },
-    },
-    "root": {
-        "handlers": ["console"],
-        "level": "INFO",
-    },
-    "loggers": {
-        "django": {
-            "handlers": ["console"],
-            "level": "WARNING",
-            "propagate": False,
-        },
-        "django.request": {
-            "handlers": ["console"],
-            "level": "ERROR",
-            "propagate": False,
-        },
-        "apps": {
-            "handlers": ["console"],
-            "level": "INFO",
-            "propagate": False,
-        },
-        "celery": {
-            "handlers": ["console"],
-            "level": "INFO",
-            "propagate": False,
-        },
-    },
+# --- Email (SMTP) ---
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = env("EMAIL_HOST", default="smtp.gmail.com")  # noqa: F405
+EMAIL_PORT = env.int("EMAIL_PORT", default=587)  # noqa: F405
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")  # noqa: F405
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")  # noqa: F405
+EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)  # noqa: F405
+
+# --- Production Logging Override ---
+# Use JSON formatter for all handlers in production (better for log aggregation)
+LOGGING["formatters"]["json"] = {  # noqa: F405
+    "format": '{{"time":"{asctime}","level":"{levelname}","logger":"{name}","module":"{module}","func":"{funcName}","line":{lineno},"message":"{message}"}}',
+    "style": "{",
+    "datefmt": "%Y-%m-%dT%H:%M:%S%z",
 }
+LOGGING["handlers"]["console"]["formatter"] = "json"  # noqa: F405
+for handler_name in ("file_app", "file_error", "file_payments", "file_security"):
+    if handler_name in LOGGING["handlers"]:  # noqa: F405
+        LOGGING["handlers"][handler_name]["formatter"] = "json"  # noqa: F405
 
 # --- M-Pesa Certificate ---
 MPESA_CERT_PATH = env(  # noqa: F405

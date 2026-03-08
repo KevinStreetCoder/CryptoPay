@@ -2,6 +2,8 @@ import { useEffect, useRef } from "react";
 import { View, Text, Animated, Easing, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
+const useNative = Platform.OS !== "web";
+
 export function LoadingScreen() {
   const pulseAnim = useRef(new Animated.Value(0.6)).current;
   const rotateAnim = useRef(new Animated.Value(0)).current;
@@ -14,13 +16,13 @@ export function LoadingScreen() {
           toValue: 1,
           duration: 1000,
           easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
+          useNativeDriver: useNative,
         }),
         Animated.timing(pulseAnim, {
           toValue: 0.6,
           duration: 1000,
           easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
+          useNativeDriver: useNative,
         }),
       ])
     ).start();
@@ -31,7 +33,7 @@ export function LoadingScreen() {
         toValue: 1,
         duration: 3000,
         easing: Easing.linear,
-        useNativeDriver: true,
+        useNativeDriver: useNative,
       })
     ).start();
   }, [pulseAnim, rotateAnim]);
@@ -45,7 +47,7 @@ export function LoadingScreen() {
     <View
       style={{
         flex: 1,
-        backgroundColor: "#0F172A",
+        backgroundColor: "#060E1F",
         alignItems: "center",
         justifyContent: "center",
       }}
@@ -58,8 +60,8 @@ export function LoadingScreen() {
           height: 120,
           borderRadius: 60,
           borderWidth: 2,
-          borderColor: "rgba(13, 159, 110, 0.15)",
-          borderTopColor: "rgba(13, 159, 110, 0.5)",
+          borderColor: "rgba(16, 185, 129, 0.15)",
+          borderTopColor: "rgba(16, 185, 129, 0.5)",
           transform: [{ rotate: spin }],
         }}
       />
@@ -70,7 +72,7 @@ export function LoadingScreen() {
           width: 80,
           height: 80,
           borderRadius: 24,
-          backgroundColor: "#0D9F6E",
+          backgroundColor: "#10B981",
           alignItems: "center",
           justifyContent: "center",
           opacity: pulseAnim,
@@ -83,9 +85,9 @@ export function LoadingScreen() {
             },
           ],
           ...(Platform.OS === "web"
-            ? { boxShadow: "0 0 20px rgba(13, 159, 110, 0.4)" }
+            ? { boxShadow: "0 0 20px rgba(16, 185, 129, 0.4)" }
             : {
-                shadowColor: "#0D9F6E",
+                shadowColor: "#10B981",
                 shadowOffset: { width: 0, height: 0 },
                 shadowOpacity: 0.4,
                 shadowRadius: 20,
@@ -99,7 +101,7 @@ export function LoadingScreen() {
       {/* Brand name */}
       <Text
         style={{
-          color: "#FFFFFF",
+          color: "#F0F4F8",
           fontSize: 28,
           fontFamily: "Inter_700Bold",
           marginTop: 24,
@@ -111,7 +113,7 @@ export function LoadingScreen() {
 
       <Text
         style={{
-          color: "#64748B",
+          color: "#8899AA",
           fontSize: 14,
           fontFamily: "Inter_400Regular",
           marginTop: 8,
