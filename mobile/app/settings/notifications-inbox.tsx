@@ -98,7 +98,7 @@ export default function NotificationsInboxScreen() {
   }, []);
 
   const isDesktop = isWeb && width >= 768;
-  const maxWidth = isDesktop ? 640 : undefined;
+  const maxWidth = isDesktop ? 860 : undefined;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.dark.bg }}>
@@ -217,6 +217,7 @@ export default function NotificationsInboxScreen() {
                 key={notification.id}
                 notification={notification}
                 onPress={() => markRead(notification.id)}
+                isDesktop={isDesktop}
               />
             ))}
           </View>
@@ -230,9 +231,11 @@ export default function NotificationsInboxScreen() {
 function NotificationRow({
   notification,
   onPress,
+  isDesktop,
 }: {
   notification: Notification;
   onPress: () => void;
+  isDesktop: boolean;
 }) {
   const { name, color, bg } = getTypeIcon(notification.type);
 
@@ -244,9 +247,9 @@ function NotificationRow({
       style={({ pressed, hovered }: any) => ({
         flexDirection: "row",
         alignItems: "flex-start",
-        gap: 14,
-        paddingHorizontal: 20,
-        paddingVertical: 16,
+        gap: isDesktop ? 18 : 14,
+        paddingHorizontal: isDesktop ? 28 : 20,
+        paddingVertical: isDesktop ? 20 : 16,
         backgroundColor: isWeb && hovered
           ? colors.dark.card
           : !notification.read

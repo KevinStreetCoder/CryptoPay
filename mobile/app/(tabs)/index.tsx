@@ -1500,7 +1500,6 @@ export default function HomeScreen() {
             style={{
               flexDirection: "row",
               gap: 16,
-              maxWidth: 680,
             }}
           >
             <DesktopQuickActionCard
