@@ -25,6 +25,9 @@ function MenuItem({ icon, label, subtitle, onPress, danger }: MenuItemProps) {
     <Pressable
       onPress={onPress}
       className="flex-row items-center px-4 py-3.5 active:bg-dark-elevated"
+      style={{ minHeight: 48 }}
+      accessibilityRole="button"
+      accessibilityLabel={`${label}${subtitle ? `. ${subtitle}` : ""}`}
     >
       <Ionicons
         name={icon as any}
@@ -166,7 +169,11 @@ export default function ProfileScreen() {
           />
         </View>
 
-        <Text className="text-textMuted text-xs font-inter text-center mt-2 mb-6">
+        <Text
+          className="text-textMuted text-xs font-inter text-center mt-2 mb-6"
+          maxFontSizeMultiplier={1.3}
+          accessibilityLabel="M-Crypto version 1.0.0"
+        >
           M-Crypto v1.0.0
         </Text>
       </ScrollView>

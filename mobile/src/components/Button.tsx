@@ -8,6 +8,7 @@ interface ButtonProps {
   loading?: boolean;
   disabled?: boolean;
   icon?: React.ReactNode;
+  testID?: string;
 }
 
 const variantStyles = {
@@ -44,6 +45,7 @@ export function Button({
   loading = false,
   disabled = false,
   icon,
+  testID,
 }: ButtonProps) {
   return (
     <Pressable
@@ -52,6 +54,11 @@ export function Button({
       className={`flex-row items-center justify-center ${variantStyles[variant]} ${sizeStyles[size]} ${
         disabled ? "opacity-50" : ""
       }`}
+      style={{ minHeight: 48 }}
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      accessibilityState={{ disabled: disabled || loading, busy: loading }}
+      testID={testID}
     >
       {loading ? (
         <ActivityIndicator color="#fff" size="small" />
@@ -60,6 +67,7 @@ export function Button({
           {icon}
           <Text
             className={`font-inter-semibold ${variantTextStyles[variant]} ${sizeTextStyles[size]}`}
+            maxFontSizeMultiplier={1.3}
           >
             {title}
           </Text>

@@ -16,6 +16,7 @@ import { useWallets } from "../../src/hooks/useWallets";
 import { useTransactions } from "../../src/hooks/useTransactions";
 import { TransactionItem } from "../../src/components/TransactionItem";
 import { StatusBadge } from "../../src/components/StatusBadge";
+import { WalletCardSkeleton, TransactionSkeleton } from "../../src/components/Skeleton";
 import { ratesApi, Rate } from "../../src/api/rates";
 import { CURRENCIES, CurrencyCode, colors } from "../../src/constants/theme";
 
@@ -62,6 +63,10 @@ export default function WalletScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
+    // Clear clipboard after 30s for security
+    setTimeout(() => {
+      Clipboard.setStringAsync("").catch(() => {});
+    }, 30000);
   };
 
   const cryptoWallets = wallets?.filter((w) => w.currency !== "KES") || [];
@@ -458,8 +463,15 @@ export default function WalletScreen() {
                   Haptics.notificationAsync(
                     Haptics.NotificationFeedbackType.Success
                   );
+                  // Clear clipboard after 30s for security
+                  setTimeout(() => {
+                    Clipboard.setStringAsync("").catch(() => {});
+                  }, 30000);
                 }
               }}
+              accessibilityRole="button"
+              accessibilityLabel="Copy deposit address"
+              accessibilityHint="Copies the address to clipboard. It will be cleared after 30 seconds."
               style={{
                 backgroundColor: colors.dark.bg,
                 borderRadius: 12,
