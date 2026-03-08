@@ -61,10 +61,10 @@ export default function LoginScreen() {
               <Ionicons name="wallet" size={32} color="#fff" />
             </View>
             <Text className="text-white text-2xl font-inter-bold" maxFontSizeMultiplier={1.3}>
-              M-Crypto
+              CryptoPay
             </Text>
             <Text className="text-textSecondary text-sm font-inter mt-1" maxFontSizeMultiplier={1.3}>
-              Crypto to M-Pesa, instantly
+              Pay bills with crypto, instantly
             </Text>
           </View>
 

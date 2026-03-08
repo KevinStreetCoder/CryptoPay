@@ -39,6 +39,6 @@ export const config: AppConfig = {
   environment,
   isDev: environment === "development",
   isProd: environment === "production",
-  appName: Constants.expoConfig?.name ?? "M-Crypto",
+  appName: Constants.expoConfig?.name ?? "CryptoPay",
   appVersion: Constants.expoConfig?.version ?? "1.0.0",
 };

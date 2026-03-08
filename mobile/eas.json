@@ -28,7 +28,7 @@
       },
       "env": {
         "APP_ENV": "preview",
-        "API_URL": "https://staging-api.mcrypto.co.ke/api/v1"
+        "API_URL": "https://staging-api.cryptopay.co.ke/api/v1"
       }
     },
     "production": {
@@ -42,14 +42,14 @@
       },
       "env": {
         "APP_ENV": "production",
-        "API_URL": "https://api.mcrypto.co.ke/api/v1"
+        "API_URL": "https://api.cryptopay.co.ke/api/v1"
       }
     }
   },
   "submit": {
     "production": {
       "ios": {
-        "appleId": "developer@mcrypto.co.ke",
+        "appleId": "developer@cryptopay.co.ke",
         "ascAppId": "YOUR_APP_STORE_CONNECT_APP_ID",
         "appleTeamId": "YOUR_APPLE_TEAM_ID"
       },

@@ -116,7 +116,7 @@
 ### Infrastructure
 - [ ] **VPS deployment** — Hetzner/Contabo setup
 - [ ] **SSL certificates** — Cloudflare or Let's Encrypt
-- [ ] **Domain setup** — cryptopay.co.ke / mcrypto.co.ke
+- [ ] **Domain setup** — cryptopay.co.ke / cryptopay.co.ke
 - [ ] **Monitoring** — Sentry (config ready), Grafana/Prometheus
 - [ ] **Backup strategy** — PostgreSQL automated backups
 - [ ] **Rate limiting at proxy** — Nginx/Cloudflare rate limiting
