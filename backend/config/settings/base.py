@@ -1,0 +1,215 @@
+import os
+from datetime import timedelta
+from pathlib import Path
+
+import environ
+
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+
+env = environ.Env()
+env.read_env(os.path.join(BASE_DIR, ".env"))
+
+SECRET_KEY = env("SECRET_KEY")
+DEBUG = env.bool("DEBUG", default=False)
+ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
+
+# --- Apps ---
+DJANGO_APPS = [
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+]
+
+THIRD_PARTY_APPS = [
+    "rest_framework",
+    "corsheaders",
+    "django_filters",
+    "django_celery_beat",
+]
+
+LOCAL_APPS = [
+    "apps.core",
+    "apps.accounts",
+    "apps.wallets",
+    "apps.payments",
+    "apps.mpesa",
+    "apps.blockchain",
+    "apps.rates",
+]
+
+INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
+
+# --- Middleware ---
+MIDDLEWARE = [
+    "django.middleware.security.SecurityMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "apps.core.middleware.AuditMiddleware",
+    "apps.mpesa.middleware.MpesaIPWhitelistMiddleware",
+]
+
+ROOT_URLCONF = "config.urls"
+
+TEMPLATES = [
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [BASE_DIR / "templates"],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.debug",
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
+            ],
+        },
+    },
+]
+
+WSGI_APPLICATION = "config.wsgi.application"
+
+# --- Database ---
+DATABASES = {
+    "default": env.db("DATABASE_URL", default="postgres://cryptopay:cryptopay@localhost:5432/cryptopay"),
+}
+
+# --- Auth ---
+AUTH_USER_MODEL = "accounts.User"
+
+AUTH_PASSWORD_VALIDATORS = [
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+]
+
+# --- Internationalization ---
+LANGUAGE_CODE = "en-us"
+TIME_ZONE = "Africa/Nairobi"
+USE_I18N = True
+USE_TZ = True
+
+# --- Static ---
+STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# --- Redis ---
+REDIS_URL = env("REDIS_URL", default="redis://localhost:6379/0")
+
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": REDIS_URL,
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        },
+    }
+}
+
+# --- Celery ---
+CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="redis://localhost:6379/1")
+CELERY_RESULT_BACKEND = CELERY_BROKER_URL
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TIMEZONE = "Africa/Nairobi"
+CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
+
+# --- DRF ---
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ),
+    "DEFAULT_PERMISSION_CLASSES": (
+        "rest_framework.permissions.IsAuthenticated",
+    ),
+    "DEFAULT_FILTER_BACKENDS": (
+        "django_filters.rest_framework.DjangoFilterBackend",
+        "rest_framework.filters.OrderingFilter",
+    ),
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 20,
+    "DEFAULT_THROTTLE_CLASSES": (
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ),
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "30/minute",
+        "user": "120/minute",
+    },
+}
+
+# --- JWT ---
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+    "ALGORITHM": "HS256",
+    "AUTH_HEADER_TYPES": ("Bearer",),
+}
+
+# --- CORS ---
+CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=["http://localhost:3000"])
+
+# --- M-Pesa ---
+MPESA_ENVIRONMENT = env("MPESA_ENVIRONMENT", default="sandbox")
+MPESA_CONSUMER_KEY = env("MPESA_CONSUMER_KEY", default="")
+MPESA_CONSUMER_SECRET = env("MPESA_CONSUMER_SECRET", default="")
+MPESA_SHORTCODE = env("MPESA_SHORTCODE", default="174379")
+MPESA_PASSKEY = env("MPESA_PASSKEY", default="")
+MPESA_INITIATOR_NAME = env("MPESA_INITIATOR_NAME", default="")
+MPESA_INITIATOR_PASSWORD = env("MPESA_INITIATOR_PASSWORD", default="")
+MPESA_B2C_SHORTCODE = env("MPESA_B2C_SHORTCODE", default="")
+MPESA_CALLBACK_BASE_URL = env("MPESA_CALLBACK_BASE_URL", default="https://localhost")
+MPESA_CERT_PATH = env("MPESA_CERT_PATH", default=str(BASE_DIR / "certs" / "sandbox.pem"))
+MPESA_ALLOWED_IPS = env.list("MPESA_ALLOWED_IPS", default=[
+    "196.201.214.0/24",
+    "196.201.213.0/24",
+    "196.201.212.0/24",
+    "192.168.0.0/16",
+    "127.0.0.0/8",
+])
+
+# --- Africa's Talking ---
+AT_API_KEY = env("AT_API_KEY", default="")
+AT_USERNAME = env("AT_USERNAME", default="sandbox")
+AT_SENDER_ID = env("AT_SENDER_ID", default="CryptoPay")
+
+# --- CoinGecko ---
+COINGECKO_API_KEY = env("COINGECKO_API_KEY", default="")
+
+# --- Google OAuth ---
+GOOGLE_CLIENT_ID = env("GOOGLE_CLIENT_ID", default="")
+
+# --- Rate Engine ---
+RATE_LOCK_TTL_SECONDS = 30
+PLATFORM_SPREAD_PERCENT = 1.5
+FLAT_FEE_KES = 10
+
+# --- Blockchain ---
+TRON_API_KEY = env("TRON_API_KEY", default="")
+TRON_NETWORK = env("TRON_NETWORK", default="shasta")
+
+REQUIRED_CONFIRMATIONS = {
+    "tron": 19,
+    "ethereum": 12,
+    "polygon": 128,
+    "bitcoin": 3,
+    "solana": 32,
+}
+
+# --- KYC Tiers ---
+KYC_DAILY_LIMITS = {
+    0: 5_000,       # KES - phone only
+    1: 50_000,      # KES - ID verified
+    2: 250_000,     # KES - KRA PIN
+    3: 1_000_000,   # KES - enhanced DD
+}

@@ -1,0 +1,180 @@
+"""
+Payment Saga Orchestrator
+
+Implements the saga pattern for crypto-to-M-Pesa payments:
+  Step 1: Lock crypto in user wallet
+  Step 2: Convert crypto → KES at locked rate
+  Step 3: Initiate M-Pesa B2B payment
+  Step 4: Await M-Pesa callback / poll status
+  Step 5: Finalize ledger entries and notify user
+
+Each step has a compensating action for rollback on failure.
+"""
+
+import logging
+from decimal import Decimal
+
+from django.db import transaction as db_transaction
+from django.utils import timezone
+
+from apps.wallets.services import InsufficientBalanceError, WalletService
+
+from .models import Transaction
+
+logger = logging.getLogger(__name__)
+
+
+class SagaError(Exception):
+    pass
+
+
+class PaymentSaga:
+    """Orchestrates a crypto-to-Paybill/Till payment."""
+
+    def __init__(self, transaction: Transaction):
+        self.tx = transaction
+
+    def execute(self):
+        """Run the saga steps sequentially. Compensate on failure."""
+        steps = [
+            (self.step_lock_crypto, self.compensate_lock_crypto),
+            (self.step_convert, self.compensate_convert),
+            (self.step_initiate_mpesa, self.compensate_mpesa),
+        ]
+
+        completed_compensations = []
+
+        for i, (step_fn, compensate_fn) in enumerate(steps):
+            try:
+                self.tx.saga_step = i + 1
+                self.tx.status = Transaction.Status.PROCESSING
+                self.tx.save(update_fields=["saga_step", "status", "updated_at"])
+
+                step_fn()
+                completed_compensations.append(compensate_fn)
+
+            except Exception as e:
+                logger.error(f"Saga step {i + 1} failed for tx {self.tx.id}: {e}")
+                self.tx.failure_reason = str(e)
+                self.tx.status = Transaction.Status.FAILED
+                self.tx.save(update_fields=["failure_reason", "status", "updated_at"])
+
+                # Compensate in reverse order
+                for compensate in reversed(completed_compensations):
+                    try:
+                        compensate()
+                    except Exception as comp_error:
+                        logger.critical(
+                            f"Compensation failed for tx {self.tx.id}: {comp_error}"
+                        )
+                raise SagaError(f"Payment saga failed at step {i + 1}: {e}") from e
+
+    def step_lock_crypto(self):
+        """Step 1: Lock the crypto amount in the user's wallet."""
+        wallet = self.tx.user.wallets.get(currency=self.tx.source_currency)
+
+        try:
+            WalletService.lock_funds(wallet.id, self.tx.source_amount)
+        except InsufficientBalanceError:
+            raise SagaError("Insufficient crypto balance")
+
+        self.tx.saga_data["locked_wallet_id"] = str(wallet.id)
+        self.tx.saga_data["locked_amount"] = str(self.tx.source_amount)
+        self.tx.save(update_fields=["saga_data"])
+
+    def compensate_lock_crypto(self):
+        """Reverse Step 1: Unlock the crypto."""
+        wallet_id = self.tx.saga_data.get("locked_wallet_id")
+        amount = Decimal(self.tx.saga_data.get("locked_amount", "0"))
+        if wallet_id and amount > 0:
+            WalletService.unlock_funds(wallet_id, amount)
+            logger.info(f"Compensated: unlocked {amount} for tx {self.tx.id}")
+
+    def step_convert(self):
+        """Step 2: Execute the conversion at the locked rate."""
+        # The rate was locked when the quote was created.
+        # Here we record the conversion in the ledger.
+        wallet_id = self.tx.saga_data["locked_wallet_id"]
+        amount = Decimal(self.tx.saga_data["locked_amount"])
+
+        with db_transaction.atomic():
+            # Unlock the funds first
+            WalletService.unlock_funds(wallet_id, amount)
+            # Debit the crypto from the user
+            WalletService.debit(
+                wallet_id,
+                amount,
+                self.tx.id,
+                f"Crypto conversion for {self.tx.type} - {self.tx.mpesa_paybill or self.tx.mpesa_till}",
+            )
+
+        self.tx.saga_data["conversion_completed"] = True
+        self.tx.save(update_fields=["saga_data"])
+
+    def compensate_convert(self):
+        """Reverse Step 2: Credit back the crypto."""
+        if self.tx.saga_data.get("conversion_completed"):
+            wallet_id = self.tx.saga_data["locked_wallet_id"]
+            amount = Decimal(self.tx.saga_data["locked_amount"])
+            WalletService.credit(
+                wallet_id,
+                amount,
+                self.tx.id,
+                f"Reversal: conversion for tx {self.tx.id}",
+            )
+            logger.info(f"Compensated: reversed conversion for tx {self.tx.id}")
+
+    def step_initiate_mpesa(self):
+        """Step 3: Call M-Pesa B2B API to pay the Paybill/Till."""
+        from apps.mpesa.client import MpesaClient
+
+        client = MpesaClient()
+
+        if self.tx.mpesa_paybill:
+            result = client.b2b_payment(
+                paybill=self.tx.mpesa_paybill,
+                account=self.tx.mpesa_account,
+                amount=int(self.tx.dest_amount),
+                remarks=f"CryptoPay-{self.tx.id}",
+            )
+        elif self.tx.mpesa_till:
+            result = client.buy_goods(
+                till=self.tx.mpesa_till,
+                amount=int(self.tx.dest_amount),
+                remarks=f"CryptoPay-{self.tx.id}",
+            )
+        else:
+            raise SagaError("No Paybill or Till number specified")
+
+        self.tx.saga_data["mpesa_conversation_id"] = result.get("ConversationID", "")
+        self.tx.saga_data["mpesa_originator_id"] = result.get("OriginatorConversationID", "")
+        self.tx.status = Transaction.Status.CONFIRMING
+        self.tx.save(update_fields=["saga_data", "status", "updated_at"])
+
+    def compensate_mpesa(self):
+        """Reverse Step 3: Request M-Pesa reversal if payment went through."""
+        mpesa_receipt = self.tx.mpesa_receipt
+        if mpesa_receipt:
+            from apps.mpesa.client import MpesaClient
+
+            try:
+                client = MpesaClient()
+                client.reversal(
+                    transaction_id=mpesa_receipt,
+                    amount=int(self.tx.dest_amount),
+                    remarks=f"Reversal for CryptoPay-{self.tx.id}",
+                )
+                logger.info(f"Compensated: M-Pesa reversal requested for tx {self.tx.id}")
+            except Exception as e:
+                logger.critical(
+                    f"M-Pesa reversal failed for tx {self.tx.id}: {e}. "
+                    f"MANUAL INTERVENTION REQUIRED."
+                )
+
+    def complete(self, mpesa_receipt: str):
+        """Called when M-Pesa callback confirms success."""
+        self.tx.mpesa_receipt = mpesa_receipt
+        self.tx.status = Transaction.Status.COMPLETED
+        self.tx.completed_at = timezone.now()
+        self.tx.save(update_fields=["mpesa_receipt", "status", "completed_at", "updated_at"])
+        logger.info(f"Payment completed: tx {self.tx.id}, receipt {mpesa_receipt}")
