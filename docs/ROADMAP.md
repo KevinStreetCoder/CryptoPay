@@ -268,6 +268,21 @@ Use case: Payroll platforms, remittance services, and crypto exchanges that need
 | Norrsken VC | Impact VC | Africa-focused, financial inclusion mandate |
 | Future Africa | VC | African founders, pre-seed/seed, fintech portfolio |
 
+### Updated Market Data (March 2026)
+
+| Metric | Value | Source |
+|--------|-------|--------|
+| Kenya crypto users | 730,000+ | Chainalysis 2025 |
+| Kenya stablecoin txns (12 mo) | KES 426.4B (~$3.3B) | Kenya Government |
+| Kenya global stablecoin rank | 5th | Chainalysis 2025 |
+| M-Pesa annual volume | KES 38.3T (~$295B) | Safaricom FY2025 |
+| M-Pesa active users | ~34M subscribers | Safaricom 2025 |
+| Sub-Saharan Africa on-chain value | $205B (52% YoY) | Chainalysis 2025 |
+| Kenya remittances projected | $3.5B (2025) | World Bank |
+| Stablecoin remittance cost | 0.5-1% vs 4-7% traditional | Industry data |
+
+These numbers validate the pre-seed pitch metrics. Kenya's stablecoin transaction volume alone (~$3.3B) dwarfs the $100K/month volume target for Month 6.
+
 ### Valuation Projections
 
 | Stage | Timeline | Projected Valuation | Basis |
@@ -425,12 +440,30 @@ VASP license costs (when regulations are published) could add KES 5M -- 10M in m
 
 ---
 
-## 9. Risk Matrix
+## 9. Competitive Landscape (Updated March 2026)
+
+**Key Finding: ZERO competitors offer direct crypto-to-Paybill/Till payment.**
+
+| Competitor | Kenya Services | Crypto→Paybill? | Key Intel |
+|-----------|---------------|-----------------|-----------|
+| **Yellow Card** | B2B stablecoin infra (API only) | NO | Exited retail Jan 2026, $3B+ processed 2024, helped draft VASP Act |
+| **Bitnob** | Buy/sell crypto, M-Pesa on/off-ramp | NO | Active in 8 countries, virtual USD card |
+| **Kotani Pay** | B2B stablecoin off-ramp API | NO (API-only) | Tether strategic investment Oct 2025, USSD access |
+| **Fonbnk** | Airtime/M-Pesa → stablecoin swap | NO | P2P model, airtime-as-on-ramp |
+| **ZendWallet** | Crypto → M-Pesa cash-out | NO | Off-ramp only, no bill payment |
+| **Luno** | Buy/sell/hold crypto, KES pairs | NO | Relaunched Kenya mid-2025, traditional exchange |
+| **Binance** | Full exchange, P2P with M-Pesa | NO | Accessible, no VASP license yet |
+
+**Strategic Opportunity:** Yellow Card's exit from retail (Jan 2026) created a consumer-facing gap. Their API can be CryptoPay's liquidity backbone while we own the consumer experience. 99%+ of their volume was stablecoins — validates our USDT-first approach.
+
+---
+
+## 10. Risk Matrix
 
 | Risk | Severity | Likelihood | Category | Mitigation |
 |------|----------|------------|----------|------------|
-| VASP license denied or delayed | HIGH | MEDIUM | Regulatory | Engage fintech lawyer early (Bowmans, AMG Advocates), prepare AML/KYC documentation before applying, explore regulatory sandbox |
-| Safaricom blocks crypto-related Paybills | HIGH | MEDIUM | Regulatory | Register Paybill under compliant fintech/payment processor category, never as "crypto exchange"; maintain direct Safaricom relationship |
+| VASP license denied or delayed | HIGH | MEDIUM | Regulatory | Engage fintech lawyer early (Bowmans, AMG Advocates, KDS Advocates), prepare AML/KYC documentation before applying, explore regulatory sandbox (Act identifies this as priority). Implementing regulations expected mid-2026. |
+| Safaricom blocks crypto-related Paybills | HIGH | MEDIUM | Regulatory | **Lipisha v Safaricom precedent:** court upheld Safaricom's right to terminate unlicensed crypto businesses. Get VASP license FIRST. Register Paybill as "digital asset payment service" not "crypto exchange". Daraja 3.0 may have updated policies. |
 | M-Pesa float depletion | HIGH | MEDIUM | Operational | Automated monitoring every 5 minutes, threshold alerts at KES 500K/300K/200K, auto-rebalance from crypto pool, multi-source top-up |
 | Trusting frontend transaction hashes | CRITICAL | N/A (mitigated) | Security | Already implemented: server-side blockchain listener detects all deposits independently; backend never accepts client-submitted tx hashes |
 | Double-payment execution | HIGH | N/A (mitigated) | Security | Already implemented: 3-layer idempotency (client UUID, Redis SET NX, PostgreSQL UNIQUE constraint) |

@@ -396,13 +396,14 @@ eas build --platform ios --profile production
 
 ## Documentation Index
 
-| Document | Purpose |
-|----------|---------|
-| [PROGRESS.md](./PROGRESS.md) | This file — development status and test results |
-| [ROADMAP.md](./ROADMAP.md) | Strategic roadmap, fundraising, go-to-market, expansion plans |
-| [SYSTEM-DESIGN.md](./SYSTEM-DESIGN.md) | Technical architecture, liquidity engine, payment saga, security |
-| [STARTUP-CHECKLIST.md](./STARTUP-CHECKLIST.md) | Legal, regulatory, financial checklists |
-| [research/](./research/) | Competitor analysis, API research, security audit, regulations |
+| Document | Purpose | Last Updated |
+|----------|---------|-------------|
+| [PROGRESS.md](./PROGRESS.md) | This file — development status and test results | 2026-03-09 |
+| [ROADMAP.md](./ROADMAP.md) | Strategic roadmap, fundraising, go-to-market, expansion plans, competitive landscape | 2026-03-09 |
+| [SYSTEM-DESIGN.md](./SYSTEM-DESIGN.md) | Technical architecture, liquidity engine, payment saga, security, regulatory compliance | 2026-03-09 |
+| [STARTUP-CHECKLIST.md](./STARTUP-CHECKLIST.md) | Legal, regulatory, financial checklists — updated with VASP Act 2025 requirements | 2026-03-09 |
+| [research/IMPLEMENTATION-RESEARCH-2026-03-09.md](./research/IMPLEMENTATION-RESEARCH-2026-03-09.md) | **Comprehensive research:** playbook verification, all APIs/tools/pricing, regulatory deep-dive, competitor analysis | 2026-03-09 |
+| [research/](./research/) | All research files: competitor analysis, API research, security audit, regulations | Ongoing |
 
 ## File Count Summary
 
