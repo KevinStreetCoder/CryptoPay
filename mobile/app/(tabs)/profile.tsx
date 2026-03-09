@@ -256,7 +256,7 @@ export default function ProfileScreen() {
           <View
             style={{
               flexDirection: "row",
-              maxWidth: 1400,
+              maxWidth: 1600,
               width: "100%",
               alignSelf: "center",
               paddingHorizontal: 32,

@@ -251,8 +251,8 @@ export default function HelpScreen() {
     Linking.openURL("https://x.com/CryptoPayKE");
   };
 
-  const contentMaxW = isDesktop ? 860 : undefined;
   const isLargeDesktop = isWeb && width >= 1100;
+  const contentMaxW = isLargeDesktop ? 1200 : isDesktop ? 960 : undefined;
 
   const content = (
     <ScrollView

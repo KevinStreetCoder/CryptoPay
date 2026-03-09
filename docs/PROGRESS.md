@@ -259,20 +259,34 @@
 
 ---
 
-## What's NOT Done Yet (Phase 3 — Infrastructure & Launch)
+## Phase 3 — Infrastructure & Launch (In Progress)
 
-### Backend / Blockchain
+**Last updated:** 2026-03-09
+
+### Production Infrastructure — IMPLEMENTED ✅
+
+| Component | Status | Details |
+|-----------|--------|---------|
+| Nginx reverse proxy | ✅ Done | `nginx/nginx.conf` + `locations.conf` — rate limiting zones (auth, API, general), security headers, gzip, SSL-ready |
+| Docker Compose production | ✅ Done | `docker-compose.prod.yml` — memory limits, Nginx service, worker tuning, max-requests recycling |
+| Database backups | ✅ Done | `scripts/backup-db.sh` — automated pg_dump with gzip, 30-day retention, cron-ready |
+| Admin dashboard improvements | ✅ Done | Auto-refresh (60s), system health panel, 3-column grid on large screens, wider layout (1800px) |
+| Responsive desktop layouts | ✅ Done | All pages optimized for 900/1200/1500px breakpoints, live stats bar, wider padding |
+| Rate limiting at proxy level | ✅ Done | Nginx rate zones: auth (10r/m), API (30r/m), general (60r/m) with burst handling |
+
+### Remaining Phase 3 Items
+
+#### Backend / Blockchain
 - [ ] **Production HD wallets** — Replace HMAC derivation with BIP-32/44 or Fireblocks custody API
 - [ ] **External wallet connection** — WalletConnect / Phantom deep link integration
 - [ ] **SOL/ETH/BTC deposit monitoring** — Only Tron deposit listener implemented so far
 
-### Infrastructure
-- [ ] **VPS deployment + SSL + domain** — Hetzner/Contabo, Cloudflare/Let's Encrypt, cryptopay.co.ke
-- [ ] **Monitoring** — Sentry (config ready), Grafana/Prometheus
-- [ ] **Rate limiting at proxy level** — Nginx/Cloudflare rate limiting
-- [ ] **Database backups** — PostgreSQL automated backup strategy
+#### Infrastructure
+- [ ] **VPS deployment + SSL + domain** — Hetzner/Contabo, Let's Encrypt, cryptopay.co.ke
+- [ ] **Monitoring dashboards** — Sentry configured, add Grafana/Prometheus for metrics
+- [ ] **SSL certificate provisioning** — Certbot automation with Nginx
 
-### Launch
+#### Launch
 - [ ] **App Store / Play Store submission** — EAS production builds, store listings, review
 
 ---

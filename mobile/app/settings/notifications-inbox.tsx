@@ -97,8 +97,8 @@ export default function NotificationsInboxScreen() {
     );
   }, []);
 
-  const isDesktop = isWeb && width >= 768;
-  const maxWidth = isDesktop ? 860 : undefined;
+  const isDesktop = isWeb && width >= 900;
+  const maxWidth = isDesktop ? 1100 : undefined;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.dark.bg }}>

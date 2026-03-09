@@ -72,8 +72,9 @@ export default function PayScreen() {
   const { width } = useWindowDimensions();
 
   const isWeb = Platform.OS === "web";
-  const isDesktop = isWeb && width >= 768;
-  const hPad = isDesktop ? 28 : 16;
+  const isDesktop = isWeb && width >= 900;
+  const isLargeDesktop = isWeb && width >= 1200;
+  const hPad = isLargeDesktop ? 40 : isDesktop ? 32 : 16;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.dark.bg }}>
@@ -111,7 +112,7 @@ export default function PayScreen() {
             style={{
               flexDirection: "row",
               paddingHorizontal: hPad,
-              gap: 20,
+              gap: isLargeDesktop ? 28 : 20,
               marginTop: 12,
             }}
           >
@@ -121,8 +122,8 @@ export default function PayScreen() {
                 <Pressable
                   key={option.id}
                   onPress={() => router.push(option.route)}
-                  style={({ pressed }) => ({
-                    backgroundColor: colors.dark.card,
+                  style={({ pressed, hovered }: any) => ({
+                    backgroundColor: hovered ? colors.dark.elevated : colors.dark.card,
                     borderRadius: 24,
                     padding: 22,
                     flexDirection: "row",
@@ -130,9 +131,13 @@ export default function PayScreen() {
                     borderWidth: 1,
                     borderColor: pressed
                       ? colors.primary[500] + "4D"
-                      : colors.glass.border,
+                      : hovered
+                        ? colors.glass.borderStrong
+                        : colors.glass.border,
                     opacity: pressed ? 0.85 : 1,
                     transform: [{ scale: pressed ? 0.98 : 1 }],
+                    ...(isWeb ? { cursor: "pointer", transition: "all 0.2s ease" } as any : {}),
+                    ...shadows.sm,
                   })}
                 >
                   <View

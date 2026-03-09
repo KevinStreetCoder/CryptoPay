@@ -143,8 +143,10 @@ function PortfolioChart({
   chartLabels,
   changePercent,
 }: PortfolioChartProps) {
-  const chartWidth = 280;
-  const chartHeight = 100;
+  const { width: windowWidth } = useWindowDimensions();
+  const isDesktopChart = Platform.OS === "web" && windowWidth >= 900;
+  const chartWidth = isDesktopChart ? Math.min(windowWidth * 0.25, 400) : 280;
+  const chartHeight = isDesktopChart ? 120 : 100;
   const hasData = chartPoints.some((v) => v > 0);
 
   const maxVal = hasData ? Math.max(...chartPoints) : 1;
@@ -784,7 +786,9 @@ export default function HomeScreen() {
   const { width } = useWindowDimensions();
   const isWeb = Platform.OS === "web";
   const isDesktop = isWeb && width >= 900;
-  const hPad = isDesktop ? 32 : 16;
+  const isLargeDesktop = isWeb && width >= 1200;
+  const isXLDesktop = isWeb && width >= 1500;
+  const hPad = isXLDesktop ? 48 : isLargeDesktop ? 40 : isDesktop ? 32 : 16;
   const {
     data: wallets,
     refetch: refetchWallets,
@@ -1460,19 +1464,125 @@ export default function HomeScreen() {
           </Pressable>
         </View>
 
+        {/* Live Stats Row — visible on large desktop */}
+        {isLargeDesktop && tickerRates.length > 0 && (
+          <View
+            style={{
+              flexDirection: "row",
+              gap: 16,
+              marginBottom: 20,
+            }}
+          >
+            {tickerRates.slice(0, 4).map((tr) => {
+              const isPos = tr.change24h >= 0;
+              const changeColor = isPos ? colors.primary[400] : colors.error;
+              const cur = CHART_CURRENCIES.find((c) => c.symbol === tr.symbol);
+              return (
+                <View
+                  key={tr.symbol}
+                  style={{
+                    flex: 1,
+                    backgroundColor: colors.dark.card,
+                    borderRadius: 14,
+                    paddingHorizontal: 18,
+                    paddingVertical: 14,
+                    borderWidth: 1,
+                    borderColor: colors.glass.border,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 12,
+                    ...shadows.sm,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 10,
+                      backgroundColor: (cur?.color || colors.primary[400]) + "1A",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: cur?.color || colors.primary[400],
+                        fontSize: 16,
+                        fontFamily: "Inter_700Bold",
+                      }}
+                    >
+                      {(CURRENCIES as any)[tr.symbol]?.iconSymbol || tr.symbol[0]}
+                    </Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={{
+                        color: colors.textPrimary,
+                        fontSize: 14,
+                        fontFamily: "Inter_600SemiBold",
+                      }}
+                      numberOfLines={1}
+                    >
+                      KES {tr.rate >= 1000
+                        ? tr.rate.toLocaleString(undefined, { maximumFractionDigits: 0 })
+                        : tr.rate.toFixed(2)}
+                    </Text>
+                    <Text
+                      style={{
+                        color: colors.textMuted,
+                        fontSize: 11,
+                        fontFamily: "Inter_400Regular",
+                      }}
+                    >
+                      {tr.symbol}
+                    </Text>
+                  </View>
+                  <View
+                    style={{
+                      backgroundColor: changeColor + "1A",
+                      borderRadius: 6,
+                      paddingHorizontal: 8,
+                      paddingVertical: 3,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: changeColor,
+                        fontSize: 11,
+                        fontFamily: "Inter_600SemiBold",
+                      }}
+                    >
+                      {isPos ? "+" : ""}{tr.change24h.toFixed(2)}%
+                    </Text>
+                  </View>
+                  {/* Pulsing live dot */}
+                  <View
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: 3,
+                      backgroundColor: colors.primary[400],
+                    }}
+                  />
+                </View>
+              );
+            })}
+          </View>
+        )}
+
         {/* Row 1: Balance Card (60%) + Portfolio Chart (40%) */}
         <View
           style={{
             flexDirection: "row",
-            gap: 20,
+            gap: isLargeDesktop ? 24 : 20,
             marginBottom: 24,
           }}
         >
-          <View style={{ flex: 6 }}>
+          <View style={{ flex: isXLDesktop ? 7 : 6 }}>
             {wallets && <BalanceCard wallets={wallets} />}
             {walletsLoading && <BalanceCardSkeleton />}
           </View>
-          <View style={{ flex: 4 }}>
+          <View style={{ flex: isXLDesktop ? 3 : 4 }}>
             <PortfolioChart
               chartPoints={chartPoints}
               chartLabels={chartLabels}
@@ -1550,7 +1660,7 @@ export default function HomeScreen() {
         <View
           style={{
             flexDirection: "row",
-            gap: 20,
+            gap: isLargeDesktop ? 24 : 20,
             marginBottom: 24,
           }}
         >

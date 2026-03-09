@@ -390,8 +390,8 @@ export default function SettingsScreen() {
     }
   };
 
-  const contentMaxW = isDesktop ? 860 : undefined;
   const isLargeDesktop = isWeb && width >= 1100;
+  const contentMaxW = isLargeDesktop ? 1200 : isDesktop ? 860 : undefined;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.dark.bg }}>
