@@ -380,6 +380,131 @@ B2C: Max KES 250,000 per transaction
 
 ---
 
+## 5.5 Liquidity Engine (Critical System)
+
+The Liquidity Engine is CryptoPay's operational core. It manages two pools that enable instant crypto-to-KES payments without waiting for exchange settlement.
+
+### Dual-Pool Model
+
+```
+┌──────────────────────┐    ┌──────────────────────┐
+│     CRYPTO POOL       │    │      KES POOL         │
+│                       │    │                       │
+│  USDT: 20,000         │    │  M-Pesa Float:        │
+│  BTC:  0.5            │    │  KES 2,000,000        │
+│  ETH:  5.0            │    │                       │
+│  SOL:  100            │    │  Bank Account:        │
+│                       │    │  KES 3,000,000        │
+└───────────┬───────────┘    └───────────┬───────────┘
+            │                            │
+            │    USER PAYS BILL          │
+            │    ──────────────>         │
+            │    Crypto pool +           │
+            │    KES pool -              │
+            │                            │
+            │    USER BUYS CRYPTO        │
+            │    <──────────────         │
+            │    Crypto pool -           │
+            │    KES pool +              │
+            └────────────────────────────┘
+```
+
+### Threshold Alerts (4 Levels)
+
+| Level | KES Float | Action |
+|-------|-----------|--------|
+| Healthy | > 1,500,000 | Normal operations |
+| Warning | < 800,000 | Alert ops team, begin rebalance |
+| Critical | < 500,000 | Auto-sell crypto, pause large payments (>50K) |
+| Emergency | < 200,000 | Pause ALL outgoing payments, emergency top-up |
+
+### Automated Rebalancing
+
+```python
+# Pseudocode for liquidity rebalancing
+def rebalance():
+    kes_balance = get_mpesa_float()
+    target = 1_500_000  # KES
+
+    if kes_balance < 800_000:
+        deficit = target - kes_balance
+        # Sell crypto to cover deficit
+        sell_amount_usd = deficit / get_usd_kes_rate()
+        execute_sell(asset="USDT", amount=sell_amount_usd, exchange="binance")
+        # Settlement: Exchange → Bank → M-Pesa float (1-24h)
+        notify_ops(f"Rebalancing: selling ${sell_amount_usd} USDT to cover KES deficit")
+
+    if kes_balance < 200_000:
+        pause_outgoing_payments()
+        alert_emergency("KES float critically low - all payments paused")
+```
+
+### Exchange Integration (Liquidity Sources)
+
+| Exchange | Use Case | Settlement |
+|----------|----------|-----------|
+| Binance | Primary crypto-to-fiat | 1-4 hours via P2P |
+| Yellow Card API | Programmatic sell | 15 min to M-Pesa |
+| OTC desks | Large orders (>$10K) | Same day |
+| Internal pool | Small payments (<$500) | Instant (pre-funded) |
+
+### CRITICAL Security Rule
+
+**Never trust frontend transaction hashes.** CryptoPay MUST detect deposits itself via blockchain listener.
+
+```
+BAD:  User submits tx hash → Backend executes payment (ATTACKABLE)
+GOOD: Blockchain listener detects tx → Verify address → Wait confirmations → Execute payment
+```
+
+Attack vectors this prevents: fake hashes, replace-by-fee attacks, dropped transactions.
+
+---
+
+## 5.6 Developer / B2B API (Phase 4)
+
+Third-party developers will integrate CryptoPay payments via REST API:
+
+### Endpoints
+
+```
+POST /api/v1/b2b/paybill
+{
+  "asset": "USDT",
+  "amount_kes": 1500,
+  "paybill": "888880",
+  "account": "123456",
+  "callback_url": "https://merchant.com/callback"
+}
+
+POST /api/v1/b2b/invoice
+{
+  "amount_kes": 5000,
+  "asset": "USDT",
+  "description": "School Fees - Term 2",
+  "expires_in": 3600
+}
+→ Returns: deposit address, QR code, amount_crypto, expiry
+
+POST /api/v1/b2b/payout
+{
+  "asset": "USDT",
+  "amount_kes": 3000,
+  "phone": "+254700000000"
+}
+→ Triggers B2C payout to user's M-Pesa
+```
+
+### API Pricing Tiers
+
+| Tier | Monthly Volume | Fee |
+|------|---------------|-----|
+| Starter | < $10K | 2.0% |
+| Growth | $10K-100K | 1.5% |
+| Enterprise | > $100K | Negotiated |
+
+---
+
 ## 6. Crypto Wallet Architecture
 
 ### HD Wallet System

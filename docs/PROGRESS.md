@@ -1,6 +1,9 @@
 # CryptoPay — Development Progress
 
-**Last updated:** 2026-03-08
+**Last updated:** 2026-03-09
+
+> See also: [ROADMAP.md](./ROADMAP.md) for strategic vision, fundraising, and expansion plans.
+> See also: [SYSTEM-DESIGN.md](./SYSTEM-DESIGN.md) for technical architecture and liquidity engine design.
 
 ---
 
@@ -391,9 +394,19 @@ eas build --platform ios --profile production
 
 ---
 
+## Documentation Index
+
+| Document | Purpose |
+|----------|---------|
+| [PROGRESS.md](./PROGRESS.md) | This file — development status and test results |
+| [ROADMAP.md](./ROADMAP.md) | Strategic roadmap, fundraising, go-to-market, expansion plans |
+| [SYSTEM-DESIGN.md](./SYSTEM-DESIGN.md) | Technical architecture, liquidity engine, payment saga, security |
+| [STARTUP-CHECKLIST.md](./STARTUP-CHECKLIST.md) | Legal, regulatory, financial checklists |
+| [research/](./research/) | Competitor analysis, API research, security audit, regulations |
+
 ## File Count Summary
 
 **Backend:** 50+ Python files across 7 apps
-**Frontend:** 30+ TypeScript/TSX files
-**Docs:** 7 documentation files
-**Config:** Docker, EAS, Tailwind, Metro, Babel, TypeScript configs
+**Frontend:** 35+ TypeScript/TSX files
+**Docs:** 10+ documentation files (architecture, research, roadmap)
+**Config:** Docker (dev + prod), Nginx, EAS, Metro, Babel, TypeScript, CI/CD
