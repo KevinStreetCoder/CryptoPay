@@ -183,6 +183,12 @@ def admin_stats_dashboard(request):
         for tx in recent_transactions_qs
     ]
 
+    # ── Celery task count (24h) ─────────────────────────────────────────
+    # Count transactions processed in last 24h as proxy for Celery activity
+    celery_tasks_24h = Transaction.objects.filter(
+        created_at__gte=now - timedelta(hours=24)
+    ).count()
+
     # ── Build Context ───────────────────────────────────────────────────
     context = {
         # Scalar stats
@@ -205,6 +211,8 @@ def admin_stats_dashboard(request):
         "region_distribution_json": json.dumps(region_distribution, cls=DecimalEncoder),
         "crypto_holdings_json": json.dumps(crypto_holdings, cls=DecimalEncoder),
         "recent_transactions_json": json.dumps(recent_transactions, cls=DecimalEncoder),
+        # System stats
+        "celery_tasks_24h": celery_tasks_24h,
         # Metadata
         "last_refresh": now.strftime("%Y-%m-%d %H:%M:%S %Z"),
     }

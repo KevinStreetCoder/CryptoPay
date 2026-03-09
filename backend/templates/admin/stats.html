@@ -39,9 +39,12 @@
         }
 
         .dashboard {
-            max-width: 1440px;
+            max-width: 1800px;
             margin: 0 auto;
-            padding: 24px;
+            padding: 24px 32px;
+        }
+        @media (min-width: 1600px) {
+            .dashboard { padding: 32px 48px; }
         }
 
         /* ── Header ─────────────────────────────────────── */
@@ -146,6 +149,10 @@
             grid-template-columns: repeat(2, 1fr);
             gap: 20px;
             margin-bottom: 24px;
+        }
+        @media (min-width: 1400px) {
+            .charts-grid { grid-template-columns: repeat(3, 1fr); }
+            .chart-card.full-width { grid-column: 1 / -1; }
         }
         @media (max-width: 960px) {
             .charts-grid { grid-template-columns: 1fr; }
@@ -389,6 +396,25 @@
         <div class="chart-card full-width">
             <div class="chart-title"><span class="dot"></span>Total Crypto Holdings by Currency</div>
             <div class="chart-container" id="holdings-chart"></div>
+        </div>
+    </div>
+
+    <!-- ═══ SYSTEM HEALTH ══════════════════════════════════════════ -->
+    <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin-bottom: 24px;">
+        <div class="stat-card green">
+            <div class="stat-icon" style="font-size:18px">&#x2764;</div>
+            <div class="stat-value" style="font-size:20px;color:var(--primary)">Healthy</div>
+            <div class="stat-label">API Server Status</div>
+        </div>
+        <div class="stat-card blue">
+            <div class="stat-icon" style="font-size:18px">&#x1F4E6;</div>
+            <div class="stat-value" style="font-size:20px">{{ celery_tasks_24h|default:"0" }}</div>
+            <div class="stat-label">Celery Tasks (24h)</div>
+        </div>
+        <div class="stat-card amber">
+            <div class="stat-icon" style="font-size:18px">&#x23F1;</div>
+            <div class="stat-value" style="font-size:20px" id="uptime-val">-</div>
+            <div class="stat-label">Page Auto-refresh (60s)</div>
         </div>
     </div>
 
@@ -789,6 +815,26 @@ function fmtShort(n) {
     });
     html += '</tbody></table>';
     wrap.html(html);
+})();
+
+// ═══════════════════════════════════════════════════════════════════════
+// 8. AUTO-REFRESH COUNTDOWN
+// ═══════════════════════════════════════════════════════════════════════
+(function() {
+    let countdown = 60;
+    const uptimeEl = document.getElementById('uptime-val');
+    if (!uptimeEl) return;
+
+    function tick() {
+        uptimeEl.textContent = countdown + 's';
+        if (countdown <= 0) {
+            window.location.reload();
+            return;
+        }
+        countdown--;
+        setTimeout(tick, 1000);
+    }
+    tick();
 })();
 </script>
 </body>

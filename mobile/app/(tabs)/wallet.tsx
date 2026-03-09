@@ -134,7 +134,8 @@ export default function WalletScreen() {
   const isWeb = Platform.OS === "web";
   const isDesktop = isWeb && width >= 900;
   const isLargeDesktop = isWeb && width >= 1200;
-  const hPad = isDesktop ? 32 : 16;
+  const isXLDesktop = isWeb && width >= 1500;
+  const hPad = isXLDesktop ? 48 : isLargeDesktop ? 40 : isDesktop ? 32 : 16;
   const { data: wallets, isLoading: walletsLoading, refetch: refetchWallets } = useWallets();
   const { data: txData, isLoading: txLoading, refetch: refetchTx } = useTransactions();
   const { data: rates } = useRates();
