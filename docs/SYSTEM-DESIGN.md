@@ -439,14 +439,21 @@ def rebalance():
         alert_emergency("KES float critically low - all payments paused")
 ```
 
-### Exchange Integration (Liquidity Sources)
+### Exchange Integration (Liquidity Sources) — Updated March 2026
 
-| Exchange | Use Case | Settlement |
-|----------|----------|-----------|
-| Binance | Primary crypto-to-fiat | 1-4 hours via P2P |
-| Yellow Card API | Programmatic sell | 15 min to M-Pesa |
-| OTC desks | Large orders (>$10K) | Same day |
-| Internal pool | Small payments (<$500) | Instant (pre-funded) |
+| Provider | Priority | Fee | Settlement | API Docs |
+|----------|----------|-----|-----------|----------|
+| **Yellow Card API** | PRIMARY | 2% (M-Pesa), 1% (bank) | Real-time | docs.yellowcard.engineering |
+| **Kotani Pay API** | SECONDARY | Custom | M-Pesa direct | docs.kotanipay.com |
+| **Paychant** | TERTIARY | Custom | M-Pesa support | developer.paychant.com |
+| **Internal pool** | INSTANT | N/A | Instant (pre-funded) | N/A |
+| **OTC desks** | LARGE ORDERS | Negotiated | Same day | Contact Yellow Card OTC |
+
+> **IMPORTANT:** Binance has NO P2P API for programmatic trading. Their P2P is manual-only with escrow. Do NOT plan to use Binance for automated off-ramp. Yellow Card API is the correct primary provider — they're Africa-native, support KES::Mobile (M-Pesa) disbursement, and process $3B+/year.
+>
+> **Yellow Card B2B Pivot (Jan 2026):** Yellow Card shut down their retail app Dec 31, 2025 and pivoted to enterprise/B2B only. Their API is now purpose-built for businesses like CryptoPay. Contact `paymentsapi@yellowcard.io` for KYB onboarding.
+>
+> **Kotani Pay:** Kenya-based, received strategic investment from Tether (Oct 2025). Supports USDT/USDC off-ramp to M-Pesa via API. Also offers USSD-based access for feature phones.
 
 ### CRITICAL Security Rule
 
@@ -570,15 +577,26 @@ async def monitor_deposits():
             if current_confirmations >= REQUIRED_CONFIRMATIONS[chain]:
                 credit_user_wallet(deposit)
 
-# Required confirmations per chain
+# Required confirmations per chain (updated March 2026)
 REQUIRED_CONFIRMATIONS = {
-    'bitcoin': 3,       # ~30 min
-    'ethereum': 12,     # ~3 min
+    'bitcoin': 3,       # ~30 min (use 6 for amounts >$10K)
+    'ethereum': 'finalized',  # Post-Merge: wait for finalized epoch (~6.4 min)
+                              # Old "12 blocks" rule is obsolete after PoS merge
     'tron': 19,         # ~1 min
     'polygon': 128,     # ~5 min
-    'solana': 32,       # ~15 sec
+    'solana': 'finalized',    # Use "finalized" commitment level (~5-12.8s)
+}
+
+# Blockchain monitoring API providers
+CHAIN_PROVIDERS = {
+    'tron': 'TronGrid (free: 15 QPS, 100K req/day)',
+    'ethereum': 'Alchemy (free: 30M CU/month) + Infura fallback',
+    'bitcoin': 'BlockCypher (free: 3 req/sec, paid: $50/mo)',
+    'solana': 'Helius (free: 1M credits, paid: $49/mo)',
 }
 ```
+
+> **NOTE (March 2026):** Ethereum confirmation counting changed after the Merge to Proof of Stake. Finality is now epoch-based, not block-count-based. Once a block is "finalized" (2 epochs, ~12.8 min), reverting it would require burning 1/3 of all staked ETH — effectively impossible. For moderate amounts, waiting for 1 finalized epoch (~6.4 min) is sufficient.
 
 ---
 
@@ -693,34 +711,63 @@ Layer 4 — M-Pesa:
 
 ## 9. Regulatory Compliance
 
-### VASP Act 2025 Requirements Checklist
+### VASP Act 2025 (Act No. 20 of 2025) — Now Law
 
-| Requirement | How We Comply |
-|-------------|--------------|
-| Kenyan-incorporated company | Register Ltd company with Registrar of Companies |
-| Physical office in Kenya | Nairobi office (can be shared/virtual initially) |
-| Kenyan bank account | Open business account (Equity/KCB/NCBA) |
-| KYC/AML program | Smile Identity for verification, transaction monitoring |
-| Kenyan board members | At least 1 Kenyan national director |
-| Cybersecurity measures | Penetration testing, encryption, access controls |
-| VASP license application | Apply to CBK (payment processor category) |
-| Minimum capital | TBD in regulations — budget KES 5-10M |
-| Insurance/trust account | Client funds segregation |
-| FATF Travel Rule | Implement originator/beneficiary data for transfers |
-| FRC reporting | Automated STR filing system |
+**Signed:** October 15, 2025 | **Gazetted:** October 21, 2025 | **Effective:** November 4, 2025
 
-### Tax Obligations
+The VASP Act is Kenya's first comprehensive crypto regulation and the first in East Africa. Dual oversight:
+- **CBK** — licenses stablecoins, custodial wallets, payment-related VASPs (this is CryptoPay)
+- **CMA** — licenses exchanges, brokers, token issuers, market operators
+
+**Penalties for non-compliance:** Fines up to KES 25 million (~$193,500) or imprisonment up to 5 years.
+
+**Implementing regulations:** Being drafted by CBK/CMA as of March 2026 (expected mid-2026). Existing operators had 6-month transition window from Nov 2025.
+
+### VASP License Requirements Checklist
+
+| Requirement | How We Comply | Status |
+|-------------|--------------|--------|
+| Kenyan-incorporated company | Register "CryptoPay Technologies Ltd" via eCitizen | Required |
+| Physical office in Kenya | Nairobi office (can be shared/virtual initially) | Required |
+| Kenyan bank account | Open business account (Equity/KCB/NCBA) | Required |
+| At least 1 Kenyan national director | Board composition requirement | Required |
+| KYC/AML program | Smile Identity (36M+ Kenya ID records) + transaction monitoring | Required |
+| FRC reporting | Designated Reporting Institution under POCAMLA — automated STR filing | Required |
+| FATF Travel Rule | Originator/beneficiary data for transfers >$1,000 | Required |
+| Cybersecurity policy + pentest | Penetration testing ($5-10K), encryption, access controls | Required |
+| VASP license from CBK | Payment processor category — apply when regulations published | Required |
+| Minimum paid-up capital | TBD in implementing regulations — budget KES 5-10M | Required |
+| Client funds segregation | Trust account or insurance for user deposits | Required |
+| Board-level governance | Compliance officer, board oversight of AML/CFT | Required |
+| Regular audits | Annual compliance audit by approved auditor | Required |
+
+### CRITICAL Legal Precedent: Lipisha/BitPesa v Safaricom (2015)
+
+Safaricom terminated M-Pesa access for BitPesa (crypto remittance business) because BitPesa operated without CBK authorization. The Kenyan High Court upheld Safaricom's right to do so. **This means:**
+
+1. **Get VASP license BEFORE applying for Daraja Paybill** — Safaricom will scrutinize crypto businesses
+2. Position CryptoPay as "digital asset payment service" not "crypto exchange" in all applications
+3. Having the VASP license in hand dramatically strengthens the Daraja go-live application
+4. Without a license, Safaricom can legally terminate your Paybill at any time
+
+The VASP Act now legitimizes crypto-M-Pesa relationships for **licensed** operators. Being among the first licensed VASPs is a significant competitive advantage.
+
+### Tax Obligations (Updated March 2026)
+
+| Tax | Rate | Applies To | Action |
+|-----|------|-----------|--------|
+| **Excise Duty** | 10% on service fees | All VASP fees/commissions | Collect from user, remit to KRA monthly |
+| **Corporate Tax** | 30% on profits | Company income | Annual filing |
+| **Capital Gains Tax** | 5% on crypto gains | User's responsibility | Provide tx history export |
+| **Digital Asset Tax (3%)** | **REPEALED** | N/A | Was repealed effective July 1, 2025 |
 
 ```
-1. Excise Duty: 10% on service fees (collected from user, remitted to KRA monthly)
-   Example: User pays KES 100 fee → KES 10 excise duty added
-   Total user pays: KES 110
-
-2. Corporate Tax: 30% on company profits
-
-3. User's responsibility:
-   - Capital Gains Tax (5%) on crypto appreciation — not our collection duty
-   - We provide transaction history export for tax filing
+Excise Duty Example:
+  User pays KES 2,500 bill with USDT
+  CryptoPay fee: 1.5% spread + KES 10 flat = KES 47.50
+  Excise duty: 10% × KES 47.50 = KES 4.75
+  User total fee: KES 52.25 (fee + excise)
+  CryptoPay remits KES 4.75 to KRA via monthly iTax return
 ```
 
 ### Safaricom Daraja Requirements
@@ -928,32 +975,46 @@ with 3-layer glow rings (96px, 76px, 64px) on auth screens
 
 ## 12. Infrastructure & Deployment
 
-### MVP Infrastructure (Month 1-3)
+### MVP Infrastructure (Month 1-3) — Updated March 2026
 
 ```
-Single VPS (Hetzner/Contabo — 8 CPU, 16GB RAM, 200GB SSD)
-  - Docker Compose (same pattern as TopPerformers)
+Kenyan VPS (Lineserve or Truehost, Nairobi — 8 CPU, 16GB RAM)
+  - Docker Compose
   - PostgreSQL 16
   - Redis 7
   - Django + Gunicorn (4 workers)
   - Celery (2 workers: default + blockchain)
   - Celery Beat
   - Nginx reverse proxy
-  - Certbot (Let's Encrypt SSL)
+  - Certbot (Let's Encrypt SSL — NOTE: moving to 45-day certs May 2026)
+  - Cloudflare Free in front (CDN + DDoS + DNS)
+  - Prometheus + Grafana (self-hosted monitoring)
+  - Sentry Free (5K errors/month)
+  - UptimeRobot Free (50 monitors)
 
-Estimated cost: $30-50/month
+Estimated cost: $50-85/month
+  - VPS: ~$30-50/mo (Nairobi DC, M-Pesa payment accepted)
+  - AWS KMS: ~$2-3/mo (wallet key encryption)
+  - SSL, CDN, monitoring, email, push: all free tier
+  - SMS: ~$5-20/mo (Africa's Talking, KSh 0.40-0.60/SMS)
+
+Note: Hetzner/Contabo are cheaper (~$12-20/mo) but have no Africa DC
+(~150-200ms latency to Nairobi). For fintech, latency matters.
+Alternative: AWS Cape Town (af-south-1) at ~$160/mo for better reliability.
 ```
 
 ### Production Infrastructure (Month 6+)
 
 ```
-Kubernetes cluster (3 nodes)
+AWS Cape Town (af-south-1) or Kubernetes cluster
   - API: 3 replicas, auto-scale to 10
   - Celery workers: 2 default, 2 blockchain, 1 M-Pesa
   - Managed PostgreSQL (RDS or equivalent)
   - Managed Redis (ElastiCache)
   - S3 for KYC documents
-  - CloudWatch / Prometheus monitoring
+  - Prometheus + Grafana monitoring
+  - Sentry Team ($26/mo)
+  - Better Stack for incident management ($24/mo)
 
 Estimated cost: $200-500/month
 ```
