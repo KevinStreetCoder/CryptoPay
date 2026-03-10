@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { View, Text, Animated, Easing, StyleSheet, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { colors, shadows } from "../constants/theme";
+import { colors, shadows, getThemeColors, getThemeShadows } from "../constants/theme";
+import { useThemeMode } from "../stores/theme";
 
 const useNative = Platform.OS !== "web";
 
@@ -17,6 +18,10 @@ interface RateTickerProps {
 }
 
 export function RateTicker({ rates, speed = 4000 }: RateTickerProps) {
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
+  const ts = getThemeShadows(isDark);
+
   const [activeIndex, setActiveIndex] = useState(0);
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -72,7 +77,7 @@ export function RateTicker({ rates, speed = 4000 }: RateTickerProps) {
   const changeColor = isPositive ? colors.success : colors.error;
 
   return (
-    <View style={[styles.container, shadows.sm]}>
+    <View style={[styles.container, ts.sm, { backgroundColor: tc.dark.card, borderColor: tc.glass.border }]}>
       {/* Left: Live indicator */}
       <View style={styles.liveContainer}>
         <Animated.View
@@ -81,13 +86,13 @@ export function RateTicker({ rates, speed = 4000 }: RateTickerProps) {
             { opacity: pulseAnim },
           ]}
         />
-        <Text style={styles.liveText}>LIVE</Text>
+        <Text style={[styles.liveText, { color: tc.textMuted }]}>LIVE</Text>
       </View>
 
       {/* Center: Rate */}
       <Animated.View style={[styles.rateContainer, { opacity: fadeAnim }]}>
-        <Text style={styles.symbolText}>{current.symbol}/KES</Text>
-        <Text style={styles.rateText}>
+        <Text style={[styles.symbolText, { color: tc.textSecondary }]}>{current.symbol}/KES</Text>
+        <Text style={[styles.rateText, { color: tc.textPrimary }]}>
           {isNaN(current.rate)
             ? "--"
             : current.rate.toLocaleString("en-KE", {
@@ -124,7 +129,6 @@ export function RateTicker({ rates, speed = 4000 }: RateTickerProps) {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: colors.dark.card,
     borderRadius: 16,
     paddingHorizontal: 16,
     paddingVertical: 14,
@@ -132,7 +136,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     borderWidth: 1,
-    borderColor: colors.glass.border,
   },
   liveContainer: {
     flexDirection: "row",
@@ -146,7 +149,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.success,
   },
   liveText: {
-    color: colors.textMuted,
     fontSize: 11,
     fontFamily: "Inter_600SemiBold",
     letterSpacing: 1,
@@ -157,12 +159,10 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   symbolText: {
-    color: colors.textSecondary,
     fontSize: 14,
     fontFamily: "Inter_600SemiBold",
   },
   rateText: {
-    color: "#FFFFFF",
     fontSize: 15,
     fontFamily: "Inter_700Bold",
   },

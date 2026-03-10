@@ -1,7 +1,8 @@
 import { useState, useCallback } from "react";
 import { View, Text, TextInput, Pressable } from "react-native";
 import * as Haptics from "expo-haptics";
-import { colors } from "../constants/theme";
+import { colors, getThemeColors } from "../constants/theme";
+import { useThemeMode } from "../stores/theme";
 
 interface AmountInputProps {
   value: string;
@@ -32,6 +33,8 @@ export function AmountInput({
   error: externalError,
   disabled = false,
 }: AmountInputProps) {
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
   const [focused, setFocused] = useState(false);
 
   const numericValue = parseInt(stripCommas(value) || "0", 10);
@@ -62,14 +65,14 @@ export function AmountInput({
     ? colors.error
     : focused
     ? colors.primary[500]
-    : colors.dark.border;
+    : tc.dark.border;
 
   return (
     <View>
       {label && (
         <Text
           style={{
-            color: colors.textSecondary,
+            color: tc.textSecondary,
             fontSize: 14,
             fontFamily: "Inter_500Medium",
             marginBottom: 8,
@@ -83,7 +86,7 @@ export function AmountInput({
         style={{
           flexDirection: "row",
           alignItems: "center",
-          backgroundColor: colors.dark.card,
+          backgroundColor: tc.dark.card,
           borderRadius: 16,
           borderWidth: 1.5,
           borderColor,
@@ -94,7 +97,7 @@ export function AmountInput({
         {/* KSh prefix */}
         <Text
           style={{
-            color: focused ? colors.primary[400] : colors.textMuted,
+            color: focused ? colors.primary[400] : tc.textMuted,
             fontSize: 22,
             fontFamily: "Inter_700Bold",
             marginRight: 4,
@@ -107,14 +110,14 @@ export function AmountInput({
           value={displayValue}
           onChangeText={handleChange}
           placeholder="0"
-          placeholderTextColor={colors.dark.muted}
+          placeholderTextColor={tc.dark.muted}
           keyboardType="numeric"
           editable={!disabled}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           style={{
             flex: 1,
-            color: "#FFFFFF",
+            color: tc.textPrimary,
             fontSize: 32,
             fontFamily: "Inter_700Bold",
             paddingVertical: 16,
@@ -170,7 +173,7 @@ export function AmountInput({
               backgroundColor:
                 numericValue === amount
                   ? "rgba(13, 159, 110, 0.15)"
-                  : colors.dark.elevated,
+                  : tc.dark.elevated,
               borderRadius: 10,
               paddingVertical: 8,
               alignItems: "center",
@@ -183,7 +186,7 @@ export function AmountInput({
                 color:
                   numericValue === amount
                     ? colors.primary[400]
-                    : colors.textSecondary,
+                    : tc.textSecondary,
                 fontSize: 13,
                 fontFamily: "Inter_500Medium",
               }}

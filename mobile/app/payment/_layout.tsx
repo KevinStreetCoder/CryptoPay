@@ -1,11 +1,16 @@
 import { Stack } from "expo-router";
+import { useThemeMode } from "../../src/stores/theme";
+import { getThemeColors } from "../../src/constants/theme";
 
 export default function PaymentLayout() {
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
+
   return (
     <Stack
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: "#060E1F" },
+        contentStyle: { backgroundColor: tc.dark.bg },
         animation: "slide_from_right",
       }}
     >

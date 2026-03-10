@@ -21,34 +21,22 @@ import { authApi } from "../../src/api/auth";
 import { useScreenSecurity } from "../../src/hooks/useScreenSecurity";
 import { normalizeError } from "../../src/utils/apiErrors";
 import { useGoogleAuth } from "../../src/hooks/useGoogleAuth";
+import { getThemeColors, getThemeShadows } from "../../src/constants/theme";
+import { useThemeMode } from "../../src/stores/theme";
 
 type Step = "phone" | "otp" | "name" | "pin";
-
-const COLORS = {
-  bg: "#060E1F",
-  card: "#0C1A2E",
-  elevated: "#162742",
-  border: "#1E3350",
-  primary: "#10B981",
-  primaryLight: "#34D399",
-  accent: "#F59E0B",
-  error: "#EF4444",
-  textPrimary: "#F0F4F8",
-  textSecondary: "#8899AA",
-  textMuted: "#556B82",
-};
 
 const STEPS: Step[] = ["phone", "otp", "name", "pin"];
 const STEP_LABELS = ["Phone", "Verify", "Name", "PIN"];
 
-function KeBadge() {
+function KeBadge({ tc }: { tc: ReturnType<typeof getThemeColors> }) {
   return (
     <View
       style={{
         width: 28,
         height: 20,
         borderRadius: 4,
-        backgroundColor: COLORS.primary,
+        backgroundColor: tc.primary[500],
         alignItems: "center",
         justifyContent: "center",
         marginRight: 8,
@@ -68,7 +56,7 @@ function KeBadge() {
   );
 }
 
-function BrandPanel() {
+function BrandPanel({ tc }: { tc: ReturnType<typeof getThemeColors> }) {
   return (
     <View
       style={{
@@ -110,13 +98,13 @@ function BrandPanel() {
             width: 80,
             height: 80,
             borderRadius: 24,
-            backgroundColor: COLORS.primary,
+            backgroundColor: tc.primary[500],
             alignItems: "center",
             justifyContent: "center",
             marginBottom: 24,
             ...(Platform.OS !== "web"
               ? {
-                  shadowColor: COLORS.primary,
+                  shadowColor: tc.primary[500],
                   shadowOffset: { width: 0, height: 8 },
                   shadowOpacity: 0.4,
                   shadowRadius: 24,
@@ -128,7 +116,7 @@ function BrandPanel() {
         </View>
         <Text
           style={{
-            color: COLORS.textPrimary,
+            color: tc.textPrimary,
             fontSize: 36,
             fontFamily: "Inter_700Bold",
             letterSpacing: -1,
@@ -139,7 +127,7 @@ function BrandPanel() {
         </Text>
         <Text
           style={{
-            color: COLORS.textSecondary,
+            color: tc.textSecondary,
             fontSize: 18,
             fontFamily: "Inter_400Regular",
             textAlign: "center",
@@ -171,11 +159,11 @@ function BrandPanel() {
                 justifyContent: "center",
               }}
             >
-              <Ionicons name={item.icon} size={20} color={COLORS.primaryLight} />
+              <Ionicons name={item.icon} size={20} color={tc.primary[300]} />
             </View>
             <Text
               style={{
-                color: COLORS.textSecondary,
+                color: tc.textSecondary,
                 fontSize: 15,
                 fontFamily: "Inter_500Medium",
               }}
@@ -193,6 +181,8 @@ export default function RegisterScreen() {
   const router = useRouter();
   const { register, googleLogin } = useAuth();
   const toast = useToast();
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
   const [step, setStep] = useState<Step>("phone");
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
@@ -367,16 +357,16 @@ export default function RegisterScreen() {
                   height: 36,
                   borderRadius: 18,
                   backgroundColor: isCompleted
-                    ? COLORS.primary
+                    ? tc.primary[500]
                     : isCurrent
                     ? "rgba(16, 185, 129, 0.15)"
                     : "rgba(22, 39, 66, 0.5)",
                   borderWidth: 2,
                   borderColor: isCompleted
-                    ? COLORS.primary
+                    ? tc.primary[500]
                     : isCurrent
-                    ? COLORS.primary
-                    : COLORS.border,
+                    ? tc.primary[500]
+                    : tc.dark.border,
                   alignItems: "center",
                   justifyContent: "center",
                 }}
@@ -386,7 +376,7 @@ export default function RegisterScreen() {
                 ) : (
                   <Text
                     style={{
-                      color: isCurrent ? COLORS.primaryLight : COLORS.textMuted,
+                      color: isCurrent ? tc.primary[300] : tc.textMuted,
                       fontSize: 14,
                       fontFamily: "Inter_600SemiBold",
                     }}
@@ -399,10 +389,10 @@ export default function RegisterScreen() {
               <Text
                 style={{
                   color: isCurrent
-                    ? COLORS.primaryLight
+                    ? tc.primary[300]
                     : isCompleted
-                    ? COLORS.textSecondary
-                    : COLORS.textMuted,
+                    ? tc.textSecondary
+                    : tc.textMuted,
                   fontSize: 10,
                   fontFamily: isCurrent ? "Inter_600SemiBold" : "Inter_400Regular",
                   marginTop: 4,
@@ -420,7 +410,7 @@ export default function RegisterScreen() {
                   height: 2,
                   backgroundColor:
                     currentIndex > i
-                      ? COLORS.primary
+                      ? tc.primary[500]
                       : "rgba(255, 255, 255, 0.08)",
                   marginHorizontal: 4,
                   marginBottom: 18,
@@ -448,7 +438,7 @@ export default function RegisterScreen() {
       {/* Card Container */}
       <View
         style={{
-          backgroundColor: COLORS.card,
+          backgroundColor: tc.dark.card,
           borderRadius: 24,
           padding: isDesktop ? 40 : 32,
           borderWidth: 1,
@@ -469,7 +459,7 @@ export default function RegisterScreen() {
           <View style={{ marginBottom: 24 }}>
             <Text
               style={{
-                color: COLORS.textPrimary,
+                color: tc.textPrimary,
                 fontSize: 24,
                 fontFamily: "Inter_700Bold",
                 letterSpacing: -0.3,
@@ -483,7 +473,7 @@ export default function RegisterScreen() {
             </Text>
             <Text
               style={{
-                color: COLORS.textMuted,
+                color: tc.textMuted,
                 fontSize: 14,
                 fontFamily: "Inter_400Regular",
                 lineHeight: 20,
@@ -507,7 +497,7 @@ export default function RegisterScreen() {
                 <>
                   <Text
                     style={{
-                      color: COLORS.textPrimary,
+                      color: tc.textPrimary,
                       fontSize: 22,
                       fontFamily: "Inter_700Bold",
                       marginBottom: 6,
@@ -519,7 +509,7 @@ export default function RegisterScreen() {
                   </Text>
                   <Text
                     style={{
-                      color: COLORS.textMuted,
+                      color: tc.textMuted,
                       fontSize: 14,
                       fontFamily: "Inter_400Regular",
                       marginBottom: 28,
@@ -536,7 +526,7 @@ export default function RegisterScreen() {
                 style={{
                   flexDirection: "row",
                   alignItems: "center",
-                  backgroundColor: COLORS.elevated,
+                  backgroundColor: tc.dark.elevated,
                   borderRadius: 18,
                   borderWidth: 2,
                   borderColor: phoneFocused
@@ -550,10 +540,10 @@ export default function RegisterScreen() {
                     : {}),
                 }}
               >
-                <KeBadge />
+                <KeBadge tc={tc} />
                 <Text
                   style={{
-                    color: COLORS.textSecondary,
+                    color: tc.textSecondary,
                     fontSize: 16,
                     fontFamily: "Inter_500Medium",
                     marginRight: 10,
@@ -565,7 +555,7 @@ export default function RegisterScreen() {
                   style={{
                     width: 1,
                     height: 24,
-                    backgroundColor: COLORS.border,
+                    backgroundColor: tc.dark.border,
                     marginRight: 12,
                   }}
                 />
@@ -573,7 +563,7 @@ export default function RegisterScreen() {
                   value={phone}
                   onChangeText={setPhone}
                   placeholder="712 345 678"
-                  placeholderTextColor={COLORS.textMuted}
+                  placeholderTextColor={tc.textMuted}
                   keyboardType="phone-pad"
                   maxLength={10}
                   autoFocus
@@ -582,7 +572,7 @@ export default function RegisterScreen() {
                   onSubmitEditing={handleSendOTP}
                   style={{
                     flex: 1,
-                    color: COLORS.textPrimary,
+                    color: tc.textPrimary,
                     fontSize: 16,
                     fontFamily: "Inter_400Regular",
                     paddingVertical: 16,
@@ -601,7 +591,7 @@ export default function RegisterScreen() {
                 style={({ pressed }) => ({
                   backgroundColor:
                     isPhoneValid && !loading
-                      ? COLORS.primary
+                      ? tc.primary[500]
                       : "rgba(16, 185, 129, 0.3)",
                   borderRadius: 18,
                   paddingVertical: 16,
@@ -647,10 +637,10 @@ export default function RegisterScreen() {
                   marginBottom: 4,
                 }}
               >
-                <View style={{ flex: 1, height: 1, backgroundColor: COLORS.border }} />
+                <View style={{ flex: 1, height: 1, backgroundColor: tc.dark.border }} />
                 <Text
                   style={{
-                    color: COLORS.textMuted,
+                    color: tc.textMuted,
                     fontSize: 12,
                     fontFamily: "Inter_500Medium",
                     paddingHorizontal: 14,
@@ -658,7 +648,7 @@ export default function RegisterScreen() {
                 >
                   OR
                 </Text>
-                <View style={{ flex: 1, height: 1, backgroundColor: COLORS.border }} />
+                <View style={{ flex: 1, height: 1, backgroundColor: tc.dark.border }} />
               </View>
 
               {/* Google Sign-Up Button */}
@@ -672,7 +662,7 @@ export default function RegisterScreen() {
                   flexDirection: "row",
                   alignItems: "center",
                   justifyContent: "center",
-                  backgroundColor: COLORS.elevated,
+                  backgroundColor: tc.dark.elevated,
                   borderRadius: 18,
                   paddingVertical: 14,
                   marginTop: 16,
@@ -689,13 +679,13 @@ export default function RegisterScreen() {
                 testID="google-signup-button"
               >
                 {googleLoading ? (
-                  <ActivityIndicator size="small" color={COLORS.textSecondary} />
+                  <ActivityIndicator size="small" color={tc.textSecondary} />
                 ) : (
                   <Text style={{ fontSize: 18 }}>G</Text>
                 )}
                 <Text
                   style={{
-                    color: COLORS.textPrimary,
+                    color: tc.textPrimary,
                     fontSize: 15,
                     fontFamily: "Inter_600SemiBold",
                   }}
@@ -708,7 +698,7 @@ export default function RegisterScreen() {
               <View style={{ marginTop: 24, alignItems: "center" }}>
                 <Text
                   style={{
-                    color: COLORS.textMuted,
+                    color: tc.textMuted,
                     fontSize: 14,
                     fontFamily: "Inter_400Regular",
                   }}
@@ -717,7 +707,7 @@ export default function RegisterScreen() {
                   Already have an account?{" "}
                   <Text
                     style={{
-                      color: COLORS.primaryLight,
+                      color: tc.primary[300],
                       fontFamily: "Inter_600SemiBold",
                     }}
                     onPress={() => router.push("/auth/login")}
@@ -751,14 +741,14 @@ export default function RegisterScreen() {
                       <Ionicons
                         name="chatbubble-ellipses"
                         size={28}
-                        color={COLORS.primaryLight}
+                        color={tc.primary[300]}
                       />
                     </View>
                   </View>
 
                   <Text
                     style={{
-                      color: COLORS.textPrimary,
+                      color: tc.textPrimary,
                       fontSize: 22,
                       fontFamily: "Inter_700Bold",
                       marginBottom: 6,
@@ -771,7 +761,7 @@ export default function RegisterScreen() {
                   </Text>
                   <Text
                     style={{
-                      color: COLORS.textMuted,
+                      color: tc.textMuted,
                       fontSize: 14,
                       fontFamily: "Inter_400Regular",
                       marginBottom: 28,
@@ -783,7 +773,7 @@ export default function RegisterScreen() {
                     Enter the 6-digit code sent to{"\n"}
                     <Text
                       style={{
-                        color: COLORS.textSecondary,
+                        color: tc.textSecondary,
                         fontFamily: "Inter_600SemiBold",
                       }}
                     >
@@ -826,14 +816,14 @@ export default function RegisterScreen() {
                         borderRadius: 14,
                         borderWidth: 2,
                         borderColor: isFilled
-                          ? COLORS.primary
+                          ? tc.primary[500]
                           : isActive
-                          ? COLORS.primary
+                          ? tc.primary[500]
                           : "rgba(255, 255, 255, 0.08)",
                         backgroundColor: isFilled
                           ? "rgba(16, 185, 129, 0.08)"
-                          : COLORS.elevated,
-                        color: COLORS.textPrimary,
+                          : tc.dark.elevated,
+                        color: tc.textPrimary,
                         fontSize: 22,
                         fontFamily: "Inter_700Bold",
                         textAlign: "center",
@@ -864,11 +854,11 @@ export default function RegisterScreen() {
                   <Ionicons
                     name="checkmark-circle"
                     size={18}
-                    color={COLORS.primaryLight}
+                    color={tc.primary[300]}
                   />
                   <Text
                     style={{
-                      color: COLORS.primaryLight,
+                      color: tc.primary[300],
                       fontSize: 13,
                       fontFamily: "Inter_500Medium",
                     }}
@@ -884,7 +874,7 @@ export default function RegisterScreen() {
                 disabled={otp.length < 6}
                 style={({ pressed }) => ({
                   backgroundColor:
-                    otp.length >= 6 ? COLORS.primary : "rgba(16, 185, 129, 0.3)",
+                    otp.length >= 6 ? tc.primary[500] : "rgba(16, 185, 129, 0.3)",
                   borderRadius: 18,
                   paddingVertical: 16,
                   alignItems: "center",
@@ -928,7 +918,7 @@ export default function RegisterScreen() {
                 >
                   <Text
                     style={{
-                      color: COLORS.primaryLight,
+                      color: tc.primary[300],
                       fontSize: 14,
                       fontFamily: "Inter_500Medium",
                     }}
@@ -951,12 +941,12 @@ export default function RegisterScreen() {
                   <Ionicons
                     name="arrow-back"
                     size={14}
-                    color={COLORS.textMuted}
+                    color={tc.textMuted}
                     style={{ marginRight: 4 }}
                   />
                   <Text
                     style={{
-                      color: COLORS.textMuted,
+                      color: tc.textMuted,
                       fontSize: 13,
                       fontFamily: "Inter_400Regular",
                     }}
@@ -989,14 +979,14 @@ export default function RegisterScreen() {
                       <Ionicons
                         name="person"
                         size={28}
-                        color={COLORS.primaryLight}
+                        color={tc.primary[300]}
                       />
                     </View>
                   </View>
 
                   <Text
                     style={{
-                      color: COLORS.textPrimary,
+                      color: tc.textPrimary,
                       fontSize: 22,
                       fontFamily: "Inter_700Bold",
                       marginBottom: 6,
@@ -1009,7 +999,7 @@ export default function RegisterScreen() {
                   </Text>
                   <Text
                     style={{
-                      color: COLORS.textMuted,
+                      color: tc.textMuted,
                       fontSize: 14,
                       fontFamily: "Inter_400Regular",
                       marginBottom: 28,
@@ -1027,7 +1017,7 @@ export default function RegisterScreen() {
                 style={{
                   flexDirection: "row",
                   alignItems: "center",
-                  backgroundColor: COLORS.elevated,
+                  backgroundColor: tc.dark.elevated,
                   borderRadius: 18,
                   borderWidth: 2,
                   borderColor: nameFocused
@@ -1044,14 +1034,14 @@ export default function RegisterScreen() {
                 <Ionicons
                   name="person-outline"
                   size={20}
-                  color={nameFocused ? COLORS.primaryLight : COLORS.textMuted}
+                  color={nameFocused ? tc.primary[300] : tc.textMuted}
                   style={{ marginRight: 12 }}
                 />
                 <TextInput
                   value={fullName}
                   onChangeText={setFullName}
                   placeholder="Enter your full name"
-                  placeholderTextColor={COLORS.textMuted}
+                  placeholderTextColor={tc.textMuted}
                   autoFocus
                   autoCapitalize="words"
                   onFocus={() => setNameFocused(true)}
@@ -1059,7 +1049,7 @@ export default function RegisterScreen() {
                   onSubmitEditing={handleNameSubmit}
                   style={{
                     flex: 1,
-                    color: COLORS.textPrimary,
+                    color: tc.textPrimary,
                     fontSize: 16,
                     fontFamily: "Inter_400Regular",
                     paddingVertical: 16,
@@ -1074,7 +1064,7 @@ export default function RegisterScreen() {
 
               <Text
                 style={{
-                  color: COLORS.textMuted,
+                  color: tc.textMuted,
                   fontSize: 12,
                   fontFamily: "Inter_400Regular",
                   marginTop: 10,
@@ -1088,7 +1078,7 @@ export default function RegisterScreen() {
               <Pressable
                 onPress={handleNameSubmit}
                 style={({ pressed }) => ({
-                  backgroundColor: COLORS.primary,
+                  backgroundColor: tc.primary[500],
                   borderRadius: 18,
                   paddingVertical: 16,
                   alignItems: "center",
@@ -1140,14 +1130,14 @@ export default function RegisterScreen() {
                       <Ionicons
                         name="lock-closed"
                         size={28}
-                        color={COLORS.primaryLight}
+                        color={tc.primary[300]}
                       />
                     </View>
                   </View>
 
                   <Text
                     style={{
-                      color: COLORS.textPrimary,
+                      color: tc.textPrimary,
                       fontSize: 22,
                       fontFamily: "Inter_700Bold",
                       marginBottom: 6,
@@ -1160,7 +1150,7 @@ export default function RegisterScreen() {
                   </Text>
                   <Text
                     style={{
-                      color: COLORS.textMuted,
+                      color: tc.textMuted,
                       fontSize: 14,
                       fontFamily: "Inter_400Regular",
                       marginBottom: 28,
@@ -1184,7 +1174,7 @@ export default function RegisterScreen() {
               {loading && (
                 <Text
                   style={{
-                    color: COLORS.primaryLight,
+                    color: tc.primary[300],
                     fontSize: 14,
                     fontFamily: "Inter_500Medium",
                     textAlign: "center",
@@ -1217,11 +1207,11 @@ export default function RegisterScreen() {
                   <Ionicons
                     name="shield-checkmark"
                     size={16}
-                    color={COLORS.primaryLight}
+                    color={tc.primary[300]}
                   />
                   <Text
                     style={{
-                      color: COLORS.primaryLight,
+                      color: tc.primary[300],
                       fontSize: 13,
                       fontFamily: "Inter_600SemiBold",
                     }}
@@ -1232,7 +1222,7 @@ export default function RegisterScreen() {
                 </View>
                 <Text
                   style={{
-                    color: COLORS.textSecondary,
+                    color: tc.textSecondary,
                     fontSize: 12,
                     fontFamily: "Inter_400Regular",
                     lineHeight: 18,
@@ -1259,10 +1249,10 @@ export default function RegisterScreen() {
           gap: 8,
         }}
       >
-        <Ionicons name="shield-checkmark" size={16} color={COLORS.textMuted} />
+        <Ionicons name="shield-checkmark" size={16} color={tc.textMuted} />
         <Text
           style={{
-            color: COLORS.textMuted,
+            color: tc.textMuted,
             fontSize: 12,
             fontFamily: "Inter_400Regular",
           }}
@@ -1278,13 +1268,13 @@ export default function RegisterScreen() {
   if (isDesktop) {
     return (
       <View
-        style={{ flex: 1, flexDirection: "row", backgroundColor: COLORS.bg }}
+        style={{ flex: 1, flexDirection: "row", backgroundColor: tc.dark.bg }}
       >
-        <BrandPanel />
+        <BrandPanel tc={tc} />
         <View
           style={{
             flex: 1,
-            backgroundColor: COLORS.bg,
+            backgroundColor: tc.dark.bg,
             justifyContent: "center",
           }}
         >
@@ -1301,7 +1291,7 @@ export default function RegisterScreen() {
 
   // Mobile & tablet: standard centered layout
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.bg }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={{ flex: 1 }}

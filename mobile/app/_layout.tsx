@@ -13,7 +13,8 @@ import { ToastProvider } from "../src/components/Toast";
 import { DashboardLayout } from "../src/components/WebSidebar";
 import { usePushNotifications } from "../src/hooks/usePushNotifications";
 import { storage } from "../src/utils/storage";
-import { initTheme } from "../src/stores/theme";
+import { initTheme, useThemeMode } from "../src/stores/theme";
+import { getThemeColors } from "../src/constants/theme";
 import { initPrivacy } from "../src/utils/privacy";
 import { OnboardingModal, ONBOARDING_COMPLETED_KEY } from "./onboarding";
 
@@ -32,6 +33,8 @@ function RootNavigator() {
   const [appReady, setAppReady] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
   const { expoPushToken } = usePushNotifications();
 
   useEffect(() => {
@@ -93,7 +96,7 @@ function RootNavigator() {
     <Stack
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: "#060E1F" },
+        contentStyle: { backgroundColor: tc.dark.bg },
         animation: "slide_from_right",
       }}
     >
@@ -106,9 +109,9 @@ function RootNavigator() {
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#060E1F" }}>
+    <View style={{ flex: 1, backgroundColor: tc.dark.bg }}>
       <NetworkStatus />
-      <StatusBar style="light" />
+      <StatusBar style={isDark ? "light" : "dark"} />
       {showDashboard ? (
         <DashboardLayout>{stackContent}</DashboardLayout>
       ) : (

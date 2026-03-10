@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { View, TextInput, Pressable, Platform } from "react-native";
 import * as Haptics from "expo-haptics";
+import { getThemeColors } from "../constants/theme";
+import { useThemeMode } from "../stores/theme";
 
 interface PinInputProps {
   length?: number;
@@ -10,6 +12,8 @@ interface PinInputProps {
 }
 
 export function PinInput({ length = 6, onComplete, error, testID }: PinInputProps) {
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
   const [pin, setPin] = useState("");
   const inputRef = useRef<TextInput>(null);
 
@@ -67,8 +71,8 @@ export function PinInput({ length = 6, onComplete, error, testID }: PinInputProp
                   : isFilled
                   ? "rgba(16, 185, 129, 0.06)"
                   : isActive
-                  ? "#162742"
-                  : "#0C1A2E",
+                  ? tc.dark.elevated
+                  : tc.dark.card,
                 ...(Platform.OS === 'web' ? { transition: 'all 0.2s ease' } as any : {}),
                 ...(isActive && Platform.OS === 'web' ? { boxShadow: '0 0 0 3px rgba(16, 185, 129, 0.2), 0 0 12px rgba(16, 185, 129, 0.1)' } as any : {}),
                 ...(isFilled && Platform.OS === 'web' ? { boxShadow: '0 0 0 2px rgba(16, 185, 129, 0.12)' } as any : {}),
