@@ -119,6 +119,78 @@ export function WalletCardSkeleton() {
   );
 }
 
+/** Skeleton for a single crypto price card with sparkline */
+export function CryptoCardSkeleton() {
+  return (
+    <View style={skeletonStyles.cryptoCard}>
+      {/* Icon + symbol row */}
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 }}>
+        <Skeleton width={32} height={32} borderRadius={10} />
+        <View>
+          <Skeleton width={40} height={13} style={{ marginBottom: 4 }} />
+          <Skeleton width={55} height={10} />
+        </View>
+      </View>
+      {/* Price */}
+      <Skeleton width={80} height={14} style={{ marginBottom: 4 }} />
+      {/* Change % */}
+      <Skeleton width={50} height={11} style={{ marginBottom: 8 }} />
+      {/* Sparkline area */}
+      <Skeleton width="100%" height={48} borderRadius={6} />
+    </View>
+  );
+}
+
+/** Row of 4 crypto card skeletons */
+export function CryptoChartsSkeleton() {
+  return (
+    <View style={{ marginBottom: 24 }}>
+      <Skeleton width={110} height={11} style={{ marginBottom: 14, marginLeft: 4 }} />
+      <View style={{ flexDirection: "row", gap: 16 }}>
+        {[1, 2, 3, 4].map((i) => (
+          <View key={i} style={{ flex: 1 }}>
+            <CryptoCardSkeleton />
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+/** Rate ticker skeleton */
+export function RateTickerSkeleton() {
+  return (
+    <View style={skeletonStyles.rateTicker}>
+      <View style={{ flexDirection: "row", gap: 24, alignItems: "center" }}>
+        {[1, 2, 3, 4].map((i) => (
+          <View key={i} style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <Skeleton width={28} height={14} />
+            <Skeleton width={70} height={14} />
+            <Skeleton width={42} height={14} borderRadius={6} />
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+/** Portfolio chart skeleton (sidebar panel) */
+export function PortfolioChartSkeleton() {
+  return (
+    <View style={skeletonStyles.portfolioChart}>
+      <Skeleton width={100} height={12} style={{ marginBottom: 8 }} />
+      <Skeleton width={60} height={22} borderRadius={8} style={{ marginBottom: 4 }} />
+      <Skeleton width={80} height={12} style={{ marginBottom: 16 }} />
+      <Skeleton width="100%" height={120} borderRadius={10} style={{ marginBottom: 12 }} />
+      <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+        {[1, 2, 3, 4, 5, 6, 7].map((i) => (
+          <Skeleton key={i} width={28} height={10} />
+        ))}
+      </View>
+    </View>
+  );
+}
+
 const skeletonStyles = StyleSheet.create({
   balanceCard: {
     backgroundColor: colors.dark.card,
@@ -166,5 +238,26 @@ const skeletonStyles = StyleSheet.create({
   },
   walletRight: {
     alignItems: "flex-end",
+  },
+  cryptoCard: {
+    backgroundColor: colors.dark.card,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.glass.border,
+  },
+  rateTicker: {
+    backgroundColor: colors.dark.card,
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: colors.glass.border,
+  },
+  portfolioChart: {
+    backgroundColor: colors.dark.card,
+    borderRadius: 20,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: colors.glass.border,
   },
 });

@@ -9,7 +9,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { colors, shadows } from "../../src/constants/theme";
+import { colors, shadows, getThemeColors, getThemeShadows } from "../../src/constants/theme";
+import { useThemeMode } from "../../src/stores/theme";
 import { storage } from "../../src/utils/storage";
 
 const isWeb = Platform.OS === "web";
@@ -25,6 +26,9 @@ export default function LanguageScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const isDesktop = isWeb && width >= 900;
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
+  const ts = getThemeShadows(isDark);
   const [selected, setSelected] = useState("en");
 
   useEffect(() => {
@@ -39,7 +43,7 @@ export default function LanguageScreen() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.dark.bg }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
       <View
         style={{
           paddingHorizontal: isDesktop ? 32 : 16,
@@ -51,7 +55,10 @@ export default function LanguageScreen() {
       >
         {/* Header */}
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => {
+            if (router.canGoBack()) router.back();
+            else router.replace("/settings" as any);
+          }}
           style={({ pressed }) => ({
             flexDirection: "row",
             alignItems: "center",
@@ -62,18 +69,18 @@ export default function LanguageScreen() {
             marginBottom: 20,
           })}
         >
-          <Ionicons name="arrow-back" size={22} color={colors.textSecondary} />
-          <Text style={{ color: colors.textSecondary, fontSize: 16, fontWeight: "500" }}>
+          <Ionicons name="arrow-back" size={22} color={tc.textSecondary} />
+          <Text style={{ color: tc.textSecondary, fontSize: 16, fontWeight: "500" }}>
             Language
           </Text>
         </Pressable>
 
         <View
           style={{
-            backgroundColor: colors.dark.card,
+            backgroundColor: tc.dark.card,
             borderRadius: 18,
             borderWidth: 1,
-            borderColor: colors.glass.border,
+            borderColor: tc.glass.border,
             overflow: "hidden",
             ...shadows.sm,
           }}
@@ -103,7 +110,7 @@ export default function LanguageScreen() {
                   <View style={{ flex: 1 }}>
                     <Text
                       style={{
-                        color: colors.textPrimary,
+                        color: tc.textPrimary,
                         fontSize: 15,
                         fontWeight: "600",
                       }}
@@ -112,7 +119,7 @@ export default function LanguageScreen() {
                     </Text>
                     <Text
                       style={{
-                        color: colors.textMuted,
+                        color: tc.textMuted,
                         fontSize: 13,
                         marginTop: 2,
                       }}
@@ -126,7 +133,7 @@ export default function LanguageScreen() {
                       height: 24,
                       borderRadius: 12,
                       borderWidth: 2,
-                      borderColor: isActive ? colors.primary[500] : colors.dark.border,
+                      borderColor: isActive ? colors.primary[500] : tc.dark.border,
                       backgroundColor: isActive ? colors.primary[500] : "transparent",
                       alignItems: "center",
                       justifyContent: "center",
@@ -141,7 +148,7 @@ export default function LanguageScreen() {
                   <View
                     style={{
                       height: 1,
-                      backgroundColor: colors.glass.border,
+                      backgroundColor: tc.glass.border,
                       marginLeft: 60,
                     }}
                   />
@@ -153,7 +160,7 @@ export default function LanguageScreen() {
 
         <Text
           style={{
-            color: colors.textMuted,
+            color: tc.textMuted,
             fontSize: 13,
             marginTop: 16,
             paddingHorizontal: 8,

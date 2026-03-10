@@ -245,7 +245,10 @@ export default function BuyCryptoScreen() {
           }}
         >
           <Pressable
-            onPress={() => router.back()}
+            onPress={() => {
+              if (router.canGoBack()) router.back();
+              else router.replace("/(tabs)" as any);
+            }}
             hitSlop={12}
             style={{
               width: 42,

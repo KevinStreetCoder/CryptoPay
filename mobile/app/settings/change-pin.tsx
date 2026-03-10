@@ -18,26 +18,17 @@ import { useToast } from "../../src/components/Toast";
 import { authApi } from "../../src/api/auth";
 import { normalizeError } from "../../src/utils/apiErrors";
 import { useScreenSecurity } from "../../src/hooks/useScreenSecurity";
+import { colors, getThemeColors, getThemeShadows } from "../../src/constants/theme";
+import { useThemeMode } from "../../src/stores/theme";
 
 type Step = "current" | "new";
-
-const COLORS = {
-  bg: "#060E1F",
-  card: "#0C1A2E",
-  elevated: "#162742",
-  border: "#1E3350",
-  primary: "#10B981",
-  primaryLight: "#34D399",
-  accent: "#F59E0B",
-  error: "#EF4444",
-  textPrimary: "#F0F4F8",
-  textSecondary: "#8899AA",
-  textMuted: "#556B82",
-};
 
 export default function ChangePinScreen() {
   const router = useRouter();
   const toast = useToast();
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
+  const ts = getThemeShadows(isDark);
   const [step, setStep] = useState<Step>("current");
   const [currentPin, setCurrentPin] = useState("");
   const [loading, setLoading] = useState(false);
@@ -84,7 +75,8 @@ export default function ChangePinScreen() {
     try {
       await authApi.changePin({ current_pin: currentPin, new_pin: newPin });
       toast.success("PIN Changed", "Your security PIN has been updated successfully");
-      router.back();
+      if (router.canGoBack()) router.back();
+      else router.replace("/settings" as any);
     } catch (err: unknown) {
       setPinError(true);
       const appError = normalizeError(err);
@@ -131,11 +123,11 @@ export default function ChangePinScreen() {
       {/* Card Container */}
       <View
         style={{
-          backgroundColor: COLORS.card,
+          backgroundColor: tc.dark.card,
           borderRadius: 24,
           padding: isDesktop ? 40 : 32,
           borderWidth: 1,
-          borderColor: "rgba(255, 255, 255, 0.08)",
+          borderColor: tc.glass.border,
           maxWidth: 480,
           width: "100%",
           alignSelf: "center",
@@ -150,7 +142,7 @@ export default function ChangePinScreen() {
             <>
               <Text
                 style={{
-                  color: COLORS.textPrimary,
+                  color: tc.textPrimary,
                   fontSize: 28,
                   fontFamily: "Inter_700Bold",
                   letterSpacing: -0.5,
@@ -161,7 +153,7 @@ export default function ChangePinScreen() {
               </Text>
               <Text
                 style={{
-                  color: COLORS.textMuted,
+                  color: tc.textMuted,
                   fontSize: 15,
                   fontFamily: "Inter_400Regular",
                   lineHeight: 22,
@@ -192,12 +184,12 @@ export default function ChangePinScreen() {
                   <Ionicons
                     name={activeStep.icon}
                     size={28}
-                    color={COLORS.primaryLight}
+                    color={colors.primary[400]}
                   />
                 </View>
                 <Text
                   style={{
-                    color: COLORS.textPrimary,
+                    color: tc.textPrimary,
                     fontSize: 21,
                     fontFamily: "Inter_600SemiBold",
                     marginBottom: 6,
@@ -209,7 +201,7 @@ export default function ChangePinScreen() {
                 </Text>
                 <Text
                   style={{
-                    color: COLORS.textMuted,
+                    color: tc.textMuted,
                     fontSize: 14,
                     fontFamily: "Inter_400Regular",
                     textAlign: "center",
@@ -237,7 +229,7 @@ export default function ChangePinScreen() {
                   width: 32,
                   height: 4,
                   borderRadius: 2,
-                  backgroundColor: COLORS.primary,
+                  backgroundColor: colors.primary[500],
                 }}
               />
               <View
@@ -246,7 +238,7 @@ export default function ChangePinScreen() {
                   height: 4,
                   borderRadius: 2,
                   backgroundColor:
-                    step === "new" ? COLORS.primary : "rgba(255, 255, 255, 0.08)",
+                    step === "new" ? colors.primary[500] : tc.glass.border,
                 }}
               />
             </View>
@@ -269,10 +261,10 @@ export default function ChangePinScreen() {
                   gap: 8,
                 }}
               >
-                <ActivityIndicator size="small" color={COLORS.primaryLight} />
+                <ActivityIndicator size="small" color={colors.primary[400]} />
                 <Text
                   style={{
-                    color: COLORS.primaryLight,
+                    color: colors.primary[400],
                     fontSize: 14,
                     fontFamily: "Inter_500Medium",
                   }}
@@ -290,7 +282,8 @@ export default function ChangePinScreen() {
                   setCurrentPin("");
                   animateTransition("current");
                 } else {
-                  router.back();
+                  if (router.canGoBack()) router.back();
+                  else router.replace("/settings" as any);
                 }
               }}
               style={({ pressed }) => ({
@@ -308,12 +301,12 @@ export default function ChangePinScreen() {
               <Ionicons
                 name="arrow-back"
                 size={16}
-                color={COLORS.textMuted}
+                color={tc.textMuted}
                 style={{ marginRight: 6 }}
               />
               <Text
                 style={{
-                  color: COLORS.textMuted,
+                  color: tc.textMuted,
                   fontSize: 14,
                   fontFamily: "Inter_500Medium",
                 }}
@@ -336,10 +329,10 @@ export default function ChangePinScreen() {
           gap: 8,
         }}
       >
-        <Ionicons name="shield-checkmark" size={16} color={COLORS.textMuted} />
+        <Ionicons name="shield-checkmark" size={16} color={tc.textMuted} />
         <Text
           style={{
-            color: COLORS.textMuted,
+            color: tc.textMuted,
             fontSize: 12,
             fontFamily: "Inter_400Regular",
           }}
@@ -357,7 +350,7 @@ export default function ChangePinScreen() {
       <View
         style={{
           flex: 1,
-          backgroundColor: COLORS.bg,
+          backgroundColor: tc.dark.bg,
           justifyContent: "center",
           alignItems: "center",
         }}
@@ -375,7 +368,10 @@ export default function ChangePinScreen() {
           }}
         >
           <Pressable
-            onPress={() => router.back()}
+            onPress={() => {
+              if (router.canGoBack()) router.back();
+              else router.replace("/settings" as any);
+            }}
             style={({ pressed }) => ({
               flexDirection: "row",
               alignItems: "center",
@@ -383,17 +379,17 @@ export default function ChangePinScreen() {
               paddingVertical: 8,
               paddingHorizontal: 12,
               borderRadius: 12,
-              backgroundColor: pressed ? COLORS.elevated : "transparent",
+              backgroundColor: pressed ? tc.dark.elevated : "transparent",
               alignSelf: "flex-start",
               opacity: pressed ? 0.9 : 1,
             })}
             accessibilityRole="button"
             accessibilityLabel="Go back"
           >
-            <Ionicons name="arrow-back" size={20} color={COLORS.textSecondary} />
+            <Ionicons name="arrow-back" size={20} color={tc.textSecondary} />
             <Text
               style={{
-                color: COLORS.textSecondary,
+                color: tc.textSecondary,
                 fontSize: 15,
                 fontFamily: "Inter_500Medium",
               }}
@@ -415,7 +411,7 @@ export default function ChangePinScreen() {
 
   // Mobile & tablet: standard centered layout with back header
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.bg }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
       {/* Back button header */}
       <View
         style={{
@@ -426,7 +422,10 @@ export default function ChangePinScreen() {
         }}
       >
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => {
+            if (router.canGoBack()) router.back();
+            else router.replace("/settings" as any);
+          }}
           style={({ pressed }) => ({
             flexDirection: "row",
             alignItems: "center",
@@ -434,16 +433,16 @@ export default function ChangePinScreen() {
             paddingVertical: 6,
             paddingHorizontal: 8,
             borderRadius: 10,
-            backgroundColor: pressed ? COLORS.elevated : "transparent",
+            backgroundColor: pressed ? tc.dark.elevated : "transparent",
             opacity: pressed ? 0.9 : 1,
           })}
           accessibilityRole="button"
           accessibilityLabel="Go back"
         >
-          <Ionicons name="arrow-back" size={20} color={COLORS.textSecondary} />
+          <Ionicons name="arrow-back" size={20} color={tc.textSecondary} />
           <Text
             style={{
-              color: COLORS.textSecondary,
+              color: tc.textSecondary,
               fontSize: 15,
               fontFamily: "Inter_500Medium",
             }}

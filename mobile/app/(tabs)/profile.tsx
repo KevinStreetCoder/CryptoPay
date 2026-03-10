@@ -196,16 +196,28 @@ export default function ProfileScreen() {
         setUploadingAvatar(true);
         try {
           const formData = new FormData();
-          formData.append("avatar", {
-            uri: asset.uri,
-            type: asset.mimeType || "image/jpeg",
-            name: "avatar.jpg",
-          } as any);
+          if (Platform.OS === "web") {
+            // Web: fetch the blob from the data URI and append as File
+            const response = await fetch(asset.uri);
+            const blob = await response.blob();
+            const file = new File([blob], "avatar.jpg", {
+              type: asset.mimeType || "image/jpeg",
+            });
+            formData.append("avatar", file);
+          } else {
+            // Native: use the { uri, type, name } pattern
+            formData.append("avatar", {
+              uri: asset.uri,
+              type: asset.mimeType || "image/jpeg",
+              name: "avatar.jpg",
+            } as any);
+          }
           const { data } = await authApi.updateProfile(formData);
           setAvatarUri(data.avatar_url);
           toast.success("Updated", "Profile photo updated");
         } catch (err: any) {
-          toast.error("Upload Failed", "Could not upload photo");
+          const msg = err?.response?.data?.detail || err?.response?.data?.avatar?.[0] || "Could not upload photo";
+          toast.error("Upload Failed", msg);
         } finally {
           setUploadingAvatar(false);
         }

@@ -10,7 +10,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Button } from "../../src/components/Button";
 import { useToast } from "../../src/components/Toast";
@@ -24,10 +24,11 @@ const CRYPTO_OPTIONS: CurrencyCode[] = ["USDT", "BTC", "ETH"];
 
 export default function PayTillScreen() {
   const router = useRouter();
+  const { prefill, name: prefillName } = useLocalSearchParams<{ prefill?: string; name?: string }>();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === "web" && width >= 768;
   const { data: wallets } = useWallets();
-  const [tillNumber, setTillNumber] = useState("");
+  const [tillNumber, setTillNumber] = useState(prefill || "");
   const [amount, setAmount] = useState("");
   const [selectedCrypto, setSelectedCrypto] = useState<CurrencyCode>("USDT");
   const [quote, setQuote] = useState<Quote | null>(null);
@@ -97,6 +98,41 @@ export default function PayTillScreen() {
               : undefined
           }
         >
+          {/* Top-level back button (outside card) */}
+          <Pressable
+            onPress={() => {
+              if (router.canGoBack()) router.back();
+              else router.replace("/(tabs)" as any);
+            }}
+            style={({ pressed, hovered }: any) => ({
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 8,
+              paddingVertical: 8,
+              paddingHorizontal: 12,
+              borderRadius: 12,
+              backgroundColor: hovered
+                ? tc.glass.highlight
+                : pressed
+                  ? tc.dark.elevated
+                  : "transparent",
+              alignSelf: "flex-start",
+              marginBottom: 12,
+              marginLeft: isDesktop ? 0 : 16,
+              opacity: pressed ? 0.9 : 1,
+              ...(Platform.OS === "web"
+                ? ({ cursor: "pointer", transition: "all 0.15s ease" } as any)
+                : {}),
+            })}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+          >
+            <Ionicons name="arrow-back" size={20} color={tc.textSecondary} />
+            <Text style={{ color: tc.textSecondary, fontSize: 15, fontWeight: "500" }}>
+              Back
+            </Text>
+          </Pressable>
+
           {/* Desktop wrapper card */}
           <View
             style={
@@ -124,7 +160,7 @@ export default function PayTillScreen() {
               }}
             >
               <Pressable
-                onPress={() => router.back()}
+                onPress={() => router.replace("/(tabs)/pay" as any)}
                 hitSlop={12}
                 style={({ pressed, hovered }: any) => ({
                   width: 42,

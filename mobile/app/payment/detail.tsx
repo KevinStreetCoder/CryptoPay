@@ -12,7 +12,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { paymentsApi, Transaction, getTxKesAmount, getTxCrypto, getTxRecipient } from "../../src/api/payments";
-import { colors, shadows, CURRENCIES, CurrencyCode } from "../../src/constants/theme";
+import { colors, shadows, CURRENCIES, CurrencyCode, getThemeColors, getThemeShadows } from "../../src/constants/theme";
+import { useThemeMode } from "../../src/stores/theme";
+import { usePhonePrivacy } from "../../src/utils/privacy";
 
 const TYPE_CONFIG: Record<string, { icon: string; label: string; color: string }> = {
   PAYBILL_PAYMENT: { icon: "receipt-outline", label: "Pay Bill", color: colors.primary[400] },
@@ -39,6 +41,9 @@ export default function TransactionDetailScreen() {
   const { width } = useWindowDimensions();
   const isWeb = Platform.OS === "web";
   const isDesktop = isWeb && width >= 900;
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
+  const ts = getThemeShadows(isDark);
 
   const { data: txData, isLoading } = useQuery({
     queryKey: ["transaction-detail", id],
@@ -52,8 +57,8 @@ export default function TransactionDetailScreen() {
   });
 
   const tx = txData as Transaction | null;
-  const typeConfig = tx ? TYPE_CONFIG[tx.type] || { icon: "ellipsis-horizontal", label: tx.type, color: colors.dark.muted } : null;
-  const statusConfig = tx ? STATUS_CONFIG[tx.status] || { color: colors.dark.muted, bg: colors.dark.muted + "1F", label: tx.status } : null;
+  const typeConfig = tx ? TYPE_CONFIG[tx.type] || { icon: "ellipsis-horizontal", label: tx.type, color: tc.dark.muted } : null;
+  const statusConfig = tx ? STATUS_CONFIG[tx.status] || { color: tc.dark.muted, bg: tc.dark.muted + "1F", label: tx.status } : null;
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -74,8 +79,13 @@ export default function TransactionDetailScreen() {
     });
   };
 
+  const { formatPhone } = usePhonePrivacy();
+
   const getRecipient = (tx: Transaction) => {
-    return getTxRecipient(tx);
+    const raw = getTxRecipient(tx);
+    // Mask phone numbers for SEND_MPESA based on privacy setting
+    if (raw && tx.type === "SEND_MPESA") return formatPhone(raw);
+    return raw;
   };
 
   const containerMaxWidth = isDesktop ? 560 : "100%";
@@ -90,16 +100,16 @@ export default function TransactionDetailScreen() {
           justifyContent: "space-between",
           paddingVertical: 14,
           borderBottomWidth: 1,
-          borderBottomColor: colors.glass.border,
+          borderBottomColor: tc.glass.border,
         }}
       >
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
           {iconName && (
-            <Ionicons name={iconName as any} size={16} color={colors.textMuted} />
+            <Ionicons name={iconName as any} size={16} color={tc.textMuted} />
           )}
           <Text
             style={{
-              color: colors.textMuted,
+              color: tc.textMuted,
               fontSize: 14,
               fontFamily: "Inter_400Regular",
             }}
@@ -109,7 +119,7 @@ export default function TransactionDetailScreen() {
         </View>
         <Text
           style={{
-            color: colors.textPrimary,
+            color: tc.textPrimary,
             fontSize: 14,
             fontFamily: "Inter_500Medium",
             textAlign: "right",
@@ -125,7 +135,7 @@ export default function TransactionDetailScreen() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.dark.bg }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
       {/* Header */}
       <View
         style={{
@@ -134,23 +144,26 @@ export default function TransactionDetailScreen() {
           paddingHorizontal: isDesktop ? 32 : 16,
           paddingVertical: 12,
           borderBottomWidth: 1,
-          borderBottomColor: colors.glass.border,
+          borderBottomColor: tc.glass.border,
         }}
       >
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => {
+            if (router.canGoBack()) router.back();
+            else router.replace("/(tabs)" as any);
+          }}
           style={({ pressed }) => ({
             width: 40,
             height: 40,
             borderRadius: 12,
-            backgroundColor: pressed ? colors.dark.elevated : "transparent",
+            backgroundColor: pressed ? tc.dark.elevated : "transparent",
             alignItems: "center",
             justifyContent: "center",
           })}
           accessibilityRole="button"
           accessibilityLabel="Go back"
         >
-          <Ionicons name="arrow-back" size={22} color={colors.textPrimary} />
+          <Ionicons name="arrow-back" size={22} color={tc.textPrimary} />
         </Pressable>
         <Text
           style={{
@@ -176,7 +189,7 @@ export default function TransactionDetailScreen() {
             <ActivityIndicator size="large" color={colors.primary[400]} />
             <Text
               style={{
-                color: colors.textMuted,
+                color: tc.textMuted,
                 fontSize: 14,
                 fontFamily: "Inter_400Regular",
                 marginTop: 16,
@@ -212,7 +225,7 @@ export default function TransactionDetailScreen() {
             </Text>
             <Text
               style={{
-                color: colors.textMuted,
+                color: tc.textMuted,
                 fontSize: 14,
                 fontFamily: "Inter_400Regular",
                 textAlign: "center",
@@ -221,7 +234,10 @@ export default function TransactionDetailScreen() {
               This transaction may have been removed or the ID is invalid.
             </Text>
             <Pressable
-              onPress={() => router.back()}
+              onPress={() => {
+                if (router.canGoBack()) router.back();
+                else router.replace("/(tabs)" as any);
+              }}
               style={({ pressed }) => ({
                 marginTop: 24,
                 backgroundColor: colors.primary[500],
@@ -330,7 +346,7 @@ export default function TransactionDetailScreen() {
                 return crypto.currency && crypto.amount ? (
                   <Text
                     style={{
-                      color: colors.textSecondary,
+                      color: tc.textSecondary,
                       fontSize: 15,
                       fontFamily: "Inter_500Medium",
                       marginTop: 6,
@@ -348,12 +364,12 @@ export default function TransactionDetailScreen() {
             {/* Detail Card */}
             <View
               style={{
-                backgroundColor: colors.dark.card,
+                backgroundColor: tc.dark.card,
                 borderRadius: 20,
                 paddingHorizontal: 20,
                 paddingVertical: 4,
                 borderWidth: 1,
-                borderColor: colors.glass.border,
+                borderColor: tc.glass.border,
                 ...(isDesktop ? shadows.sm : {}),
               }}
             >
@@ -418,15 +434,18 @@ export default function TransactionDetailScreen() {
 
             {/* Back Button */}
             <Pressable
-              onPress={() => router.back()}
+              onPress={() => {
+                if (router.canGoBack()) router.back();
+                else router.replace("/(tabs)" as any);
+              }}
               style={({ pressed }) => ({
-                backgroundColor: pressed ? colors.dark.border : colors.dark.elevated,
+                backgroundColor: pressed ? tc.dark.border : tc.dark.elevated,
                 borderRadius: 16,
                 paddingVertical: 16,
                 alignItems: "center",
                 marginTop: 28,
                 borderWidth: 1,
-                borderColor: colors.glass.border,
+                borderColor: tc.glass.border,
                 opacity: pressed ? 0.85 : 1,
               })}
             >

@@ -3,6 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { Transaction, getTxKesAmount, getTxRecipient } from "../api/payments";
 import { colors } from "../constants/theme";
+import { usePhonePrivacy } from "../utils/privacy";
 
 const TYPE_CONFIG: Record<
   string,
@@ -68,6 +69,7 @@ interface TransactionItemProps {
 
 export function TransactionItem({ transaction, onPress }: TransactionItemProps) {
   const router = useRouter();
+  const { formatPhone } = usePhonePrivacy();
 
   const handlePress = () => {
     if (onPress) {
@@ -99,7 +101,11 @@ export function TransactionItem({ transaction, onPress }: TransactionItemProps) 
     month: "short",
   });
 
-  const recipient = getTxRecipient(transaction);
+  const rawRecipient = getTxRecipient(transaction);
+  // Mask phone numbers based on privacy setting; leave paybill/till numbers unmasked
+  const recipient = rawRecipient && transaction.type === "SEND_MPESA"
+    ? formatPhone(rawRecipient)
+    : rawRecipient;
 
   return (
     <View>

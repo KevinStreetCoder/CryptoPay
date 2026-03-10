@@ -48,7 +48,8 @@ export const authApi = {
 
   updateProfile: (data: FormData) =>
     api.patch<User>("/auth/profile/", data, {
-      headers: { "Content-Type": "multipart/form-data" },
+      // Let axios set Content-Type with proper boundary automatically
+      headers: { "Content-Type": undefined as any },
     }),
 
   changePin: (data: { current_pin: string; new_pin: string }) =>
