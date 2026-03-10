@@ -17,23 +17,10 @@ import { useToast } from "../../src/components/Toast";
 import { useWallets } from "../../src/hooks/useWallets";
 import { ratesApi, Quote } from "../../src/api/rates";
 import { normalizeError } from "../../src/utils/apiErrors";
-import { CURRENCIES, CurrencyCode, colors } from "../../src/constants/theme";
+import { getThemeColors, getThemeShadows, CURRENCIES, CurrencyCode, colors } from "../../src/constants/theme";
+import { useThemeMode } from "../../src/stores/theme";
 
 const CRYPTO_OPTIONS: CurrencyCode[] = ["USDT", "BTC", "ETH"];
-
-const C = {
-  bg: "#060E1F",
-  card: "#0C1A2E",
-  text: "#F0F4F8",
-  muted: "#556B82",
-  secondary: "#8899AA",
-  border: colors.dark.border,
-  green: colors.primary[500],
-  greenLight: colors.primary[400],
-  greenFaint: "rgba(16, 185, 129, 0.10)",
-  greenBorder: "rgba(16, 185, 129, 0.30)",
-  error: colors.error,
-};
 
 export default function PayBillScreen() {
   const router = useRouter();
@@ -48,6 +35,10 @@ export default function PayBillScreen() {
   const [loading, setLoading] = useState(false);
 
   const [focusedField, setFocusedField] = useState<string | null>(null);
+
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
+  const ts = getThemeShadows(isDark);
 
   const selectedWallet = wallets?.find((w) => w.currency === selectedCrypto);
   const balance = selectedWallet ? parseFloat(selectedWallet.balance) : 0;
@@ -94,10 +85,10 @@ export default function PayBillScreen() {
   };
 
   const inputBorder = (field: string) =>
-    focusedField === field ? C.green : C.border;
+    focusedField === field ? tc.primary[500] : tc.dark.border;
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={{ flex: 1 }}
@@ -118,11 +109,11 @@ export default function PayBillScreen() {
                 ? {
                     width: "100%",
                     maxWidth: 560,
-                    backgroundColor: C.card,
+                    backgroundColor: tc.dark.card,
                     borderRadius: 20,
                     padding: 36,
                     borderWidth: 1,
-                    borderColor: C.border,
+                    borderColor: tc.dark.border,
                   }
                 : { flex: 1 }
             }
@@ -137,23 +128,61 @@ export default function PayBillScreen() {
                 marginBottom: isDesktop ? 12 : 0,
               }}
             >
+              {/* Premium glass back button */}
               <Pressable
                 onPress={() => router.back()}
                 hitSlop={12}
-                style={{ padding: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel="Go back"
+                testID="back-button"
+                style={({ pressed, hovered }: any) => ({
+                  width: 42,
+                  height: 42,
+                  borderRadius: 14,
+                  backgroundColor: hovered ? tc.dark.elevated : tc.dark.card,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderWidth: 1,
+                  borderColor: tc.glass.border,
+                  opacity: pressed ? 0.8 : 1,
+                  ...(Platform.OS === 'web' ? { cursor: 'pointer', transition: 'all 0.15s ease' } as any : {}),
+                })}
               >
-                <Ionicons name="arrow-back" size={24} color={C.text} />
+                <Ionicons name="arrow-back" size={20} color={tc.textPrimary} />
               </Pressable>
+
               <Text
                 style={{
-                  color: C.text,
+                  color: tc.textPrimary,
                   fontSize: isDesktop ? 22 : 18,
                   fontWeight: "600",
-                  marginLeft: 8,
+                  marginLeft: 14,
+                  flex: 1,
                 }}
+                maxFontSizeMultiplier={1.3}
               >
                 Pay Bill
               </Text>
+
+              {/* Step indicator pills */}
+              <View style={{ flexDirection: "row", gap: 6 }}>
+                <View
+                  style={{
+                    width: 24,
+                    height: 4,
+                    borderRadius: 2,
+                    backgroundColor: tc.primary[500],
+                  }}
+                />
+                <View
+                  style={{
+                    width: 24,
+                    height: 4,
+                    borderRadius: 2,
+                    backgroundColor: tc.dark.elevated,
+                  }}
+                />
+              </View>
             </View>
 
             <View
@@ -165,7 +194,7 @@ export default function PayBillScreen() {
               {/* Paybill Number */}
               <Text
                 style={{
-                  color: C.secondary,
+                  color: tc.textSecondary,
                   fontSize: 14,
                   fontWeight: "500",
                   marginBottom: 8,
@@ -177,13 +206,13 @@ export default function PayBillScreen() {
                 value={paybillNumber}
                 onChangeText={setPaybillNumber}
                 placeholder="e.g. 888880"
-                placeholderTextColor={C.muted}
+                placeholderTextColor={tc.dark.muted}
                 keyboardType="number-pad"
                 onFocus={() => setFocusedField("paybill")}
                 onBlur={() => setFocusedField(null)}
                 style={{
-                  backgroundColor: C.card,
-                  color: C.text,
+                  backgroundColor: tc.dark.card,
+                  color: tc.textPrimary,
                   fontSize: 16,
                   borderRadius: 16,
                   borderWidth: 1,
@@ -203,7 +232,7 @@ export default function PayBillScreen() {
               {/* Account Number */}
               <Text
                 style={{
-                  color: C.secondary,
+                  color: tc.textSecondary,
                   fontSize: 14,
                   fontWeight: "500",
                   marginBottom: 8,
@@ -215,12 +244,12 @@ export default function PayBillScreen() {
                 value={accountNumber}
                 onChangeText={setAccountNumber}
                 placeholder="e.g. 12345678"
-                placeholderTextColor={C.muted}
+                placeholderTextColor={tc.dark.muted}
                 onFocus={() => setFocusedField("account")}
                 onBlur={() => setFocusedField(null)}
                 style={{
-                  backgroundColor: C.card,
-                  color: C.text,
+                  backgroundColor: tc.dark.card,
+                  color: tc.textPrimary,
                   fontSize: 16,
                   borderRadius: 16,
                   borderWidth: 1,
@@ -240,7 +269,7 @@ export default function PayBillScreen() {
               {/* Amount */}
               <Text
                 style={{
-                  color: C.secondary,
+                  color: tc.textSecondary,
                   fontSize: 14,
                   fontWeight: "500",
                   marginBottom: 8,
@@ -252,7 +281,7 @@ export default function PayBillScreen() {
                 style={{
                   flexDirection: "row",
                   alignItems: "center",
-                  backgroundColor: C.card,
+                  backgroundColor: tc.dark.card,
                   borderRadius: 16,
                   borderWidth: 1,
                   borderColor: inputBorder("amount"),
@@ -263,7 +292,7 @@ export default function PayBillScreen() {
               >
                 <Text
                   style={{
-                    color: C.secondary,
+                    color: tc.textSecondary,
                     fontSize: 18,
                     fontWeight: "700",
                     marginRight: 4,
@@ -275,13 +304,13 @@ export default function PayBillScreen() {
                   value={amount}
                   onChangeText={setAmount}
                   placeholder="0"
-                  placeholderTextColor={C.muted}
+                  placeholderTextColor={tc.dark.muted}
                   keyboardType="numeric"
                   onFocus={() => setFocusedField("amount")}
                   onBlur={() => setFocusedField(null)}
                   style={{
                     flex: 1,
-                    color: C.text,
+                    color: tc.textPrimary,
                     fontSize: 24,
                     fontWeight: "700",
                     paddingVertical: 12,
@@ -293,7 +322,7 @@ export default function PayBillScreen() {
               {/* Crypto Selector */}
               <Text
                 style={{
-                  color: C.secondary,
+                  color: tc.textSecondary,
                   fontSize: 14,
                   fontWeight: "500",
                   marginTop: 20,
@@ -313,7 +342,7 @@ export default function PayBillScreen() {
                   const isSelected = selectedCrypto === crypto;
                   const wallet = wallets?.find((w) => w.currency === crypto);
                   const bal = wallet ? parseFloat(wallet.balance) : 0;
-                  const brandColor = colors.crypto[crypto] ?? C.green;
+                  const brandColor = colors.crypto[crypto] ?? tc.primary[500];
 
                   return (
                     <Pressable
@@ -327,8 +356,8 @@ export default function PayBillScreen() {
                         borderRadius: 16,
                         padding: 12,
                         borderWidth: 1,
-                        borderColor: isSelected ? C.green : C.border,
-                        backgroundColor: isSelected ? C.greenFaint : C.card,
+                        borderColor: isSelected ? tc.primary[500] : tc.dark.border,
+                        backgroundColor: isSelected ? tc.primary[500] + "1A" : tc.dark.card,
                         ...(Platform.OS === 'web' ? { cursor: 'pointer', transition: 'all 0.15s ease' } as any : {}),
                       }}
                     >
@@ -346,7 +375,7 @@ export default function PayBillScreen() {
                             borderRadius: 13,
                             backgroundColor: isSelected
                               ? brandColor
-                              : C.border,
+                              : tc.dark.border,
                             alignItems: "center",
                             justifyContent: "center",
                             marginRight: 6,
@@ -354,7 +383,7 @@ export default function PayBillScreen() {
                         >
                           <Text
                             style={{
-                              color: isSelected ? "#fff" : C.secondary,
+                              color: isSelected ? "#fff" : tc.textSecondary,
                               fontSize: 13,
                               fontWeight: "700",
                             }}
@@ -366,7 +395,7 @@ export default function PayBillScreen() {
                           style={{
                             fontSize: 14,
                             fontWeight: "600",
-                            color: isSelected ? C.greenLight : C.text,
+                            color: isSelected ? tc.primary[400] : tc.textPrimary,
                           }}
                         >
                           {info.symbol}
@@ -374,7 +403,7 @@ export default function PayBillScreen() {
                       </View>
                       <Text
                         style={{
-                          color: C.muted,
+                          color: tc.dark.muted,
                           fontSize: 12,
                           marginTop: 2,
                         }}
@@ -392,10 +421,10 @@ export default function PayBillScreen() {
               {quote && (
                 <View
                   style={{
-                    backgroundColor: C.card,
+                    backgroundColor: tc.dark.card,
                     borderRadius: 16,
                     borderWidth: 1,
-                    borderColor: C.greenBorder,
+                    borderColor: tc.primary[500] + "4D",
                     padding: 16,
                     marginTop: 20,
                   }}
@@ -407,10 +436,10 @@ export default function PayBillScreen() {
                       marginBottom: 8,
                     }}
                   >
-                    <Text style={{ color: C.muted, fontSize: 14 }}>Rate</Text>
+                    <Text style={{ color: tc.dark.muted, fontSize: 14 }}>Rate</Text>
                     <Text
                       style={{
-                        color: C.text,
+                        color: tc.textPrimary,
                         fontSize: 14,
                         fontWeight: "500",
                       }}
@@ -426,10 +455,10 @@ export default function PayBillScreen() {
                       marginBottom: 8,
                     }}
                   >
-                    <Text style={{ color: C.muted, fontSize: 14 }}>Fee</Text>
+                    <Text style={{ color: tc.dark.muted, fontSize: 14 }}>Fee</Text>
                     <Text
                       style={{
-                        color: C.text,
+                        color: tc.textPrimary,
                         fontSize: 14,
                         fontWeight: "500",
                       }}
@@ -445,10 +474,10 @@ export default function PayBillScreen() {
                         marginBottom: 8,
                       }}
                     >
-                      <Text style={{ color: C.muted, fontSize: 14 }}>Excise Duty (10%)</Text>
+                      <Text style={{ color: tc.dark.muted, fontSize: 14 }}>Excise Duty (10%)</Text>
                       <Text
                         style={{
-                          color: C.text,
+                          color: tc.textPrimary,
                           fontSize: 14,
                           fontWeight: "500",
                         }}
@@ -460,7 +489,7 @@ export default function PayBillScreen() {
                   <View
                     style={{
                       height: 1,
-                      backgroundColor: C.border,
+                      backgroundColor: tc.dark.border,
                       marginVertical: 8,
                     }}
                   />
@@ -472,7 +501,7 @@ export default function PayBillScreen() {
                   >
                     <Text
                       style={{
-                        color: C.secondary,
+                        color: tc.textSecondary,
                         fontSize: 14,
                         fontWeight: "500",
                       }}
@@ -481,7 +510,7 @@ export default function PayBillScreen() {
                     </Text>
                     <Text
                       style={{
-                        color: C.greenLight,
+                        color: tc.primary[400],
                         fontSize: 16,
                         fontWeight: "700",
                       }}
@@ -492,7 +521,7 @@ export default function PayBillScreen() {
                   {parseFloat(quote.crypto_amount) > balance && (
                     <Text
                       style={{
-                        color: C.error,
+                        color: tc.error,
                         fontSize: 12,
                         marginTop: 8,
                       }}
@@ -502,7 +531,7 @@ export default function PayBillScreen() {
                   )}
                   <Text
                     style={{
-                      color: C.muted,
+                      color: tc.dark.muted,
                       fontSize: 12,
                       marginTop: 8,
                     }}

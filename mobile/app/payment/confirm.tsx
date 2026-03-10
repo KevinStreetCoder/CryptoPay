@@ -11,6 +11,8 @@ import { paymentsApi } from "../../src/api/payments";
 import { normalizeError } from "../../src/utils/apiErrors";
 import { useScreenSecurity } from "../../src/hooks/useScreenSecurity";
 import { CURRENCIES, CurrencyCode, colors, shadows } from "../../src/constants/theme";
+import { getThemeColors, getThemeShadows } from "../../src/constants/theme";
+import { useThemeMode } from "../../src/stores/theme";
 
 function PulsingDot() {
   const pulse = useRef(new Animated.Value(0.4)).current;
@@ -143,6 +145,12 @@ export default function ConfirmPaymentScreen() {
   const isWeb = Platform.OS === "web";
   const isDesktop = isWeb && width >= 768;
 
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
+  const ts = getThemeShadows(isDark);
+
+  const [backHovered, setBackHovered] = useState(false);
+
   const params = useLocalSearchParams<{
     type: string;
     paybill_number?: string;
@@ -251,14 +259,14 @@ export default function ConfirmPaymentScreen() {
       ? "phone-portrait-outline"
       : "cart-outline";
   const typeColor = isPaybill
-    ? colors.primary[500]
+    ? tc.primary[500]
     : isSend
       ? "#F59E0B"
-      : colors.accent;
+      : tc.accent;
   const typeLabel = isPaybill ? "Pay Bill" : isSend ? "Send to M-Pesa" : "Buy Goods";
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.dark.bg }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
       {/* Header */}
       <View
         style={{
@@ -273,26 +281,28 @@ export default function ConfirmPaymentScreen() {
       >
         <Pressable
           onPress={() => (step === "pin" ? setStep("review") : router.back())}
+          onHoverIn={() => setBackHovered(true)}
+          onHoverOut={() => setBackHovered(false)}
           hitSlop={12}
           style={{
             width: 42,
             height: 42,
             borderRadius: 14,
-            backgroundColor: colors.dark.card,
+            backgroundColor: backHovered ? tc.dark.elevated : tc.dark.card,
             alignItems: "center",
             justifyContent: "center",
             borderWidth: 1,
-            borderColor: colors.glass.border,
+            borderColor: tc.glass.border,
           }}
           accessibilityRole="button"
           accessibilityLabel="Go back"
           testID="back-button"
         >
-          <Ionicons name="arrow-back" size={20} color={colors.textPrimary} />
+          <Ionicons name="arrow-back" size={20} color={tc.textPrimary} />
         </Pressable>
         <Text
           style={{
-            color: colors.textPrimary,
+            color: tc.textPrimary,
             fontSize: 18,
             fontFamily: "Inter_600SemiBold",
             marginLeft: 14,
@@ -303,14 +313,14 @@ export default function ConfirmPaymentScreen() {
           {step === "review" ? "Confirm Payment" : "Enter PIN"}
         </Text>
 
-        {/* Step indicator pills */}
+        {/* Step indicator pills — step 2 of 2, both filled */}
         <View style={{ flexDirection: "row", gap: 6 }}>
           <View
             style={{
               width: 24,
               height: 4,
               borderRadius: 2,
-              backgroundColor: colors.primary[500],
+              backgroundColor: tc.primary[500],
             }}
           />
           <View
@@ -318,8 +328,7 @@ export default function ConfirmPaymentScreen() {
               width: 24,
               height: 4,
               borderRadius: 2,
-              backgroundColor:
-                step === "pin" ? colors.primary[500] : colors.dark.elevated,
+              backgroundColor: tc.primary[500],
             }}
           />
         </View>
@@ -345,12 +354,12 @@ export default function ConfirmPaymentScreen() {
           {/* Premium Receipt Card */}
           <View
             style={{
-              backgroundColor: colors.dark.card,
+              backgroundColor: tc.dark.card,
               borderRadius: 24,
               marginTop: isDesktop ? 0 : 12,
               overflow: "hidden",
               borderWidth: 1,
-              borderColor: colors.glass.border,
+              borderColor: tc.glass.border,
               ...(isWeb ? { boxShadow: '0 8px 32px rgba(0,0,0,0.3)' } as any : {}),
             }}
           >
@@ -388,7 +397,7 @@ export default function ConfirmPaymentScreen() {
 
               <Text
                 style={{
-                  color: colors.textMuted,
+                  color: tc.textMuted,
                   fontSize: 12,
                   fontFamily: "Inter_500Medium",
                   marginBottom: 10,
@@ -402,7 +411,7 @@ export default function ConfirmPaymentScreen() {
 
               <Text
                 style={{
-                  color: colors.textPrimary,
+                  color: tc.textPrimary,
                   fontSize: 38,
                   fontFamily: "Inter_700Bold",
                   letterSpacing: -1,
@@ -418,7 +427,7 @@ export default function ConfirmPaymentScreen() {
             <View
               style={{
                 borderBottomWidth: 1.5,
-                borderBottomColor: colors.dark.border + "40",
+                borderBottomColor: tc.dark.border + "40",
                 borderStyle: "dashed",
                 marginHorizontal: 20,
               }}
@@ -436,7 +445,7 @@ export default function ConfirmPaymentScreen() {
               >
                 <Text
                   style={{
-                    color: colors.textMuted,
+                    color: tc.textMuted,
                     fontSize: 14,
                     fontFamily: "Inter_400Regular",
                   }}
@@ -446,7 +455,7 @@ export default function ConfirmPaymentScreen() {
                 </Text>
                 <Text
                   style={{
-                    color: colors.textPrimary,
+                    color: tc.textPrimary,
                     fontSize: 14,
                     fontFamily: "Inter_600SemiBold",
                   }}
@@ -466,7 +475,7 @@ export default function ConfirmPaymentScreen() {
                 >
                   <Text
                     style={{
-                      color: colors.textMuted,
+                      color: tc.textMuted,
                       fontSize: 14,
                       fontFamily: "Inter_400Regular",
                     }}
@@ -476,7 +485,7 @@ export default function ConfirmPaymentScreen() {
                   </Text>
                   <Text
                     style={{
-                      color: colors.textPrimary,
+                      color: tc.textPrimary,
                       fontSize: 14,
                       fontFamily: "Inter_600SemiBold",
                     }}
@@ -491,7 +500,7 @@ export default function ConfirmPaymentScreen() {
               <View
                 style={{
                   borderBottomWidth: 1,
-                  borderBottomColor: colors.dark.border + "30",
+                  borderBottomColor: tc.dark.border + "30",
                   borderStyle: "dashed",
                 }}
               />
@@ -506,7 +515,7 @@ export default function ConfirmPaymentScreen() {
               >
                 <Text
                   style={{
-                    color: colors.textMuted,
+                    color: tc.textMuted,
                     fontSize: 14,
                     fontFamily: "Inter_400Regular",
                   }}
@@ -519,7 +528,7 @@ export default function ConfirmPaymentScreen() {
                     flexDirection: "row",
                     alignItems: "center",
                     gap: 6,
-                    backgroundColor: colors.primary[500] + "1A",
+                    backgroundColor: tc.primary[500] + "1A",
                     borderRadius: 10,
                     paddingHorizontal: 12,
                     paddingVertical: 5,
@@ -527,7 +536,7 @@ export default function ConfirmPaymentScreen() {
                 >
                   <Text
                     style={{
-                      color: colors.primary[400],
+                      color: tc.primary[400],
                       fontSize: 14,
                       fontFamily: "Inter_600SemiBold",
                     }}
@@ -548,7 +557,7 @@ export default function ConfirmPaymentScreen() {
               >
                 <Text
                   style={{
-                    color: colors.textMuted,
+                    color: tc.textMuted,
                     fontSize: 14,
                     fontFamily: "Inter_400Regular",
                   }}
@@ -558,7 +567,7 @@ export default function ConfirmPaymentScreen() {
                 </Text>
                 <Text
                   style={{
-                    color: colors.textSecondary,
+                    color: tc.textSecondary,
                     fontSize: 14,
                     fontFamily: "Inter_500Medium",
                   }}
@@ -579,7 +588,7 @@ export default function ConfirmPaymentScreen() {
               >
                 <Text
                   style={{
-                    color: colors.textMuted,
+                    color: tc.textMuted,
                     fontSize: 14,
                     fontFamily: "Inter_400Regular",
                   }}
@@ -589,7 +598,7 @@ export default function ConfirmPaymentScreen() {
                 </Text>
                 <Text
                   style={{
-                    color: colors.textSecondary,
+                    color: tc.textSecondary,
                     fontSize: 14,
                     fontFamily: "Inter_500Medium",
                   }}
@@ -610,7 +619,7 @@ export default function ConfirmPaymentScreen() {
                 >
                   <Text
                     style={{
-                      color: colors.textMuted,
+                      color: tc.textMuted,
                       fontSize: 14,
                       fontFamily: "Inter_400Regular",
                     }}
@@ -620,7 +629,7 @@ export default function ConfirmPaymentScreen() {
                   </Text>
                   <Text
                     style={{
-                      color: colors.textSecondary,
+                      color: tc.textSecondary,
                       fontSize: 14,
                       fontFamily: "Inter_500Medium",
                     }}
@@ -650,7 +659,7 @@ export default function ConfirmPaymentScreen() {
                 size="lg"
                 testID="pay-now-button"
                 style={{
-                  ...shadows.glow(colors.primary[500], 0.35),
+                  ...ts.glow(tc.primary[500], 0.35),
                 }}
               />
             )}
@@ -666,10 +675,10 @@ export default function ConfirmPaymentScreen() {
               marginBottom: isDesktop ? 0 : 16,
             }}
           >
-            <Ionicons name="shield-checkmark" size={14} color={colors.primary[400]} />
+            <Ionicons name="shield-checkmark" size={14} color={tc.primary[400]} />
             <Text
               style={{
-                color: colors.textMuted,
+                color: tc.textMuted,
                 fontSize: 12,
                 fontFamily: "Inter_400Regular",
               }}
@@ -695,11 +704,11 @@ export default function ConfirmPaymentScreen() {
           {/* PIN card wrapper for desktop */}
           <View
             style={isDesktop ? {
-              backgroundColor: colors.dark.card,
+              backgroundColor: tc.dark.card,
               borderRadius: 28,
               padding: 40,
               borderWidth: 1,
-              borderColor: colors.glass.border,
+              borderColor: tc.glass.border,
               ...(isWeb ? { boxShadow: '0 8px 32px rgba(0,0,0,0.3)' } as any : {}),
             } : { paddingTop: 40 }}
           >
@@ -710,20 +719,20 @@ export default function ConfirmPaymentScreen() {
                   width: 68,
                   height: 68,
                   borderRadius: 20,
-                  backgroundColor: colors.primary[500] + "1A",
+                  backgroundColor: tc.primary[500] + "1A",
                   alignItems: "center",
                   justifyContent: "center",
                   borderWidth: 1.5,
-                  borderColor: colors.primary[500] + "25",
+                  borderColor: tc.primary[500] + "25",
                 }}
               >
-                <Ionicons name="lock-closed" size={30} color={colors.primary[400]} />
+                <Ionicons name="lock-closed" size={30} color={tc.primary[400]} />
               </View>
             </View>
 
             <Text
               style={{
-                color: colors.textPrimary,
+                color: tc.textPrimary,
                 fontSize: 22,
                 fontFamily: "Inter_700Bold",
                 textAlign: "center",
@@ -735,7 +744,7 @@ export default function ConfirmPaymentScreen() {
             </Text>
             <Text
               style={{
-                color: colors.textMuted,
+                color: tc.textMuted,
                 fontSize: 14,
                 fontFamily: "Inter_400Regular",
                 textAlign: "center",
@@ -751,7 +760,7 @@ export default function ConfirmPaymentScreen() {
             <View
               style={{
                 alignSelf: "center",
-                backgroundColor: isDesktop ? colors.dark.elevated : colors.dark.card,
+                backgroundColor: isDesktop ? tc.dark.elevated : tc.dark.card,
                 borderRadius: 16,
                 paddingHorizontal: 20,
                 paddingVertical: 12,
@@ -760,22 +769,22 @@ export default function ConfirmPaymentScreen() {
                 gap: 10,
                 marginBottom: 36,
                 borderWidth: 1,
-                borderColor: colors.glass.border,
+                borderColor: tc.glass.border,
               }}
             >
               <Text
                 style={{
-                  color: colors.textPrimary,
+                  color: tc.textPrimary,
                   fontSize: 17,
                   fontFamily: "Inter_700Bold",
                 }}
               >
                 KSh {amountKES.toLocaleString()}
               </Text>
-              <Ionicons name="arrow-forward" size={14} color={colors.textMuted} />
+              <Ionicons name="arrow-forward" size={14} color={tc.textMuted} />
               <Text
                 style={{
-                  color: colors.textSecondary,
+                  color: tc.textSecondary,
                   fontSize: 15,
                   fontFamily: "Inter_500Medium",
                 }}
@@ -786,10 +795,10 @@ export default function ConfirmPaymentScreen() {
 
             {quoteExpired ? (
               <View style={{ alignItems: "center", gap: 16 }}>
-                <Ionicons name="time-outline" size={40} color={colors.error} />
+                <Ionicons name="time-outline" size={40} color={tc.error} />
                 <Text
                   style={{
-                    color: colors.error,
+                    color: tc.error,
                     fontSize: 16,
                     fontFamily: "Inter_600SemiBold",
                     textAlign: "center",
@@ -799,7 +808,7 @@ export default function ConfirmPaymentScreen() {
                 </Text>
                 <Text
                   style={{
-                    color: colors.textMuted,
+                    color: tc.textMuted,
                     fontSize: 14,
                     fontFamily: "Inter_400Regular",
                     textAlign: "center",
@@ -832,7 +841,7 @@ export default function ConfirmPaymentScreen() {
                 <PulsingDot />
                 <Text
                   style={{
-                    color: colors.primary[400],
+                    color: tc.primary[400],
                     fontSize: 14,
                     fontFamily: "Inter_500Medium",
                   }}
@@ -853,10 +862,10 @@ export default function ConfirmPaymentScreen() {
                 opacity: 0.6,
               }}
             >
-              <Ionicons name="shield-checkmark" size={14} color={colors.textMuted} />
+              <Ionicons name="shield-checkmark" size={14} color={tc.textMuted} />
               <Text
                 style={{
-                  color: colors.textMuted,
+                  color: tc.textMuted,
                   fontSize: 12,
                   fontFamily: "Inter_400Regular",
                 }}

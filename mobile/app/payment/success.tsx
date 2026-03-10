@@ -7,7 +7,8 @@ import { Animated, Easing } from "react-native";
 import * as Haptics from "expo-haptics";
 import { Button } from "../../src/components/Button";
 import { useToast } from "../../src/components/Toast";
-import { colors, shadows } from "../../src/constants/theme";
+import { colors, shadows, getThemeColors, getThemeShadows } from "../../src/constants/theme";
+import { useThemeMode } from "../../src/stores/theme";
 
 function AnimatedCheckmark() {
   const scale = useRef(new Animated.Value(0)).current;
@@ -113,6 +114,10 @@ export default function PaymentSuccessScreen() {
     recipient: string;
   }>();
 
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
+  const ts = getThemeShadows(isDark);
+
   const { width } = useWindowDimensions();
   const isWeb = Platform.OS === "web";
   const isDesktop = isWeb && width >= 768;
@@ -144,7 +149,7 @@ export default function PaymentSuccessScreen() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.dark.bg }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
       <View
         style={{
           flex: 1,
@@ -161,7 +166,7 @@ export default function PaymentSuccessScreen() {
 
         <Text
           style={{
-            color: colors.textPrimary,
+            color: tc.textPrimary,
             fontSize: 28,
             fontFamily: "Inter_700Bold",
             marginBottom: 8,
@@ -172,7 +177,7 @@ export default function PaymentSuccessScreen() {
         </Text>
         <Text
           style={{
-            color: colors.textSecondary,
+            color: tc.textSecondary,
             fontSize: 15,
             fontFamily: "Inter_400Regular",
             textAlign: "center",
@@ -186,28 +191,28 @@ export default function PaymentSuccessScreen() {
         {/* Receipt Card - glass, rounded-3xl */}
         <View
           style={{
-            backgroundColor: colors.dark.card,
+            backgroundColor: tc.dark.card,
             borderRadius: 24,
             width: "100%",
             overflow: "hidden",
             borderWidth: 1,
-            borderColor: colors.glass.border,
+            borderColor: tc.glass.border,
           }}
         >
           {/* Amount header - primary/8% bg */}
           <View
             style={{
-              backgroundColor: colors.primary[500] + "14",
+              backgroundColor: tc.primary[500] + "14",
               paddingVertical: 22,
               paddingHorizontal: 24,
               alignItems: "center",
               borderBottomWidth: 1,
-              borderBottomColor: colors.dark.border + "20",
+              borderBottomColor: tc.dark.border + "20",
             }}
           >
             <Text
               style={{
-                color: colors.textMuted,
+                color: tc.textMuted,
                 fontSize: 12,
                 fontFamily: "Inter_500Medium",
                 textTransform: "uppercase",
@@ -219,7 +224,7 @@ export default function PaymentSuccessScreen() {
             </Text>
             <Text
               style={{
-                color: colors.textPrimary,
+                color: tc.textPrimary,
                 fontSize: 34,
                 fontFamily: "Inter_700Bold",
                 letterSpacing: -0.5,
@@ -242,7 +247,7 @@ export default function PaymentSuccessScreen() {
             >
               <Text
                 style={{
-                  color: colors.textMuted,
+                  color: tc.textMuted,
                   fontSize: 14,
                   fontFamily: "Inter_400Regular",
                 }}
@@ -251,7 +256,7 @@ export default function PaymentSuccessScreen() {
               </Text>
               <Text
                 style={{
-                  color: colors.textPrimary,
+                  color: tc.textPrimary,
                   fontSize: 14,
                   fontFamily: "Inter_600SemiBold",
                 }}
@@ -264,7 +269,7 @@ export default function PaymentSuccessScreen() {
             <View
               style={{
                 borderBottomWidth: 1,
-                borderBottomColor: colors.dark.border + "40",
+                borderBottomColor: tc.dark.border + "40",
                 borderStyle: "dashed",
                 marginBottom: 16,
               }}
@@ -281,7 +286,7 @@ export default function PaymentSuccessScreen() {
             >
               <Text
                 style={{
-                  color: colors.textMuted,
+                  color: tc.textMuted,
                   fontSize: 14,
                   fontFamily: "Inter_400Regular",
                 }}
@@ -290,7 +295,7 @@ export default function PaymentSuccessScreen() {
               </Text>
               <Text
                 style={{
-                  color: colors.textPrimary,
+                  color: tc.textPrimary,
                   fontSize: 14,
                   fontFamily: "Inter_600SemiBold",
                 }}
@@ -303,7 +308,7 @@ export default function PaymentSuccessScreen() {
             <View
               style={{
                 borderBottomWidth: 1,
-                borderBottomColor: colors.dark.border + "40",
+                borderBottomColor: tc.dark.border + "40",
                 borderStyle: "dashed",
                 marginBottom: 16,
               }}
@@ -319,7 +324,7 @@ export default function PaymentSuccessScreen() {
             >
               <Text
                 style={{
-                  color: colors.textMuted,
+                  color: tc.textMuted,
                   fontSize: 14,
                   fontFamily: "Inter_400Regular",
                 }}
@@ -331,7 +336,7 @@ export default function PaymentSuccessScreen() {
                   flexDirection: "row",
                   alignItems: "center",
                   gap: 6,
-                  backgroundColor: colors.success + "1A",
+                  backgroundColor: tc.success + "1A",
                   borderRadius: 10,
                   paddingHorizontal: 12,
                   paddingVertical: 5,
@@ -342,12 +347,12 @@ export default function PaymentSuccessScreen() {
                     width: 6,
                     height: 6,
                     borderRadius: 3,
-                    backgroundColor: colors.success,
+                    backgroundColor: tc.success,
                   }}
                 />
                 <Text
                   style={{
-                    color: colors.success,
+                    color: tc.success,
                     fontSize: 13,
                     fontFamily: "Inter_600SemiBold",
                   }}
@@ -371,13 +376,13 @@ export default function PaymentSuccessScreen() {
             paddingVertical: 12,
             paddingHorizontal: 20,
             borderRadius: 14,
-            backgroundColor: pressed ? colors.dark.elevated + "60" : "transparent",
+            backgroundColor: pressed ? tc.dark.elevated + "60" : "transparent",
           })}
         >
-          <Ionicons name="share-outline" size={18} color={colors.primary[400]} />
+          <Ionicons name="share-outline" size={18} color={tc.primary[400]} />
           <Text
             style={{
-              color: colors.primary[400],
+              color: tc.primary[400],
               fontSize: 14,
               fontFamily: "Inter_600SemiBold",
             }}
@@ -389,7 +394,7 @@ export default function PaymentSuccessScreen() {
         {/* Info text */}
         <Text
           style={{
-            color: colors.textMuted,
+            color: tc.textMuted,
             fontSize: 12,
             fontFamily: "Inter_400Regular",
             textAlign: "center",
@@ -419,7 +424,7 @@ export default function PaymentSuccessScreen() {
           onPress={() => router.replace("/(tabs)")}
           size="lg"
           style={{
-            ...shadows.glow(colors.primary[500], 0.35),
+            ...ts.glow(tc.primary[500], 0.35),
           }}
         />
         <Button
