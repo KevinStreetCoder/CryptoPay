@@ -25,7 +25,7 @@ const CRYPTO_OPTIONS: CurrencyCode[] = ["USDT", "BTC", "ETH"];
 export default function SendMpesaScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
-  const isDesktop = width >= 768;
+  const isDesktop = Platform.OS === "web" && width >= 768;
   const { data: wallets } = useWallets();
   const [phone, setPhone] = useState("");
   const [amount, setAmount] = useState("");
@@ -104,89 +104,96 @@ export default function SendMpesaScreen() {
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={
             isDesktop
-              ? { alignItems: "center", paddingTop: 20 }
+              ? { alignItems: "center", paddingVertical: 32 }
               : undefined
           }
         >
-          {/* Header */}
+          {/* Desktop wrapper card */}
           <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              paddingHorizontal: 16,
-              paddingVertical: 12,
-              width: isDesktop ? 560 : "100%",
-            }}
+            style={
+              isDesktop
+                ? {
+                    width: "100%",
+                    maxWidth: 560,
+                    backgroundColor: tc.dark.card,
+                    borderRadius: 20,
+                    padding: 36,
+                    borderWidth: 1,
+                    borderColor: tc.dark.border,
+                  }
+                : { flex: 1 }
+            }
           >
-            <Pressable
-              onPress={() => router.back()}
-              hitSlop={12}
-              style={({ pressed, hovered }: any) => ({
-                width: 42,
-                height: 42,
-                borderRadius: 14,
-                backgroundColor: hovered ? tc.dark.elevated : tc.dark.card,
-                alignItems: "center",
-                justifyContent: "center",
-                borderWidth: 1,
-                borderColor: tc.glass.border,
-                opacity: pressed ? 0.8 : 1,
-                ...(Platform.OS === 'web' ? { cursor: 'pointer', transition: 'all 0.15s ease' } as any : {}),
-              })}
-              accessibilityRole="button"
-              accessibilityLabel="Go back"
-            >
-              <Ionicons name="arrow-back" size={20} color={tc.textPrimary} />
-            </Pressable>
-            <Text
+            {/* Header */}
+            <View
               style={{
-                color: tc.textPrimary,
-                fontSize: 18,
-                fontFamily: "Inter_600SemiBold",
-                marginLeft: 14,
-                flex: 1,
+                flexDirection: "row",
+                alignItems: "center",
+                paddingHorizontal: isDesktop ? 0 : 16,
+                paddingVertical: 12,
+                marginBottom: isDesktop ? 12 : 0,
               }}
-              maxFontSizeMultiplier={1.3}
             >
-              Send to M-Pesa
-            </Text>
+              <Pressable
+                onPress={() => router.back()}
+                hitSlop={12}
+                style={({ pressed, hovered }: any) => ({
+                  width: 42,
+                  height: 42,
+                  borderRadius: 14,
+                  backgroundColor: hovered ? tc.dark.elevated : tc.dark.card,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderWidth: 1,
+                  borderColor: tc.glass.border,
+                  opacity: pressed ? 0.8 : 1,
+                  ...(Platform.OS === 'web' ? { cursor: 'pointer', transition: 'all 0.15s ease' } as any : {}),
+                })}
+                accessibilityRole="button"
+                accessibilityLabel="Go back"
+              >
+                <Ionicons name="arrow-back" size={20} color={tc.textPrimary} />
+              </Pressable>
+              <Text
+                style={{
+                  color: tc.textPrimary,
+                  fontSize: isDesktop ? 22 : 18,
+                  fontFamily: "Inter_600SemiBold",
+                  marginLeft: 14,
+                  flex: 1,
+                }}
+                maxFontSizeMultiplier={1.3}
+              >
+                Send to M-Pesa
+              </Text>
 
-            {/* Step indicator pills */}
-            <View style={{ flexDirection: "row", gap: 6 }}>
-              <View
-                style={{
-                  width: 24,
-                  height: 4,
-                  borderRadius: 2,
-                  backgroundColor: tc.primary[500],
-                }}
-              />
-              <View
-                style={{
-                  width: 24,
-                  height: 4,
-                  borderRadius: 2,
-                  backgroundColor: tc.dark.elevated,
-                }}
-              />
+              {/* Step indicator pills */}
+              <View style={{ flexDirection: "row", gap: 6 }}>
+                <View
+                  style={{
+                    width: 24,
+                    height: 4,
+                    borderRadius: 2,
+                    backgroundColor: tc.primary[500],
+                  }}
+                />
+                <View
+                  style={{
+                    width: 24,
+                    height: 4,
+                    borderRadius: 2,
+                    backgroundColor: tc.dark.elevated,
+                  }}
+                />
+              </View>
             </View>
-          </View>
 
-          <View
-            style={{
-              paddingHorizontal: 20,
-              marginTop: 8,
-              width: isDesktop ? 560 : "100%",
-              ...(isDesktop ? {
-                backgroundColor: tc.dark.card,
-                borderRadius: 20,
-                padding: 24,
-                borderWidth: 1,
-                borderColor: tc.glass.border,
-                ...(Platform.OS === 'web' ? { boxShadow: '0 8px 32px rgba(0,0,0,0.3)' } as any : {}),
-              } : {}),
-            }}
-          >
+            <View
+              style={{
+                paddingHorizontal: isDesktop ? 0 : 20,
+                marginTop: isDesktop ? 0 : 8,
+              }}
+            >
             {/* Phone Number */}
             <Text
               style={{
@@ -590,6 +597,7 @@ export default function SendMpesaScreen() {
                   testID="confirm-payment-button"
                 />
               )}
+            </View>
             </View>
           </View>
         </ScrollView>

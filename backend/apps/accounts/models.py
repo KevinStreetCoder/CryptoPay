@@ -17,6 +17,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     phone = models.CharField(max_length=15, unique=True, db_index=True)
     email = models.EmailField(blank=True, null=True, unique=True)
     full_name = models.CharField(max_length=150, blank=True, default="")
+    avatar = models.ImageField(upload_to="avatars/%Y/%m/", blank=True, null=True)
     pin_hash = models.CharField(max_length=255, blank=True)
     kyc_tier = models.SmallIntegerField(default=0)
     kyc_status = models.CharField(

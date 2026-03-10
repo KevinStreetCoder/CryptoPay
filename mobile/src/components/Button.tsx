@@ -8,7 +8,8 @@ import {
   ViewStyle,
   Platform,
 } from "react-native";
-import { colors, shadows } from "../constants/theme";
+import { colors, getThemeShadows } from "../constants/theme";
+import { useThemeMode } from "../stores/theme";
 import { BrandedSpinner } from "./BrandedSpinner";
 
 const isWeb = Platform.OS === "web";
@@ -53,40 +54,42 @@ const SIZE_CONFIG = {
   },
 } as const;
 
-const VARIANT_STYLES = {
-  primary: {
-    bg: colors.primary[500],
-    bgPressed: colors.primary[600],
-    bgHover: colors.primary[400],
-    text: "#FFFFFF",
-    border: "transparent",
-    borderWidth: 0,
-  },
-  secondary: {
-    bg: "rgba(22, 39, 66, 0.7)",
-    bgPressed: "rgba(22, 39, 66, 0.9)",
-    bgHover: "rgba(22, 39, 66, 0.85)",
-    text: "#FFFFFF",
-    border: colors.glass.border,
-    borderWidth: 1,
-  },
-  outline: {
-    bg: "transparent",
-    bgPressed: "rgba(16, 185, 129, 0.08)",
-    bgHover: "rgba(16, 185, 129, 0.05)",
-    text: colors.primary[400],
-    border: colors.primary[500],
-    borderWidth: 1.5,
-  },
-  ghost: {
-    bg: "transparent",
-    bgPressed: colors.dark.elevated,
-    bgHover: "rgba(22, 39, 66, 0.4)",
-    text: colors.primary[400],
-    border: "transparent",
-    borderWidth: 0,
-  },
-} as const;
+function getVariantStyles(isDark: boolean) {
+  return {
+    primary: {
+      bg: colors.primary[500],
+      bgPressed: colors.primary[600],
+      bgHover: colors.primary[400],
+      text: "#FFFFFF",
+      border: "transparent",
+      borderWidth: 0,
+    },
+    secondary: {
+      bg: isDark ? "rgba(22, 39, 66, 0.7)" : "rgba(0, 0, 0, 0.06)",
+      bgPressed: isDark ? "rgba(22, 39, 66, 0.9)" : "rgba(0, 0, 0, 0.1)",
+      bgHover: isDark ? "rgba(22, 39, 66, 0.85)" : "rgba(0, 0, 0, 0.08)",
+      text: isDark ? "#FFFFFF" : "#0F172A",
+      border: isDark ? colors.glass.border : "rgba(0, 0, 0, 0.1)",
+      borderWidth: 1,
+    },
+    outline: {
+      bg: "transparent",
+      bgPressed: "rgba(16, 185, 129, 0.08)",
+      bgHover: "rgba(16, 185, 129, 0.05)",
+      text: colors.primary[isDark ? 400 : 600],
+      border: colors.primary[500],
+      borderWidth: 1.5,
+    },
+    ghost: {
+      bg: "transparent",
+      bgPressed: isDark ? colors.dark.elevated : "rgba(0, 0, 0, 0.06)",
+      bgHover: isDark ? "rgba(22, 39, 66, 0.4)" : "rgba(0, 0, 0, 0.04)",
+      text: colors.primary[isDark ? 400 : 600],
+      border: "transparent",
+      borderWidth: 0,
+    },
+  } as const;
+}
 
 export function Button({
   title,
@@ -102,7 +105,8 @@ export function Button({
   const scaleAnim = React.useRef(new Animated.Value(1)).current;
   const flashAnim = React.useRef(new Animated.Value(0)).current;
   const sizeConfig = SIZE_CONFIG[size];
-  const variantStyle = VARIANT_STYLES[variant];
+  const { isDark } = useThemeMode();
+  const variantStyle = getVariantStyles(isDark)[variant];
 
   const handlePressIn = () => {
     // Spring scale down
@@ -131,10 +135,11 @@ export function Button({
     }).start();
   };
 
+  const ts = getThemeShadows(isDark);
   const glowShadow =
     variant === "primary" && !disabled
-      ? shadows.glow(colors.primary[500], 0.35)
-      : shadows.sm;
+      ? ts.glow(colors.primary[500], 0.35)
+      : ts.sm;
 
   // Opacity flash overlay interpolation (0 -> transparent, 1 -> white flash)
   const flashOpacity = flashAnim.interpolate({

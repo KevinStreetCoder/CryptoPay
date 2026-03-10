@@ -13,6 +13,8 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from apps.wallets.services import WalletService
 
 from .models import AuditLog, Device, KYCDocument, PushToken, User
+from rest_framework.parsers import MultiPartParser, FormParser
+
 from .serializers import (
     ChangePINSerializer,
     DeviceModelSerializer,
@@ -21,6 +23,7 @@ from .serializers import (
     KYCDocumentSerializer,
     KYCUploadSerializer,
     LoginSerializer,
+    ProfileUpdateSerializer,
     PushTokenSerializer,
     RegisterSerializer,
     RequestOTPSerializer,
@@ -231,12 +234,63 @@ class LoginView(APIView):
 
 
 class ProfileView(APIView):
-    """Get current user profile."""
+    """Get or update current user profile."""
 
     permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
 
     def get(self, request):
-        return Response(UserSerializer(request.user).data)
+        return Response(UserSerializer(request.user, context={"request": request}).data)
+
+    def patch(self, request):
+        user = request.user
+
+        # Handle avatar upload
+        if "avatar" in request.FILES:
+            avatar = request.FILES["avatar"]
+            if avatar.size > 5 * 1024 * 1024:  # 5MB limit
+                return Response(
+                    {"error": "Avatar must be under 5MB"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if not avatar.content_type.startswith("image/"):
+                return Response(
+                    {"error": "File must be an image"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            # Delete old avatar if exists
+            if user.avatar:
+                user.avatar.delete(save=False)
+            user.avatar = avatar
+
+        # Handle text fields
+        serializer = ProfileUpdateSerializer(
+            data=request.data,
+            context={"user": user},
+        )
+        serializer.is_valid(raise_exception=True)
+
+        update_fields = []
+        if "full_name" in serializer.validated_data:
+            user.full_name = serializer.validated_data["full_name"]
+            update_fields.append("full_name")
+        if "email" in serializer.validated_data:
+            user.email = serializer.validated_data["email"] or None
+            update_fields.append("email")
+        if "avatar" in request.FILES:
+            update_fields.append("avatar")
+
+        if update_fields:
+            user.save(update_fields=update_fields)
+            AuditLog.objects.create(
+                user=user,
+                action="PROFILE_UPDATE",
+                entity_type="user",
+                entity_id=str(user.id),
+                details={"fields": update_fields},
+            )
+
+        return Response(UserSerializer(user, context={"request": request}).data)
 
 
 def _register_device(user, device_data: dict, ip_address: str) -> tuple[Device, bool]:
