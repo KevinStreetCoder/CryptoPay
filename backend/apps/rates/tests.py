@@ -132,11 +132,16 @@ class QuoteLockingTest(TestCase):
             "spread_percent": 0,
             "final_rate": "130.00",
             "flat_fee_kes": 10,
+            "excise_duty_percent": 10,
         }
 
         quote = RateService.lock_rate("USDT", Decimal("1300"))
 
-        # total_kes = 1300 + 10 = 1310
-        # crypto_amount = 1310 / 130 = 10.07692307...
-        expected = (Decimal("1310") / Decimal("130")).quantize(Decimal("0.00000001"))
+        # spread_revenue = 1300 * 1.5% (from settings) = 19.50
+        # platform_fee = 19.50 + 10 = 29.50
+        # excise_duty = 29.50 * 10% = 2.95
+        # total_kes = 1300 + 10 + 2.95 = 1312.95
+        # crypto_amount = 1312.95 / 130
+        expected = (Decimal("1312.95") / Decimal("130")).quantize(Decimal("0.00000001"))
         self.assertEqual(Decimal(quote["crypto_amount"]), expected)
+        self.assertEqual(quote["excise_duty_kes"], "2.95")

@@ -442,10 +442,11 @@ VASP license costs (when regulations are published) could add KES 5M -- 10M in m
 
 ## 9. Competitive Landscape (Updated March 2026)
 
-**Key Finding: ZERO competitors offer direct crypto-to-Paybill/Till payment.**
+**UPDATED March 2026:** Rift (riftfi.xyz) is the first known competitor to ship crypto-to-Paybill in Kenya. CryptoPay must accelerate to maintain differentiation.
 
 | Competitor | Kenya Services | Crypto→Paybill? | Key Intel |
 |-----------|---------------|-----------------|-----------|
+| **Rift (riftfi.xyz)** | Buy stablecoins, pay Paybills/Till, send money, cross-Africa remittance, yield products | **YES** | ~1,000 users, web-only (apps ~May 2026), ERC-4337 Account Abstraction, gasless UX, DeFi yield. Weak KYC, unclear VASP status. **DIRECT COMPETITOR.** |
 | **Yellow Card** | B2B stablecoin infra (API only) | NO | Exited retail Jan 2026, $3B+ processed 2024, helped draft VASP Act |
 | **Bitnob** | Buy/sell crypto, M-Pesa on/off-ramp | NO | Active in 8 countries, virtual USD card |
 | **Kotani Pay** | B2B stablecoin off-ramp API | NO (API-only) | Tether strategic investment Oct 2025, USSD access |
@@ -453,6 +454,13 @@ VASP license costs (when regulations are published) could add KES 5M -- 10M in m
 | **ZendWallet** | Crypto → M-Pesa cash-out | NO | Off-ramp only, no bill payment |
 | **Luno** | Buy/sell/hold crypto, KES pairs | NO | Relaunched Kenya mid-2025, traditional exchange |
 | **Binance** | Full exchange, P2P with M-Pesa | NO | Accessible, no VASP license yet |
+
+**Strategic Response to Rift:**
+- **Ship native apps before Rift's mobile launch (~May 2026)** — their web-only UX is a window of opportunity
+- **Lean on multi-chain support** (Tron, ETH, BTC, SOL) vs Rift's likely single-chain (EVM)
+- **Emphasize KYC/compliance** as trust differentiator — Rift's KYC is reportedly slow and their VASP status unclear
+- **Evaluate Account Abstraction (ERC-4337)** for gasless transactions — Rift's paymaster model is a genuine UX win
+- **Consider dollar-denominated yield products** — Rift's "Estate Royalty" feature shows user demand for stablecoin savings
 
 **Strategic Opportunity:** Yellow Card's exit from retail (Jan 2026) created a consumer-facing gap. Their API can be CryptoPay's liquidity backbone while we own the consumer experience. 99%+ of their volume was stablecoins — validates our USDT-first approach.
 
@@ -473,7 +481,7 @@ VASP license costs (when regulations are published) could add KES 5M -- 10M in m
 | Exchange downtime or withdrawal limits | MEDIUM | MEDIUM | Operational | Multi-exchange strategy (Binance + Yellow Card + OTC desks), no single-exchange dependency |
 | User account fraud/takeover | HIGH | MEDIUM | Security | Device fingerprinting, PIN + OTP for high-value transactions, velocity checks (5 payments/hour max), new-device OTP requirement |
 | Regulatory change (crypto ban or new rules) | MEDIUM | LOW | Regulatory | Legal counsel on retainer, modular architecture allowing feature pivot, operate as payment infrastructure not exchange |
-| Competition adds bill pay feature | MEDIUM | MEDIUM | Market | First-mover advantage, superior UX, developer API as moat, network effects from merchant integrations |
+| Competition adds bill pay feature | HIGH | **CONFIRMED** | Market | **Rift has shipped crypto-to-Paybill (March 2026).** Differentiate on: native mobile app, multi-chain, superior KYC, VASP compliance, B2B API. Ship mobile apps before Rift (~May 2026). Evaluate Account Abstraction for gasless UX. |
 | Crypto bear market reduces user activity | LOW | MEDIUM | Market | Stablecoin-first approach (USDT/USDC), utility-driven not speculation-driven, users need to pay bills regardless of market |
 | HD wallet key compromise | CRITICAL | LOW | Security | Hot/warm/cold wallet split (only 2-5% in hot), multi-sig for warm/cold, HSM or encrypted KMS for key storage |
 | M-Pesa callback timeout | MEDIUM | MEDIUM | Technical | Already implemented: Transaction Status API fallback query, 3 retries at 30-second intervals, manual review flag after 3 minutes |

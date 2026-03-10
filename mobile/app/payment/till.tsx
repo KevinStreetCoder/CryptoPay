@@ -72,6 +72,7 @@ export default function PayTillScreen() {
         crypto_amount: quote.crypto_amount,
         rate: quote.exchange_rate,
         fee: quote.fee_kes,
+        excise_duty: quote.excise_duty_kes || "0",
       },
     });
   };

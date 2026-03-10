@@ -367,6 +367,7 @@ The Virtual Asset Service Providers Act (Act No. 20 of 2025) is now law:
 
 | Competitor | Services in Kenya | Crypto→Paybill? | Status |
 |-----------|-------------------|-----------------|--------|
+| **Rift (riftfi.xyz)** | Buy stablecoins, pay Paybills/Till, send money, cross-Africa remittance, yield products | **YES** | Active, ~1,000 users, web-only, apps coming ~May 2026 |
 | **Yellow Card** | B2B stablecoin infrastructure | NO (B2B API only) | Exited retail Jan 2026 |
 | **Bitnob** | Buy/sell crypto, M-Pesa on/off-ramp, virtual USD card | NO | Active, 8 countries |
 | **Kotani Pay** | B2B stablecoin off-ramp API, USSD access | NO (API-only) | Active, Tether-backed |
@@ -375,7 +376,46 @@ The Virtual Asset Service Providers Act (Act No. 20 of 2025) is now law:
 | **Luno** | Buy/sell/hold crypto, KES pairs | NO | Relaunched Kenya mid-2025 |
 | **Binance** | Full exchange, P2P with M-Pesa | NO | Accessible, no VASP license |
 
-**Key Finding: ZERO competitors offer direct crypto-to-Paybill/Till payment. CryptoPay's core value proposition is validated and unique.**
+**UPDATED March 2026: Rift (riftfi.xyz) now offers crypto-to-Paybill. CryptoPay is no longer the only player targeting this gap — speed to market matters.**
+
+### Rift / RiftFi — DIRECT COMPETITOR (New Intel, March 2026)
+
+| Attribute | Details |
+|-----------|---------|
+| **Product** | wallet.riftfi.xyz (web app) |
+| **Founder** | Experienced DeFi developer; managed $5M+ TVL, led security audits |
+| **Users** | Approaching ~1,000 (March 2026) |
+| **Platforms** | Web-first; Android/iOS apps launching "in 2 months" (~May 2026) |
+| **Core Features** | Buy stablecoins (USDC/USDT) in <2 min, pay Paybills/Till numbers, send money locally, cross-Africa remittance in <1 minute |
+| **Yield** | "Estate Royalty" — dollar-denominated yield product (DeFi integration) |
+| **Tech** | ERC-4337 Account Abstraction with Paymasters — gasless UX (<$5 in gas for $50K USDC volume) |
+| **Ecosystem** | DeFi integrations (e.g., Polymarket login via Rift wallet) |
+| **Weaknesses** | KYC slow/unreliable (user complaints), unclear regulatory status (founder didn't address VASP licensing in public Q&A), web-only (no native app yet), likely single-chain |
+| **Source** | r/KenyaStartups Reddit post, March 2026 |
+
+**Why Rift matters:** They are the first known competitor to ship crypto-to-Paybill/Till in Kenya. This invalidates our "ZERO competitors" claim. However, Rift is early (~1,000 users), web-only, and has clear weaknesses CryptoPay can exploit.
+
+**What CryptoPay should learn from Rift:**
+
+1. **Account Abstraction (ERC-4337):** Paymasters sponsor gas fees so users never hold ETH. Major UX improvement — users only think in stablecoins. CryptoPay should evaluate ERC-4337 smart contract wallets for the Ethereum chain.
+2. **Dollar-denominated yield:** "Estate Royalty" offers stablecoin yield. DeFi-integrated savings products are a retention tool. Consider partnering with DeFi protocols (Aave, Compound) for yield on idle USDT/USDC balances.
+3. **Cross-Africa remittance:** Rift already supports cross-border transfers across Africa. CryptoPay's roadmap has Uganda/Tanzania expansion at Month 12-18 — Rift may get there first.
+4. **Speed messaging:** "Buy stablecoins in under 2 minutes" is a strong marketing hook. CryptoPay should benchmark and advertise our transaction speed.
+5. **Smart contract wallets:** More secure than EOA wallets, support social recovery and spending limits. Better for non-crypto-native users.
+
+**CryptoPay's remaining advantages over Rift:**
+
+| Advantage | CryptoPay | Rift |
+|-----------|-----------|------|
+| Native mobile app | Expo (iOS + Android + Web) | Web-only (apps "in 2 months") |
+| Multi-chain support | Tron, ETH, BTC, SOL | Likely single-chain (EVM) |
+| HD wallet derivation | BIP-44 multi-chain from single seed | Smart contract wallets (ERC-4337) |
+| KYC | Smile Identity (52 African countries, 36M+ ID records) | Slow/unreliable per user reports |
+| Blockchain monitoring | Celery-based listeners for Tron, ETH, BTC | Unknown |
+| Regulatory posture | VASP Act compliance planned, lawyer engagement | Unclear — didn't address in public |
+| B2B API | Developer API planned (Phase 3) | No public API mentioned |
+
+**Strategic response:** Ship native mobile apps before Rift's Android/iOS launch (~May 2026). Emphasize multi-chain support, superior KYC, and regulatory compliance as trust differentiators. Evaluate Account Abstraction for Phase 4.
 
 ### Yellow Card's B2B Pivot Creates Opportunity
 - Retail app shutdown (Dec 31, 2025) left consumer gap

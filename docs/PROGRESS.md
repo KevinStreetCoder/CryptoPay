@@ -1,6 +1,6 @@
 # CryptoPay — Development Progress
 
-**Last updated:** 2026-03-09
+**Last updated:** 2026-03-10
 
 > See also: [ROADMAP.md](./ROADMAP.md) for strategic vision, fundraising, and expansion plans.
 > See also: [SYSTEM-DESIGN.md](./SYSTEM-DESIGN.md) for technical architecture and liquidity engine design.
@@ -262,7 +262,7 @@
 
 ---
 
-## Phase 3 — Infrastructure & Launch (In Progress)
+## Phase 3 — Production Ready & Launch (In Progress)
 
 **Last updated:** 2026-03-09
 
@@ -276,21 +276,86 @@
 | Admin dashboard improvements | ✅ Done | Auto-refresh (60s), system health panel, 3-column grid on large screens, wider layout (1800px) |
 | Responsive desktop layouts | ✅ Done | All pages optimized for 900/1200/1500px breakpoints, live stats bar, wider padding |
 | Rate limiting at proxy level | ✅ Done | Nginx rate zones: auth (10r/m), API (30r/m), general (60r/m) with burst handling |
+| Comprehensive documentation | ✅ Done | Research, roadmap, system design, startup checklist — all updated with verified data |
 
-### Remaining Phase 3 Items
+### Production Readiness Audit (March 9, 2026)
 
-#### Backend / Blockchain
-- [ ] **Production HD wallets** — Replace HMAC derivation with BIP-32/44 or Fireblocks custody API
-- [ ] **External wallet connection** — WalletConnect / Phantom deep link integration
-- [ ] **SOL/ETH/BTC deposit monitoring** — Only Tron deposit listener implemented so far
+What's real vs placeholder in the current codebase:
 
-#### Infrastructure
-- [ ] **VPS deployment + SSL + domain** — Hetzner/Contabo, Let's Encrypt, cryptopay.co.ke
-- [ ] **Monitoring dashboards** — Sentry configured, add Grafana/Prometheus for metrics
-- [ ] **SSL certificate provisioning** — Certbot automation with Nginx
+| Component | Status | Details |
+|-----------|--------|---------|
+| **Rate Engine** | ✅ REAL | CoinGecko batch + CryptoCompare fallback, Redis 60s cache, DB persistence, 1.5% spread, rate locking |
+| **M-Pesa Daraja** | ✅ REAL | STK Push, B2B, B2C, BuyGoods, Reversal, Status — env-aware (sandbox/production) |
+| **Tron Blockchain Listener** | ✅ REAL | TronGrid polling, confirmation tracking, auto-crediting — runs every 10-15s |
+| **Ethereum Listener** | ✅ REAL | ERC-20 USDT/USDC monitoring via `eth_getLogs`, epoch-based finality (64 blocks), Alchemy-compatible |
+| **Bitcoin Listener** | ✅ REAL | UTXO monitoring via BlockCypher API, 3-confirmation threshold, rate-limit aware |
+| **KYC / Smile Identity** | ✅ REAL | ID verify, document+selfie, webhook callbacks, auto tier upgrade |
+| **Push Notifications** | ✅ REAL | Expo Push API, auto token cleanup, Celery async delivery |
+| **SMS / OTP** | ✅ REAL | Africa's Talking integration with fallback to console in dev |
+| **Email** | ✅ CONFIGURED | Resend SMTP (3K/month free) configured in production settings, console in dev |
+| **Transaction Data** | ✅ REAL | All screens use real API data (balances, transactions, rates) |
+| **Wallet Balances** | ✅ REAL | Real API with 30s polling refresh |
+| **Live Rate Ticker** | ✅ REAL | Real API rates, 30s refresh, pulsing LIVE indicator |
+| **Wallet Addresses** | ✅ REAL | BIP-44 HD wallet derivation with secp256k1/Ed25519, chain-specific address encoding |
+| **Crypto Price Charts** | ✅ REAL | CoinGecko `/market_chart` → CryptoCompare fallback → internal DB fallback, period-based caching |
+| **Rate History API** | ✅ REAL | Backend serves real market data, frontend fetches per currency/period with react-query |
+| **ETH/BTC/SOL Listeners** | ⚠️ PARTIAL | ETH + BTC implemented, Solana still missing (Helius API needed) |
+| **Off-Ramp (Yellow Card)** | ❌ MISSING | No exchange API integration for automated USDT→KES |
+| **Production API URL** | ✅ UNIFIED | Single source in `config.ts`, env-based with production validation (crashes if localhost in prod) |
+| **Celery Tasks** | ✅ REAL | 9 periodic tasks: rate refresh, Tron/ETH/BTC monitors + confirmation trackers, float check |
+| **Security Settings** | ✅ REAL | SSL, HSTS, secure cookies, CORS, JSON logging — properly structured |
+| **Audit Logging** | ✅ REAL | Immutable audit trail, separate payment/security log files |
 
-#### Launch
-- [ ] **App Store / Play Store submission** — EAS production builds, store listings, review
+---
+
+### Phase 3 Implementation Progress
+
+#### ✅ COMPLETED (This Session)
+
+| # | Task | Area | Details | Files |
+|---|------|------|---------|-------|
+| 1 | **Real crypto price charts** | Full stack | CoinGecko `/market_chart` with CryptoCompare fallback. Backend serves real data, frontend `CryptoPriceChartsSection` fetches via react-query with sparklines + expandable chart. All mock data removed. | `rates/services.py`, `rates/views.py`, `CryptoChart.tsx`, `index.tsx` |
+| 2 | **Production HD wallets (BIP-44)** | Backend | Full BIP-32/44 HD wallet derivation. secp256k1 for BTC/ETH/Tron, Ed25519 for Solana. Master seed from env (`WALLET_MASTER_SEED`) or PBKDF2-derived from SECRET_KEY. Chain-specific address encoding (base58check, EIP-55, Tron base58). | `blockchain/services.py`, `settings/base.py` |
+| 3 | **Fix price feed 429 errors** | Backend | Batch API calls (1 CoinGecko call for all 5 currencies), 60s cache TTL, CryptoCompare fallback, 55s debounce lock, polling reduced to 120s. | `rates/services.py`, `settings/base.py` |
+| 4 | **Unified API URL config** | Frontend | `client.ts` now imports from `config.ts` (single source of truth). Production safety: crashes early if localhost URL detected in prod build. | `api/client.ts`, `constants/config.ts` |
+| 5 | **Email provider (Resend)** | Backend | Production settings default to Resend SMTP (`smtp.resend.com`). Also supports SES. Documented inline. | `settings/production.py` |
+| 6 | **Ethereum deposit listener** | Backend | ERC-20 USDT/USDC via `eth_getLogs` with Alchemy/Infura RPC. Post-Merge epoch-based finality (64 blocks). Block scanning with high-water mark. | `blockchain/eth_listener.py`, `settings/base.py` |
+| 7 | **Bitcoin deposit listener** | Backend | BTC UTXO monitoring via BlockCypher API. Rate-limit aware (200 req/hr free). Address-based transaction scanning. | `blockchain/btc_listener.py`, `settings/base.py` |
+| 8 | **ETH confirmation model updated** | Backend | Changed from 12 to 64 blocks (2 finalized epochs post-Merge). All confirmation values documented with timing. | `settings/base.py` |
+| 9 | **Excise duty (10%) on fees** | Full stack | VASP Act 2025 legal requirement. Backend calculates excise on platform fees (spread + flat fee), stores on Transaction model. Frontend displays as separate line item in payment preview and confirm screens. Migration applied. | `rates/services.py`, `settings/base.py`, `payments/models.py`, `payments/views.py`, `payments/serializers.py`, `confirm.tsx`, `paybill.tsx`, `till.tsx`, `send.tsx`, `rates.ts` |
+| 10 | **Quote countdown timer (90s)** | Frontend | Real-time countdown with progress bar, color transitions (green→yellow→red), haptic warning at 10s, expired state blocks payment and shows "Get New Quote" button. Works on both review and PIN steps. | `payment/confirm.tsx` |
+| 11 | **Swahili translations expanded** | Frontend | Added 12 new translation keys for payment flow (excise duty, rate locked, quote expired, pay now, etc.) in both English and Swahili. | `i18n/en.ts`, `i18n/sw.ts` |
+| 12 | **RiftFi competitive analysis** | Docs | Documented RiftFi as direct competitor. Updated ROADMAP.md, PROGRESS.md, and research docs with strategic response plan. | `ROADMAP.md`, `PROGRESS.md`, `IMPLEMENTATION-RESEARCH.md` |
+
+#### 🟡 HIGH PRIORITY — Remaining (Before Beta Launch)
+
+| # | Task | Area | Details | Files |
+|---|------|------|---------|-------|
+| 1 | **VPS deployment + domain** | Infra | Deploy to Nairobi VPS (Lineserve/Truehost), configure Cloudflare DNS, domain cryptopay.co.ke. | `docker-compose.prod.yml`, `nginx/nginx.conf` |
+| 2 | **SSL certificate** | Infra | Certbot + Let's Encrypt with auto-renewal. NOTE: moving to 45-day certs May 2026. | `nginx/nginx.conf` |
+| 3 | **Monitoring: Prometheus + Grafana** | Infra | Add `django-prometheus` middleware, self-hosted Grafana dashboards for API latency, error rates, float levels. | New: `docker-compose.prod.yml` services |
+| 4 | **M-Pesa environment switch** | Backend | Switch from sandbox to production credentials. Update callback URLs to production domain. Just swap API keys. | `backend/.env`, M-Pesa config |
+| 5 | **Configure all API credentials** | Backend | Fill empty env vars: Smile Identity, Africa's Talking, CoinGecko key, M-Pesa production keys, WALLET_MASTER_SEED. | `backend/.env` |
+
+#### 🟢 BEFORE PUBLIC LAUNCH
+
+| # | Task | Area | Details | Files |
+|---|------|------|---------|-------|
+| 13 | **Solana SPL deposit listener** | Backend | Helius API for SPL token monitoring ($49/mo when needed). "Finalized" commitment level. | New: `backend/apps/blockchain/sol_listener.py` |
+| 14 | **WalletConnect (Reown AppKit)** | Frontend | External wallet connection for paying from MetaMask/Trust/Phantom. Well-supported on Expo. | New: mobile components |
+| 15 | **Hot/warm/cold wallet split** | Backend | Tiered security: hot (2-5%, KMS), warm (multi-sig 2-of-3), cold (hardware, 3-of-5). | `backend/apps/blockchain/services.py` |
+| 16 | **App Store + Play Store submission** | Launch | EAS production builds, store listings, screenshots, privacy policy. Apple review ~24h, financial apps may take longer. | `mobile/eas.json`, `mobile/app.json` |
+| 17 | **Compress app assets** | Frontend | App icon is 385 KB (should be ~100 KB). Optimize all PNG assets. | `mobile/assets/` |
+| 18 | **Google OAuth production setup** | Frontend | Fill OAuth client IDs in app.json extra config. Currently empty. | `mobile/app.json` |
+| 19 | **Off-ramp API (Yellow Card / Kotani Pay)** | Backend | Automated USDT→KES conversion via exchange API. Yellow Card B2B API or Kotani Pay. | New: exchange service |
+
+#### 🔵 FUTURE CONSIDERATION (Post-Launch)
+
+| # | Task | Area | Details | Files |
+|---|------|------|---------|-------|
+| 20 | **Account Abstraction / Gasless UX (ERC-4337)** | Backend / Blockchain | Evaluate ERC-4337 smart contract wallets with Paymasters for gasless transactions. Competitor Rift (riftfi.xyz) uses this to sponsor gas fees (<$5 for $50K volume). Major UX win — users never need ETH for gas. Consider for Ethereum chain deposits/payments. Libraries: eth-infinitism/account-abstraction, permissionless.js, ZeroDev SDK. | New: ERC-4337 integration |
+| 21 | **Dollar-denominated yield products** | Backend / DeFi | Stablecoin yield on idle USDT/USDC balances (DeFi integration). Rift offers "Estate Royalty" yield feature. Potential partners: Aave, Compound, or Yearn vaults. Regulatory implications under VASP Act need legal review. | New: yield service |
+| 22 | **Cross-Africa remittance** | Backend / Product | Expand beyond Kenya to support cross-border stablecoin transfers. Uganda, Tanzania, Nigeria corridors. Rift already supports this. Aligns with geographic expansion roadmap. | Existing expansion plan |
 
 ---
 
@@ -313,21 +378,22 @@
                │
     ┌──────────┼───────────────────┐
     │          │                   │
-┌───▼───┐ ┌───▼───┐ ┌────────────▼──────────┐
-│ PostgreSQL│ │ Redis │ │ Celery Workers        │
-│ (users,   │ │ (cache,│ │ - Rate refresh (30s)  │
-│  wallets, │ │ tokens,│ │ - M-Pesa status check │
-│  txns,    │ │ quotes,│ │ - Blockchain monitor  │
-│  ledger)  │ │ locks) │ │ - Float alerts        │
-└───────────┘ └───────┘ └───────────────────────┘
+┌───▼───┐ ┌───▼───┐ ┌─────────────▼───────────────┐
+│ PostgreSQL│ │ Redis │ │ Celery Workers (9 tasks)     │
+│ (users,   │ │ (cache,│ │ - Rate refresh (120s batch)  │
+│  wallets, │ │ tokens,│ │ - Tron monitor (15s)        │
+│  txns,    │ │ quotes,│ │ - ETH monitor (30s)         │
+│  ledger)  │ │ locks) │ │ - BTC monitor (60s)         │
+└───────────┘ └───────┘ │ - Float alerts (5min)       │
+                        └─────────────────────────────┘
                               │
-           ┌──────────────────┼──────────────────┐
-           │                  │                  │
-    ┌──────▼──────┐  ┌───────▼───────┐  ┌──────▼──────┐
-    │ Safaricom   │  │ CoinGecko     │  │ TronGrid    │
-    │ Daraja API  │  │ Rate API      │  │ Blockchain  │
-    │ (M-Pesa)    │  │               │  │ Explorer    │
-    └─────────────┘  └───────────────┘  └─────────────┘
+       ┌──────────────────┬───┴───────┬──────────────────┐
+       │                  │           │                  │
+┌──────▼──────┐  ┌───────▼───────┐ ┌─▼──────────┐ ┌────▼─────────┐
+│ Safaricom   │  │ CoinGecko +   │ │ TronGrid   │ │ Alchemy ETH  │
+│ Daraja API  │  │ CryptoCompare │ │ Tron API   │ │ BlockCypher  │
+│ (M-Pesa)    │  │ (Rates)       │ │            │ │ (BTC)        │
+└─────────────┘  └───────────────┘ └────────────┘ └──────────────┘
 ```
 
 ---
@@ -407,7 +473,8 @@ eas build --platform ios --profile production
 
 ## File Count Summary
 
-**Backend:** 50+ Python files across 7 apps
+**Backend:** 55+ Python files across 7 apps (including ETH + BTC listeners)
 **Frontend:** 35+ TypeScript/TSX files
 **Docs:** 10+ documentation files (architecture, research, roadmap)
 **Config:** Docker (dev + prod), Nginx, EAS, Metro, Babel, TypeScript, CI/CD
+**Celery Tasks:** 9 periodic tasks across rates, blockchain (Tron/ETH/BTC), M-Pesa

@@ -12,7 +12,8 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../src/stores/auth";
 import { useBalanceVisibility } from "../../src/stores/balance";
-import { colors, shadows } from "../../src/constants/theme";
+import { colors, getThemeColors, getThemeShadows } from "../../src/constants/theme";
+import { useThemeMode } from "../../src/stores/theme";
 import { storage } from "../../src/utils/storage";
 
 const isWeb = Platform.OS === "web";
@@ -40,10 +41,12 @@ function SettingsItem({
   item,
   isDesktop,
   onPress,
+  tc,
 }: {
   item: MenuItem;
   isDesktop: boolean;
   onPress: () => void;
+  tc: ReturnType<typeof getThemeColors>;
 }) {
   return (
     <Pressable
@@ -55,7 +58,7 @@ function SettingsItem({
         paddingHorizontal: isDesktop ? 18 : 16,
         borderRadius: 14,
         backgroundColor: hovered
-          ? "rgba(255,255,255,0.04)"
+          ? tc.glass.highlight
           : "transparent",
         opacity: pressed ? 0.8 : 1,
         gap: 14,
@@ -82,7 +85,7 @@ function SettingsItem({
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
           <Text
             style={{
-              color: colors.textPrimary,
+              color: tc.textPrimary,
               fontSize: 15,
               fontWeight: "600",
             }}
@@ -110,21 +113,12 @@ function SettingsItem({
             </View>
           )}
         </View>
-        <Text
-          style={{
-            color: colors.textMuted,
-            fontSize: 13,
-            marginTop: 2,
-          }}
-        >
-          {item.description}
-        </Text>
       </View>
       {item.rightElement || (
         <Ionicons
           name="chevron-forward"
           size={18}
-          color={colors.textMuted}
+          color={tc.textMuted}
         />
       )}
     </Pressable>
@@ -137,11 +131,15 @@ function ToggleItem({
   isDesktop,
   value,
   onToggle,
+  tc,
+  ts,
 }: {
   item: MenuItem;
   isDesktop: boolean;
   value: boolean;
   onToggle: () => void;
+  tc: ReturnType<typeof getThemeColors>;
+  ts: ReturnType<typeof getThemeShadows>;
 }) {
   return (
     <View
@@ -168,21 +166,12 @@ function ToggleItem({
       <View style={{ flex: 1 }}>
         <Text
           style={{
-            color: colors.textPrimary,
+            color: tc.textPrimary,
             fontSize: 15,
             fontWeight: "600",
           }}
         >
           {item.label}
-        </Text>
-        <Text
-          style={{
-            color: colors.textMuted,
-            fontSize: 13,
-            marginTop: 2,
-          }}
-        >
-          {item.description}
         </Text>
       </View>
       <Pressable
@@ -191,7 +180,7 @@ function ToggleItem({
           width: 52,
           height: 30,
           borderRadius: 15,
-          backgroundColor: value ? colors.primary[500] : colors.dark.elevated,
+          backgroundColor: value ? colors.primary[500] : tc.dark.elevated,
           justifyContent: "center",
           paddingHorizontal: 3,
           ...(isWeb
@@ -211,10 +200,91 @@ function ToggleItem({
             ...(isWeb
               ? ({ transition: "all 0.2s ease" } as any)
               : {}),
-            ...shadows.sm,
+            ...ts.sm,
           }}
         />
       </Pressable>
+    </View>
+  );
+}
+
+// ── Section Card ────────────────────────────────────────────────────────────
+function SectionCard({
+  section,
+  isDesktop,
+  tc,
+  ts,
+  balanceHidden,
+  biometricEnabled,
+  toggleBalance,
+  toggleBiometric,
+  handleItemPress,
+}: {
+  section: MenuSection;
+  isDesktop: boolean;
+  tc: ReturnType<typeof getThemeColors>;
+  ts: ReturnType<typeof getThemeShadows>;
+  balanceHidden: boolean;
+  biometricEnabled: boolean;
+  toggleBalance: () => void;
+  toggleBiometric: () => void;
+  handleItemPress: (item: MenuItem) => void;
+}) {
+  return (
+    <View style={{ marginBottom: 20 }}>
+      <Text
+        style={{
+          color: tc.textMuted,
+          fontSize: 12,
+          fontWeight: "600",
+          letterSpacing: 0.8,
+          textTransform: "uppercase",
+          paddingHorizontal: isDesktop ? 18 : 16,
+          marginBottom: 8,
+        }}
+      >
+        {section.title}
+      </Text>
+      <View
+        style={{
+          backgroundColor: tc.dark.card,
+          borderRadius: 18,
+          borderWidth: 1,
+          borderColor: tc.glass.border,
+          overflow: "hidden",
+          ...ts.sm,
+        }}
+      >
+        {section.items.map((item, idx) => {
+          const isToggle = item.key === "hide-balance" || item.key === "biometric";
+          const showDivider = idx < section.items.length - 1;
+          return (
+            <View key={item.key}>
+              {isToggle ? (
+                <ToggleItem
+                  item={item}
+                  isDesktop={isDesktop}
+                  value={item.key === "hide-balance" ? balanceHidden : biometricEnabled}
+                  onToggle={item.key === "hide-balance" ? toggleBalance : toggleBiometric}
+                  tc={tc}
+                  ts={ts}
+                />
+              ) : (
+                <SettingsItem item={item} isDesktop={isDesktop} onPress={() => handleItemPress(item)} tc={tc} />
+              )}
+              {showDivider && (
+                <View
+                  style={{
+                    height: 1,
+                    backgroundColor: tc.glass.border,
+                    marginLeft: isDesktop ? 74 : 72,
+                  }}
+                />
+              )}
+            </View>
+          );
+        })}
+      </View>
     </View>
   );
 }
@@ -224,6 +294,11 @@ export default function SettingsScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const isDesktop = isWeb && width >= 900;
+  const isTablet = isWeb && width >= 600 && width < 900;
+  const useGrid = isDesktop || isTablet;
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
+  const ts = getThemeShadows(isDark);
   const { user } = useAuth();
   const { balanceHidden, toggleBalance } = useBalanceVisibility();
   const [biometricEnabled, setBiometricEnabled] = useState(false);
@@ -241,7 +316,7 @@ export default function SettingsScreen() {
     await storage.setItemAsync("biometric_enabled", newVal ? "true" : "false");
   }, [biometricEnabled]);
 
-  const sections: (MenuSection & { type?: "toggle" })[] = [
+  const sections: MenuSection[] = [
     {
       title: "Account",
       items: [
@@ -306,7 +381,7 @@ export default function SettingsScreen() {
           description: "Display amounts in KES",
           action: () => {},
           rightElement: (
-            <Text style={{ color: colors.textSecondary, fontSize: 14, fontWeight: "600" }}>
+            <Text style={{ color: tc.textSecondary, fontSize: 14, fontWeight: "600" }}>
               KES
             </Text>
           ),
@@ -349,7 +424,7 @@ export default function SettingsScreen() {
         {
           key: "help",
           icon: "help-circle-outline",
-          iconColor: colors.textSecondary,
+          iconColor: tc.textSecondary,
           iconBg: "rgba(136,153,170,0.12)",
           label: "Help & Support",
           description: "FAQs, contact support",
@@ -358,7 +433,7 @@ export default function SettingsScreen() {
         {
           key: "terms",
           icon: "document-text-outline",
-          iconColor: colors.textSecondary,
+          iconColor: tc.textSecondary,
           iconBg: "rgba(136,153,170,0.12)",
           label: "Terms & Privacy",
           description: "Legal documents and data policy",
@@ -367,13 +442,13 @@ export default function SettingsScreen() {
         {
           key: "version",
           icon: "information-circle-outline",
-          iconColor: colors.textSecondary,
+          iconColor: tc.textSecondary,
           iconBg: "rgba(136,153,170,0.12)",
           label: "App Version",
           description: "CryptoPay v1.0.0",
           action: () => {},
           rightElement: (
-            <Text style={{ color: colors.textMuted, fontSize: 13, fontWeight: "500" }}>
+            <Text style={{ color: tc.textMuted, fontSize: 13, fontWeight: "500" }}>
               1.0.0
             </Text>
           ),
@@ -390,20 +465,14 @@ export default function SettingsScreen() {
     }
   };
 
-  const isLargeDesktop = isWeb && width >= 1100;
-  const contentMaxW = isLargeDesktop ? 1200 : isDesktop ? 860 : undefined;
-
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.dark.bg }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
           paddingHorizontal: isDesktop ? 32 : 16,
-          paddingTop: isDesktop ? 8 : 8,
+          paddingTop: 8,
           paddingBottom: 40,
-          ...(contentMaxW
-            ? { maxWidth: contentMaxW, alignSelf: "center" as const, width: "100%" as const }
-            : {}),
         }}
       >
         {/* Back button (mobile only) */}
@@ -420,8 +489,8 @@ export default function SettingsScreen() {
               marginBottom: 8,
             })}
           >
-            <Ionicons name="arrow-back" size={22} color={colors.textSecondary} />
-            <Text style={{ color: colors.textSecondary, fontSize: 16, fontWeight: "500" }}>
+            <Ionicons name="arrow-back" size={22} color={tc.textSecondary} />
+            <Text style={{ color: tc.textSecondary, fontSize: 16, fontWeight: "500" }}>
               Back
             </Text>
           </Pressable>
@@ -430,16 +499,19 @@ export default function SettingsScreen() {
         {/* User header card */}
         <View
           style={{
-            backgroundColor: colors.dark.card,
+            backgroundColor: tc.dark.card,
             borderRadius: 20,
             padding: isDesktop ? 24 : 20,
             borderWidth: 1,
-            borderColor: colors.glass.border,
+            borderColor: tc.glass.border,
             marginBottom: 24,
             flexDirection: "row",
             alignItems: "center",
             gap: 16,
-            ...shadows.sm,
+            maxWidth: 600,
+            alignSelf: "center" as const,
+            width: "100%" as const,
+            ...ts.sm,
           }}
         >
           <View
@@ -467,7 +539,7 @@ export default function SettingsScreen() {
           <View style={{ flex: 1 }}>
             <Text
               style={{
-                color: colors.textPrimary,
+                color: tc.textPrimary,
                 fontSize: 18,
                 fontWeight: "700",
               }}
@@ -476,7 +548,7 @@ export default function SettingsScreen() {
             </Text>
             <Text
               style={{
-                color: colors.textMuted,
+                color: tc.textMuted,
                 fontSize: 14,
                 marginTop: 2,
               }}
@@ -498,168 +570,39 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        {/* Settings sections */}
-        {isLargeDesktop ? (
-          <View style={{ flexDirection: "row", gap: 20 }}>
-            {/* Left column: Account + Preferences */}
-            <View style={{ flex: 1 }}>
-              {sections.filter((s) => s.title === "Account" || s.title === "Preferences").map((section) => (
-                <View key={section.title} style={{ marginBottom: 20 }}>
-                  <Text
-                    style={{
-                      color: colors.textMuted,
-                      fontSize: 12,
-                      fontWeight: "600",
-                      letterSpacing: 0.8,
-                      textTransform: "uppercase",
-                      paddingHorizontal: 18,
-                      marginBottom: 8,
-                    }}
-                  >
-                    {section.title}
-                  </Text>
-                  <View
-                    style={{
-                      backgroundColor: colors.dark.card,
-                      borderRadius: 18,
-                      borderWidth: 1,
-                      borderColor: colors.glass.border,
-                      overflow: "hidden",
-                      ...shadows.sm,
-                    }}
-                  >
-                    {section.items.map((item, idx) => {
-                      const isToggle = item.key === "hide-balance" || item.key === "biometric";
-                      const showDivider = idx < section.items.length - 1;
-                      return (
-                        <View key={item.key}>
-                          {isToggle ? (
-                            <ToggleItem item={item} isDesktop={isDesktop} value={item.key === "hide-balance" ? balanceHidden : biometricEnabled} onToggle={item.key === "hide-balance" ? toggleBalance : toggleBiometric} />
-                          ) : (
-                            <SettingsItem item={item} isDesktop={isDesktop} onPress={() => handleItemPress(item)} />
-                          )}
-                          {showDivider && <View style={{ height: 1, backgroundColor: colors.glass.border, marginLeft: 74 }} />}
-                        </View>
-                      );
-                    })}
-                  </View>
-                </View>
-              ))}
-            </View>
-            {/* Right column: Security + About */}
-            <View style={{ flex: 1 }}>
-              {sections.filter((s) => s.title === "Security" || s.title === "About").map((section) => (
-                <View key={section.title} style={{ marginBottom: 20 }}>
-                  <Text
-                    style={{
-                      color: colors.textMuted,
-                      fontSize: 12,
-                      fontWeight: "600",
-                      letterSpacing: 0.8,
-                      textTransform: "uppercase",
-                      paddingHorizontal: 18,
-                      marginBottom: 8,
-                    }}
-                  >
-                    {section.title}
-                  </Text>
-                  <View
-                    style={{
-                      backgroundColor: colors.dark.card,
-                      borderRadius: 18,
-                      borderWidth: 1,
-                      borderColor: colors.glass.border,
-                      overflow: "hidden",
-                      ...shadows.sm,
-                    }}
-                  >
-                    {section.items.map((item, idx) => {
-                      const isToggle = item.key === "hide-balance" || item.key === "biometric";
-                      const showDivider = idx < section.items.length - 1;
-                      return (
-                        <View key={item.key}>
-                          {isToggle ? (
-                            <ToggleItem item={item} isDesktop={isDesktop} value={item.key === "hide-balance" ? balanceHidden : biometricEnabled} onToggle={item.key === "hide-balance" ? toggleBalance : toggleBiometric} />
-                          ) : (
-                            <SettingsItem item={item} isDesktop={isDesktop} onPress={() => handleItemPress(item)} />
-                          )}
-                          {showDivider && <View style={{ height: 1, backgroundColor: colors.glass.border, marginLeft: 74 }} />}
-                        </View>
-                      );
-                    })}
-                  </View>
-                </View>
-              ))}
-            </View>
+        {/* Settings sections - 2x2 grid on desktop/tablet, single column on mobile */}
+        {useGrid ? (
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 20 }}>
+            {sections.map((section) => (
+              <View key={section.title} style={{ width: "48%", minWidth: 280, flexGrow: 1 }}>
+                <SectionCard
+                  section={section}
+                  isDesktop={isDesktop}
+                  tc={tc}
+                  ts={ts}
+                  balanceHidden={balanceHidden}
+                  biometricEnabled={biometricEnabled}
+                  toggleBalance={toggleBalance}
+                  toggleBiometric={toggleBiometric}
+                  handleItemPress={handleItemPress}
+                />
+              </View>
+            ))}
           </View>
         ) : (
           sections.map((section) => (
-            <View key={section.title} style={{ marginBottom: 20 }}>
-              <Text
-                style={{
-                  color: colors.textMuted,
-                  fontSize: 12,
-                  fontWeight: "600",
-                  letterSpacing: 0.8,
-                  textTransform: "uppercase",
-                  paddingHorizontal: isDesktop ? 18 : 16,
-                  marginBottom: 8,
-                }}
-              >
-                {section.title}
-              </Text>
-              <View
-                style={{
-                  backgroundColor: colors.dark.card,
-                  borderRadius: 18,
-                  borderWidth: 1,
-                  borderColor: colors.glass.border,
-                  overflow: "hidden",
-                  ...shadows.sm,
-                }}
-              >
-                {section.items.map((item, idx) => {
-                  const isToggle = item.key === "hide-balance" || item.key === "biometric";
-                  const showDivider = idx < section.items.length - 1;
-
-                  return (
-                    <View key={item.key}>
-                      {isToggle ? (
-                        <ToggleItem
-                          item={item}
-                          isDesktop={isDesktop}
-                          value={
-                            item.key === "hide-balance"
-                              ? balanceHidden
-                              : biometricEnabled
-                          }
-                          onToggle={
-                            item.key === "hide-balance"
-                              ? toggleBalance
-                              : toggleBiometric
-                          }
-                        />
-                      ) : (
-                        <SettingsItem
-                          item={item}
-                          isDesktop={isDesktop}
-                          onPress={() => handleItemPress(item)}
-                        />
-                      )}
-                      {showDivider && (
-                        <View
-                          style={{
-                            height: 1,
-                            backgroundColor: colors.glass.border,
-                            marginLeft: isDesktop ? 74 : 72,
-                          }}
-                        />
-                      )}
-                    </View>
-                  );
-                })}
-              </View>
-            </View>
+            <SectionCard
+              key={section.title}
+              section={section}
+              isDesktop={isDesktop}
+              tc={tc}
+              ts={ts}
+              balanceHidden={balanceHidden}
+              biometricEnabled={biometricEnabled}
+              toggleBalance={toggleBalance}
+              toggleBiometric={toggleBiometric}
+              handleItemPress={handleItemPress}
+            />
           ))
         )}
       </ScrollView>

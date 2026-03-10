@@ -46,6 +46,7 @@ class Transaction(models.Model):
     exchange_rate = models.DecimalField(max_digits=18, decimal_places=8, null=True, blank=True)
     fee_amount = models.DecimalField(max_digits=28, decimal_places=8, default=0)
     fee_currency = models.CharField(max_length=10, blank=True)
+    excise_duty_amount = models.DecimalField(max_digits=28, decimal_places=8, default=0)
 
     # M-Pesa fields
     mpesa_paybill = models.CharField(max_length=20, blank=True)

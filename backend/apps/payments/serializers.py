@@ -59,7 +59,7 @@ class TransactionSerializer(serializers.ModelSerializer):
             "id", "type", "status",
             "source_currency", "source_amount",
             "dest_currency", "dest_amount",
-            "exchange_rate", "fee_amount", "fee_currency",
+            "exchange_rate", "fee_amount", "fee_currency", "excise_duty_amount",
             "mpesa_paybill", "mpesa_till", "mpesa_account",
             "mpesa_phone", "mpesa_receipt",
             "chain", "tx_hash", "confirmations",

@@ -88,6 +88,7 @@ export default function PayBillScreen() {
         crypto_amount: quote.crypto_amount,
         rate: quote.exchange_rate,
         fee: quote.fee_kes,
+        excise_duty: quote.excise_duty_kes || "0",
       },
     });
   };
@@ -436,6 +437,26 @@ export default function PayBillScreen() {
                       KSh {quote.fee_kes}
                     </Text>
                   </View>
+                  {quote.excise_duty_kes && parseFloat(quote.excise_duty_kes) > 0 && (
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        justifyContent: "space-between",
+                        marginBottom: 8,
+                      }}
+                    >
+                      <Text style={{ color: C.muted, fontSize: 14 }}>Excise Duty (10%)</Text>
+                      <Text
+                        style={{
+                          color: C.text,
+                          fontSize: 14,
+                          fontWeight: "500",
+                        }}
+                      >
+                        KSh {quote.excise_duty_kes}
+                      </Text>
+                    </View>
+                  )}
                   <View
                     style={{
                       height: 1,

@@ -62,16 +62,18 @@ class QuoteView(APIView):
 
 
 class RateHistoryView(APIView):
-    """Get historical exchange rate data for charts."""
+    """Get real historical market price data for charts.
+    Fetches actual market prices from CoinGecko/CryptoCompare,
+    not our internal exchange rates. Heavily cached."""
 
     permission_classes = [AllowAny]
 
     VALID_CURRENCIES = {"USDT", "BTC", "ETH", "SOL"}
-    PERIOD_CONFIG = {
-        "1d": {"days": 1, "aggregate": None},
-        "7d": {"days": 7, "aggregate": "hour"},
-        "30d": {"days": 30, "aggregate": "6hour"},
-        "90d": {"days": 90, "aggregate": "day"},
+    PERIOD_DAYS = {
+        "1d": 1,
+        "7d": 7,
+        "30d": 30,
+        "90d": 90,
     }
 
     def get(self, request):
@@ -90,73 +92,32 @@ class RateHistoryView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if period not in self.PERIOD_CONFIG:
+        if period not in self.PERIOD_DAYS:
             return Response(
-                {"error": f"Invalid period. Must be one of: {', '.join(self.PERIOD_CONFIG.keys())}"},
+                {"error": f"Invalid period. Must be one of: {', '.join(self.PERIOD_DAYS.keys())}"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        config = self.PERIOD_CONFIG[period]
-        since = timezone.now() - timedelta(days=config["days"])
+        days = self.PERIOD_DAYS[period]
 
-        qs = ExchangeRate.objects.filter(
-            pair__startswith=f"{currency}/",
-            created_at__gte=since,
-        )
+        try:
+            data = RateService.get_market_chart(currency, days)
+        except Exception:
+            data = []
 
-        aggregate = config["aggregate"]
+        # If external APIs failed, fall back to our internal rate history
+        if not data:
+            since = timezone.now() - timedelta(days=days)
+            qs = ExchangeRate.objects.filter(
+                pair=f"{currency}/USD",
+                created_at__gte=since,
+            ).order_by("created_at")
 
-        if aggregate is None:
-            # 1d: return every record
-            data = list(
-                qs.order_by("created_at").values_list("created_at", "rate")
-            )
-            result = [
-                {"timestamp": ts.isoformat(), "rate": str(rate)}
-                for ts, rate in data
-            ]
-        elif aggregate == "hour":
-            # 7d: hourly averages
-            data = (
-                qs.annotate(bucket=TruncHour("created_at"))
-                .values("bucket")
-                .annotate(avg_rate=Avg("rate"))
-                .order_by("bucket")
-            )
-            result = [
-                {"timestamp": row["bucket"].isoformat(), "rate": str(round(row["avg_rate"], 8))}
-                for row in data
-            ]
-        elif aggregate == "6hour":
-            # 30d: 6-hour averages using raw SQL bucketing for Postgres
-            data = (
-                qs.extra(
-                    select={
-                        "bucket": "date_trunc('hour', created_at) - "
-                                  "interval '1 hour' * (extract(hour from created_at)::int %% 6)"
-                    }
-                )
-                .values("bucket")
-                .annotate(avg_rate=Avg("rate"))
-                .order_by("bucket")
-            )
-            result = [
-                {"timestamp": row["bucket"].isoformat(), "rate": str(round(row["avg_rate"], 8))}
-                for row in data
-            ]
-        elif aggregate == "day":
-            # 90d: daily averages
-            data = (
-                qs.annotate(bucket=TruncDay("created_at"))
-                .values("bucket")
-                .annotate(avg_rate=Avg("rate"))
-                .order_by("bucket")
-            )
-            result = [
-                {"timestamp": row["bucket"].isoformat(), "rate": str(round(row["avg_rate"], 8))}
-                for row in data
-            ]
-        else:
-            result = []
+            if days <= 7:
+                qs_data = qs.annotate(bucket=TruncHour("created_at")).values("bucket").annotate(avg_rate=Avg("rate")).order_by("bucket")
+                data = [{"timestamp": row["bucket"].isoformat(), "rate": float(row["avg_rate"])} for row in qs_data]
+            else:
+                qs_data = qs.annotate(bucket=TruncDay("created_at")).values("bucket").annotate(avg_rate=Avg("rate")).order_by("bucket")
+                data = [{"timestamp": row["bucket"].isoformat(), "rate": float(row["avg_rate"])} for row in qs_data]
 
-        return Response({"currency": currency, "period": period, "data": result})
+        return Response({"currency": currency, "period": period, "data": data})

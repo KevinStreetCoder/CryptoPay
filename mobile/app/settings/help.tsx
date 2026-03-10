@@ -12,7 +12,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { colors, shadows } from "../../src/constants/theme";
+import { colors, getThemeColors, getThemeShadows } from "../../src/constants/theme";
+import { useThemeMode } from "../../src/stores/theme";
 
 const isWeb = Platform.OS === "web";
 
@@ -32,7 +33,7 @@ const FAQ_DATA: FAQItem[] = [
   {
     question: "How long do deposits take?",
     answer:
-      "Deposit times depend on the blockchain network:\n\n• Tron (USDT-TRC20): ~19 confirmations, typically 1\u20132 minutes\n• Ethereum (ETH/USDT-ERC20): ~12 confirmations, typically 2\u20133 minutes\n• Bitcoin (BTC): ~3 confirmations, typically 30 minutes\n• Solana (SOL): ~32 confirmations, typically 15 seconds",
+      "Deposit times depend on the blockchain network:\n\n\u2022 Tron (USDT-TRC20): ~19 confirmations, typically 1\u20132 minutes\n\u2022 Ethereum (ETH/USDT-ERC20): ~12 confirmations, typically 2\u20133 minutes\n\u2022 Bitcoin (BTC): ~3 confirmations, typically 30 minutes\n\u2022 Solana (SOL): ~32 confirmations, typically 15 seconds",
   },
   {
     question: "How do I pay a bill?",
@@ -57,7 +58,7 @@ const FAQ_DATA: FAQItem[] = [
   {
     question: "What currencies are supported?",
     answer:
-      "CryptoPay currently supports:\n\n• USDT (Tether)\n• BTC (Bitcoin)\n• ETH (Ethereum)\n• SOL (Solana)\n\nMore currencies will be added in future updates.",
+      "CryptoPay currently supports:\n\n\u2022 USDT (Tether)\n\u2022 BTC (Bitcoin)\n\u2022 ETH (Ethereum)\n\u2022 SOL (Solana)\n\nMore currencies will be added in future updates.",
   },
   {
     question: "How do I contact support?",
@@ -73,11 +74,13 @@ function AccordionItem({
   isExpanded,
   onToggle,
   isDesktop,
+  tc,
 }: {
   item: FAQItem;
   isExpanded: boolean;
   onToggle: () => void;
   isDesktop: boolean;
+  tc: ReturnType<typeof getThemeColors>;
 }) {
   return (
     <Pressable
@@ -85,7 +88,7 @@ function AccordionItem({
       style={({ pressed, hovered }: any) => ({
         paddingHorizontal: isDesktop ? 20 : 16,
         paddingVertical: isDesktop ? 16 : 14,
-        backgroundColor: hovered ? "rgba(255,255,255,0.03)" : "transparent",
+        backgroundColor: hovered ? tc.glass.highlight : "transparent",
         opacity: pressed ? 0.85 : 1,
         ...(isWeb
           ? ({ cursor: "pointer", transition: "background-color 0.15s ease" } as any)
@@ -104,7 +107,7 @@ function AccordionItem({
       >
         <Text
           style={{
-            color: colors.textPrimary,
+            color: tc.textPrimary,
             fontSize: 15,
             fontWeight: "600",
             flex: 1,
@@ -116,13 +119,13 @@ function AccordionItem({
         <Ionicons
           name={isExpanded ? "chevron-up" : "chevron-down"}
           size={18}
-          color={colors.textMuted}
+          color={tc.textMuted}
         />
       </View>
       {isExpanded && (
         <Text
           style={{
-            color: colors.textSecondary,
+            color: tc.textSecondary,
             fontSize: 14,
             lineHeight: 22,
             marginTop: 10,
@@ -145,6 +148,8 @@ function ContactCard({
   value,
   onPress,
   isDesktop,
+  tc,
+  ts,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   iconColor: string;
@@ -153,25 +158,31 @@ function ContactCard({
   value: string;
   onPress: () => void;
   isDesktop: boolean;
+  tc: ReturnType<typeof getThemeColors>;
+  ts: ReturnType<typeof getThemeShadows>;
 }) {
   return (
     <Pressable
       onPress={onPress}
       style={({ pressed, hovered }: any) => ({
         backgroundColor: hovered
-          ? "rgba(255,255,255,0.04)"
-          : colors.dark.card,
+          ? tc.dark.elevated
+          : tc.dark.card,
         borderRadius: 16,
         padding: isDesktop ? 18 : 16,
         borderWidth: 1,
-        borderColor: colors.glass.border,
+        borderColor: hovered ? tc.glass.borderStrong : tc.glass.border,
         flexDirection: "row",
         alignItems: "center",
         gap: 14,
         opacity: pressed ? 0.85 : 1,
-        ...shadows.sm,
+        ...ts.sm,
         ...(isWeb
-          ? ({ cursor: "pointer", transition: "background-color 0.15s ease" } as any)
+          ? ({
+              cursor: "pointer",
+              transition: "all 0.2s ease",
+              transform: hovered ? "scale(1.015)" : "scale(1)",
+            } as any)
           : {}),
       })}
       accessibilityRole="button"
@@ -192,7 +203,7 @@ function ContactCard({
       <View style={{ flex: 1 }}>
         <Text
           style={{
-            color: colors.textMuted,
+            color: tc.textMuted,
             fontSize: 12,
             fontWeight: "500",
           }}
@@ -201,7 +212,7 @@ function ContactCard({
         </Text>
         <Text
           style={{
-            color: colors.textPrimary,
+            color: tc.textPrimary,
             fontSize: 15,
             fontWeight: "600",
             marginTop: 2,
@@ -210,7 +221,7 @@ function ContactCard({
           {value}
         </Text>
       </View>
-      <Ionicons name="open-outline" size={16} color={colors.textMuted} />
+      <Ionicons name="open-outline" size={16} color={tc.textMuted} />
     </Pressable>
   );
 }
@@ -221,6 +232,10 @@ export default function HelpScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const isDesktop = isWeb && width >= 900;
+  const isLargeDesktop = isWeb && width >= 1100;
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
+  const ts = getThemeShadows(isDark);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
@@ -251,9 +266,6 @@ export default function HelpScreen() {
     Linking.openURL("https://x.com/CryptoPayKE");
   };
 
-  const isLargeDesktop = isWeb && width >= 1100;
-  const contentMaxW = isLargeDesktop ? 1200 : isDesktop ? 960 : undefined;
-
   const content = (
     <ScrollView
       showsVerticalScrollIndicator={false}
@@ -261,13 +273,6 @@ export default function HelpScreen() {
         paddingHorizontal: isDesktop ? 32 : 16,
         paddingTop: isDesktop ? 0 : 4,
         paddingBottom: 40,
-        ...(contentMaxW
-          ? {
-              maxWidth: contentMaxW,
-              alignSelf: "center" as const,
-              width: "100%" as const,
-            }
-          : {}),
       }}
     >
       {/* Title (mobile only) */}
@@ -275,7 +280,7 @@ export default function HelpScreen() {
         <View style={{ marginBottom: 16, marginTop: 4 }}>
           <Text
             style={{
-              color: colors.textPrimary,
+              color: tc.textPrimary,
               fontSize: 24,
               fontWeight: "700",
               letterSpacing: -0.3,
@@ -285,7 +290,7 @@ export default function HelpScreen() {
           </Text>
           <Text
             style={{
-              color: colors.textMuted,
+              color: tc.textMuted,
               fontSize: 14,
               marginTop: 4,
               lineHeight: 20,
@@ -299,18 +304,21 @@ export default function HelpScreen() {
       {/* Search Bar */}
       <View
         style={{
-          backgroundColor: colors.dark.card,
+          backgroundColor: tc.dark.card,
           borderRadius: 16,
           borderWidth: 1,
-          borderColor: colors.glass.border,
+          borderColor: tc.glass.border,
           flexDirection: "row",
           alignItems: "center",
           paddingHorizontal: 14,
           marginBottom: 24,
-          ...shadows.sm,
+          ...(isDesktop
+            ? { maxWidth: 480, alignSelf: "center" as const, width: "100%" as const }
+            : {}),
+          ...ts.sm,
         }}
       >
-        <Ionicons name="search-outline" size={20} color={colors.textMuted} />
+        <Ionicons name="search-outline" size={20} color={tc.textMuted} />
         <TextInput
           value={searchQuery}
           onChangeText={(text) => {
@@ -318,10 +326,10 @@ export default function HelpScreen() {
             setExpandedIndex(null);
           }}
           placeholder="Search FAQs..."
-          placeholderTextColor={colors.textMuted}
+          placeholderTextColor={tc.textMuted}
           style={{
             flex: 1,
-            color: colors.textPrimary,
+            color: tc.textPrimary,
             fontSize: 15,
             paddingVertical: 14,
             paddingHorizontal: 10,
@@ -346,7 +354,7 @@ export default function HelpScreen() {
             <Ionicons
               name="close-circle"
               size={20}
-              color={colors.textMuted}
+              color={tc.textMuted}
             />
           </Pressable>
         )}
@@ -364,7 +372,7 @@ export default function HelpScreen() {
         <View style={{ marginBottom: 28, ...(isLargeDesktop ? { flex: 6 } : {}) }}>
           <Text
             style={{
-              color: colors.textMuted,
+              color: tc.textMuted,
               fontSize: 12,
               fontWeight: "600",
               letterSpacing: 0.8,
@@ -377,12 +385,12 @@ export default function HelpScreen() {
           </Text>
           <View
             style={{
-              backgroundColor: colors.dark.card,
+              backgroundColor: tc.dark.card,
               borderRadius: 18,
               borderWidth: 1,
-              borderColor: colors.glass.border,
+              borderColor: tc.glass.border,
               overflow: "hidden",
-              ...shadows.sm,
+              ...ts.sm,
             }}
           >
             {filteredFAQ.length === 0 ? (
@@ -395,11 +403,11 @@ export default function HelpScreen() {
                 <Ionicons
                   name="search-outline"
                   size={32}
-                  color={colors.textMuted}
+                  color={tc.textMuted}
                 />
                 <Text
                   style={{
-                    color: colors.textMuted,
+                    color: tc.textMuted,
                     fontSize: 14,
                     marginTop: 10,
                   }}
@@ -417,7 +425,7 @@ export default function HelpScreen() {
                       <View
                         style={{
                           height: 1,
-                          backgroundColor: colors.glass.border,
+                          backgroundColor: tc.glass.border,
                           marginLeft: isDesktop ? 20 : 16,
                         }}
                       />
@@ -427,6 +435,7 @@ export default function HelpScreen() {
                       isExpanded={expandedIndex === originalIndex}
                       onToggle={() => handleToggle(originalIndex)}
                       isDesktop={isDesktop}
+                      tc={tc}
                     />
                   </View>
                 );
@@ -439,7 +448,7 @@ export default function HelpScreen() {
         <View style={{ marginBottom: 28, ...(isLargeDesktop ? { flex: 4 } : {}) }}>
           <Text
             style={{
-              color: colors.textMuted,
+              color: tc.textMuted,
               fontSize: 12,
               fontWeight: "600",
               letterSpacing: 0.8,
@@ -459,6 +468,8 @@ export default function HelpScreen() {
               value="support@cryptopay.co.ke"
               onPress={handleEmail}
               isDesktop={isDesktop}
+              tc={tc}
+              ts={ts}
             />
             <ContactCard
               icon="logo-whatsapp"
@@ -468,6 +479,8 @@ export default function HelpScreen() {
               value="+254700000000"
               onPress={handleWhatsApp}
               isDesktop={isDesktop}
+              tc={tc}
+              ts={ts}
             />
             <ContactCard
               icon="logo-twitter"
@@ -477,6 +490,8 @@ export default function HelpScreen() {
               value="@CryptoPayKE"
               onPress={handleTwitter}
               isDesktop={isDesktop}
+              tc={tc}
+              ts={ts}
             />
           </View>
         </View>
@@ -486,7 +501,7 @@ export default function HelpScreen() {
       <View style={{ alignItems: "center", marginTop: 8 }}>
         <Text
           style={{
-            color: colors.textMuted,
+            color: tc.textMuted,
             fontSize: 13,
             fontWeight: "500",
           }}
@@ -500,7 +515,7 @@ export default function HelpScreen() {
   // Desktop layout
   if (isDesktop) {
     return (
-      <View style={{ flex: 1, backgroundColor: colors.dark.bg }}>
+      <View style={{ flex: 1, backgroundColor: tc.dark.bg }}>
         {/* Back button header */}
         <View style={{ paddingHorizontal: 24, paddingTop: 24 }}>
           <Pressable
@@ -512,7 +527,7 @@ export default function HelpScreen() {
               paddingVertical: 8,
               paddingHorizontal: 12,
               borderRadius: 12,
-              backgroundColor: pressed ? colors.dark.elevated : "transparent",
+              backgroundColor: pressed ? tc.dark.elevated : "transparent",
               alignSelf: "flex-start",
               opacity: pressed ? 0.9 : 1,
               ...(isWeb
@@ -525,11 +540,11 @@ export default function HelpScreen() {
             <Ionicons
               name="arrow-back"
               size={20}
-              color={colors.textSecondary}
+              color={tc.textSecondary}
             />
             <Text
               style={{
-                color: colors.textSecondary,
+                color: tc.textSecondary,
                 fontSize: 15,
                 fontWeight: "500",
               }}
@@ -550,7 +565,7 @@ export default function HelpScreen() {
         >
           <Text
             style={{
-              color: colors.textPrimary,
+              color: tc.textPrimary,
               fontSize: 28,
               fontWeight: "700",
               letterSpacing: -0.5,
@@ -560,7 +575,7 @@ export default function HelpScreen() {
           </Text>
           <Text
             style={{
-              color: colors.textMuted,
+              color: tc.textMuted,
               fontSize: 15,
               marginTop: 6,
             }}
@@ -576,7 +591,7 @@ export default function HelpScreen() {
 
   // Mobile layout
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.dark.bg }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
       {/* Back button header */}
       <View
         style={{
@@ -595,7 +610,7 @@ export default function HelpScreen() {
             paddingVertical: 6,
             paddingHorizontal: 8,
             borderRadius: 10,
-            backgroundColor: pressed ? colors.dark.elevated : "transparent",
+            backgroundColor: pressed ? tc.dark.elevated : "transparent",
             opacity: pressed ? 0.9 : 1,
           })}
           accessibilityRole="button"
@@ -604,11 +619,11 @@ export default function HelpScreen() {
           <Ionicons
             name="arrow-back"
             size={20}
-            color={colors.textSecondary}
+            color={tc.textSecondary}
           />
           <Text
             style={{
-              color: colors.textSecondary,
+              color: tc.textSecondary,
               fontSize: 15,
               fontWeight: "500",
             }}
