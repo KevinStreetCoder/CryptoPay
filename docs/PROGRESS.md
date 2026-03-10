@@ -341,6 +341,15 @@ What's real vs placeholder in the current codebase:
 | 8 | **Real Kenyan service providers** | Frontend | Replaced generic providers with 12 real services: KPLC Prepaid/Postpaid, Nairobi Water, Safaricom, Airtel, DSTV, GOtv, StarTimes, KRA iTax, NHIF, Zuku, Showmax. Click prefills paybill number. | `pay.tsx`, `paybill.tsx`, `till.tsx` |
 | 9 | **Remove conflicting settings** | Frontend | Ensured phone masking toggle exists only in Profile (not duplicated in Settings). No conflicting privacy controls. | `profile.tsx`, `settings/index.tsx` |
 
+#### ✅ COMPLETED (March 10, 2026 Session 2)
+
+| # | Task | Area | Details | Files |
+|---|------|------|---------|-------|
+| 1 | **Full theme support — all components** | Frontend | Added `useThemeMode()` + `getThemeColors(isDark)` to 12 components: CryptoChart (4 sub-components), Skeleton (8 variants), RateTicker, TransactionItem, BalanceCard, QuickAction, Header, AmountInput, CurrencySelector, PinInput, ErrorBoundary, LoadingScreen. All `colors.dark.*` → `tc.dark.*`, `colors.textPrimary` → `tc.textPrimary`, etc. | 12 component files |
+| 2 | **Full theme support — auth screens** | Frontend | Removed hardcoded `COLORS` constants from login.tsx and register.tsx. Removed hardcoded `C` constant from onboarding.tsx. All replaced with `getThemeColors(isDark)` → `tc.*` pattern. Sub-components accept `tc` as prop. | `login.tsx`, `register.tsx`, `onboarding.tsx` |
+| 3 | **Full theme support — layouts** | Frontend | All 4 layout files (`_layout.tsx`, `auth/_layout.tsx`, `payment/_layout.tsx`, `settings/_layout.tsx`) replaced hardcoded `#060E1F` with `tc.dark.bg`. Root layout StatusBar now theme-aware. | 4 layout files |
+| 4 | **Full theme support — remaining screens** | Frontend | buy-crypto.tsx: all `colors.dark.*` → `tc.dark.*`. confirm.tsx: QuoteCountdown themed. profile.tsx: KYC tiers themed. | `buy-crypto.tsx`, `confirm.tsx`, `profile.tsx` |
+
 #### 🟡 HIGH PRIORITY — Remaining (Before Beta Launch)
 
 | # | Task | Area | Details | Files |
