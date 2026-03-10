@@ -10,7 +10,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { colors, shadows } from "../../src/constants/theme";
+import { colors, shadows, getThemeColors, getThemeShadows } from "../../src/constants/theme";
+import { useThemeMode } from "../../src/stores/theme";
 
 /* ─── Types ─── */
 interface Notification {
@@ -83,6 +84,9 @@ const isWeb = Platform.OS === "web";
 export default function NotificationsInboxScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
+  const ts = getThemeShadows(isDark);
   const [notifications, setNotifications] = useState<Notification[]>(INITIAL_NOTIFICATIONS);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
@@ -101,7 +105,7 @@ export default function NotificationsInboxScreen() {
   const maxWidth = isDesktop ? 1100 : undefined;
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.dark.bg }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
       {/* Header */}
       <View
         style={{
@@ -112,33 +116,36 @@ export default function NotificationsInboxScreen() {
           paddingTop: isWeb ? 16 : 8,
           paddingBottom: 16,
           borderBottomWidth: 1,
-          borderBottomColor: colors.dark.border,
+          borderBottomColor: tc.dark.border,
         }}
       >
         <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
           {/* Back button */}
           <Pressable
-            onPress={() => router.back()}
+            onPress={() => {
+              if (router.canGoBack()) router.back();
+              else router.replace("/settings" as any);
+            }}
             accessibilityRole="button"
             accessibilityLabel="Go back"
             style={({ pressed, hovered }: any) => ({
               width: 40,
               height: 40,
               borderRadius: 12,
-              backgroundColor: isWeb && hovered ? colors.dark.elevated : colors.dark.card,
+              backgroundColor: isWeb && hovered ? tc.dark.elevated : tc.dark.card,
               alignItems: "center",
               justifyContent: "center",
               borderWidth: 1,
-              borderColor: isWeb && hovered ? colors.glass.borderStrong : colors.glass.border,
+              borderColor: isWeb && hovered ? tc.glass.borderStrong : tc.glass.border,
               opacity: pressed ? 0.85 : 1,
               ...(isWeb ? { cursor: "pointer", transition: "all 0.15s ease" } as any : {}),
             })}
           >
-            <Ionicons name="arrow-back" size={20} color={colors.textPrimary} />
+            <Ionicons name="arrow-back" size={20} color={tc.textPrimary} />
           </Pressable>
           <Text
             style={{
-              color: colors.textPrimary,
+              color: tc.textPrimary,
               fontSize: 20,
               fontFamily: "Inter_700Bold",
               letterSpacing: -0.3,
@@ -237,6 +244,8 @@ function NotificationRow({
   onPress: () => void;
   isDesktop: boolean;
 }) {
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
   const { name, color, bg } = getTypeIcon(notification.type);
 
   return (
@@ -251,12 +260,12 @@ function NotificationRow({
         paddingHorizontal: isDesktop ? 28 : 20,
         paddingVertical: isDesktop ? 20 : 16,
         backgroundColor: isWeb && hovered
-          ? colors.dark.card
+          ? tc.dark.card
           : !notification.read
             ? "rgba(16, 185, 129, 0.03)"
             : "transparent",
         borderBottomWidth: 1,
-        borderBottomColor: colors.dark.border,
+        borderBottomColor: tc.dark.border,
         opacity: pressed ? 0.85 : 1,
         ...(isWeb
           ? { cursor: "pointer", transition: "background-color 0.15s ease" } as any
@@ -284,7 +293,7 @@ function NotificationRow({
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
             <Text
               style={{
-                color: notification.read ? colors.textSecondary : colors.textPrimary,
+                color: notification.read ? tc.textSecondary : tc.textPrimary,
                 fontSize: 15,
                 fontFamily: notification.read ? "Inter_500Medium" : "Inter_600SemiBold",
                 letterSpacing: -0.2,
@@ -306,7 +315,7 @@ function NotificationRow({
           </View>
           <Text
             style={{
-              color: colors.textMuted,
+              color: tc.textMuted,
               fontSize: 12,
               fontFamily: "Inter_400Regular",
               marginLeft: 8,
@@ -317,7 +326,7 @@ function NotificationRow({
         </View>
         <Text
           style={{
-            color: notification.read ? colors.textMuted : colors.textSecondary,
+            color: notification.read ? tc.textMuted : tc.textSecondary,
             fontSize: 13,
             fontFamily: "Inter_400Regular",
             lineHeight: 19,
@@ -333,6 +342,8 @@ function NotificationRow({
 
 /* ─── Empty state ─── */
 function EmptyState() {
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
   return (
     <View
       style={{
@@ -347,19 +358,19 @@ function EmptyState() {
           width: 72,
           height: 72,
           borderRadius: 20,
-          backgroundColor: colors.dark.card,
+          backgroundColor: tc.dark.card,
           alignItems: "center",
           justifyContent: "center",
           marginBottom: 20,
           borderWidth: 1,
-          borderColor: colors.glass.border,
+          borderColor: tc.glass.border,
         }}
       >
-        <Ionicons name="notifications-off-outline" size={32} color={colors.textMuted} />
+        <Ionicons name="notifications-off-outline" size={32} color={tc.textMuted} />
       </View>
       <Text
         style={{
-          color: colors.textPrimary,
+          color: tc.textPrimary,
           fontSize: 18,
           fontFamily: "Inter_600SemiBold",
           marginBottom: 8,
@@ -370,7 +381,7 @@ function EmptyState() {
       </Text>
       <Text
         style={{
-          color: colors.textSecondary,
+          color: tc.textSecondary,
           fontSize: 14,
           fontFamily: "Inter_400Regular",
           textAlign: "center",

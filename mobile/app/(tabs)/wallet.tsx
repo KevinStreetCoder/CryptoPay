@@ -28,6 +28,7 @@ import { walletsApi } from "../../src/api/wallets";
 import { CURRENCIES, CurrencyCode, colors, getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
 import { getTxKesAmount, getTxRecipient } from "../../src/api/payments";
+import { usePhonePrivacy } from "../../src/utils/privacy";
 import { useBalanceVisibility } from "../../src/stores/balance";
 const SUPPORTED_CRYPTOS: CurrencyCode[] = ["USDT", "BTC", "ETH", "SOL"];
 
@@ -144,6 +145,7 @@ export default function WalletScreen() {
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
   const ts = getThemeShadows(isDark);
+  const { formatPhone } = usePhonePrivacy();
   const { data: wallets, isLoading: walletsLoading, refetch: refetchWallets } = useWallets();
   const { data: txData, isLoading: txLoading, refetch: refetchTx } = useTransactions();
   const { data: rates } = useRates();
@@ -1134,7 +1136,10 @@ export default function WalletScreen() {
     const date = new Date(tx.created_at);
     const timeStr = date.toLocaleTimeString("en-KE", { hour: "2-digit", minute: "2-digit" });
     const dateStr = date.toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" });
-    const recipient = getTxRecipient(tx);
+    const rawRecipient = getTxRecipient(tx);
+    const recipient = rawRecipient && tx.type === "SEND_MPESA"
+      ? formatPhone(rawRecipient)
+      : rawRecipient;
 
     return (
       <View

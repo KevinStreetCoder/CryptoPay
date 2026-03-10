@@ -15,6 +15,7 @@ import { useBalanceVisibility } from "../../src/stores/balance";
 import { colors, getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
 import { storage } from "../../src/utils/storage";
+import { usePhonePrivacy } from "../../src/utils/privacy";
 
 const isWeb = Platform.OS === "web";
 
@@ -300,6 +301,7 @@ export default function SettingsScreen() {
   const tc = getThemeColors(isDark);
   const ts = getThemeShadows(isDark);
   const { user } = useAuth();
+  const { formatPhone } = usePhonePrivacy();
   const { balanceHidden, toggleBalance } = useBalanceVisibility();
   const [biometricEnabled, setBiometricEnabled] = useState(false);
 
@@ -475,26 +477,39 @@ export default function SettingsScreen() {
           paddingBottom: 40,
         }}
       >
-        {/* Back button (mobile only) */}
-        {!isDesktop && (
-          <Pressable
-            onPress={() => router.back()}
-            style={({ pressed }) => ({
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 6,
-              paddingVertical: 8,
-              opacity: pressed ? 0.6 : 1,
-              alignSelf: "flex-start",
-              marginBottom: 8,
-            })}
-          >
-            <Ionicons name="arrow-back" size={22} color={tc.textSecondary} />
-            <Text style={{ color: tc.textSecondary, fontSize: 16, fontWeight: "500" }}>
-              Back
-            </Text>
-          </Pressable>
-        )}
+        {/* Back button */}
+        <Pressable
+          onPress={() => {
+            if (router.canGoBack()) router.back();
+            else router.replace("/(tabs)" as any);
+          }}
+          style={({ pressed, hovered }: any) => ({
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 8,
+            paddingVertical: 8,
+            paddingHorizontal: 12,
+            borderRadius: 12,
+            backgroundColor: hovered
+              ? tc.glass.highlight
+              : pressed
+                ? tc.dark.elevated
+                : "transparent",
+            alignSelf: "flex-start",
+            marginBottom: 12,
+            opacity: pressed ? 0.9 : 1,
+            ...(isWeb
+              ? ({ cursor: "pointer", transition: "all 0.15s ease" } as any)
+              : {}),
+          })}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
+          <Ionicons name="arrow-back" size={20} color={tc.textSecondary} />
+          <Text style={{ color: tc.textSecondary, fontSize: 15, fontWeight: "500" }}>
+            Back
+          </Text>
+        </Pressable>
 
         {/* User header card */}
         <View
@@ -553,7 +568,7 @@ export default function SettingsScreen() {
                 marginTop: 2,
               }}
             >
-              {user?.phone || ""}
+              {formatPhone(user?.phone)}
             </Text>
           </View>
           <View

@@ -2,6 +2,12 @@ import axios from "axios";
 import { storage } from "../utils/storage";
 import { config } from "../constants/config";
 
+// Callback for session expiry — set by auth store to avoid circular imports
+let _onSessionExpired: (() => void) | null = null;
+export function setOnSessionExpired(cb: () => void) {
+  _onSessionExpired = cb;
+}
+
 const BASE_URL = config.apiUrl;
 
 // Production safety: crash early if API URL is localhost in a production build
@@ -44,6 +50,7 @@ api.interceptors.response.use(
       } catch {
         await storage.deleteItemAsync("access_token");
         await storage.deleteItemAsync("refresh_token");
+        _onSessionExpired?.();
       }
     }
     return Promise.reject(error);

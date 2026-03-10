@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Platform } from "react-native";
 import { storage } from "../utils/storage";
 import { authApi, User } from "../api/auth";
+import { setOnSessionExpired } from "../api/client";
 import { resetBalanceVisibility } from "./balance";
 
 let _user: User | null = null;
@@ -11,6 +12,19 @@ let _biometricEnabled: boolean = false;
 function notify() {
   _listeners.forEach((l) => l());
 }
+
+/** Force-logout from anywhere (e.g. API interceptor on refresh failure) */
+export function forceLogout() {
+  storage.deleteItemAsync("access_token");
+  storage.deleteItemAsync("refresh_token");
+  _user = null;
+  resetBalanceVisibility();
+  notify();
+}
+
+// Register session-expiry callback so the API client can trigger logout
+// without a circular import
+setOnSessionExpired(forceLogout);
 
 /** Check if user has enabled biometric login */
 export async function isBiometricEnabled(): Promise<boolean> {

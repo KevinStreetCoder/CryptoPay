@@ -12,23 +12,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { storage } from "../../src/utils/storage";
-
-const COLORS = {
-  bg: "#060E1F",
-  card: "#0C1A2E",
-  elevated: "#162742",
-  border: "#1E3350",
-  glassBorder: "rgba(255, 255, 255, 0.08)",
-  primary: "#10B981",
-  primaryLight: "#34D399",
-  accent: "#F59E0B",
-  info: "#3B82F6",
-  error: "#EF4444",
-  warning: "#F59E0B",
-  textPrimary: "#F0F4F8",
-  textSecondary: "#8899AA",
-  textMuted: "#556B82",
-};
+import { colors, getThemeColors, getThemeShadows } from "../../src/constants/theme";
+import { useThemeMode } from "../../src/stores/theme";
 
 const STORAGE_KEY = "notification_prefs";
 
@@ -62,63 +47,65 @@ interface NotificationSection {
   options: NotificationOption[];
 }
 
-const SECTIONS: NotificationSection[] = [
-  {
-    title: "TRANSACTIONS",
-    options: [
-      {
-        key: "transaction_alerts",
-        label: "Transaction Alerts",
-        description: "Get notified when payments are sent or received",
-        icon: "swap-horizontal-outline",
-        iconColor: COLORS.primary,
-        iconBg: COLORS.primary + "20",
-      },
-      {
-        key: "deposit_confirmations",
-        label: "Deposit Confirmations",
-        description: "Alerts when blockchain deposits are credited to your wallet",
-        icon: "arrow-down-circle-outline",
-        iconColor: COLORS.info,
-        iconBg: COLORS.info + "20",
-      },
-    ],
-  },
-  {
-    title: "SECURITY",
-    options: [
-      {
-        key: "security_alerts",
-        label: "Security Alerts",
-        description: "New device logins, PIN changes, and suspicious activity",
-        icon: "shield-outline",
-        iconColor: COLORS.error,
-        iconBg: COLORS.error + "20",
-      },
-    ],
-  },
-  {
-    title: "MARKET & UPDATES",
-    options: [
-      {
-        key: "price_alerts",
-        label: "Price Alerts",
-        description: "Significant cryptocurrency price changes and market movements",
-        icon: "trending-up-outline",
-        iconColor: COLORS.accent,
-        iconBg: COLORS.accent + "20",
-      },
-      {
-        key: "promotional",
-        label: "Promotional",
-        description: "New features, announcements, and special offers",
-        icon: "megaphone-outline",
-        iconColor: COLORS.textSecondary,
-        iconBg: COLORS.elevated,
-      },
-    ],
-  },
-];
+function buildSections(tc: ReturnType<typeof getThemeColors>): NotificationSection[] {
+  return [
+    {
+      title: "TRANSACTIONS",
+      options: [
+        {
+          key: "transaction_alerts",
+          label: "Transaction Alerts",
+          description: "Get notified when payments are sent or received",
+          icon: "swap-horizontal-outline",
+          iconColor: colors.primary[500],
+          iconBg: colors.primary[500] + "20",
+        },
+        {
+          key: "deposit_confirmations",
+          label: "Deposit Confirmations",
+          description: "Alerts when blockchain deposits are credited to your wallet",
+          icon: "arrow-down-circle-outline",
+          iconColor: colors.info,
+          iconBg: colors.info + "20",
+        },
+      ],
+    },
+    {
+      title: "SECURITY",
+      options: [
+        {
+          key: "security_alerts",
+          label: "Security Alerts",
+          description: "New device logins, PIN changes, and suspicious activity",
+          icon: "shield-outline",
+          iconColor: colors.error,
+          iconBg: colors.error + "20",
+        },
+      ],
+    },
+    {
+      title: "MARKET & UPDATES",
+      options: [
+        {
+          key: "price_alerts",
+          label: "Price Alerts",
+          description: "Significant cryptocurrency price changes and market movements",
+          icon: "trending-up-outline",
+          iconColor: colors.accent,
+          iconBg: colors.accent + "20",
+        },
+        {
+          key: "promotional",
+          label: "Promotional",
+          description: "New features, announcements, and special offers",
+          icon: "megaphone-outline",
+          iconColor: tc.textSecondary,
+          iconBg: tc.dark.elevated,
+        },
+      ],
+    },
+  ];
+}
 
 export default function NotificationsScreen() {
   const router = useRouter();
@@ -126,8 +113,14 @@ export default function NotificationsScreen() {
   const [prefs, setPrefs] = useState<NotificationPrefs>(DEFAULT_PREFS);
   const [loaded, setLoaded] = useState(false);
 
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
+  const ts = getThemeShadows(isDark);
+
   const isWeb = Platform.OS === "web";
   const isDesktop = isWeb && width >= 768;
+
+  const sections = buildSections(tc);
 
   useEffect(() => {
     (async () => {
@@ -159,7 +152,7 @@ export default function NotificationsScreen() {
   );
 
   if (!loaded) {
-    return <View style={{ flex: 1, backgroundColor: COLORS.bg }} />;
+    return <View style={{ flex: 1, backgroundColor: tc.dark.bg }} />;
   }
 
   const content = (
@@ -178,7 +171,7 @@ export default function NotificationsScreen() {
         <View style={{ marginBottom: 8, marginTop: 4 }}>
           <Text
             style={{
-              color: COLORS.textPrimary,
+              color: tc.textPrimary,
               fontSize: 24,
               fontFamily: "Inter_700Bold",
               letterSpacing: -0.3,
@@ -188,7 +181,7 @@ export default function NotificationsScreen() {
           </Text>
           <Text
             style={{
-              color: COLORS.textMuted,
+              color: tc.textMuted,
               fontSize: 14,
               fontFamily: "Inter_400Regular",
               marginTop: 4,
@@ -200,12 +193,12 @@ export default function NotificationsScreen() {
         </View>
       )}
 
-      {SECTIONS.map((section) => (
+      {sections.map((section) => (
         <View key={section.title} style={{ marginTop: 20 }}>
           {/* Section header */}
           <Text
             style={{
-              color: COLORS.textMuted,
+              color: tc.textMuted,
               fontSize: 11,
               fontFamily: "Inter_600SemiBold",
               textTransform: "uppercase",
@@ -220,11 +213,11 @@ export default function NotificationsScreen() {
           {/* Section card */}
           <View
             style={{
-              backgroundColor: COLORS.card,
+              backgroundColor: tc.dark.card,
               borderRadius: 20,
               overflow: "hidden",
               borderWidth: 1,
-              borderColor: COLORS.glassBorder,
+              borderColor: tc.glass.border,
             }}
           >
             {section.options.map((option, index) => (
@@ -233,7 +226,7 @@ export default function NotificationsScreen() {
                   <View
                     style={{
                       height: 1,
-                      backgroundColor: "rgba(255,255,255,0.04)",
+                      backgroundColor: tc.glass.highlight,
                       marginLeft: 72,
                     }}
                   />
@@ -272,7 +265,7 @@ export default function NotificationsScreen() {
                       style={{
                         fontSize: 15,
                         fontFamily: "Inter_500Medium",
-                        color: COLORS.textPrimary,
+                        color: tc.textPrimary,
                         marginBottom: 2,
                       }}
                     >
@@ -280,7 +273,7 @@ export default function NotificationsScreen() {
                     </Text>
                     <Text
                       style={{
-                        color: COLORS.textMuted,
+                        color: tc.textMuted,
                         fontSize: 12,
                         fontFamily: "Inter_400Regular",
                         lineHeight: 17,
@@ -295,11 +288,11 @@ export default function NotificationsScreen() {
                     value={prefs[option.key]}
                     onValueChange={(value) => handleToggle(option.key, value)}
                     trackColor={{
-                      false: COLORS.elevated,
-                      true: COLORS.primary + "60",
+                      false: tc.dark.elevated,
+                      true: colors.primary[500] + "60",
                     }}
                     thumbColor={
-                      prefs[option.key] ? COLORS.primaryLight : COLORS.textMuted
+                      prefs[option.key] ? colors.primary[400] : tc.textMuted
                     }
                     accessibilityLabel={`${option.label}. ${option.description}`}
                     accessibilityRole="switch"
@@ -325,12 +318,12 @@ export default function NotificationsScreen() {
         <Ionicons
           name="information-circle-outline"
           size={16}
-          color={COLORS.textMuted}
+          color={tc.textMuted}
           style={{ marginTop: 1 }}
         />
         <Text
           style={{
-            color: COLORS.textMuted,
+            color: tc.textMuted,
             fontSize: 12,
             fontFamily: "Inter_400Regular",
             lineHeight: 18,
@@ -350,7 +343,7 @@ export default function NotificationsScreen() {
       <View
         style={{
           flex: 1,
-          backgroundColor: COLORS.bg,
+          backgroundColor: tc.dark.bg,
         }}
       >
         {/* Back button header */}
@@ -361,7 +354,10 @@ export default function NotificationsScreen() {
           }}
         >
           <Pressable
-            onPress={() => router.back()}
+            onPress={() => {
+              if (router.canGoBack()) router.back();
+              else router.replace("/settings" as any);
+            }}
             style={({ pressed }) => ({
               flexDirection: "row",
               alignItems: "center",
@@ -369,17 +365,17 @@ export default function NotificationsScreen() {
               paddingVertical: 8,
               paddingHorizontal: 12,
               borderRadius: 12,
-              backgroundColor: pressed ? COLORS.elevated : "transparent",
+              backgroundColor: pressed ? tc.dark.elevated : "transparent",
               alignSelf: "flex-start",
               opacity: pressed ? 0.9 : 1,
             })}
             accessibilityRole="button"
             accessibilityLabel="Go back"
           >
-            <Ionicons name="arrow-back" size={20} color={COLORS.textSecondary} />
+            <Ionicons name="arrow-back" size={20} color={tc.textSecondary} />
             <Text
               style={{
-                color: COLORS.textSecondary,
+                color: tc.textSecondary,
                 fontSize: 15,
                 fontFamily: "Inter_500Medium",
               }}
@@ -400,7 +396,7 @@ export default function NotificationsScreen() {
         >
           <Text
             style={{
-              color: COLORS.textPrimary,
+              color: tc.textPrimary,
               fontSize: 28,
               fontFamily: "Inter_700Bold",
               letterSpacing: -0.5,
@@ -410,7 +406,7 @@ export default function NotificationsScreen() {
           </Text>
           <Text
             style={{
-              color: COLORS.textMuted,
+              color: tc.textMuted,
               fontSize: 15,
               fontFamily: "Inter_400Regular",
               marginTop: 6,
@@ -427,7 +423,7 @@ export default function NotificationsScreen() {
 
   // Mobile layout
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.bg }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
       {/* Back button header */}
       <View
         style={{
@@ -438,7 +434,10 @@ export default function NotificationsScreen() {
         }}
       >
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => {
+            if (router.canGoBack()) router.back();
+            else router.replace("/settings" as any);
+          }}
           style={({ pressed }) => ({
             flexDirection: "row",
             alignItems: "center",
@@ -446,16 +445,16 @@ export default function NotificationsScreen() {
             paddingVertical: 6,
             paddingHorizontal: 8,
             borderRadius: 10,
-            backgroundColor: pressed ? COLORS.elevated : "transparent",
+            backgroundColor: pressed ? tc.dark.elevated : "transparent",
             opacity: pressed ? 0.9 : 1,
           })}
           accessibilityRole="button"
           accessibilityLabel="Go back"
         >
-          <Ionicons name="arrow-back" size={20} color={COLORS.textSecondary} />
+          <Ionicons name="arrow-back" size={20} color={tc.textSecondary} />
           <Text
             style={{
-              color: COLORS.textSecondary,
+              color: tc.textSecondary,
               fontSize: 15,
               fontFamily: "Inter_500Medium",
             }}

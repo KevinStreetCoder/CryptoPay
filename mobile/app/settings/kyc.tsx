@@ -14,7 +14,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../src/stores/auth";
 import { authApi, KYCDocument } from "../../src/api/auth";
 import { useToast } from "../../src/components/Toast";
-import { colors } from "../../src/constants/theme";
+import { colors, getThemeColors, getThemeShadows } from "../../src/constants/theme";
+import { useThemeMode } from "../../src/stores/theme";
 
 const DOCUMENT_TYPES = [
   {
@@ -87,6 +88,9 @@ export default function KYCScreen() {
   const toast = useToast();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === "web" && width >= 768;
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
+  const ts = getThemeShadows(isDark);
 
   const [documents, setDocuments] = useState<KYCDocument[]>([]);
   const [loading, setLoading] = useState(true);
@@ -138,7 +142,7 @@ export default function KYCScreen() {
   const hPad = isDesktop ? 28 : 16;
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.dark.bg }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
       {/* Header */}
       <View
         style={{
@@ -151,25 +155,28 @@ export default function KYCScreen() {
         }}
       >
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => {
+            if (router.canGoBack()) router.back();
+            else router.replace("/settings" as any);
+          }}
           style={{
             width: 40,
             height: 40,
             borderRadius: 12,
-            backgroundColor: colors.dark.card,
+            backgroundColor: tc.dark.card,
             alignItems: "center",
             justifyContent: "center",
             borderWidth: 1,
-            borderColor: colors.glass.border,
+            borderColor: tc.glass.border,
           }}
           accessibilityRole="button"
           accessibilityLabel="Go back"
         >
-          <Ionicons name="arrow-back" size={20} color={colors.textPrimary} />
+          <Ionicons name="arrow-back" size={20} color={tc.textPrimary} />
         </Pressable>
         <Text
           style={{
-            color: colors.textPrimary,
+            color: tc.textPrimary,
             fontSize: isDesktop ? 28 : 24,
             fontFamily: "Inter_700Bold",
             letterSpacing: -0.5,
@@ -190,17 +197,17 @@ export default function KYCScreen() {
         {/* Current Tier Card */}
         <View
           style={{
-            backgroundColor: colors.dark.card,
+            backgroundColor: tc.dark.card,
             borderRadius: 20,
             padding: 20,
             marginBottom: 20,
             borderWidth: 1,
-            borderColor: colors.glass.border,
+            borderColor: tc.glass.border,
           }}
         >
           <Text
             style={{
-              color: colors.textMuted,
+              color: tc.textMuted,
               fontSize: 11,
               fontFamily: "Inter_600SemiBold",
               textTransform: "uppercase",
@@ -221,7 +228,7 @@ export default function KYCScreen() {
             />
             <Text
               style={{
-                color: colors.textPrimary,
+                color: tc.textPrimary,
                 fontSize: 18,
                 fontFamily: "Inter_700Bold",
               }}
@@ -231,7 +238,7 @@ export default function KYCScreen() {
           </View>
           <Text
             style={{
-              color: colors.textSecondary,
+              color: tc.textSecondary,
               fontSize: 13,
               fontFamily: "Inter_400Regular",
               marginTop: 8,
@@ -253,7 +260,7 @@ export default function KYCScreen() {
             <View
               key={doc.type}
               style={{
-                backgroundColor: colors.dark.card,
+                backgroundColor: tc.dark.card,
                 borderRadius: 18,
                 padding: 18,
                 marginBottom: 12,
@@ -262,7 +269,7 @@ export default function KYCScreen() {
                   ? colors.success + "30"
                   : existing?.status === "rejected"
                   ? colors.error + "30"
-                  : colors.glass.border,
+                  : tc.glass.border,
               }}
             >
               <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 14 }}>
@@ -273,7 +280,7 @@ export default function KYCScreen() {
                     borderRadius: 14,
                     backgroundColor: isApproved
                       ? colors.success + "20"
-                      : colors.dark.elevated,
+                      : tc.dark.elevated,
                     alignItems: "center",
                     justifyContent: "center",
                   }}
@@ -281,14 +288,14 @@ export default function KYCScreen() {
                   <Ionicons
                     name={(isApproved ? "checkmark-circle" : doc.icon) as any}
                     size={22}
-                    color={isApproved ? colors.success : colors.textSecondary}
+                    color={isApproved ? colors.success : tc.textSecondary}
                   />
                 </View>
                 <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 }}>
                     <Text
                       style={{
-                        color: colors.textPrimary,
+                        color: tc.textPrimary,
                         fontSize: 15,
                         fontFamily: "Inter_600SemiBold",
                       }}
@@ -297,7 +304,7 @@ export default function KYCScreen() {
                     </Text>
                     <View
                       style={{
-                        backgroundColor: colors.dark.elevated,
+                        backgroundColor: tc.dark.elevated,
                         paddingHorizontal: 6,
                         paddingVertical: 2,
                         borderRadius: 6,
@@ -305,7 +312,7 @@ export default function KYCScreen() {
                     >
                       <Text
                         style={{
-                          color: colors.textMuted,
+                          color: tc.textMuted,
                           fontSize: 10,
                           fontFamily: "Inter_600SemiBold",
                         }}
@@ -316,7 +323,7 @@ export default function KYCScreen() {
                   </View>
                   <Text
                     style={{
-                      color: colors.textMuted,
+                      color: tc.textMuted,
                       fontSize: 12,
                       fontFamily: "Inter_400Regular",
                       lineHeight: 17,
@@ -405,7 +412,7 @@ export default function KYCScreen() {
           <Ionicons name="information-circle-outline" size={18} color={colors.info} style={{ marginTop: 1 }} />
           <Text
             style={{
-              color: colors.textSecondary,
+              color: tc.textSecondary,
               fontSize: 12,
               fontFamily: "Inter_400Regular",
               lineHeight: 18,

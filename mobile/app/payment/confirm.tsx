@@ -280,7 +280,7 @@ export default function ConfirmPaymentScreen() {
         }}
       >
         <Pressable
-          onPress={() => (step === "pin" ? setStep("review") : router.back())}
+          onPress={() => { if (step === "pin") setStep("review"); else if (router.canGoBack()) router.back(); else router.replace("/(tabs)" as any); }}
           onHoverIn={() => setBackHovered(true)}
           onHoverOut={() => setBackHovered(false)}
           hitSlop={12}
@@ -647,7 +647,7 @@ export default function ConfirmPaymentScreen() {
             {quoteExpired ? (
               <Button
                 title="Get New Quote"
-                onPress={() => router.back()}
+                onPress={() => { if (router.canGoBack()) router.back(); else router.replace("/(tabs)" as any); }}
                 size="lg"
                 variant="outline"
                 testID="new-quote-button"
@@ -818,7 +818,7 @@ export default function ConfirmPaymentScreen() {
                 </Text>
                 <Button
                   title="Get New Quote"
-                  onPress={() => router.back()}
+                  onPress={() => { if (router.canGoBack()) router.back(); else router.replace("/(tabs)" as any); }}
                   size="lg"
                   variant="outline"
                   style={{ marginTop: 8, width: "100%" }}

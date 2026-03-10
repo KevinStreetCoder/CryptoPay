@@ -17,8 +17,13 @@ import { QuickAction } from "../../src/components/QuickAction";
 import { TransactionItem } from "../../src/components/TransactionItem";
 import { RateTicker } from "../../src/components/RateTicker";
 import {
+  Skeleton,
   BalanceCardSkeleton,
   TransactionSkeleton,
+  CryptoCardSkeleton,
+  CryptoChartsSkeleton,
+  RateTickerSkeleton,
+  PortfolioChartSkeleton,
 } from "../../src/components/Skeleton";
 import { useWallets } from "../../src/hooks/useWallets";
 import { useTransactions } from "../../src/hooks/useTransactions";
@@ -660,6 +665,7 @@ function CryptoPriceChartsSection({
   });
 
   const sparklines = sparklineQueries.data || {};
+  const sparklinesLoading = sparklineQueries.isLoading;
 
   const handlePeriodChange = useCallback((apiPeriod: string) => {
     setChartPeriod(apiPeriod);
@@ -805,7 +811,11 @@ function CryptoPriceChartsSection({
               </Text>
 
               {/* Mini sparkline */}
-              <SparklineChart data={sparkData} color={cur.color} height={48} />
+              {sparklinesLoading && sparkData.length < 2 ? (
+                <Skeleton width="100%" height={48} borderRadius={6} />
+              ) : (
+                <SparklineChart data={sparkData} color={cur.color} height={48} />
+              )}
             </Pressable>
           );
         })}
@@ -825,6 +835,166 @@ function CryptoPriceChartsSection({
           onPeriodChange={handlePeriodChange}
           loading={expandedQuery.isLoading || expandedQuery.isFetching}
         />
+      )}
+    </View>
+  );
+}
+
+/* ─── Mobile Crypto Charts (2x2 compact grid) ─── */
+function MobileCryptoCharts({
+  tickerRates,
+  tc,
+  ts,
+}: {
+  tickerRates: { symbol: string; rate: number; change24h: number }[];
+  tc: ReturnType<typeof getThemeColors>;
+  ts: ReturnType<typeof getThemeShadows>;
+}) {
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [chartPeriod, setChartPeriod] = useState<string>("7d");
+
+  const sparklineQueries = useQuery({
+    queryKey: ["sparklines-mobile"],
+    queryFn: async () => {
+      const map: Record<string, ChartDataPoint[]> = {};
+      await Promise.all(
+        CHART_CURRENCIES.map(async (cur) => {
+          try {
+            const { data } = await ratesApi.getRateHistory(cur.symbol, "1d");
+            map[cur.symbol] = apiDataToChartPoints(data.data);
+          } catch {
+            map[cur.symbol] = [];
+          }
+        })
+      );
+      return map;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const expandedQuery = useQuery({
+    queryKey: ["chart-mobile", expanded, chartPeriod],
+    queryFn: async () => {
+      if (!expanded) return [];
+      const { data } = await ratesApi.getRateHistory(expanded, chartPeriod);
+      return apiDataToChartPoints(data.data);
+    },
+    enabled: !!expanded,
+    staleTime: chartPeriod === "1d" ? 5 * 60 * 1000 : 30 * 60 * 1000,
+  });
+
+  const sparklines = sparklineQueries.data || {};
+  const sparklinesLoading = sparklineQueries.isLoading;
+
+  const handlePeriodChange = useCallback((apiPeriod: string) => {
+    setChartPeriod(apiPeriod);
+  }, []);
+
+  return (
+    <View style={{ paddingHorizontal: 16, marginBottom: 24 }}>
+      <Text
+        style={{
+          color: tc.dark.muted,
+          fontSize: 11,
+          fontFamily: "Inter_600SemiBold",
+          letterSpacing: 1.2,
+          textTransform: "uppercase",
+          marginBottom: 14,
+          paddingHorizontal: 4,
+        }}
+      >
+        CRYPTO PRICES
+      </Text>
+
+      {/* 2x2 grid of cards */}
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
+        {CHART_CURRENCIES.map((cur) => {
+          const tr = tickerRates.find((r) => r.symbol === cur.symbol);
+          if (!tr) return null;
+          const isPos = tr.change24h >= 0;
+          const changeColor = isPos ? colors.primary[400] : colors.error;
+          const isExpanded = expanded === cur.symbol;
+          const sparkData = (sparklines[cur.symbol] || []).slice(-48);
+          const iconSymbol =
+            (CURRENCIES as any)[cur.symbol]?.iconSymbol || cur.symbol[0];
+
+          return (
+            <Pressable
+              key={cur.symbol}
+              onPress={() => {
+                setExpanded(isExpanded ? null : cur.symbol);
+                setChartPeriod("7d");
+              }}
+              style={({ pressed }) => ({
+                width: "47%" as any,
+                flexGrow: 1,
+                backgroundColor: isExpanded ? cur.color + "0D" : tc.dark.card,
+                borderRadius: 16,
+                padding: 14,
+                borderWidth: 1,
+                borderColor: isExpanded ? cur.color + "33" : tc.glass.border,
+                opacity: pressed ? 0.9 : 1,
+                transform: [{ scale: pressed ? 0.97 : 1 }],
+              })}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <View
+                  style={{
+                    width: 28,
+                    height: 28,
+                    borderRadius: 8,
+                    backgroundColor: cur.color + "1A",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Text style={{ color: cur.color, fontSize: 14, fontFamily: "Inter_700Bold" }}>
+                    {iconSymbol}
+                  </Text>
+                </View>
+                <Text style={{ color: tc.textPrimary, fontSize: 13, fontFamily: "Inter_600SemiBold" }}>
+                  {cur.symbol}
+                </Text>
+              </View>
+              <Text
+                style={{ color: tc.textPrimary, fontSize: 13, fontFamily: "Inter_700Bold", marginBottom: 2 }}
+                numberOfLines={1}
+              >
+                KES {tr.rate >= 1000
+                  ? tr.rate.toLocaleString(undefined, { maximumFractionDigits: 0 })
+                  : tr.rate.toFixed(2)}
+              </Text>
+              <Text
+                style={{ color: changeColor, fontSize: 11, fontFamily: "Inter_600SemiBold", marginBottom: 6 }}
+              >
+                {isPos ? "+" : ""}{tr.change24h.toFixed(2)}%
+              </Text>
+              {sparklinesLoading && sparkData.length < 2 ? (
+                <Skeleton width="100%" height={40} borderRadius={6} />
+              ) : (
+                <SparklineChart data={sparkData} color={cur.color} height={40} />
+              )}
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {/* Expanded full chart */}
+      {expanded && (
+        <View style={{ marginTop: 12 }}>
+          <CryptoChart
+            data={expandedQuery.data || []}
+            currency={expanded}
+            color={
+              CHART_CURRENCIES.find((c) => c.symbol === expanded)?.color ||
+              colors.primary[400]
+            }
+            height={220}
+            interactive
+            onPeriodChange={handlePeriodChange}
+            loading={expandedQuery.isLoading || expandedQuery.isFetching}
+          />
+        </View>
       )}
     </View>
   );
@@ -852,7 +1022,7 @@ export default function HomeScreen() {
     refetch: refetchTx,
     isLoading: txLoading,
   } = useTransactions();
-  const { data: rates } = useRates();
+  const { data: rates, isLoading: ratesLoading } = useRates();
   const [refreshing, setRefreshing] = useState(false);
 
   const onRefresh = async () => {
@@ -1079,11 +1249,31 @@ export default function HomeScreen() {
           </View>
 
           {/* Live Rate Ticker */}
-          {tickerRates.length > 0 && (
+          {tickerRates.length > 0 ? (
             <View style={{ marginHorizontal: 16, marginBottom: 24 }}>
               <RateTicker rates={tickerRates} />
             </View>
-          )}
+          ) : ratesLoading ? (
+            <View style={{ marginHorizontal: 16, marginBottom: 24 }}>
+              <RateTickerSkeleton />
+            </View>
+          ) : null}
+
+          {/* Crypto Price Charts (mobile) */}
+          {tickerRates.length > 0 ? (
+            <MobileCryptoCharts tickerRates={tickerRates} tc={tc} ts={ts} />
+          ) : ratesLoading ? (
+            <View style={{ paddingHorizontal: 16, marginBottom: 24 }}>
+              <Skeleton width={110} height={11} style={{ marginBottom: 14, marginLeft: 4 }} />
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
+                {[1, 2, 3, 4].map((i) => (
+                  <View key={i} style={{ width: "47%", flexGrow: 1 }}>
+                    <CryptoCardSkeleton />
+                  </View>
+                ))}
+              </View>
+            </View>
+          ) : null}
 
           {/* Promotional Banner */}
           <Pressable
@@ -1519,6 +1709,35 @@ export default function HomeScreen() {
         </View>
 
         {/* Live Stats Row — visible on large desktop */}
+        {isLargeDesktop && ratesLoading && tickerRates.length === 0 && (
+          <View style={{ flexDirection: "row", gap: 16, marginBottom: 20 }}>
+            {[1, 2, 3, 4].map((i) => (
+              <View
+                key={i}
+                style={{
+                  flex: 1,
+                  backgroundColor: tc.dark.card,
+                  borderRadius: 14,
+                  paddingHorizontal: 18,
+                  paddingVertical: 14,
+                  borderWidth: 1,
+                  borderColor: tc.glass.border,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 12,
+                  ...ts.sm,
+                }}
+              >
+                <Skeleton width={36} height={36} borderRadius={10} />
+                <View style={{ flex: 1 }}>
+                  <Skeleton width={80} height={14} style={{ marginBottom: 4 }} />
+                  <Skeleton width={40} height={11} />
+                </View>
+                <Skeleton width={52} height={22} borderRadius={6} />
+              </View>
+            ))}
+          </View>
+        )}
         {isLargeDesktop && tickerRates.length > 0 && (
           <View
             style={{
@@ -1637,13 +1856,17 @@ export default function HomeScreen() {
             {walletsLoading && <BalanceCardSkeleton />}
           </View>
           <View style={{ flex: isXLDesktop ? 3 : 4 }}>
-            <PortfolioChart
-              chartPoints={chartPoints}
-              chartLabels={chartLabels}
-              changePercent={changePercent}
-              tc={tc}
-              ts={ts}
-            />
+            {txLoading ? (
+              <PortfolioChartSkeleton />
+            ) : (
+              <PortfolioChart
+                chartPoints={chartPoints}
+                chartLabels={chartLabels}
+                changePercent={changePercent}
+                tc={tc}
+                ts={ts}
+              />
+            )}
           </View>
         </View>
 
@@ -1709,16 +1932,22 @@ export default function HomeScreen() {
         </View>
 
         {/* Row 2.5: Crypto Price Charts */}
-        {tickerRates.length > 0 && (
+        {tickerRates.length > 0 ? (
           <CryptoPriceChartsSection rates={rates || []} tickerRates={tickerRates} tc={tc} ts={ts} />
-        )}
+        ) : ratesLoading ? (
+          <CryptoChartsSkeleton />
+        ) : null}
 
         {/* Row 3: Rate Ticker (full width, contained) */}
-        {tickerRates.length > 0 && (
+        {tickerRates.length > 0 ? (
           <View style={{ marginBottom: 24 }}>
             <RateTicker rates={tickerRates} />
           </View>
-        )}
+        ) : ratesLoading ? (
+          <View style={{ marginBottom: 24 }}>
+            <RateTickerSkeleton />
+          </View>
+        ) : null}
 
         {/* Row 4: Recent Transactions (60%) + Transaction Summary (40%) */}
         <View

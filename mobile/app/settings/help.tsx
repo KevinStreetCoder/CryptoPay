@@ -519,19 +519,26 @@ export default function HelpScreen() {
         {/* Back button header */}
         <View style={{ paddingHorizontal: 24, paddingTop: 24 }}>
           <Pressable
-            onPress={() => router.back()}
-            style={({ pressed }) => ({
+            onPress={() => {
+              if (router.canGoBack()) router.back();
+              else router.replace("/settings" as any);
+            }}
+            style={({ pressed, hovered }: any) => ({
               flexDirection: "row",
               alignItems: "center",
               gap: 8,
               paddingVertical: 8,
               paddingHorizontal: 12,
               borderRadius: 12,
-              backgroundColor: pressed ? tc.dark.elevated : "transparent",
+              backgroundColor: hovered
+                ? tc.glass.highlight
+                : pressed
+                  ? tc.dark.elevated
+                  : "transparent",
               alignSelf: "flex-start",
               opacity: pressed ? 0.9 : 1,
               ...(isWeb
-                ? ({ cursor: "pointer", transition: "background-color 0.15s ease" } as any)
+                ? ({ cursor: "pointer", transition: "all 0.15s ease" } as any)
                 : {}),
             })}
             accessibilityRole="button"
@@ -602,7 +609,10 @@ export default function HelpScreen() {
         }}
       >
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => {
+            if (router.canGoBack()) router.back();
+            else router.replace("/settings" as any);
+          }}
           style={({ pressed }) => ({
             flexDirection: "row",
             alignItems: "center",
