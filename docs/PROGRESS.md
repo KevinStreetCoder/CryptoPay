@@ -1,6 +1,6 @@
 # CryptoPay — Development Progress
 
-**Last updated:** 2026-03-10
+**Last updated:** 2026-03-10 (Session 2)
 
 > See also: [ROADMAP.md](./ROADMAP.md) for strategic vision, fundraising, and expansion plans.
 > See also: [SYSTEM-DESIGN.md](./SYSTEM-DESIGN.md) for technical architecture and liquidity engine design.
@@ -264,7 +264,7 @@
 
 ## Phase 3 — Production Ready & Launch (In Progress)
 
-**Last updated:** 2026-03-09
+**Last updated:** 2026-03-10
 
 ### Production Infrastructure — IMPLEMENTED ✅
 
@@ -326,6 +326,20 @@ What's real vs placeholder in the current codebase:
 | 10 | **Quote countdown timer (90s)** | Frontend | Real-time countdown with progress bar, color transitions (green→yellow→red), haptic warning at 10s, expired state blocks payment and shows "Get New Quote" button. Works on both review and PIN steps. | `payment/confirm.tsx` |
 | 11 | **Swahili translations expanded** | Frontend | Added 12 new translation keys for payment flow (excise duty, rate locked, quote expired, pay now, etc.) in both English and Swahili. | `i18n/en.ts`, `i18n/sw.ts` |
 | 12 | **RiftFi competitive analysis** | Docs | Documented RiftFi as direct competitor. Updated ROADMAP.md, PROGRESS.md, and research docs with strategic response plan. | `ROADMAP.md`, `PROGRESS.md`, `IMPLEMENTATION-RESEARCH.md` |
+
+#### ✅ COMPLETED (March 10, 2026 Session)
+
+| # | Task | Area | Details | Files |
+|---|------|------|---------|-------|
+| 1 | **Fix auth session expiry (401 loop)** | Frontend | Added `forceLogout` callback pattern — axios interceptor clears tokens AND updates React auth state on refresh failure. Avoids circular imports via `setOnSessionExpired()` registration. | `client.ts`, `stores/auth.ts` |
+| 2 | **Fix web avatar upload** | Frontend | Platform-specific FormData: web uses `fetch()` → blob → `new File()`, native uses `{ uri, type, name }`. Set `Content-Type: undefined` so axios auto-sets multipart boundary. | `profile.tsx`, `api/auth.ts` |
+| 3 | **Light mode on ALL pages** | Frontend | Fixed 6 pages with hardcoded dark colors: `notifications.tsx`, `change-pin.tsx`, `detail.tsx`, `kyc.tsx`, `language.tsx`, `notifications-inbox.tsx`. All now use `getThemeColors(isDark)` → `tc.*` pattern. | 6 settings/payment files |
+| 4 | **Back buttons on ALL pages** | Frontend | Dual back buttons on payment pages: top `< Back` goes to previous page, card back button goes to Pay page. All pages have `canGoBack()` guards with fallback `router.replace()`. | All payment + settings pages |
+| 5 | **Phone masking everywhere** | Frontend | `usePhonePrivacy` hook with `formatPhone()` applied to: recent transactions, wallet desktop table, settings user card, transaction detail page. Single toggle in Profile controls all. | `TransactionItem.tsx`, `wallet.tsx`, `settings/index.tsx`, `detail.tsx` |
+| 6 | **Mobile crypto charts** | Frontend | Added `MobileCryptoCharts` component: 2x2 grid of crypto price cards with sparklines + expandable full chart. Charts now visible on all devices, not just desktop. | `index.tsx` |
+| 7 | **Skeleton loading** | Frontend | Added 4 new skeleton components: `CryptoCardSkeleton`, `CryptoChartsSkeleton`, `RateTickerSkeleton`, `PortfolioChartSkeleton`. Applied to charts, rate ticker, portfolio chart, crypto cards. | `Skeleton.tsx`, `index.tsx` |
+| 8 | **Real Kenyan service providers** | Frontend | Replaced generic providers with 12 real services: KPLC Prepaid/Postpaid, Nairobi Water, Safaricom, Airtel, DSTV, GOtv, StarTimes, KRA iTax, NHIF, Zuku, Showmax. Click prefills paybill number. | `pay.tsx`, `paybill.tsx`, `till.tsx` |
+| 9 | **Remove conflicting settings** | Frontend | Ensured phone masking toggle exists only in Profile (not duplicated in Settings). No conflicting privacy controls. | `profile.tsx`, `settings/index.tsx` |
 
 #### 🟡 HIGH PRIORITY — Remaining (Before Beta Launch)
 
