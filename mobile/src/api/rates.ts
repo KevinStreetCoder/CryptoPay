@@ -38,12 +38,14 @@ export interface Quote {
   crypto_amount: string;
   kes_amount: string;
   fee_kes: string;
+  excise_duty_kes: string;
   total_kes: string;
   crypto_usd: string;
   usd_kes: string;
   raw_rate: string;
   spread_percent: number;
   flat_fee_kes: number;
+  excise_duty_percent: number;
 }
 
 export const ratesApi = {

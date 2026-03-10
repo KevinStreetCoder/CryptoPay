@@ -13,6 +13,7 @@ import { ToastProvider } from "../src/components/Toast";
 import { DashboardLayout } from "../src/components/WebSidebar";
 import { usePushNotifications } from "../src/hooks/usePushNotifications";
 import { storage } from "../src/utils/storage";
+import { initTheme } from "../src/stores/theme";
 import { OnboardingModal, ONBOARDING_COMPLETED_KEY } from "./onboarding";
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -34,7 +35,7 @@ function RootNavigator() {
 
   useEffect(() => {
     const init = async () => {
-      await bootstrap();
+      await Promise.all([bootstrap(), initTheme()]);
       setAppReady(true);
       await SplashScreen.hideAsync().catch(() => {});
     };

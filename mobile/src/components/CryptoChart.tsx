@@ -27,33 +27,28 @@ export interface ChartDataPoint {
 }
 
 export interface CryptoChartProps {
-  data: ChartDataPoint[];
+  data?: ChartDataPoint[];
   currency: string;
   color: string;
   height?: number;
   interactive?: boolean;
+  onPeriodChange?: (period: string) => void;
+  loading?: boolean;
 }
 
 type Period = "1D" | "7D" | "1M" | "3M";
 
-/* ─── Mock data generator ─── */
-export function generateMockHistory(
-  currentRate: number,
-  days: number = 7
+/* ─── Convert API data to chart format ─── */
+export function apiDataToChartPoints(
+  apiData: Array<{ timestamp: number | string; rate: number | string }>
 ): ChartDataPoint[] {
-  const points = days * 24; // hourly
-  const data: ChartDataPoint[] = [];
-  let rate = currentRate * (0.95 + Math.random() * 0.1);
-  for (let i = 0; i < points; i++) {
-    rate += rate * (Math.random() - 0.49) * 0.005;
-    data.push({
-      timestamp: new Date(Date.now() - (points - i) * 3600000).toISOString(),
-      rate: Math.max(rate, 0.01),
-    });
-  }
-  // Ensure last point matches current rate
-  data[data.length - 1].rate = currentRate;
-  return data;
+  return apiData.map((p) => ({
+    timestamp:
+      typeof p.timestamp === "number"
+        ? new Date(p.timestamp).toISOString()
+        : p.timestamp,
+    rate: typeof p.rate === "string" ? parseFloat(p.rate) : p.rate,
+  }));
 }
 
 /* ─── Helpers ─── */
@@ -329,6 +324,13 @@ function Tooltip({
   );
 }
 
+const PERIOD_API_MAP: Record<Period, string> = {
+  "1D": "1d",
+  "7D": "7d",
+  "1M": "30d",
+  "3M": "90d",
+};
+
 /* ─── Main CryptoChart Component ─── */
 export function CryptoChart({
   data,
@@ -336,8 +338,18 @@ export function CryptoChart({
   color,
   height = 200,
   interactive = true,
+  onPeriodChange,
+  loading = false,
 }: CryptoChartProps) {
   const [period, setPeriod] = useState<Period>("7D");
+
+  const handlePeriodChange = useCallback(
+    (p: Period) => {
+      setPeriod(p);
+      onPeriodChange?.(PERIOD_API_MAP[p]);
+    },
+    [onPeriodChange]
+  );
   const [containerWidth, setContainerWidth] = useState(0);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
@@ -349,8 +361,8 @@ export function CryptoChart({
     setContainerWidth(e.nativeEvent.layout.width);
   }, []);
 
-  // Filter data by selected period
-  const filteredData = useMemo(() => filterDataByPeriod(data, period), [data, period]);
+  // Data is already filtered by period from API — use directly
+  const filteredData = useMemo(() => data || [], [data]);
 
   // Downsample to max ~120 points for performance
   const chartData = useMemo(() => {
@@ -504,8 +516,11 @@ export function CryptoChart({
         : "",
   }));
 
-  // Empty state
-  if (!data || data.length === 0) {
+  // Loading / Empty state
+  if (loading || !data || data.length === 0) {
+    if (loading) {
+      return <ChartSkeleton height={height} />;
+    }
     return (
       <View
         style={{
@@ -514,8 +529,6 @@ export function CryptoChart({
           padding: 24,
           borderWidth: 1,
           borderColor: colors.glass.border,
-          alignItems: "center",
-          justifyContent: "center",
           minHeight: height + 80,
         }}
       >
@@ -524,10 +537,14 @@ export function CryptoChart({
             color: colors.textMuted,
             fontSize: 14,
             fontFamily: "Inter_500Medium",
+            textAlign: "center",
+            marginTop: height / 3,
           }}
         >
-          No data available
+          No price data available
         </Text>
+        {/* Still show period selector */}
+        <PeriodSelector selected={period} onSelect={handlePeriodChange} accentColor={color} />
       </View>
     );
   }
@@ -703,7 +720,7 @@ export function CryptoChart({
       </View>
 
       {/* Period Selector */}
-      <PeriodSelector selected={period} onSelect={setPeriod} accentColor={color} />
+      <PeriodSelector selected={period} onSelect={handlePeriodChange} accentColor={color} />
     </View>
   );
 }

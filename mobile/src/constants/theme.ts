@@ -1,6 +1,7 @@
-// CryptoPay Premium Design System v2.0
-// Modern fintech dark theme with glassmorphism effects
+// CryptoPay Premium Design System v3.0
+// Dark/Light theme with glassmorphism effects
 
+/** Dark theme (default) – kept as `colors` for backward compat */
 export const colors = {
   primary: {
     50: "#ECFDF5",
@@ -111,3 +112,44 @@ export const CURRENCIES = {
 } as const;
 
 export type CurrencyCode = keyof typeof CURRENCIES;
+
+// ── Light Theme ──────────────────────────────────────────────────────────────
+
+/** Light theme variant – same structure as `colors` */
+export const lightColors = {
+  ...colors,
+  dark: {
+    bg: "#F5F7FA",
+    card: "#FFFFFF",
+    elevated: "#F0F2F5",
+    border: "#E2E8F0",
+    muted: "#94A3B8",
+  },
+  textPrimary: "#0F172A",
+  textSecondary: "#475569",
+  textMuted: "#94A3B8",
+  white: "#FFFFFF",
+  glass: {
+    bg: "rgba(255, 255, 255, 0.85)",
+    bgLight: "rgba(255, 255, 255, 0.6)",
+    border: "rgba(0, 0, 0, 0.08)",
+    borderStrong: "rgba(0, 0, 0, 0.12)",
+    highlight: "rgba(0, 0, 0, 0.02)",
+  },
+} as const;
+
+export const lightShadows = {
+  sm: makeShadow("#94A3B8", 1, 6, 0.08, 2),
+  md: makeShadow("#94A3B8", 3, 12, 0.1, 4),
+  lg: makeShadow("#94A3B8", 6, 20, 0.12, 8),
+  glow: (color: string, opacity = 0.15) => makeShadow(color, 3, 12, opacity, 6),
+};
+
+/** Returns the correct color set based on dark/light mode */
+export function getThemeColors(isDark: boolean) {
+  return isDark ? colors : lightColors;
+}
+
+export function getThemeShadows(isDark: boolean) {
+  return isDark ? shadows : lightShadows;
+}

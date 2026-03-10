@@ -10,7 +10,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { BalanceCard } from "../../src/components/BalanceCard";
 import { QuickAction } from "../../src/components/QuickAction";
@@ -25,11 +25,12 @@ import { useTransactions } from "../../src/hooks/useTransactions";
 import { useAuth } from "../../src/stores/auth";
 import { ratesApi, Rate, normalizeRate } from "../../src/api/rates";
 import { Transaction, getTxKesAmount } from "../../src/api/payments";
-import { colors, shadows, CURRENCIES } from "../../src/constants/theme";
+import { colors, CURRENCIES, getThemeColors, getThemeShadows } from "../../src/constants/theme";
+import { useThemeMode } from "../../src/stores/theme";
 import {
   CryptoChart,
   SparklineChart,
-  generateMockHistory,
+  apiDataToChartPoints,
   ChartDataPoint,
 } from "../../src/components/CryptoChart";
 
@@ -136,12 +137,16 @@ interface PortfolioChartProps {
   chartPoints: number[];
   chartLabels: string[];
   changePercent: string;
+  tc: ReturnType<typeof getThemeColors>;
+  ts: ReturnType<typeof getThemeShadows>;
 }
 
 function PortfolioChart({
   chartPoints,
   chartLabels,
   changePercent,
+  tc,
+  ts,
 }: PortfolioChartProps) {
   const { width: windowWidth } = useWindowDimensions();
   const isDesktopChart = Platform.OS === "web" && windowWidth >= 900;
@@ -174,13 +179,13 @@ function PortfolioChart({
   return (
     <View
       style={{
-        backgroundColor: colors.dark.card,
+        backgroundColor: tc.dark.card,
         borderRadius: 20,
         padding: 20,
         borderWidth: 1,
-        borderColor: colors.glass.border,
+        borderColor: tc.glass.border,
         flex: 1,
-        ...shadows.md,
+        ...ts.md,
       }}
     >
       {/* Header */}
@@ -195,7 +200,7 @@ function PortfolioChart({
         <View>
           <Text
             style={{
-              color: colors.textSecondary,
+              color: tc.textSecondary,
               fontSize: 12,
               fontFamily: "Inter_500Medium",
               letterSpacing: 0.5,
@@ -207,7 +212,7 @@ function PortfolioChart({
           </Text>
           <Text
             style={{
-              color: colors.textPrimary,
+              color: tc.textPrimary,
               fontSize: 22,
               fontFamily: "Inter_700Bold",
             }}
@@ -258,7 +263,7 @@ function PortfolioChart({
               right: 0,
               top: (i / 2) * chartHeight,
               height: 1,
-              backgroundColor: colors.glass.border,
+              backgroundColor: tc.glass.border,
             }}
           />
         ))}
@@ -282,7 +287,7 @@ function PortfolioChart({
                 height: 2,
                 backgroundColor: hasData
                   ? colors.primary[400]
-                  : colors.textMuted,
+                  : tc.textMuted,
                 borderRadius: 1,
                 transform: [{ rotate: `${angle}deg` }],
                 transformOrigin: "0 0",
@@ -304,9 +309,9 @@ function PortfolioChart({
               borderRadius: 4,
               backgroundColor: hasData
                 ? colors.primary[400]
-                : colors.textMuted,
+                : tc.textMuted,
               borderWidth: 2,
-              borderColor: colors.dark.card,
+              borderColor: tc.dark.card,
             }}
           />
         ))}
@@ -343,7 +348,7 @@ function PortfolioChart({
           <Text
             key={`${label}-${idx}`}
             style={{
-              color: colors.textMuted,
+              color: tc.textMuted,
               fontSize: 10,
               fontFamily: "Inter_400Regular",
               textAlign: "center",
@@ -367,7 +372,7 @@ interface TxCategory {
   total: number;
 }
 
-function TransactionSummary({ transactions }: { transactions: Transaction[] }) {
+function TransactionSummary({ transactions, tc, ts }: { transactions: Transaction[]; tc: ReturnType<typeof getThemeColors>; ts: ReturnType<typeof getThemeShadows> }) {
   const categories: TxCategory[] = [
     {
       label: "Payments",
@@ -407,18 +412,18 @@ function TransactionSummary({ transactions }: { transactions: Transaction[] }) {
   return (
     <View
       style={{
-        backgroundColor: colors.dark.card,
+        backgroundColor: tc.dark.card,
         borderRadius: 20,
         padding: 20,
         borderWidth: 1,
-        borderColor: colors.glass.border,
+        borderColor: tc.glass.border,
         flex: 1,
-        ...shadows.md,
+        ...ts.md,
       }}
     >
       <Text
         style={{
-          color: colors.textPrimary,
+          color: tc.textPrimary,
           fontSize: 16,
           fontFamily: "Inter_600SemiBold",
           marginBottom: 20,
@@ -452,7 +457,7 @@ function TransactionSummary({ transactions }: { transactions: Transaction[] }) {
           <View style={{ flex: 1 }}>
             <Text
               style={{
-                color: colors.textPrimary,
+                color: tc.textPrimary,
                 fontSize: 14,
                 fontFamily: "Inter_600SemiBold",
                 marginBottom: 2,
@@ -462,7 +467,7 @@ function TransactionSummary({ transactions }: { transactions: Transaction[] }) {
             </Text>
             <Text
               style={{
-                color: colors.textMuted,
+                color: tc.textMuted,
                 fontSize: 12,
                 fontFamily: "Inter_400Regular",
               }}
@@ -472,7 +477,7 @@ function TransactionSummary({ transactions }: { transactions: Transaction[] }) {
           </View>
           <Text
             style={{
-              color: colors.textPrimary,
+              color: tc.textPrimary,
               fontSize: 14,
               fontFamily: "Inter_700Bold",
             }}
@@ -486,7 +491,7 @@ function TransactionSummary({ transactions }: { transactions: Transaction[] }) {
       <View
         style={{
           height: 1,
-          backgroundColor: colors.glass.border,
+          backgroundColor: tc.glass.border,
           marginVertical: 8,
         }}
       />
@@ -502,7 +507,7 @@ function TransactionSummary({ transactions }: { transactions: Transaction[] }) {
       >
         <Text
           style={{
-            color: colors.textSecondary,
+            color: tc.textSecondary,
             fontSize: 13,
             fontFamily: "Inter_500Medium",
           }}
@@ -533,28 +538,33 @@ function DesktopQuickActionCard({
   description,
   color,
   onPress,
+  tc,
+  ts,
 }: {
   icon: string;
   label: string;
   description: string;
   color: string;
   onPress: () => void;
+  tc: ReturnType<typeof getThemeColors>;
+  ts: ReturnType<typeof getThemeShadows>;
 }) {
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={({ pressed }) => ({
+      style={({ pressed, hovered }: any) => ({
         flex: 1,
-        backgroundColor: colors.dark.card,
+        backgroundColor: Platform.OS === "web" && hovered ? tc.dark.elevated : tc.dark.card,
         borderRadius: 16,
         padding: 18,
         borderWidth: 1,
-        borderColor: pressed ? color + "40" : colors.glass.border,
+        borderColor: pressed ? color + "40" : Platform.OS === "web" && hovered ? tc.glass.borderStrong : tc.glass.border,
         opacity: pressed ? 0.9 : 1,
         transform: [{ scale: pressed ? 0.98 : 1 }],
-        ...shadows.sm,
+        ...(Platform.OS === "web" ? { cursor: "pointer", transition: "all 0.2s ease" } as any : {}),
+        ...ts.sm,
       })}
     >
       <View
@@ -572,7 +582,7 @@ function DesktopQuickActionCard({
       </View>
       <Text
         style={{
-          color: colors.textPrimary,
+          color: tc.textPrimary,
           fontSize: 14,
           fontFamily: "Inter_600SemiBold",
           marginBottom: 4,
@@ -582,7 +592,7 @@ function DesktopQuickActionCard({
       </Text>
       <Text
         style={{
-          color: colors.textMuted,
+          color: tc.textMuted,
           fontSize: 12,
           fontFamily: "Inter_400Regular",
           lineHeight: 17,
@@ -605,26 +615,61 @@ const CHART_CURRENCIES: { symbol: string; name: string; color: string }[] = [
 function CryptoPriceChartsSection({
   rates,
   tickerRates,
+  tc,
+  ts,
 }: {
   rates: Rate[];
   tickerRates: { symbol: string; rate: number; change24h: number }[];
+  tc: ReturnType<typeof getThemeColors>;
+  ts: ReturnType<typeof getThemeShadows>;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [chartPeriod, setChartPeriod] = useState<string>("7d");
+  const [chartLoading, setChartLoading] = useState(false);
 
-  // Generate mock history for each currency (memoized so it doesn't regenerate on re-render)
-  const mockHistories = useMemo(() => {
-    const map: Record<string, ChartDataPoint[]> = {};
-    for (const tr of tickerRates) {
-      map[tr.symbol] = generateMockHistory(tr.rate, 90); // 90 days for 3M support
-    }
-    return map;
-  }, [tickerRates.map((r) => `${r.symbol}:${r.rate}`).join(",")]);
+  // Fetch sparkline data (1-day) for all currencies
+  const sparklineQueries = useQuery({
+    queryKey: ["sparklines"],
+    queryFn: async () => {
+      const map: Record<string, ChartDataPoint[]> = {};
+      await Promise.all(
+        CHART_CURRENCIES.map(async (cur) => {
+          try {
+            const { data } = await ratesApi.getRateHistory(cur.symbol, "1d");
+            map[cur.symbol] = apiDataToChartPoints(data.data);
+          } catch {
+            map[cur.symbol] = [];
+          }
+        })
+      );
+      return map;
+    },
+    staleTime: 5 * 60 * 1000, // 5 min
+  });
+
+  // Fetch expanded chart data for selected currency + period
+  const expandedQuery = useQuery({
+    queryKey: ["chart", expanded, chartPeriod],
+    queryFn: async () => {
+      if (!expanded) return [];
+      const { data } = await ratesApi.getRateHistory(expanded, chartPeriod);
+      return apiDataToChartPoints(data.data);
+    },
+    enabled: !!expanded,
+    staleTime: chartPeriod === "1d" ? 5 * 60 * 1000 : 30 * 60 * 1000,
+  });
+
+  const sparklines = sparklineQueries.data || {};
+
+  const handlePeriodChange = useCallback((apiPeriod: string) => {
+    setChartPeriod(apiPeriod);
+  }, []);
 
   return (
     <View style={{ marginBottom: 24 }}>
       <Text
         style={{
-          color: colors.dark.muted,
+          color: tc.dark.muted,
           fontSize: 11,
           fontFamily: "Inter_600SemiBold",
           letterSpacing: 1.2,
@@ -644,14 +689,17 @@ function CryptoPriceChartsSection({
           const isPos = tr.change24h >= 0;
           const changeColor = isPos ? colors.primary[400] : colors.error;
           const isExpanded = expanded === cur.symbol;
-          const sparkData = mockHistories[cur.symbol]?.slice(-24) || []; // last 24 hours
+          const sparkData = sparklines[cur.symbol]?.slice(-48) || [];
           const iconSymbol =
             (CURRENCIES as any)[cur.symbol]?.iconSymbol || cur.symbol[0];
 
           return (
             <Pressable
               key={cur.symbol}
-              onPress={() => setExpanded(isExpanded ? null : cur.symbol)}
+              onPress={() => {
+                setExpanded(isExpanded ? null : cur.symbol);
+                setChartPeriod("7d"); // Reset period when switching currency
+              }}
               accessibilityRole="button"
               accessibilityLabel={`${cur.name} price chart`}
               style={({ pressed, hovered }: any) => ({
@@ -659,22 +707,22 @@ function CryptoPriceChartsSection({
                 backgroundColor: isExpanded
                   ? cur.color + "0D"
                   : Platform.OS === "web" && hovered
-                  ? colors.dark.elevated
-                  : colors.dark.card,
+                  ? tc.dark.elevated
+                  : tc.dark.card,
                 borderRadius: 16,
                 padding: 16,
                 borderWidth: 1,
                 borderColor: isExpanded
                   ? cur.color + "33"
                   : Platform.OS === "web" && hovered
-                  ? colors.glass.borderStrong
-                  : colors.glass.border,
+                  ? tc.glass.borderStrong
+                  : tc.glass.border,
                 opacity: pressed ? 0.9 : 1,
                 transform: [{ scale: pressed ? 0.98 : 1 }],
                 ...(Platform.OS === "web"
                   ? ({ cursor: "pointer", transition: "all 0.2s ease" } as any)
                   : {}),
-                ...shadows.sm,
+                ...ts.sm,
               })}
             >
               {/* Icon + Symbol */}
@@ -709,7 +757,7 @@ function CryptoPriceChartsSection({
                 <View>
                   <Text
                     style={{
-                      color: colors.textPrimary,
+                      color: tc.textPrimary,
                       fontSize: 13,
                       fontFamily: "Inter_600SemiBold",
                     }}
@@ -718,7 +766,7 @@ function CryptoPriceChartsSection({
                   </Text>
                   <Text
                     style={{
-                      color: colors.textMuted,
+                      color: tc.textMuted,
                       fontSize: 10,
                       fontFamily: "Inter_400Regular",
                     }}
@@ -731,7 +779,7 @@ function CryptoPriceChartsSection({
               {/* Price */}
               <Text
                 style={{
-                  color: colors.textPrimary,
+                  color: tc.textPrimary,
                   fontSize: 14,
                   fontFamily: "Inter_700Bold",
                   marginBottom: 2,
@@ -764,9 +812,9 @@ function CryptoPriceChartsSection({
       </View>
 
       {/* Expanded full chart */}
-      {expanded && mockHistories[expanded] && (
+      {expanded && (
         <CryptoChart
-          data={mockHistories[expanded]}
+          data={expandedQuery.data || []}
           currency={expanded}
           color={
             CHART_CURRENCIES.find((c) => c.symbol === expanded)?.color ||
@@ -774,6 +822,8 @@ function CryptoPriceChartsSection({
           }
           height={280}
           interactive
+          onPeriodChange={handlePeriodChange}
+          loading={expandedQuery.isLoading || expandedQuery.isFetching}
         />
       )}
     </View>
@@ -784,11 +834,14 @@ export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { width } = useWindowDimensions();
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
+  const ts = getThemeShadows(isDark);
   const isWeb = Platform.OS === "web";
   const isDesktop = isWeb && width >= 900;
   const isLargeDesktop = isWeb && width >= 1200;
   const isXLDesktop = isWeb && width >= 1500;
-  const hPad = isXLDesktop ? 48 : isLargeDesktop ? 40 : isDesktop ? 32 : 16;
+  const hPad = isXLDesktop ? 48 : isLargeDesktop ? 48 : isDesktop ? 32 : 16;
   const {
     data: wallets,
     refetch: refetchWallets,
@@ -831,14 +884,14 @@ export default function HomeScreen() {
   /* ─── MOBILE LAYOUT (unchanged) ─── */
   if (!isDesktop) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: colors.dark.bg }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
         <ScrollView
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
               tintColor={colors.primary[400]}
-              progressBackgroundColor={colors.dark.card}
+              progressBackgroundColor={tc.dark.card}
             />
           }
           showsVerticalScrollIndicator={false}
@@ -892,7 +945,7 @@ export default function HomeScreen() {
               <View>
                 <Text
                   style={{
-                    color: colors.textSecondary,
+                    color: tc.textSecondary,
                     fontSize: 13,
                     fontFamily: "Inter_400Regular",
                     marginBottom: 1,
@@ -902,7 +955,7 @@ export default function HomeScreen() {
                 </Text>
                 <Text
                   style={{
-                    color: colors.textPrimary,
+                    color: tc.textPrimary,
                     fontSize: 20,
                     fontFamily: "Inter_700Bold",
                     letterSpacing: -0.3,
@@ -924,14 +977,14 @@ export default function HomeScreen() {
                 height: 44,
                 borderRadius: 14,
                 backgroundColor: Platform.OS === "web" && hovered
-                  ? colors.dark.elevated
-                  : colors.dark.card,
+                  ? tc.dark.elevated
+                  : tc.dark.card,
                 alignItems: "center",
                 justifyContent: "center",
                 borderWidth: 1,
                 borderColor: Platform.OS === "web" && hovered
-                  ? colors.glass.borderStrong
-                  : colors.glass.border,
+                  ? tc.glass.borderStrong
+                  : tc.glass.border,
                 opacity: pressed ? 0.85 : 1,
                 transform: [{ scale: pressed ? 0.98 : 1 }],
                 ...(Platform.OS === "web" ? { cursor: "pointer", transition: "all 0.15s ease" } as any : {}),
@@ -940,7 +993,7 @@ export default function HomeScreen() {
               <Ionicons
                 name="notifications-outline"
                 size={22}
-                color={colors.textSecondary}
+                color={tc.textSecondary}
               />
               {/* Unread badge dot */}
               {hasUnread && (
@@ -954,7 +1007,7 @@ export default function HomeScreen() {
                     borderRadius: 4,
                     backgroundColor: colors.primary[400],
                     borderWidth: 1.5,
-                    borderColor: colors.dark.card,
+                    borderColor: tc.dark.card,
                   }}
                 />
               )}
@@ -976,7 +1029,7 @@ export default function HomeScreen() {
           >
             <Text
               style={{
-                color: colors.dark.muted,
+                color: tc.dark.muted,
                 fontSize: 11,
                 fontFamily: "Inter_600SemiBold",
                 letterSpacing: 1.2,
@@ -990,11 +1043,11 @@ export default function HomeScreen() {
             <View
               style={{
                 flexDirection: "row",
-                backgroundColor: colors.dark.card,
+                backgroundColor: tc.dark.card,
                 borderRadius: 20,
                 padding: 18,
                 borderWidth: 1,
-                borderColor: colors.glass.border,
+                borderColor: tc.glass.border,
               }}
             >
               <QuickAction
@@ -1198,7 +1251,7 @@ export default function HomeScreen() {
             >
               <Text
                 style={{
-                  color: colors.textPrimary,
+                  color: tc.textPrimary,
                   fontSize: 17,
                   fontFamily: "Inter_600SemiBold",
                   letterSpacing: -0.2,
@@ -1233,11 +1286,11 @@ export default function HomeScreen() {
 
             <View
               style={{
-                backgroundColor: colors.dark.card,
+                backgroundColor: tc.dark.card,
                 borderRadius: 20,
                 overflow: "hidden",
                 borderWidth: 1,
-                borderColor: colors.glass.border,
+                borderColor: tc.glass.border,
               }}
             >
               {txLoading ? (
@@ -1282,7 +1335,7 @@ export default function HomeScreen() {
                   </View>
                   <Text
                     style={{
-                      color: colors.textPrimary,
+                      color: tc.textPrimary,
                       fontSize: 16,
                       fontFamily: "Inter_600SemiBold",
                       marginBottom: 6,
@@ -1293,7 +1346,7 @@ export default function HomeScreen() {
                   </Text>
                   <Text
                     style={{
-                      color: colors.textMuted,
+                      color: tc.textMuted,
                       fontSize: 13,
                       fontFamily: "Inter_400Regular",
                       marginBottom: 24,
@@ -1347,7 +1400,7 @@ export default function HomeScreen() {
                         <View
                           style={{
                             height: 1,
-                            backgroundColor: "rgba(255, 255, 255, 0.04)",
+                            backgroundColor: tc.glass.highlight,
                             marginLeft: 68,
                             marginRight: 16,
                           }}
@@ -1366,14 +1419,14 @@ export default function HomeScreen() {
 
   /* ─── DESKTOP WEB LAYOUT (width >= 900) ─── */
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.dark.bg }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
       <ScrollView
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
             tintColor={colors.primary[400]}
-            progressBackgroundColor={colors.dark.card}
+            progressBackgroundColor={tc.dark.card}
           />
         }
         showsVerticalScrollIndicator={false}
@@ -1381,6 +1434,7 @@ export default function HomeScreen() {
           paddingBottom: 48,
           paddingHorizontal: hPad,
           paddingTop: 8,
+          width: "100%" as const,
         }}
       >
         {/* Desktop Header - simplified */}
@@ -1396,7 +1450,7 @@ export default function HomeScreen() {
           <View>
             <Text
               style={{
-                color: colors.textSecondary,
+                color: tc.textSecondary,
                 fontSize: 14,
                 fontFamily: "Inter_400Regular",
                 marginBottom: 4,
@@ -1406,7 +1460,7 @@ export default function HomeScreen() {
             </Text>
             <Text
               style={{
-                color: colors.textPrimary,
+                color: tc.textPrimary,
                 fontSize: 28,
                 fontFamily: "Inter_700Bold",
                 letterSpacing: -0.5,
@@ -1427,14 +1481,14 @@ export default function HomeScreen() {
               height: 44,
               borderRadius: 14,
               backgroundColor: Platform.OS === "web" && hovered
-                ? colors.dark.elevated
-                : colors.dark.card,
+                ? tc.dark.elevated
+                : tc.dark.card,
               alignItems: "center",
               justifyContent: "center",
               borderWidth: 1,
               borderColor: Platform.OS === "web" && hovered
-                ? colors.glass.borderStrong
-                : colors.glass.border,
+                ? tc.glass.borderStrong
+                : tc.glass.border,
               opacity: pressed ? 0.85 : 1,
               transform: [{ scale: pressed ? 0.98 : 1 }],
               ...(Platform.OS === "web" ? { cursor: "pointer", transition: "all 0.15s ease" } as any : {}),
@@ -1443,7 +1497,7 @@ export default function HomeScreen() {
             <Ionicons
               name="notifications-outline"
               size={22}
-              color={colors.textSecondary}
+              color={tc.textSecondary}
             />
             {/* Unread badge dot */}
             {hasUnread && (
@@ -1457,7 +1511,7 @@ export default function HomeScreen() {
                   borderRadius: 4,
                   backgroundColor: colors.primary[400],
                   borderWidth: 1.5,
-                  borderColor: colors.dark.card,
+                  borderColor: tc.dark.card,
                 }}
               />
             )}
@@ -1482,16 +1536,16 @@ export default function HomeScreen() {
                   key={tr.symbol}
                   style={{
                     flex: 1,
-                    backgroundColor: colors.dark.card,
+                    backgroundColor: tc.dark.card,
                     borderRadius: 14,
                     paddingHorizontal: 18,
                     paddingVertical: 14,
                     borderWidth: 1,
-                    borderColor: colors.glass.border,
+                    borderColor: tc.glass.border,
                     flexDirection: "row",
                     alignItems: "center",
                     gap: 12,
-                    ...shadows.sm,
+                    ...ts.sm,
                   }}
                 >
                   <View
@@ -1517,7 +1571,7 @@ export default function HomeScreen() {
                   <View style={{ flex: 1 }}>
                     <Text
                       style={{
-                        color: colors.textPrimary,
+                        color: tc.textPrimary,
                         fontSize: 14,
                         fontFamily: "Inter_600SemiBold",
                       }}
@@ -1529,7 +1583,7 @@ export default function HomeScreen() {
                     </Text>
                     <Text
                       style={{
-                        color: colors.textMuted,
+                        color: tc.textMuted,
                         fontSize: 11,
                         fontFamily: "Inter_400Regular",
                       }}
@@ -1587,6 +1641,8 @@ export default function HomeScreen() {
               chartPoints={chartPoints}
               chartLabels={chartLabels}
               changePercent={changePercent}
+              tc={tc}
+              ts={ts}
             />
           </View>
         </View>
@@ -1595,7 +1651,7 @@ export default function HomeScreen() {
         <View style={{ marginBottom: 24 }}>
           <Text
             style={{
-              color: colors.dark.muted,
+              color: tc.dark.muted,
               fontSize: 11,
               fontFamily: "Inter_600SemiBold",
               letterSpacing: 1.2,
@@ -1618,6 +1674,8 @@ export default function HomeScreen() {
               description="Pay utility & service bills"
               color={colors.primary[400]}
               onPress={() => router.push("/payment/paybill")}
+              tc={tc}
+              ts={ts}
             />
             <DesktopQuickActionCard
               icon="cart-outline"
@@ -1625,6 +1683,8 @@ export default function HomeScreen() {
               description="Pay merchants directly"
               color={colors.info}
               onPress={() => router.push("/payment/till")}
+              tc={tc}
+              ts={ts}
             />
             <DesktopQuickActionCard
               icon="arrow-down-circle-outline"
@@ -1632,6 +1692,8 @@ export default function HomeScreen() {
               description="Add crypto to your wallet"
               color={colors.success}
               onPress={() => router.push("/(tabs)/wallet")}
+              tc={tc}
+              ts={ts}
             />
             <DesktopQuickActionCard
               icon="swap-horizontal-outline"
@@ -1640,13 +1702,15 @@ export default function HomeScreen() {
               color={colors.accent}
               // TODO: convert will be a separate screen later
               onPress={() => router.push("/(tabs)/wallet")}
+              tc={tc}
+              ts={ts}
             />
           </View>
         </View>
 
         {/* Row 2.5: Crypto Price Charts */}
         {tickerRates.length > 0 && (
-          <CryptoPriceChartsSection rates={rates || []} tickerRates={tickerRates} />
+          <CryptoPriceChartsSection rates={rates || []} tickerRates={tickerRates} tc={tc} ts={ts} />
         )}
 
         {/* Row 3: Rate Ticker (full width, contained) */}
@@ -1677,7 +1741,7 @@ export default function HomeScreen() {
             >
               <Text
                 style={{
-                  color: colors.textPrimary,
+                  color: tc.textPrimary,
                   fontSize: 17,
                   fontFamily: "Inter_600SemiBold",
                   letterSpacing: -0.2,
@@ -1712,12 +1776,12 @@ export default function HomeScreen() {
 
             <View
               style={{
-                backgroundColor: colors.dark.card,
+                backgroundColor: tc.dark.card,
                 borderRadius: 20,
                 overflow: "hidden",
                 borderWidth: 1,
-                borderColor: colors.glass.border,
-                ...shadows.md,
+                borderColor: tc.glass.border,
+                ...ts.md,
               }}
             >
               {txLoading ? (
@@ -1760,7 +1824,7 @@ export default function HomeScreen() {
                   </View>
                   <Text
                     style={{
-                      color: colors.textPrimary,
+                      color: tc.textPrimary,
                       fontSize: 16,
                       fontFamily: "Inter_600SemiBold",
                       marginBottom: 6,
@@ -1771,7 +1835,7 @@ export default function HomeScreen() {
                   </Text>
                   <Text
                     style={{
-                      color: colors.textMuted,
+                      color: tc.textMuted,
                       fontSize: 13,
                       fontFamily: "Inter_400Regular",
                       marginBottom: 24,
@@ -1793,7 +1857,7 @@ export default function HomeScreen() {
                       gap: 8,
                       opacity: pressed ? 0.85 : 1,
                       transform: [{ scale: pressed ? 0.98 : 1 }],
-                      ...shadows.glow(colors.primary[500], 0.3),
+                      ...ts.glow(colors.primary[500], 0.3),
                     })}
                   >
                     <Ionicons name="add-circle-outline" size={18} color="#FFFFFF" />
@@ -1817,7 +1881,7 @@ export default function HomeScreen() {
                         <View
                           style={{
                             height: 1,
-                            backgroundColor: "rgba(255, 255, 255, 0.04)",
+                            backgroundColor: tc.glass.highlight,
                             marginLeft: 68,
                             marginRight: 16,
                           }}
@@ -1839,7 +1903,7 @@ export default function HomeScreen() {
                 height: 24,
               }}
             />
-            <TransactionSummary transactions={recentTx} />
+            <TransactionSummary transactions={recentTx} tc={tc} ts={ts} />
           </View>
         </View>
       </ScrollView>

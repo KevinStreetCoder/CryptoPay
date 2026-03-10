@@ -1,12 +1,16 @@
 import axios from "axios";
-import { Platform } from "react-native";
 import { storage } from "../utils/storage";
+import { config } from "../constants/config";
 
-const BASE_URL = Platform.select({
-  android: "http://10.0.2.2:8000/api/v1",
-  ios: "http://localhost:8000/api/v1",
-  default: "http://localhost:8000/api/v1",
-});
+const BASE_URL = config.apiUrl;
+
+// Production safety: crash early if API URL is localhost in a production build
+if (config.isProd && BASE_URL.includes("localhost")) {
+  throw new Error(
+    "FATAL: Production build is using localhost API URL. " +
+    "Set API_URL in eas.json extra or environment variables."
+  );
+}
 
 export const api = axios.create({
   baseURL: BASE_URL,
@@ -14,12 +18,12 @@ export const api = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
-api.interceptors.request.use(async (config) => {
+api.interceptors.request.use(async (cfg) => {
   const token = await storage.getItemAsync("access_token");
   if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+    cfg.headers.Authorization = `Bearer ${token}`;
   }
-  return config;
+  return cfg;
 });
 
 api.interceptors.response.use(

@@ -1,10 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { View, Text, Pressable, Animated, Easing, Platform, useWindowDimensions, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { useEffect, useRef } from "react";
 import { PinInput } from "../../src/components/PinInput";
 import { Button } from "../../src/components/Button";
 import { useToast } from "../../src/components/Toast";
@@ -48,6 +47,95 @@ function PulsingDot() {
   );
 }
 
+const QUOTE_TTL_SECONDS = 90;
+
+function QuoteCountdown({ onExpired }: { onExpired: () => void }) {
+  const [secondsLeft, setSecondsLeft] = useState(QUOTE_TTL_SECONDS);
+  const hasExpired = useRef(false);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setSecondsLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          if (!hasExpired.current) {
+            hasExpired.current = true;
+            onExpired();
+          }
+          return 0;
+        }
+        // Haptic warning at 10 seconds left
+        if (prev === 11 && Platform.OS !== "web") {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [onExpired]);
+
+  const isUrgent = secondsLeft <= 15;
+  const isCritical = secondsLeft <= 10;
+  const minutes = Math.floor(secondsLeft / 60);
+  const seconds = secondsLeft % 60;
+  const display = `${minutes}:${seconds.toString().padStart(2, "0")}`;
+  const progress = secondsLeft / QUOTE_TTL_SECONDS;
+
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+        borderRadius: 12,
+        backgroundColor: isCritical
+          ? colors.error + "18"
+          : isUrgent
+            ? colors.warning + "15"
+            : colors.primary[500] + "12",
+      }}
+    >
+      <Ionicons
+        name="timer-outline"
+        size={16}
+        color={isCritical ? colors.error : isUrgent ? colors.warning : colors.primary[400]}
+      />
+      <Text
+        style={{
+          color: isCritical ? colors.error : isUrgent ? colors.warning : colors.primary[400],
+          fontSize: 13,
+          fontFamily: "Inter_600SemiBold",
+        }}
+      >
+        Rate locked — {display}
+      </Text>
+      {/* Progress bar */}
+      <View
+        style={{
+          flex: 1,
+          maxWidth: 60,
+          height: 3,
+          borderRadius: 2,
+          backgroundColor: colors.dark.elevated,
+          overflow: "hidden",
+        }}
+      >
+        <View
+          style={{
+            width: `${progress * 100}%`,
+            height: "100%",
+            borderRadius: 2,
+            backgroundColor: isCritical ? colors.error : isUrgent ? colors.warning : colors.primary[400],
+          }}
+        />
+      </View>
+    </View>
+  );
+}
+
 export default function ConfirmPaymentScreen() {
   const router = useRouter();
   const toast = useToast();
@@ -67,19 +155,31 @@ export default function ConfirmPaymentScreen() {
     crypto_amount: string;
     rate: string;
     fee: string;
+    excise_duty?: string;
   }>();
 
   const [step, setStep] = useState<"review" | "pin">("review");
   const [loading, setLoading] = useState(false);
   const [pinError, setPinError] = useState(false);
+  const [quoteExpired, setQuoteExpired] = useState(false);
 
   useScreenSecurity(step === "pin");
 
+  const handleQuoteExpired = useCallback(() => {
+    setQuoteExpired(true);
+    if (Platform.OS !== "web") {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
+    toast.error("Quote Expired", "The rate lock has expired. Please get a new quote.");
+  }, [toast]);
+
   const handleConfirm = () => {
+    if (quoteExpired) return;
     setStep("pin");
   };
 
   const handlePinComplete = async (pin: string) => {
+    if (quoteExpired) return;
     setLoading(true);
     setPinError(false);
 
@@ -238,6 +338,10 @@ export default function ConfirmPaymentScreen() {
             paddingVertical: isDesktop ? 24 : 0,
           }}
         >
+          {/* Quote countdown timer */}
+          <QuoteCountdown onExpired={handleQuoteExpired} />
+          <View style={{ height: 16 }} />
+
           {/* Premium Receipt Card */}
           <View
             style={{
@@ -494,20 +598,62 @@ export default function ConfirmPaymentScreen() {
                   KSh {parseFloat(params.fee).toLocaleString()}
                 </Text>
               </View>
+
+              {/* Excise Duty (VASP Act 2025) */}
+              {params.excise_duty && parseFloat(params.excise_duty) > 0 && (
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: colors.textMuted,
+                      fontSize: 14,
+                      fontFamily: "Inter_400Regular",
+                    }}
+                    maxFontSizeMultiplier={1.3}
+                  >
+                    Excise Duty (10%)
+                  </Text>
+                  <Text
+                    style={{
+                      color: colors.textSecondary,
+                      fontSize: 14,
+                      fontFamily: "Inter_500Medium",
+                    }}
+                    maxFontSizeMultiplier={1.3}
+                  >
+                    KSh {parseFloat(params.excise_duty).toLocaleString()}
+                  </Text>
+                </View>
+              )}
             </View>
           </View>
 
-          {/* Pay Now Button */}
+          {/* Pay Now / Expired Button */}
           <View style={{ marginTop: 24, marginBottom: isDesktop ? 8 : 32 }}>
-            <Button
-              title="Pay Now"
-              onPress={handleConfirm}
-              size="lg"
-              testID="pay-now-button"
-              style={{
-                ...shadows.glow(colors.primary[500], 0.35),
-              }}
-            />
+            {quoteExpired ? (
+              <Button
+                title="Get New Quote"
+                onPress={() => router.back()}
+                size="lg"
+                variant="outline"
+                testID="new-quote-button"
+              />
+            ) : (
+              <Button
+                title="Pay Now"
+                onPress={handleConfirm}
+                size="lg"
+                testID="pay-now-button"
+                style={{
+                  ...shadows.glow(colors.primary[500], 0.35),
+                }}
+              />
+            )}
           </View>
 
           {/* Security note */}
@@ -638,7 +784,40 @@ export default function ConfirmPaymentScreen() {
               </Text>
             </View>
 
-            <PinInput onComplete={handlePinComplete} error={pinError} testID="confirm-pin-input" />
+            {quoteExpired ? (
+              <View style={{ alignItems: "center", gap: 16 }}>
+                <Ionicons name="time-outline" size={40} color={colors.error} />
+                <Text
+                  style={{
+                    color: colors.error,
+                    fontSize: 16,
+                    fontFamily: "Inter_600SemiBold",
+                    textAlign: "center",
+                  }}
+                >
+                  Quote expired
+                </Text>
+                <Text
+                  style={{
+                    color: colors.textMuted,
+                    fontSize: 14,
+                    fontFamily: "Inter_400Regular",
+                    textAlign: "center",
+                  }}
+                >
+                  The exchange rate has changed. Please go back and get a new quote.
+                </Text>
+                <Button
+                  title="Get New Quote"
+                  onPress={() => router.back()}
+                  size="lg"
+                  variant="outline"
+                  style={{ marginTop: 8, width: "100%" }}
+                />
+              </View>
+            ) : (
+              <PinInput onComplete={handlePinComplete} error={pinError} testID="confirm-pin-input" />
+            )}
 
             {loading && (
               <View

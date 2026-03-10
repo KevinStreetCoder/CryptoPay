@@ -94,6 +94,7 @@ class PayBillView(APIView):
                 exchange_rate=Decimal(quote["exchange_rate"]),
                 fee_amount=Decimal(quote["fee_kes"]),
                 fee_currency="KES",
+                excise_duty_amount=Decimal(quote.get("excise_duty_kes", "0")),
                 mpesa_paybill=data["paybill"],
                 mpesa_account=data["account"],
                 ip_address=self._get_client_ip(request),
@@ -195,6 +196,7 @@ class PayTillView(APIView):
                 exchange_rate=Decimal(quote["exchange_rate"]),
                 fee_amount=Decimal(quote["fee_kes"]),
                 fee_currency="KES",
+                excise_duty_amount=Decimal(quote.get("excise_duty_kes", "0")),
                 mpesa_till=data["till"],
                 ip_address=self._get_client_ip(request),
             )
@@ -272,6 +274,7 @@ class SendMpesaView(APIView):
                 exchange_rate=Decimal(quote["exchange_rate"]),
                 fee_amount=Decimal(quote["fee_kes"]),
                 fee_currency="KES",
+                excise_duty_amount=Decimal(quote.get("excise_duty_kes", "0")),
                 mpesa_phone=data["phone"],
                 ip_address=self._get_client_ip(request),
             )
@@ -366,6 +369,7 @@ class BuyCryptoView(APIView):
                 exchange_rate=Decimal(quote["exchange_rate"]),
                 fee_amount=Decimal(quote["fee_kes"]),
                 fee_currency="KES",
+                excise_duty_amount=Decimal(quote.get("excise_duty_kes", "0")),
                 mpesa_phone=data["phone"],
                 ip_address=self._get_client_ip(request),
             )

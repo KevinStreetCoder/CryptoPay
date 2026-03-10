@@ -17,7 +17,8 @@ import { useAuth, isBiometricEnabled, setBiometricEnabled } from "../../src/stor
 import { useBiometricAuth } from "../../src/hooks/useBiometricAuth";
 import { useToast } from "../../src/components/Toast";
 import { useLocale } from "../../src/hooks/useLocale";
-import { colors, shadows } from "../../src/constants/theme";
+import { colors, getThemeColors, getThemeShadows } from "../../src/constants/theme";
+import { useThemeMode } from "../../src/stores/theme";
 
 const KYC_TIERS = [
   { tier: 0, label: "Phone Only", limit: "KSh 5,000/day", color: colors.dark.muted },
@@ -34,13 +35,15 @@ interface MenuItemProps {
   danger?: boolean;
   iconBg?: string;
   iconColor?: string;
+  tc: ReturnType<typeof getThemeColors>;
+  trailing?: React.ReactNode;
 }
 
-function MenuItem({ icon, label, subtitle, onPress, danger, iconBg, iconColor }: MenuItemProps) {
+function MenuItem({ icon, label, subtitle, onPress, danger, iconBg, iconColor, tc, trailing }: MenuItemProps) {
   const itemIconBg = danger
     ? colors.error + "15"
-    : iconBg || colors.dark.elevated + "80";
-  const itemIconColor = danger ? colors.error : iconColor || colors.textSecondary;
+    : iconBg || tc.dark.elevated + "80";
+  const itemIconColor = danger ? colors.error : iconColor || tc.textSecondary;
 
   return (
     <Pressable
@@ -50,7 +53,7 @@ function MenuItem({ icon, label, subtitle, onPress, danger, iconBg, iconColor }:
         alignItems: "center",
         paddingHorizontal: 16,
         paddingVertical: 14,
-        backgroundColor: pressed ? colors.dark.elevated + "40" : "transparent",
+        backgroundColor: pressed ? tc.dark.elevated + "40" : "transparent",
         minHeight: 60,
         transform: [{ scale: pressed ? 0.98 : 1 }],
         opacity: pressed ? 0.9 : 1,
@@ -76,7 +79,7 @@ function MenuItem({ icon, label, subtitle, onPress, danger, iconBg, iconColor }:
           style={{
             fontSize: 15,
             fontFamily: "Inter_500Medium",
-            color: danger ? colors.error : colors.textPrimary,
+            color: danger ? colors.error : tc.textPrimary,
             marginBottom: subtitle ? 2 : 0,
           }}
         >
@@ -85,7 +88,7 @@ function MenuItem({ icon, label, subtitle, onPress, danger, iconBg, iconColor }:
         {subtitle && (
           <Text
             style={{
-              color: colors.textMuted,
+              color: tc.textMuted,
               fontSize: 12,
               fontFamily: "Inter_400Regular",
             }}
@@ -94,7 +97,7 @@ function MenuItem({ icon, label, subtitle, onPress, danger, iconBg, iconColor }:
           </Text>
         )}
       </View>
-      <Ionicons name="chevron-forward" size={16} color={colors.dark.muted} />
+      {trailing || <Ionicons name="chevron-forward" size={16} color={tc.dark.muted} />}
     </Pressable>
   );
 }
@@ -109,13 +112,58 @@ function getInitials(name: string | undefined): string {
     .slice(0, 2);
 }
 
+function ThemeToggleSwitch({ isDark, onToggle, tc }: { isDark: boolean; onToggle: () => void; tc: ReturnType<typeof getThemeColors> }) {
+  const isWeb = Platform.OS === "web";
+
+  if (isWeb) {
+    return (
+      <Pressable
+        onPress={onToggle}
+        style={{
+          width: 48,
+          height: 28,
+          borderRadius: 14,
+          backgroundColor: isDark ? colors.primary[500] + "60" : tc.dark.elevated,
+          justifyContent: "center",
+          paddingHorizontal: 2,
+        }}
+        accessibilityRole="switch"
+        accessibilityLabel={isDark ? "Switch to light mode" : "Switch to dark mode"}
+      >
+        <View
+          style={{
+            width: 24,
+            height: 24,
+            borderRadius: 12,
+            backgroundColor: isDark ? colors.primary[400] : tc.textMuted,
+            alignSelf: isDark ? "flex-end" : "flex-start",
+          }}
+        />
+      </Pressable>
+    );
+  }
+
+  return (
+    <Switch
+      value={isDark}
+      onValueChange={() => onToggle()}
+      trackColor={{ false: tc.dark.elevated, true: colors.primary[500] + "60" }}
+      thumbColor={isDark ? colors.primary[400] : tc.textMuted}
+    />
+  );
+}
+
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, logout } = useAuth();
   const { width } = useWindowDimensions();
+  const { isDark, toggle: toggleTheme } = useThemeMode();
+  const tc = getThemeColors(isDark);
+  const ts = getThemeShadows(isDark);
 
   const isWeb = Platform.OS === "web";
-  const isDesktop = isWeb && width >= 768;
+  const isDesktop = isWeb && width >= 900;
+  const isLargeDesktop = isWeb && width >= 1200;
 
   const currentTier = KYC_TIERS.find((t) => t.tier === (user?.kyc_tier ?? 0));
   const tierProgress = ((user?.kyc_tier ?? 0) + 1) / KYC_TIERS.length;
@@ -225,10 +273,12 @@ export default function ProfileScreen() {
   };
 
   // Responsive padding
-  const hPad = isDesktop ? 28 : 16;
+  const hPad = isLargeDesktop ? 48 : isDesktop ? 32 : 16;
+
+  const dividerColor = isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.06)";
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.dark.bg }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
@@ -240,7 +290,7 @@ export default function ProfileScreen() {
           <View style={{ paddingHorizontal: hPad + 4, paddingTop: 8, paddingBottom: 6 }}>
             <Text
               style={{
-                color: colors.textPrimary,
+                color: tc.textPrimary,
                 fontSize: 28,
                 fontFamily: "Inter_700Bold",
                 letterSpacing: -0.5,
@@ -256,24 +306,22 @@ export default function ProfileScreen() {
           <View
             style={{
               flexDirection: "row",
-              maxWidth: 1600,
               width: "100%",
-              alignSelf: "center",
-              paddingHorizontal: 32,
-              gap: 24,
+              paddingHorizontal: hPad,
+              gap: 28,
               marginTop: 12,
               marginBottom: 20,
             }}
           >
             {/* Left column: User Card */}
-            <View style={{ flex: 1, maxWidth: "50%" }}>
+            <View style={{ flex: 1 }}>
               <View
                 style={{
-                  backgroundColor: colors.dark.card,
+                  backgroundColor: tc.dark.card,
                   borderRadius: 24,
                   padding: 28,
                   borderWidth: 1,
-                  borderColor: colors.glass.border,
+                  borderColor: tc.glass.border,
                   marginBottom: 20,
                 }}
               >
@@ -305,7 +353,7 @@ export default function ProfileScreen() {
                   <View style={{ flex: 1 }}>
                     <Text
                       style={{
-                        color: colors.textPrimary,
+                        color: tc.textPrimary,
                         fontSize: 24,
                         fontFamily: "Inter_700Bold",
                         marginBottom: 6,
@@ -314,10 +362,10 @@ export default function ProfileScreen() {
                       {user?.full_name || "User"}
                     </Text>
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                      <Ionicons name="call-outline" size={14} color={colors.textMuted} />
+                      <Ionicons name="call-outline" size={14} color={tc.textMuted} />
                       <Text
                         style={{
-                          color: colors.textMuted,
+                          color: tc.textMuted,
                           fontSize: 15,
                           fontFamily: "Inter_400Regular",
                         }}
@@ -331,11 +379,11 @@ export default function ProfileScreen() {
                 {/* KYC Status */}
                 <View
                   style={{
-                    backgroundColor: colors.dark.bg,
+                    backgroundColor: tc.dark.bg,
                     borderRadius: 18,
                     padding: 18,
                     borderWidth: 1,
-                    borderColor: colors.glass.border,
+                    borderColor: tc.glass.border,
                   }}
                 >
                   <View
@@ -349,7 +397,7 @@ export default function ProfileScreen() {
                     <View>
                       <Text
                         style={{
-                          color: colors.textMuted,
+                          color: tc.textMuted,
                           fontSize: 11,
                           fontFamily: "Inter_500Medium",
                           textTransform: "uppercase",
@@ -381,7 +429,7 @@ export default function ProfileScreen() {
                     </View>
                     <View
                       style={{
-                        backgroundColor: colors.dark.elevated,
+                        backgroundColor: tc.dark.elevated,
                         borderRadius: 12,
                         paddingHorizontal: 12,
                         paddingVertical: 6,
@@ -389,7 +437,7 @@ export default function ProfileScreen() {
                     >
                       <Text
                         style={{
-                          color: colors.textSecondary,
+                          color: tc.textSecondary,
                           fontSize: 12,
                           fontFamily: "Inter_600SemiBold",
                         }}
@@ -403,7 +451,7 @@ export default function ProfileScreen() {
                   <View
                     style={{
                       height: 6,
-                      backgroundColor: colors.dark.elevated,
+                      backgroundColor: tc.dark.elevated,
                       borderRadius: 3,
                       overflow: "hidden",
                     }}
@@ -412,7 +460,7 @@ export default function ProfileScreen() {
                       style={{
                         height: "100%",
                         width: `${tierProgress * 100}%`,
-                        backgroundColor: currentTier?.color || colors.dark.muted,
+                        backgroundColor: currentTier?.color || tc.dark.muted,
                         borderRadius: 3,
                       }}
                     />
@@ -436,7 +484,7 @@ export default function ProfileScreen() {
                             backgroundColor:
                               (user?.kyc_tier ?? 0) >= t.tier
                                 ? t.color
-                                : colors.dark.elevated,
+                                : tc.dark.elevated,
                           }}
                         />
                       </View>
@@ -448,7 +496,7 @@ export default function ProfileScreen() {
               {/* Logout on desktop - bottom of left column */}
               <View
                 style={{
-                  backgroundColor: colors.dark.card,
+                  backgroundColor: tc.dark.card,
                   borderRadius: 20,
                   overflow: "hidden",
                   borderWidth: 1,
@@ -460,17 +508,18 @@ export default function ProfileScreen() {
                   label="Logout"
                   onPress={handleLogout}
                   danger
+                  tc={tc}
                 />
               </View>
             </View>
 
-            {/* Right column: Security + Support */}
-            <View style={{ flex: 1, maxWidth: "50%" }}>
+            {/* Right column: Security + Preferences + Support */}
+            <View style={{ flex: 1 }}>
               {/* Security Section */}
               <View style={{ marginBottom: 4 }}>
                 <Text
                   style={{
-                    color: colors.textMuted,
+                    color: tc.textMuted,
                     fontSize: 11,
                     fontFamily: "Inter_600SemiBold",
                     textTransform: "uppercase",
@@ -484,32 +533,32 @@ export default function ProfileScreen() {
               </View>
               <View
                 style={{
-                  backgroundColor: colors.dark.card,
+                  backgroundColor: tc.dark.card,
                   borderRadius: 20,
                   marginBottom: 20,
                   overflow: "hidden",
                   borderWidth: 1,
-                  borderColor: colors.glass.border,
+                  borderColor: tc.glass.border,
                 }}
               >
                 <MenuItem
                   icon="shield-checkmark-outline"
                   label="Verify Identity"
-                  subtitle="Upgrade your transaction limits"
                   onPress={handleVerifyIdentity}
                   iconBg={colors.primary[500] + "20"}
                   iconColor={colors.primary[400]}
+                  tc={tc}
                 />
-                <View style={{ height: 1, backgroundColor: "rgba(255,255,255,0.04)", marginLeft: 72 }} />
+                <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 72 }} />
                 <MenuItem
                   icon="lock-closed-outline"
                   label="Change PIN"
-                  subtitle="Update your security PIN"
                   onPress={() => router.push("/settings/change-pin")}
                   iconBg={colors.info + "20"}
                   iconColor={colors.info}
+                  tc={tc}
                 />
-                <View style={{ height: 1, backgroundColor: "rgba(255,255,255,0.04)", marginLeft: 72 }} />
+                <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 72 }} />
                 <View style={{ flexDirection: "row", alignItems: "center", paddingRight: 16 }}>
                   <View style={{ flex: 1 }}>
                     <MenuItem
@@ -523,14 +572,39 @@ export default function ProfileScreen() {
                       onPress={() => handleBiometricToggle(!biometricOn)}
                       iconBg={colors.accent + "20"}
                       iconColor={colors.accent}
+                      tc={tc}
+                      trailing={<View />}
                     />
                   </View>
-                  {!isWeb && (
+                  {isWeb ? (
+                    <Pressable
+                      onPress={() => handleBiometricToggle(!biometricOn)}
+                      style={{
+                        width: 48,
+                        height: 28,
+                        borderRadius: 14,
+                        backgroundColor: biometricOn ? colors.primary[500] + "60" : tc.dark.elevated,
+                        justifyContent: "center",
+                        paddingHorizontal: 2,
+                      }}
+                      accessibilityRole="switch"
+                    >
+                      <View
+                        style={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: 12,
+                          backgroundColor: biometricOn ? colors.primary[400] : tc.textMuted,
+                          alignSelf: biometricOn ? "flex-end" : "flex-start",
+                        }}
+                      />
+                    </Pressable>
+                  ) : (
                     <Switch
                       value={biometricOn}
                       onValueChange={handleBiometricToggle}
-                      trackColor={{ false: colors.dark.elevated, true: colors.primary[500] + "60" }}
-                      thumbColor={biometricOn ? colors.primary[400] : colors.textMuted}
+                      trackColor={{ false: tc.dark.elevated, true: colors.primary[500] + "60" }}
+                      thumbColor={biometricOn ? colors.primary[400] : tc.textMuted}
                       disabled={!biometric.isAvailable}
                     />
                   )}
@@ -541,7 +615,7 @@ export default function ProfileScreen() {
               <View style={{ marginBottom: 4 }}>
                 <Text
                   style={{
-                    color: colors.textMuted,
+                    color: tc.textMuted,
                     fontSize: 11,
                     fontFamily: "Inter_600SemiBold",
                     textTransform: "uppercase",
@@ -555,23 +629,39 @@ export default function ProfileScreen() {
               </View>
               <View
                 style={{
-                  backgroundColor: colors.dark.card,
+                  backgroundColor: tc.dark.card,
                   borderRadius: 20,
                   marginBottom: 20,
                   overflow: "hidden",
                   borderWidth: 1,
-                  borderColor: colors.glass.border,
+                  borderColor: tc.glass.border,
                 }}
               >
+                {/* Dark Mode Toggle */}
+                <View style={{ flexDirection: "row", alignItems: "center", paddingRight: 16 }}>
+                  <View style={{ flex: 1 }}>
+                    <MenuItem
+                      icon={isDark ? "moon-outline" : "sunny-outline"}
+                      label={isDark ? "Dark Mode" : "Light Mode"}
+                      onPress={toggleTheme}
+                      iconBg={isDark ? "rgba(99,102,241,0.15)" : "rgba(251,191,36,0.15)"}
+                      iconColor={isDark ? "#818CF8" : "#F59E0B"}
+                      tc={tc}
+                      trailing={<View />}
+                    />
+                  </View>
+                  <ThemeToggleSwitch isDark={isDark} onToggle={toggleTheme} tc={tc} />
+                </View>
+                <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 72 }} />
                 <MenuItem
                   icon="notifications-outline"
                   label="Notifications"
-                  subtitle="Manage your notification preferences"
                   onPress={() => router.push("/settings/notifications" as any)}
                   iconBg={colors.primary[500] + "20"}
                   iconColor={colors.primary[400]}
+                  tc={tc}
                 />
-                <View style={{ height: 1, backgroundColor: "rgba(255,255,255,0.04)", marginLeft: 72 }} />
+                <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 72 }} />
                 <MenuItem
                   icon="language-outline"
                   label={t("profile.language")}
@@ -579,6 +669,7 @@ export default function ProfileScreen() {
                   onPress={() => setShowLanguagePicker(true)}
                   iconBg={colors.warning + "20"}
                   iconColor={colors.warning}
+                  tc={tc}
                 />
               </View>
 
@@ -586,7 +677,7 @@ export default function ProfileScreen() {
               <View style={{ marginBottom: 4 }}>
                 <Text
                   style={{
-                    color: colors.textMuted,
+                    color: tc.textMuted,
                     fontSize: 11,
                     fontFamily: "Inter_600SemiBold",
                     textTransform: "uppercase",
@@ -600,37 +691,40 @@ export default function ProfileScreen() {
               </View>
               <View
                 style={{
-                  backgroundColor: colors.dark.card,
+                  backgroundColor: tc.dark.card,
                   borderRadius: 20,
                   marginBottom: 20,
                   overflow: "hidden",
                   borderWidth: 1,
-                  borderColor: colors.glass.border,
+                  borderColor: tc.glass.border,
                 }}
               >
                 <MenuItem
                   icon="help-circle-outline"
                   label="Help & Support"
                   onPress={handleHelpSupport}
+                  tc={tc}
                 />
-                <View style={{ height: 1, backgroundColor: "rgba(255,255,255,0.04)", marginLeft: 72 }} />
+                <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 72 }} />
                 <MenuItem
                   icon="document-text-outline"
                   label="Terms of Service"
                   onPress={handleTermsOfService}
+                  tc={tc}
                 />
-                <View style={{ height: 1, backgroundColor: "rgba(255,255,255,0.04)", marginLeft: 72 }} />
+                <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 72 }} />
                 <MenuItem
                   icon="shield-outline"
                   label="Privacy Policy"
                   onPress={handlePrivacyPolicy}
+                  tc={tc}
                 />
               </View>
 
               {/* Version */}
               <Text
                 style={{
-                  color: colors.textMuted,
+                  color: tc.textMuted,
                   fontSize: 12,
                   fontFamily: "Inter_400Regular",
                   textAlign: "center",
@@ -645,19 +739,19 @@ export default function ProfileScreen() {
             </View>
           </View>
         ) : (
-          /* Mobile layout (unchanged) */
+          /* Mobile layout */
           <>
             {/* User Card */}
             <View
               style={{
-                backgroundColor: colors.dark.card,
+                backgroundColor: tc.dark.card,
                 borderRadius: 24,
                 marginHorizontal: hPad,
                 padding: 24,
                 marginTop: 8,
                 marginBottom: 16,
                 borderWidth: 1,
-                borderColor: colors.glass.border,
+                borderColor: tc.glass.border,
               }}
             >
               {/* Avatar + Info */}
@@ -688,7 +782,7 @@ export default function ProfileScreen() {
                 <View style={{ flex: 1 }}>
                   <Text
                     style={{
-                      color: colors.textPrimary,
+                      color: tc.textPrimary,
                       fontSize: 21,
                       fontFamily: "Inter_700Bold",
                       marginBottom: 6,
@@ -697,10 +791,10 @@ export default function ProfileScreen() {
                     {user?.full_name || "User"}
                   </Text>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                    <Ionicons name="call-outline" size={13} color={colors.textMuted} />
+                    <Ionicons name="call-outline" size={13} color={tc.textMuted} />
                     <Text
                       style={{
-                        color: colors.textMuted,
+                        color: tc.textMuted,
                         fontSize: 14,
                         fontFamily: "Inter_400Regular",
                       }}
@@ -714,11 +808,11 @@ export default function ProfileScreen() {
               {/* KYC Status */}
               <View
                 style={{
-                  backgroundColor: colors.dark.bg,
+                  backgroundColor: tc.dark.bg,
                   borderRadius: 18,
                   padding: 16,
                   borderWidth: 1,
-                  borderColor: colors.glass.border,
+                  borderColor: tc.glass.border,
                 }}
               >
                 <View
@@ -732,7 +826,7 @@ export default function ProfileScreen() {
                   <View>
                     <Text
                       style={{
-                        color: colors.textMuted,
+                        color: tc.textMuted,
                         fontSize: 11,
                         fontFamily: "Inter_500Medium",
                         textTransform: "uppercase",
@@ -764,7 +858,7 @@ export default function ProfileScreen() {
                   </View>
                   <View
                     style={{
-                      backgroundColor: colors.dark.elevated,
+                      backgroundColor: tc.dark.elevated,
                       borderRadius: 12,
                       paddingHorizontal: 12,
                       paddingVertical: 6,
@@ -772,7 +866,7 @@ export default function ProfileScreen() {
                   >
                     <Text
                       style={{
-                        color: colors.textSecondary,
+                        color: tc.textSecondary,
                         fontSize: 12,
                         fontFamily: "Inter_600SemiBold",
                       }}
@@ -786,7 +880,7 @@ export default function ProfileScreen() {
                 <View
                   style={{
                     height: 6,
-                    backgroundColor: colors.dark.elevated,
+                    backgroundColor: tc.dark.elevated,
                     borderRadius: 3,
                     overflow: "hidden",
                   }}
@@ -795,7 +889,7 @@ export default function ProfileScreen() {
                     style={{
                       height: "100%",
                       width: `${tierProgress * 100}%`,
-                      backgroundColor: currentTier?.color || colors.dark.muted,
+                      backgroundColor: currentTier?.color || tc.dark.muted,
                       borderRadius: 3,
                     }}
                   />
@@ -819,7 +913,7 @@ export default function ProfileScreen() {
                           backgroundColor:
                             (user?.kyc_tier ?? 0) >= t.tier
                               ? t.color
-                              : colors.dark.elevated,
+                              : tc.dark.elevated,
                         }}
                       />
                     </View>
@@ -832,7 +926,7 @@ export default function ProfileScreen() {
             <View style={{ paddingHorizontal: hPad, marginBottom: 4 }}>
               <Text
                 style={{
-                  color: colors.textMuted,
+                  color: tc.textMuted,
                   fontSize: 11,
                   fontFamily: "Inter_600SemiBold",
                   textTransform: "uppercase",
@@ -846,48 +940,65 @@ export default function ProfileScreen() {
             </View>
             <View
               style={{
-                backgroundColor: colors.dark.card,
+                backgroundColor: tc.dark.card,
                 borderRadius: 20,
                 marginHorizontal: hPad,
                 marginBottom: 20,
                 overflow: "hidden",
                 borderWidth: 1,
-                borderColor: colors.glass.border,
+                borderColor: tc.glass.border,
               }}
             >
               <MenuItem
                 icon="shield-checkmark-outline"
                 label="Verify Identity"
-                subtitle="Upgrade your transaction limits"
                 onPress={handleVerifyIdentity}
                 iconBg={colors.primary[500] + "20"}
                 iconColor={colors.primary[400]}
+                tc={tc}
               />
-              <View style={{ height: 1, backgroundColor: "rgba(255,255,255,0.04)", marginLeft: 72 }} />
+              <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 72 }} />
               <MenuItem
                 icon="lock-closed-outline"
                 label="Change PIN"
-                subtitle="Update your security PIN"
                 onPress={() => router.push("/settings/change-pin")}
                 iconBg={colors.info + "20"}
                 iconColor={colors.info}
+                tc={tc}
               />
-              <View style={{ height: 1, backgroundColor: "rgba(255,255,255,0.04)", marginLeft: 72 }} />
-              <MenuItem
-                icon="finger-print-outline"
-                label="Biometric Login"
-                subtitle="Use fingerprint or Face ID"
-                onPress={() => handleBiometricToggle(!biometricOn)}
-                iconBg={colors.accent + "20"}
-                iconColor={colors.accent}
-              />
+              <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 72 }} />
+              <View style={{ flexDirection: "row", alignItems: "center", paddingRight: 16 }}>
+                <View style={{ flex: 1 }}>
+                  <MenuItem
+                    icon="finger-print-outline"
+                    label="Biometric Login"
+                    subtitle={
+                      biometric.isAvailable
+                        ? `${biometric.biometricType === "face" ? "Face ID" : "Fingerprint"} ${biometricOn ? "enabled" : "disabled"}`
+                        : "Not available on this device"
+                    }
+                    onPress={() => handleBiometricToggle(!biometricOn)}
+                    iconBg={colors.accent + "20"}
+                    iconColor={colors.accent}
+                    tc={tc}
+                    trailing={<View />}
+                  />
+                </View>
+                <Switch
+                  value={biometricOn}
+                  onValueChange={handleBiometricToggle}
+                  trackColor={{ false: tc.dark.elevated, true: colors.primary[500] + "60" }}
+                  thumbColor={biometricOn ? colors.primary[400] : tc.textMuted}
+                  disabled={!biometric.isAvailable}
+                />
+              </View>
             </View>
 
             {/* Preferences Section */}
             <View style={{ paddingHorizontal: hPad, marginBottom: 4 }}>
               <Text
                 style={{
-                  color: colors.textMuted,
+                  color: tc.textMuted,
                   fontSize: 11,
                   fontFamily: "Inter_600SemiBold",
                   textTransform: "uppercase",
@@ -901,24 +1012,40 @@ export default function ProfileScreen() {
             </View>
             <View
               style={{
-                backgroundColor: colors.dark.card,
+                backgroundColor: tc.dark.card,
                 borderRadius: 20,
                 marginHorizontal: hPad,
                 marginBottom: 20,
                 overflow: "hidden",
                 borderWidth: 1,
-                borderColor: colors.glass.border,
+                borderColor: tc.glass.border,
               }}
             >
+              {/* Dark Mode Toggle */}
+              <View style={{ flexDirection: "row", alignItems: "center", paddingRight: 16 }}>
+                <View style={{ flex: 1 }}>
+                  <MenuItem
+                    icon={isDark ? "moon-outline" : "sunny-outline"}
+                    label={isDark ? "Dark Mode" : "Light Mode"}
+                    onPress={toggleTheme}
+                    iconBg={isDark ? "rgba(99,102,241,0.15)" : "rgba(251,191,36,0.15)"}
+                    iconColor={isDark ? "#818CF8" : "#F59E0B"}
+                    tc={tc}
+                    trailing={<View />}
+                  />
+                </View>
+                <ThemeToggleSwitch isDark={isDark} onToggle={toggleTheme} tc={tc} />
+              </View>
+              <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 72 }} />
               <MenuItem
                 icon="notifications-outline"
                 label="Notifications"
-                subtitle="Manage your notification preferences"
                 onPress={() => router.push("/settings/notifications" as any)}
                 iconBg={colors.primary[500] + "20"}
                 iconColor={colors.primary[400]}
+                tc={tc}
               />
-              <View style={{ height: 1, backgroundColor: "rgba(255,255,255,0.04)", marginLeft: 72 }} />
+              <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 72 }} />
               <MenuItem
                 icon="language-outline"
                 label={t("profile.language")}
@@ -926,6 +1053,7 @@ export default function ProfileScreen() {
                 onPress={() => setShowLanguagePicker(true)}
                 iconBg={colors.warning + "20"}
                 iconColor={colors.warning}
+                tc={tc}
               />
             </View>
 
@@ -933,7 +1061,7 @@ export default function ProfileScreen() {
             <View style={{ paddingHorizontal: hPad, marginBottom: 4 }}>
               <Text
                 style={{
-                  color: colors.textMuted,
+                  color: tc.textMuted,
                   fontSize: 11,
                   fontFamily: "Inter_600SemiBold",
                   textTransform: "uppercase",
@@ -947,38 +1075,41 @@ export default function ProfileScreen() {
             </View>
             <View
               style={{
-                backgroundColor: colors.dark.card,
+                backgroundColor: tc.dark.card,
                 borderRadius: 20,
                 marginHorizontal: hPad,
                 marginBottom: 20,
                 overflow: "hidden",
                 borderWidth: 1,
-                borderColor: colors.glass.border,
+                borderColor: tc.glass.border,
               }}
             >
               <MenuItem
                 icon="help-circle-outline"
                 label="Help & Support"
                 onPress={handleHelpSupport}
+                tc={tc}
               />
-              <View style={{ height: 1, backgroundColor: "rgba(255,255,255,0.04)", marginLeft: 72 }} />
+              <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 72 }} />
               <MenuItem
                 icon="document-text-outline"
                 label="Terms of Service"
                 onPress={handleTermsOfService}
+                tc={tc}
               />
-              <View style={{ height: 1, backgroundColor: "rgba(255,255,255,0.04)", marginLeft: 72 }} />
+              <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 72 }} />
               <MenuItem
                 icon="shield-outline"
                 label="Privacy Policy"
                 onPress={handlePrivacyPolicy}
+                tc={tc}
               />
             </View>
 
             {/* Logout */}
             <View
               style={{
-                backgroundColor: colors.dark.card,
+                backgroundColor: tc.dark.card,
                 borderRadius: 20,
                 marginHorizontal: hPad,
                 marginBottom: 16,
@@ -992,13 +1123,14 @@ export default function ProfileScreen() {
                 label="Logout"
                 onPress={handleLogout}
                 danger
+                tc={tc}
               />
             </View>
 
             {/* Version */}
             <Text
               style={{
-                color: colors.textMuted,
+                color: tc.textMuted,
                 fontSize: 12,
                 fontFamily: "Inter_400Regular",
                 textAlign: "center",
@@ -1032,13 +1164,13 @@ export default function ProfileScreen() {
         >
           <View
             style={{
-              backgroundColor: colors.dark.card,
+              backgroundColor: tc.dark.card,
               borderRadius: 24,
               padding: 28,
               maxWidth: 340,
               width: "90%",
               borderWidth: 1,
-              borderColor: colors.glass.border,
+              borderColor: tc.glass.border,
               alignItems: "center",
             }}
           >
@@ -1057,7 +1189,7 @@ export default function ProfileScreen() {
             </View>
             <Text
               style={{
-                color: colors.textPrimary,
+                color: tc.textPrimary,
                 fontSize: 18,
                 fontFamily: "Inter_700Bold",
                 marginBottom: 8,
@@ -1067,7 +1199,7 @@ export default function ProfileScreen() {
             </Text>
             <Text
               style={{
-                color: colors.textMuted,
+                color: tc.textMuted,
                 fontSize: 14,
                 fontFamily: "Inter_400Regular",
                 textAlign: "center",
@@ -1084,16 +1216,16 @@ export default function ProfileScreen() {
                   flex: 1,
                   paddingVertical: 14,
                   borderRadius: 14,
-                  backgroundColor: colors.dark.elevated,
+                  backgroundColor: tc.dark.elevated,
                   alignItems: "center",
                   borderWidth: 1,
-                  borderColor: colors.glass.border,
+                  borderColor: tc.glass.border,
                   opacity: pressed ? 0.9 : 1,
                 })}
               >
                 <Text
                   style={{
-                    color: colors.textPrimary,
+                    color: tc.textPrimary,
                     fontSize: 15,
                     fontFamily: "Inter_600SemiBold",
                   }}
@@ -1144,18 +1276,18 @@ export default function ProfileScreen() {
         >
           <View
             style={{
-              backgroundColor: colors.dark.card,
+              backgroundColor: tc.dark.card,
               borderRadius: 24,
               padding: 28,
               maxWidth: 340,
               width: "90%",
               borderWidth: 1,
-              borderColor: colors.glass.border,
+              borderColor: tc.glass.border,
             }}
           >
             <Text
               style={{
-                color: colors.textPrimary,
+                color: tc.textPrimary,
                 fontSize: 18,
                 fontFamily: "Inter_700Bold",
                 marginBottom: 20,
@@ -1178,11 +1310,11 @@ export default function ProfileScreen() {
                   locale === "en"
                     ? colors.primary[500] + "20"
                     : pressed
-                      ? colors.dark.elevated + "40"
+                      ? tc.dark.elevated + "40"
                       : "transparent",
                 borderWidth: 1,
                 borderColor:
-                  locale === "en" ? colors.primary[400] + "40" : colors.glass.border,
+                  locale === "en" ? colors.primary[400] + "40" : tc.glass.border,
                 marginBottom: 10,
               })}
               accessibilityRole="button"
@@ -1192,7 +1324,7 @@ export default function ProfileScreen() {
               <View style={{ flex: 1 }}>
                 <Text
                   style={{
-                    color: colors.textPrimary,
+                    color: tc.textPrimary,
                     fontSize: 15,
                     fontFamily: "Inter_600SemiBold",
                   }}
@@ -1201,7 +1333,7 @@ export default function ProfileScreen() {
                 </Text>
                 <Text
                   style={{
-                    color: colors.textMuted,
+                    color: tc.textMuted,
                     fontSize: 12,
                     fontFamily: "Inter_400Regular",
                   }}
@@ -1227,11 +1359,11 @@ export default function ProfileScreen() {
                   locale === "sw"
                     ? colors.primary[500] + "20"
                     : pressed
-                      ? colors.dark.elevated + "40"
+                      ? tc.dark.elevated + "40"
                       : "transparent",
                 borderWidth: 1,
                 borderColor:
-                  locale === "sw" ? colors.primary[400] + "40" : colors.glass.border,
+                  locale === "sw" ? colors.primary[400] + "40" : tc.glass.border,
                 marginBottom: 20,
               })}
               accessibilityRole="button"
@@ -1241,7 +1373,7 @@ export default function ProfileScreen() {
               <View style={{ flex: 1 }}>
                 <Text
                   style={{
-                    color: colors.textPrimary,
+                    color: tc.textPrimary,
                     fontSize: 15,
                     fontFamily: "Inter_600SemiBold",
                   }}
@@ -1250,7 +1382,7 @@ export default function ProfileScreen() {
                 </Text>
                 <Text
                   style={{
-                    color: colors.textMuted,
+                    color: tc.textMuted,
                     fontSize: 12,
                     fontFamily: "Inter_400Regular",
                   }}
@@ -1269,16 +1401,16 @@ export default function ProfileScreen() {
               style={({ pressed }) => ({
                 paddingVertical: 14,
                 borderRadius: 14,
-                backgroundColor: colors.dark.elevated,
+                backgroundColor: tc.dark.elevated,
                 alignItems: "center",
                 borderWidth: 1,
-                borderColor: colors.glass.border,
+                borderColor: tc.glass.border,
                 opacity: pressed ? 0.9 : 1,
               })}
             >
               <Text
                 style={{
-                  color: colors.textPrimary,
+                  color: tc.textPrimary,
                   fontSize: 15,
                   fontFamily: "Inter_600SemiBold",
                 }}

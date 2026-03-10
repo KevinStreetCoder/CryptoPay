@@ -143,6 +143,22 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.mpesa.tasks.check_float_balance",
         "schedule": 300.0,  # Every 5 minutes
     },
+    "monitor-eth-deposits": {
+        "task": "apps.blockchain.eth_listener.monitor_eth_deposits",
+        "schedule": 30.0,  # Every 30 seconds (Alchemy-friendly)
+    },
+    "update-eth-confirmations": {
+        "task": "apps.blockchain.eth_listener.update_eth_confirmations",
+        "schedule": 20.0,  # Every 20 seconds
+    },
+    "monitor-btc-deposits": {
+        "task": "apps.blockchain.btc_listener.monitor_btc_deposits",
+        "schedule": 60.0,  # Every 60 seconds (BlockCypher 200 req/hr limit)
+    },
+    "update-btc-confirmations": {
+        "task": "apps.blockchain.btc_listener.update_btc_confirmations",
+        "schedule": 60.0,  # Every 60 seconds
+    },
 }
 
 # --- DRF ---
@@ -233,8 +249,9 @@ AT_API_KEY = env("AT_API_KEY", default="")
 AT_USERNAME = env("AT_USERNAME", default="sandbox")
 AT_SENDER_ID = env("AT_SENDER_ID", default="CryptoPay")
 
-# --- CoinGecko ---
+# --- Price Feed APIs ---
 COINGECKO_API_KEY = env("COINGECKO_API_KEY", default="")
+CRYPTOCOMPARE_API_KEY = env("CRYPTOCOMPARE_API_KEY", default="")  # Fallback provider
 
 # --- Google OAuth ---
 GOOGLE_CLIENT_ID = env("GOOGLE_CLIENT_ID", default="")
@@ -243,17 +260,32 @@ GOOGLE_CLIENT_ID = env("GOOGLE_CLIENT_ID", default="")
 RATE_LOCK_TTL_SECONDS = 90
 PLATFORM_SPREAD_PERCENT = 1.5
 FLAT_FEE_KES = 10
+EXCISE_DUTY_PERCENT = 10  # 10% excise duty on VASP fees/commissions (VASP Act 2025)
 
 # --- Blockchain ---
 TRON_API_KEY = env("TRON_API_KEY", default="")
 TRON_NETWORK = env("TRON_NETWORK", default="shasta")
 
+# --- Ethereum ---
+ETH_RPC_URL = env("ETH_RPC_URL", default="")  # Alchemy/Infura URL, e.g. https://eth-mainnet.g.alchemy.com/v2/YOUR_KEY
+ETH_NETWORK = env("ETH_NETWORK", default="sepolia")  # mainnet or sepolia (testnet)
+
+# --- Bitcoin ---
+BTC_NETWORK = env("BTC_NETWORK", default="test3")  # main or test3 (testnet)
+BLOCKCYPHER_API_TOKEN = env("BLOCKCYPHER_API_TOKEN", default="")  # Free: 200 req/hr, with token: 2000 req/hr
+
+# HD Wallet master seed (hex-encoded 64 bytes from BIP-39 mnemonic)
+# CRITICAL: In production, generate from a secure mnemonic and store in KMS/HSM
+# Generate with: python -c "from mnemonic import Mnemonic; m=Mnemonic('english'); print(m.generate(256))"
+# Then derive seed: python -c "from mnemonic import Mnemonic; m=Mnemonic('english'); print(m.to_seed('your mnemonic words').hex())"
+WALLET_MASTER_SEED = env("WALLET_MASTER_SEED", default="")
+
 REQUIRED_CONFIRMATIONS = {
-    "tron": 19,
-    "ethereum": 12,
-    "polygon": 128,
-    "bitcoin": 3,
-    "solana": 32,
+    "tron": 19,         # ~1 min (3s blocks)
+    "ethereum": 64,     # 2 finalized epochs (~12.8 min post-Merge)
+    "polygon": 128,     # ~5 min (2s blocks)
+    "bitcoin": 3,       # ~30 min (for <$10K; use 6 for large amounts)
+    "solana": 32,       # "finalized" commitment level
 }
 
 # --- Logging ---

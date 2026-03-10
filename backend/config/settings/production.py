@@ -57,11 +57,14 @@ if SENTRY_DSN:
         environment=env("SENTRY_ENVIRONMENT", default="production"),  # noqa: F405
     )
 
-# --- Email (SMTP) ---
+# --- Email ---
+# Supports Resend (recommended, 3K/month free), Amazon SES, or any SMTP provider.
+# Resend: EMAIL_HOST=smtp.resend.com, EMAIL_HOST_USER=resend, EMAIL_HOST_PASSWORD=re_xxxxx
+# SES:    EMAIL_HOST=email-smtp.eu-west-1.amazonaws.com, EMAIL_HOST_USER=AKIA..., EMAIL_HOST_PASSWORD=...
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-EMAIL_HOST = env("EMAIL_HOST", default="smtp.gmail.com")  # noqa: F405
+EMAIL_HOST = env("EMAIL_HOST", default="smtp.resend.com")  # noqa: F405
 EMAIL_PORT = env.int("EMAIL_PORT", default=587)  # noqa: F405
-EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")  # noqa: F405
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="resend")  # noqa: F405
 EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")  # noqa: F405
 EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)  # noqa: F405
 
