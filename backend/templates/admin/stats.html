@@ -3,8 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CryptoPay Admin Dashboard</title>
+    <title>CryptoPay — Analytics Dashboard</title>
     <script src="https://d3js.org/d3.v7.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -12,40 +14,48 @@
             --bg: #060E1F;
             --bg-card: #0C1A2E;
             --bg-card-hover: #0F2035;
+            --bg-surface: #0A1628;
             --border: rgba(16, 185, 129, 0.15);
-            --border-subtle: rgba(136, 153, 170, 0.12);
+            --border-subtle: rgba(136, 153, 170, 0.10);
             --text: #F0F4F8;
-            --text-muted: #8899AA;
+            --text-dim: #C8D6E0;
+            --text-muted: #6B7F93;
             --primary: #10B981;
-            --primary-dim: rgba(16, 185, 129, 0.15);
+            --primary-dim: rgba(16, 185, 129, 0.12);
             --accent: #F59E0B;
-            --accent-dim: rgba(245, 158, 11, 0.15);
+            --accent-dim: rgba(245, 158, 11, 0.12);
             --danger: #EF4444;
-            --danger-dim: rgba(239, 68, 68, 0.15);
+            --danger-dim: rgba(239, 68, 68, 0.12);
             --info: #3B82F6;
-            --info-dim: rgba(59, 130, 246, 0.15);
+            --info-dim: rgba(59, 130, 246, 0.12);
             --purple: #8B5CF6;
-            --purple-dim: rgba(139, 92, 246, 0.15);
+            --purple-dim: rgba(139, 92, 246, 0.12);
+            --teal: #14B8A6;
+            --pink: #EC4899;
             --radius: 16px;
-            --shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+            --radius-sm: 10px;
+            --shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
+            --shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.35);
+            --font: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            --mono: 'JetBrains Mono', 'Fira Code', monospace;
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            font-family: var(--font);
             background: var(--bg);
             color: var(--text);
-            line-height: 1.6;
+            line-height: 1.5;
             min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
         }
 
         .dashboard {
             max-width: 1800px;
             margin: 0 auto;
-            padding: 24px 32px;
+            padding: 24px 28px 60px;
         }
-        @media (min-width: 1600px) {
-            .dashboard { padding: 32px 48px; }
-        }
+        @media (min-width: 1600px) { .dashboard { padding: 28px 48px 60px; } }
+        @media (max-width: 768px) { .dashboard { padding: 16px 12px 40px; } }
 
         /* ── Header ─────────────────────────────────────── */
         .header {
@@ -57,7 +67,6 @@
             border: 1px solid var(--border);
             border-radius: var(--radius);
             margin-bottom: 24px;
-            backdrop-filter: blur(12px);
             box-shadow: var(--shadow);
         }
         .header-left { display: flex; align-items: center; gap: 16px; }
@@ -66,82 +75,107 @@
             background: linear-gradient(135deg, var(--primary), #059669);
             border-radius: 12px;
             display: flex; align-items: center; justify-content: center;
-            font-size: 22px; font-weight: 700; color: #fff;
+            font-size: 20px; font-weight: 700; color: #fff;
+            box-shadow: 0 4px 16px rgba(16, 185, 129, 0.25);
         }
-        .header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.3px; }
+        .header h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
         .header h1 span { color: var(--primary); }
-        .header-right { text-align: right; }
-        .header-right .label { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
-        .header-right .time { font-size: 14px; color: var(--text); font-weight: 500; }
+        .header-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+        .header-right { display: flex; align-items: center; gap: 20px; }
+        .header-meta { text-align: right; }
+        .header-meta .label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
+        .header-meta .time { font-size: 13px; color: var(--text-dim); font-weight: 500; font-family: var(--mono); }
         .admin-link {
-            display: inline-block;
-            margin-top: 6px;
-            font-size: 12px;
-            color: var(--primary);
-            text-decoration: none;
-            opacity: 0.8;
-            transition: opacity 0.2s;
+            display: inline-flex; align-items: center; gap: 6px;
+            font-size: 12px; color: var(--primary);
+            text-decoration: none; font-weight: 600;
+            padding: 8px 14px; border-radius: 8px;
+            background: var(--primary-dim);
+            transition: all 0.2s;
         }
-        .admin-link:hover { opacity: 1; }
+        .admin-link:hover { background: rgba(16, 185, 129, 0.2); }
+        @media (max-width: 768px) {
+            .header { flex-direction: column; gap: 12px; align-items: flex-start; }
+            .header-right { width: 100%; justify-content: space-between; }
+        }
 
-        /* ── Stat Cards Grid ────────────────────────────── */
-        .stats-grid {
+        /* ── Trend Indicator ─────────────────────────────── */
+        .trend { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; font-weight: 600; font-family: var(--mono); padding: 3px 8px; border-radius: 6px; }
+        .trend.up { color: var(--primary); background: var(--primary-dim); }
+        .trend.down { color: var(--danger); background: var(--danger-dim); }
+        .trend.flat { color: var(--text-muted); background: rgba(107, 127, 147, 0.12); }
+        .trend svg { width: 12px; height: 12px; }
+
+        /* ── KPI Cards ────────────────────────────────────── */
+        .kpi-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            grid-template-columns: repeat(5, 1fr);
             gap: 16px;
             margin-bottom: 24px;
         }
-        .stat-card {
+        @media (max-width: 1200px) { .kpi-grid { grid-template-columns: repeat(3, 1fr); } }
+        @media (max-width: 768px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+
+        .kpi {
             background: var(--bg-card);
             border: 1px solid var(--border-subtle);
             border-radius: var(--radius);
-            padding: 20px;
+            padding: 20px 22px;
             box-shadow: var(--shadow);
-            transition: transform 0.2s, border-color 0.2s;
+            transition: transform 0.2s, border-color 0.3s;
             position: relative;
             overflow: hidden;
         }
-        .stat-card:hover {
-            transform: translateY(-2px);
-            border-color: var(--border);
-        }
-        .stat-card::before {
-            content: '';
-            position: absolute;
-            top: 0; left: 0; right: 0;
-            height: 3px;
-            border-radius: var(--radius) var(--radius) 0 0;
-        }
-        .stat-card.green::before  { background: var(--primary); }
-        .stat-card.amber::before  { background: var(--accent); }
-        .stat-card.red::before    { background: var(--danger); }
-        .stat-card.blue::before   { background: var(--info); }
-        .stat-card.purple::before { background: var(--purple); }
+        .kpi:hover { transform: translateY(-2px); border-color: var(--border); }
+        .kpi-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+        .kpi-icon { width: 38px; height: 38px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; font-size: 18px; }
+        .kpi-value { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; line-height: 1.1; margin-bottom: 4px; }
+        .kpi-label { font-size: 12px; color: var(--text-muted); font-weight: 500; }
+        .kpi-sub { font-size: 11px; color: var(--text-muted); margin-top: 6px; font-family: var(--mono); }
+        .kpi::after { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; }
+        .kpi.green::after { background: var(--primary); }
+        .kpi.green .kpi-icon { background: var(--primary-dim); }
+        .kpi.amber::after { background: var(--accent); }
+        .kpi.amber .kpi-icon { background: var(--accent-dim); }
+        .kpi.red::after { background: var(--danger); }
+        .kpi.red .kpi-icon { background: var(--danger-dim); }
+        .kpi.blue::after { background: var(--info); }
+        .kpi.blue .kpi-icon { background: var(--info-dim); }
+        .kpi.purple::after { background: var(--purple); }
+        .kpi.purple .kpi-icon { background: var(--purple-dim); }
 
-        .stat-icon {
-            width: 40px; height: 40px;
-            border-radius: 10px;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 20px;
-            margin-bottom: 12px;
+        /* ── Period Tabs ──────────────────────────────────── */
+        .period-tabs { display: flex; gap: 4px; background: var(--bg-surface); border-radius: 10px; padding: 4px; border: 1px solid var(--border-subtle); width: fit-content; }
+        .period-tab {
+            padding: 6px 16px; border-radius: 7px; font-size: 12px; font-weight: 600;
+            color: var(--text-muted); cursor: pointer; transition: all 0.2s;
+            background: transparent; border: none; font-family: var(--font);
         }
-        .stat-card.green .stat-icon  { background: var(--primary-dim); }
-        .stat-card.amber .stat-icon  { background: var(--accent-dim); }
-        .stat-card.red .stat-icon    { background: var(--danger-dim); }
-        .stat-card.blue .stat-icon   { background: var(--info-dim); }
-        .stat-card.purple .stat-icon { background: var(--purple-dim); }
+        .period-tab:hover { color: var(--text-dim); }
+        .period-tab.active { background: var(--primary-dim); color: var(--primary); }
 
-        .stat-value {
-            font-size: 28px;
-            font-weight: 700;
-            letter-spacing: -0.5px;
-            margin-bottom: 2px;
+        /* ── Trend Summary Row ────────────────────────────── */
+        .trend-row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-bottom: 24px;
         }
-        .stat-label {
-            font-size: 13px;
-            color: var(--text-muted);
-            font-weight: 500;
+        @media (max-width: 768px) { .trend-row { grid-template-columns: 1fr; } }
+        .trend-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius);
+            padding: 22px 24px;
+            box-shadow: var(--shadow);
         }
+        .trend-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+        .trend-card-title { font-size: 13px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; }
+        .trend-card-value { font-size: 26px; font-weight: 700; margin-bottom: 4px; }
+        .trend-card-detail { font-size: 12px; color: var(--text-muted); font-family: var(--mono); }
+        .trend-card-detail strong { color: var(--text-dim); }
+        .trend-card-bar { height: 4px; border-radius: 2px; background: var(--border-subtle); margin-top: 14px; overflow: hidden; }
+        .trend-card-bar-fill { height: 100%; border-radius: 2px; transition: width 1s ease; }
 
         /* ── Chart Grid ─────────────────────────────────── */
         .charts-grid {
@@ -154,118 +188,102 @@
             .charts-grid { grid-template-columns: repeat(3, 1fr); }
             .chart-card.full-width { grid-column: 1 / -1; }
         }
-        @media (max-width: 960px) {
-            .charts-grid { grid-template-columns: 1fr; }
-        }
+        @media (max-width: 960px) { .charts-grid { grid-template-columns: 1fr; } }
+
         .chart-card {
             background: var(--bg-card);
             border: 1px solid var(--border-subtle);
             border-radius: var(--radius);
             padding: 24px;
             box-shadow: var(--shadow);
+            transition: border-color 0.3s;
         }
-        .chart-card.full-width {
-            grid-column: 1 / -1;
-        }
+        .chart-card:hover { border-color: var(--border); }
+        .chart-card.full-width { grid-column: 1 / -1; }
+
         .chart-title {
-            font-size: 16px;
+            font-size: 14px;
             font-weight: 600;
-            margin-bottom: 16px;
+            margin-bottom: 18px;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
+            color: var(--text-dim);
         }
-        .chart-title .dot {
-            width: 8px; height: 8px;
-            border-radius: 50%;
-            background: var(--primary);
-        }
+        .chart-title .dot { width: 8px; height: 8px; border-radius: 50%; }
+        .chart-title .dot.green { background: var(--primary); }
+        .chart-title .dot.blue { background: var(--info); }
+        .chart-title .dot.amber { background: var(--accent); }
+        .chart-title .dot.purple { background: var(--purple); }
 
         /* ── D3 Chart Styles ────────────────────────────── */
         .chart-container { width: 100%; overflow: hidden; }
         .chart-container svg { width: 100%; display: block; }
-
-        .axis text { fill: var(--text-muted); font-size: 11px; }
+        .axis text { fill: var(--text-muted); font-size: 11px; font-family: var(--mono); }
         .axis line, .axis path { stroke: var(--border-subtle); }
         .grid line { stroke: var(--border-subtle); stroke-opacity: 0.3; }
         .grid path { stroke: none; }
 
         .tooltip {
-            position: absolute;
-            background: rgba(12, 26, 46, 0.95);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 10px 14px;
-            font-size: 13px;
-            color: var(--text);
-            pointer-events: none;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-            z-index: 1000;
-            backdrop-filter: blur(8px);
-            opacity: 0;
-            transition: opacity 0.15s;
+            position: absolute; background: rgba(10, 22, 40, 0.96);
+            border: 1px solid var(--border); border-radius: var(--radius-sm);
+            padding: 12px 16px; font-size: 13px; color: var(--text);
+            pointer-events: none; box-shadow: var(--shadow-lg);
+            z-index: 1000; backdrop-filter: blur(12px);
+            opacity: 0; transition: opacity 0.15s;
+            font-family: var(--font);
         }
         .tooltip.visible { opacity: 1; }
-        .tooltip-label { color: var(--text-muted); font-size: 11px; margin-bottom: 2px; }
-        .tooltip-value { font-weight: 600; font-size: 15px; }
+        .tooltip-label { color: var(--text-muted); font-size: 11px; margin-bottom: 3px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
+        .tooltip-value { font-weight: 700; font-size: 16px; }
 
         /* ── Table ──────────────────────────────────────── */
-        .table-wrap {
-            overflow-x: auto;
-            border-radius: 12px;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 13px;
-        }
+        .table-wrap { overflow-x: auto; border-radius: 10px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
         th {
-            text-align: left;
-            padding: 12px 14px;
-            color: var(--text-muted);
-            font-weight: 600;
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            border-bottom: 1px solid var(--border-subtle);
-            white-space: nowrap;
+            text-align: left; padding: 12px 14px;
+            color: var(--text-muted); font-weight: 600;
+            font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px;
+            border-bottom: 1px solid var(--border-subtle); white-space: nowrap;
         }
-        td {
-            padding: 10px 14px;
-            border-bottom: 1px solid rgba(136,153,170,0.06);
-            white-space: nowrap;
-        }
-        tr:hover td { background: rgba(16, 185, 129, 0.03); }
+        td { padding: 11px 14px; border-bottom: 1px solid rgba(136,153,170,0.05); white-space: nowrap; }
+        tr:hover td { background: rgba(16, 185, 129, 0.02); }
 
         .badge {
-            display: inline-block;
-            padding: 3px 10px;
-            border-radius: 20px;
-            font-size: 11px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.3px;
+            display: inline-block; padding: 3px 10px; border-radius: 20px;
+            font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
         }
         .badge-completed { background: var(--primary-dim); color: var(--primary); }
         .badge-pending, .badge-processing, .badge-confirming { background: var(--accent-dim); color: var(--accent); }
         .badge-failed { background: var(--danger-dim); color: var(--danger); }
         .badge-reversed { background: var(--purple-dim); color: var(--purple); }
+        .type-badge { display: inline-block; padding: 3px 8px; border-radius: 6px; font-size: 10px; font-weight: 600; background: var(--info-dim); color: var(--info); }
 
-        .type-badge {
-            display: inline-block;
-            padding: 3px 8px;
-            border-radius: 6px;
-            font-size: 10px;
-            font-weight: 600;
-            background: var(--info-dim);
-            color: var(--info);
+        .no-data { text-align: center; padding: 48px; color: var(--text-muted); font-size: 14px; }
+
+        /* ── Milestone Story ────────────────────────────── */
+        .milestone-section { margin-bottom: 24px; }
+        .milestone-title { font-size: 14px; font-weight: 600; color: var(--text-dim); margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+        .milestone-grid { display: flex; gap: 16px; overflow-x: auto; padding-bottom: 8px; }
+        .milestone {
+            flex: 0 0 220px; background: var(--bg-card); border: 1px solid var(--border-subtle);
+            border-radius: var(--radius); padding: 20px; position: relative;
+            box-shadow: var(--shadow); transition: border-color 0.2s;
         }
+        .milestone:hover { border-color: var(--border); }
+        .milestone.achieved { border-color: rgba(16, 185, 129, 0.3); }
+        .milestone.achieved::after { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--primary); border-radius: var(--radius) var(--radius) 0 0; }
+        .milestone-icon { font-size: 24px; margin-bottom: 10px; }
+        .milestone-name { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+        .milestone-desc { font-size: 11px; color: var(--text-muted); line-height: 1.5; }
+        .milestone-check { position: absolute; top: 12px; right: 12px; width: 20px; height: 20px; border-radius: 50%; background: var(--primary-dim); display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--primary); }
 
-        .no-data {
-            text-align: center;
-            padding: 40px;
-            color: var(--text-muted);
-            font-size: 14px;
+        /* ── System Health ───────────────────────────────── */
+        .health-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
         }
 
         /* ── Animations ─────────────────────────────────── */
@@ -273,19 +291,17 @@
             from { opacity: 0; transform: translateY(12px); }
             to   { opacity: 1; transform: translateY(0); }
         }
-        .stat-card, .chart-card {
-            animation: fadeInUp 0.4s ease-out both;
-        }
-        .stat-card:nth-child(1)  { animation-delay: 0.05s; }
-        .stat-card:nth-child(2)  { animation-delay: 0.1s; }
-        .stat-card:nth-child(3)  { animation-delay: 0.15s; }
-        .stat-card:nth-child(4)  { animation-delay: 0.2s; }
-        .stat-card:nth-child(5)  { animation-delay: 0.25s; }
-        .stat-card:nth-child(6)  { animation-delay: 0.3s; }
-        .stat-card:nth-child(7)  { animation-delay: 0.35s; }
-        .stat-card:nth-child(8)  { animation-delay: 0.4s; }
-        .stat-card:nth-child(9)  { animation-delay: 0.45s; }
-        .stat-card:nth-child(10) { animation-delay: 0.5s; }
+        .kpi, .trend-card, .chart-card, .milestone { animation: fadeInUp 0.4s ease-out both; }
+        .kpi:nth-child(1) { animation-delay: 0.03s; }
+        .kpi:nth-child(2) { animation-delay: 0.06s; }
+        .kpi:nth-child(3) { animation-delay: 0.09s; }
+        .kpi:nth-child(4) { animation-delay: 0.12s; }
+        .kpi:nth-child(5) { animation-delay: 0.15s; }
+        .kpi:nth-child(6) { animation-delay: 0.18s; }
+        .kpi:nth-child(7) { animation-delay: 0.21s; }
+        .kpi:nth-child(8) { animation-delay: 0.24s; }
+        .kpi:nth-child(9) { animation-delay: 0.27s; }
+        .kpi:nth-child(10) { animation-delay: 0.30s; }
     </style>
 </head>
 <body>
@@ -294,139 +310,185 @@
     <!-- ═══ HEADER ═══════════════════════════════════════════════ -->
     <div class="header">
         <div class="header-left">
-            <div class="logo">C</div>
+            <div class="logo">&#x26A1;</div>
             <div>
-                <h1><span>Crypto</span>Pay Dashboard</h1>
+                <h1><span>Crypto</span>Pay Analytics</h1>
+                <div class="header-sub">Business Intelligence &amp; Platform Metrics</div>
             </div>
         </div>
         <div class="header-right">
-            <div class="label">Last Refreshed</div>
-            <div class="time">{{ last_refresh }}</div>
-            <a href="/admin/" class="admin-link">&larr; Back to Admin</a>
+            <div class="header-meta">
+                <div class="label">Last Updated</div>
+                <div class="time">{{ last_refresh }}</div>
+            </div>
+            <a href="/admin/" class="admin-link">&#x2190; Admin Panel</a>
         </div>
     </div>
 
-    <!-- ═══ STAT CARDS ═══════════════════════════════════════════ -->
-    <div class="stats-grid">
-        <div class="stat-card green">
-            <div class="stat-icon">&#x1F465;</div>
-            <div class="stat-value">{{ total_users }}</div>
-            <div class="stat-label">Total Users</div>
+    <!-- ═══ KPI CARDS ═══════════════════════════════════════════ -->
+    <div class="kpi-grid">
+        <div class="kpi green">
+            <div class="kpi-header">
+                <div class="kpi-icon">&#x1F465;</div>
+                <span class="trend {% if new_users_today > 0 %}up{% else %}flat{% endif %}">
+                    {% if new_users_today > 0 %}&#x2191;{% else %}—{% endif %} +{{ new_users_today }} today
+                </span>
+            </div>
+            <div class="kpi-value">{{ total_users }}</div>
+            <div class="kpi-label">Total Users</div>
+            <div class="kpi-sub">{{ active_users }} active · {{ suspended_users }} suspended</div>
         </div>
-        <div class="stat-card green">
-            <div class="stat-icon">&#x2705;</div>
-            <div class="stat-value">{{ active_users }}</div>
-            <div class="stat-label">Active Users</div>
+
+        <div class="kpi amber">
+            <div class="kpi-header">
+                <div class="kpi-icon">&#x1F4B1;</div>
+                <span class="trend {% if success_rate >= 90 %}up{% elif success_rate >= 50 %}flat{% else %}down{% endif %}">
+                    {{ success_rate }}% success
+                </span>
+            </div>
+            <div class="kpi-value">{{ total_transactions }}</div>
+            <div class="kpi-label">Total Transactions</div>
+            <div class="kpi-sub">{{ completed_transactions }} completed · {{ pending_transactions }} pending</div>
         </div>
-        <div class="stat-card blue">
-            <div class="stat-icon">&#x1F195;</div>
-            <div class="stat-value">{{ new_users_today }}</div>
-            <div class="stat-label">New Today</div>
+
+        <div class="kpi green">
+            <div class="kpi-header">
+                <div class="kpi-icon">&#x1F4B0;</div>
+            </div>
+            <div class="kpi-value" style="font-size:22px">KES {{ total_revenue|floatformat:0 }}</div>
+            <div class="kpi-label">Total Revenue (Fees)</div>
+            <div class="kpi-sub">24h: KES {{ rev_24h|floatformat:0 }} · 7d: KES {{ rev_7d|floatformat:0 }}</div>
         </div>
-        <div class="stat-card amber">
-            <div class="stat-icon">&#x1F4B1;</div>
-            <div class="stat-value">{{ total_transactions }}</div>
-            <div class="stat-label">Total Transactions</div>
+
+        <div class="kpi red">
+            <div class="kpi-header">
+                <div class="kpi-icon">&#x26A0;</div>
+            </div>
+            <div class="kpi-value">{{ failed_transactions }}</div>
+            <div class="kpi-label">Failed Transactions</div>
+            <div class="kpi-sub">{{ pending_transactions }} pending review</div>
         </div>
-        <div class="stat-card green">
-            <div class="stat-icon">&#x2714;</div>
-            <div class="stat-value">{{ completed_transactions }}</div>
-            <div class="stat-label">Completed</div>
-        </div>
-        <div class="stat-card red">
-            <div class="stat-icon">&#x2718;</div>
-            <div class="stat-value">{{ failed_transactions }}</div>
-            <div class="stat-label">Failed</div>
-        </div>
-        <div class="stat-card amber">
-            <div class="stat-icon">&#x23F3;</div>
-            <div class="stat-value">{{ pending_transactions }}</div>
-            <div class="stat-label">Pending</div>
-        </div>
-        <div class="stat-card green">
-            <div class="stat-icon">&#x1F4B0;</div>
-            <div class="stat-value" id="revenue-val">KES {{ total_revenue|floatformat:2 }}</div>
-            <div class="stat-label">Total Fee Revenue</div>
-        </div>
-        <div class="stat-card purple">
-            <div class="stat-icon">&#x1F4BC;</div>
-            <div class="stat-value">{{ active_wallets }}</div>
-            <div class="stat-label">Active Wallets (bal&gt;0)</div>
-        </div>
-        <div class="stat-card blue">
-            <div class="stat-icon">&#x1F3E6;</div>
-            <div class="stat-value">{{ total_wallets }}</div>
-            <div class="stat-label">Total Wallets</div>
+
+        <div class="kpi purple">
+            <div class="kpi-header">
+                <div class="kpi-icon">&#x1F4BC;</div>
+            </div>
+            <div class="kpi-value">{{ active_wallets }}</div>
+            <div class="kpi-label">Active Wallets</div>
+            <div class="kpi-sub">{{ total_wallets }} total wallets</div>
         </div>
     </div>
 
-    <!-- ═══ CHARTS ROW 1 ═════════════════════════════════════════ -->
+    <!-- ═══ TREND COMPARISON CARDS ═════════════════════════════ -->
+    <div class="trend-row">
+        <div class="trend-card" id="trend-24h">
+            <div class="trend-card-header">
+                <span class="trend-card-title">Last 24 Hours</span>
+                <span class="trend" id="trend-24h-badge"></span>
+            </div>
+            <div class="trend-card-value" id="trend-24h-value">—</div>
+            <div class="trend-card-detail" id="trend-24h-detail"></div>
+            <div class="trend-card-bar"><div class="trend-card-bar-fill" id="trend-24h-bar" style="background:var(--primary)"></div></div>
+        </div>
+        <div class="trend-card" id="trend-7d">
+            <div class="trend-card-header">
+                <span class="trend-card-title">Last 7 Days</span>
+                <span class="trend" id="trend-7d-badge"></span>
+            </div>
+            <div class="trend-card-value" id="trend-7d-value">—</div>
+            <div class="trend-card-detail" id="trend-7d-detail"></div>
+            <div class="trend-card-bar"><div class="trend-card-bar-fill" id="trend-7d-bar" style="background:var(--info)"></div></div>
+        </div>
+        <div class="trend-card" id="trend-30d">
+            <div class="trend-card-header">
+                <span class="trend-card-title">Last 30 Days</span>
+                <span class="trend" id="trend-30d-badge"></span>
+            </div>
+            <div class="trend-card-value" id="trend-30d-value">—</div>
+            <div class="trend-card-detail" id="trend-30d-detail"></div>
+            <div class="trend-card-bar"><div class="trend-card-bar-fill" id="trend-30d-bar" style="background:var(--purple)"></div></div>
+        </div>
+    </div>
+
+    <!-- ═══ MILESTONE STORY ═══════════════════════════════════ -->
+    <div class="milestone-section">
+        <div class="milestone-title"><span style="font-size:16px">&#x1F3AF;</span> Growth Milestones</div>
+        <div class="milestone-grid" id="milestones"></div>
+    </div>
+
+    <!-- ═══ CHARTS ════════════════════════════════════════════ -->
     <div class="charts-grid">
-        <!-- Daily Volume Line Chart -->
         <div class="chart-card full-width">
-            <div class="chart-title"><span class="dot"></span>Daily Transaction Volume (Last 30 Days)</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+                <div class="chart-title" style="margin-bottom:0"><span class="dot green"></span>Transaction Volume</div>
+                <div class="period-tabs" id="volume-period-tabs">
+                    <button class="period-tab active" data-days="7">7D</button>
+                    <button class="period-tab" data-days="14">14D</button>
+                    <button class="period-tab" data-days="30">30D</button>
+                </div>
+            </div>
             <div class="chart-container" id="daily-volume-chart"></div>
         </div>
 
-        <!-- Volume by Type Bar Chart -->
         <div class="chart-card">
-            <div class="chart-title"><span class="dot"></span>Transaction Volume by Type</div>
+            <div class="chart-title"><span class="dot blue"></span>Volume by Type</div>
             <div class="chart-container" id="volume-type-chart"></div>
         </div>
 
-        <!-- Transaction Status Pie Chart -->
         <div class="chart-card">
-            <div class="chart-title"><span class="dot"></span>Transaction Status Distribution</div>
+            <div class="chart-title"><span class="dot amber"></span>Transaction Status</div>
             <div class="chart-container" id="status-chart"></div>
         </div>
 
-        <!-- KYC Tier Donut Chart -->
         <div class="chart-card">
-            <div class="chart-title"><span class="dot"></span>KYC Tier Distribution</div>
+            <div class="chart-title"><span class="dot purple"></span>KYC Distribution</div>
             <div class="chart-container" id="kyc-chart"></div>
         </div>
 
-        <!-- Region Horizontal Bar Chart -->
         <div class="chart-card">
-            <div class="chart-title"><span class="dot"></span>Users by Phone Prefix (Region)</div>
+            <div class="chart-title"><span class="dot green"></span>Users by Region</div>
             <div class="chart-container" id="region-chart"></div>
         </div>
 
-        <!-- Crypto Holdings Bar Chart -->
         <div class="chart-card full-width">
-            <div class="chart-title"><span class="dot"></span>Total Crypto Holdings by Currency</div>
+            <div class="chart-title"><span class="dot blue"></span>Crypto Holdings by Currency</div>
             <div class="chart-container" id="holdings-chart"></div>
         </div>
     </div>
 
-    <!-- ═══ SYSTEM HEALTH ══════════════════════════════════════════ -->
-    <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin-bottom: 24px;">
-        <div class="stat-card green">
-            <div class="stat-icon" style="font-size:18px">&#x2764;</div>
-            <div class="stat-value" style="font-size:20px;color:var(--primary)">Healthy</div>
-            <div class="stat-label">API Server Status</div>
+    <!-- ═══ SYSTEM HEALTH ══════════════════════════════════════ -->
+    <div class="health-grid">
+        <div class="kpi green">
+            <div class="kpi-header"><div class="kpi-icon">&#x1F49A;</div></div>
+            <div class="kpi-value" style="font-size:18px;color:var(--primary)">Healthy</div>
+            <div class="kpi-label">API Server</div>
         </div>
-        <div class="stat-card blue">
-            <div class="stat-icon" style="font-size:18px">&#x1F4E6;</div>
-            <div class="stat-value" style="font-size:20px">{{ celery_tasks_24h|default:"0" }}</div>
-            <div class="stat-label">Celery Tasks (24h)</div>
+        <div class="kpi blue">
+            <div class="kpi-header"><div class="kpi-icon">&#x1F4E6;</div></div>
+            <div class="kpi-value" style="font-size:18px">{{ celery_tasks_24h|default:"0" }}</div>
+            <div class="kpi-label">Celery Tasks (24h)</div>
         </div>
-        <div class="stat-card amber">
-            <div class="stat-icon" style="font-size:18px">&#x23F1;</div>
-            <div class="stat-value" style="font-size:20px" id="uptime-val">-</div>
-            <div class="stat-label">Page Auto-refresh (60s)</div>
+        <div class="kpi amber">
+            <div class="kpi-header"><div class="kpi-icon">&#x23F1;</div></div>
+            <div class="kpi-value" style="font-size:18px" id="uptime-val">60s</div>
+            <div class="kpi-label">Auto-refresh</div>
+        </div>
+        <div class="kpi blue">
+            <div class="kpi-header"><div class="kpi-icon">&#x1F195;</div></div>
+            <div class="kpi-value" style="font-size:18px">{{ new_users_7d }}</div>
+            <div class="kpi-label">New Users (7d)</div>
+            <div class="kpi-sub">30d: {{ new_users_30d }}</div>
         </div>
     </div>
 
-    <!-- ═══ RECENT TRANSACTIONS TABLE ════════════════════════════ -->
+    <!-- ═══ RECENT TRANSACTIONS ════════════════════════════════ -->
     <div class="chart-card full-width" style="margin-bottom: 40px;">
-        <div class="chart-title"><span class="dot"></span>Recent Transactions (Last 20)</div>
+        <div class="chart-title"><span class="dot green"></span>Recent Transactions</div>
         <div class="table-wrap" id="recent-table"></div>
     </div>
 
 </div>
 
-<!-- Shared tooltip -->
 <div class="tooltip" id="tooltip"></div>
 
 <script>
@@ -438,402 +500,303 @@ const statusDistribution = {{ status_distribution_json|safe }};
 const regionDistribution = {{ region_distribution_json|safe }};
 const cryptoHoldings     = {{ crypto_holdings_json|safe }};
 const recentTransactions = {{ recent_transactions_json|safe }};
+const trends24h          = {{ trends_24h_json|safe }};
+const trends7d           = {{ trends_7d_json|safe }};
+const trends30d          = {{ trends_30d_json|safe }};
+const totalUsers         = {{ total_users }};
+const totalTransactions  = {{ total_transactions }};
+const totalRevenue       = {{ total_revenue }};
 
-// ── Color Palettes ────────────────────────────────────────────────────
-const COLORS = {
-    primary:  '#10B981',
-    accent:   '#F59E0B',
-    danger:   '#EF4444',
-    info:     '#3B82F6',
-    purple:   '#8B5CF6',
-    teal:     '#14B8A6',
-    pink:     '#EC4899',
-    orange:   '#F97316',
-    cyan:     '#06B6D4',
-};
-const CHART_COLORS = [COLORS.primary, COLORS.accent, COLORS.info, COLORS.purple, COLORS.teal, COLORS.pink, COLORS.orange, COLORS.danger, COLORS.cyan];
-
-const STATUS_COLORS = {
-    completed:  COLORS.primary,
-    pending:    COLORS.accent,
-    processing: COLORS.info,
-    confirming: COLORS.cyan,
-    failed:     COLORS.danger,
-    reversed:   COLORS.purple,
-};
+// ── Colors ────────────────────────────────────────────────────────────
+const C = { primary: '#10B981', accent: '#F59E0B', danger: '#EF4444', info: '#3B82F6', purple: '#8B5CF6', teal: '#14B8A6', pink: '#EC4899', orange: '#F97316', cyan: '#06B6D4' };
+const PALETTE = [C.primary, C.accent, C.info, C.purple, C.teal, C.pink, C.orange, C.danger, C.cyan];
+const STATUS_C = { completed: C.primary, pending: C.accent, processing: C.info, confirming: C.cyan, failed: C.danger, reversed: C.purple };
 
 // ── Tooltip ───────────────────────────────────────────────────────────
 const tooltip = d3.select('#tooltip');
-function showTooltip(event, html) {
+function showTip(e, html) {
     tooltip.html(html).classed('visible', true);
-    const tt = tooltip.node();
-    const x = Math.min(event.pageX + 12, window.innerWidth - tt.offsetWidth - 20);
-    const y = event.pageY - tt.offsetHeight - 8;
-    tooltip.style('left', x + 'px').style('top', (y < 0 ? event.pageY + 12 : y) + 'px');
+    const tt = tooltip.node(), x = Math.min(e.pageX + 14, window.innerWidth - tt.offsetWidth - 20);
+    const y = e.pageY - tt.offsetHeight - 10;
+    tooltip.style('left', x + 'px').style('top', (y < 0 ? e.pageY + 14 : y) + 'px');
 }
-function hideTooltip() { tooltip.classed('visible', false); }
+function hideTip() { tooltip.classed('visible', false); }
 
-// ── Helpers ───────────────────────────────────────────────────────────
 function fmt(n) { return Number(n).toLocaleString('en-KE', { maximumFractionDigits: 2 }); }
-function fmtShort(n) {
-    if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
-    if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
-    return n.toString();
+function fmtShort(n) { return n >= 1e6 ? (n/1e6).toFixed(1)+'M' : n >= 1e3 ? (n/1e3).toFixed(1)+'K' : n.toString(); }
+
+// ── Trend Cards ───────────────────────────────────────────────────────
+function renderTrend(id, data, label) {
+    const badge = document.getElementById(id + '-badge');
+    const value = document.getElementById(id + '-value');
+    const detail = document.getElementById(id + '-detail');
+    const bar = document.getElementById(id + '-bar');
+
+    const pct = data.count_change;
+    const arrow = pct > 0 ? '&#x2191;' : pct < 0 ? '&#x2193;' : '—';
+    const cls = pct > 0 ? 'up' : pct < 0 ? 'down' : 'flat';
+
+    badge.className = 'trend ' + cls;
+    badge.innerHTML = arrow + ' ' + Math.abs(pct) + '%';
+    value.textContent = data.count + ' txns';
+    detail.innerHTML = 'Vol: <strong>KES ' + fmt(data.volume) + '</strong> vs prev ' + fmt(data.prev_volume);
+
+    const maxBar = Math.max(data.count, data.prev_count, 1);
+    bar.style.width = (data.count / maxBar * 100) + '%';
 }
+renderTrend('trend-24h', trends24h, '24h');
+renderTrend('trend-7d', trends7d, '7d');
+renderTrend('trend-30d', trends30d, '30d');
+
+// ── Milestones ────────────────────────────────────────────────────────
+(function() {
+    const milestones = [
+        { icon: '&#x1F680;', name: 'First User', desc: 'Platform registered its first user', threshold: 1, metric: totalUsers },
+        { icon: '&#x1F389;', name: '10 Users', desc: 'Early adopter community formed', threshold: 10, metric: totalUsers },
+        { icon: '&#x1F4B3;', name: 'First Transaction', desc: 'First successful payment processed', threshold: 1, metric: totalTransactions },
+        { icon: '&#x2B50;', name: '100 Transactions', desc: 'Platform gaining real traction', threshold: 100, metric: totalTransactions },
+        { icon: '&#x1F4B5;', name: 'KES 1K Revenue', desc: 'First thousand in fee revenue', threshold: 1000, metric: totalRevenue },
+        { icon: '&#x1F31F;', name: '50 Users', desc: 'Growing user base milestone', threshold: 50, metric: totalUsers },
+        { icon: '&#x1F3C6;', name: '1K Transactions', desc: 'Proven product-market fit signal', threshold: 1000, metric: totalTransactions },
+        { icon: '&#x1F4B0;', name: 'KES 100K Revenue', desc: 'Significant revenue milestone', threshold: 100000, metric: totalRevenue },
+    ];
+
+    const grid = document.getElementById('milestones');
+    milestones.forEach(m => {
+        const achieved = m.metric >= m.threshold;
+        const progress = Math.min(m.metric / m.threshold * 100, 100);
+        grid.innerHTML += `
+            <div class="milestone ${achieved ? 'achieved' : ''}">
+                ${achieved ? '<div class="milestone-check">&#x2713;</div>' : ''}
+                <div class="milestone-icon">${m.icon}</div>
+                <div class="milestone-name">${m.name}</div>
+                <div class="milestone-desc">${achieved ? 'Achieved!' : Math.round(progress) + '% — ' + m.desc}</div>
+                ${!achieved ? '<div class="trend-card-bar" style="margin-top:10px"><div class="trend-card-bar-fill" style="width:'+progress+'%;background:var(--primary)"></div></div>' : ''}
+            </div>
+        `;
+    });
+})();
 
 // ═══════════════════════════════════════════════════════════════════════
-// 1. DAILY VOLUME LINE CHART
+// CHARTS
 // ═══════════════════════════════════════════════════════════════════════
+
+// 1. DAILY VOLUME with period filter
 (function() {
     const container = d3.select('#daily-volume-chart');
-    if (!dailyVolume.length) {
-        container.html('<div class="no-data" style="padding:60px 20px"><div style="font-size:40px;margin-bottom:12px;opacity:0.4">&#x1F4C8;</div><div style="font-size:15px;font-weight:600;margin-bottom:4px">No Transaction Data</div><div style="font-size:13px;color:var(--text-muted)">Transactions from the last 30 days will appear here</div></div>');
-        return;
+
+    function drawVolume(days) {
+        container.selectAll('*').remove();
+        const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - days);
+        const filtered = dailyVolume.filter(d => new Date(d.date) >= cutoff);
+
+        if (!filtered.length) {
+            container.html('<div class="no-data"><div style="font-size:36px;margin-bottom:10px;opacity:0.3">&#x1F4C8;</div><div style="font-weight:600">No data for this period</div></div>');
+            return;
+        }
+
+        const margin = { top: 16, right: 30, bottom: 36, left: 56 };
+        const width = container.node().clientWidth - margin.left - margin.right;
+        const height = 260 - margin.top - margin.bottom;
+
+        const svg = container.append('svg')
+            .attr('viewBox', `0 0 ${width + margin.left + margin.right} ${height + margin.top + margin.bottom}`)
+            .append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+        const data = filtered.map(d => ({ date: new Date(d.date), count: d.count, amount: d.total_amount }));
+        const x = d3.scaleTime().domain(d3.extent(data, d => d.date)).range([0, width]);
+        const y = d3.scaleLinear().domain([0, d3.max(data, d => d.count) * 1.15]).nice().range([height, 0]);
+
+        svg.append('g').attr('class', 'grid').call(d3.axisLeft(y).ticks(5).tickSize(-width).tickFormat(''));
+
+        const area = d3.area().x(d => x(d.date)).y0(height).y1(d => y(d.count)).curve(d3.curveMonotoneX);
+        const grad = svg.append('defs').append('linearGradient').attr('id', 'aGrad').attr('x1',0).attr('y1',0).attr('x2',0).attr('y2',1);
+        grad.append('stop').attr('offset','0%').attr('stop-color',C.primary).attr('stop-opacity',0.25);
+        grad.append('stop').attr('offset','100%').attr('stop-color',C.primary).attr('stop-opacity',0.01);
+
+        const aPath = svg.append('path').datum(data).attr('fill','url(#aGrad)').attr('d',area).style('opacity',0);
+        const line = d3.line().x(d => x(d.date)).y(d => y(d.count)).curve(d3.curveMonotoneX);
+        const lPath = svg.append('path').datum(data).attr('fill','none').attr('stroke',C.primary).attr('stroke-width',2.5).attr('d',line);
+
+        const len = lPath.node().getTotalLength();
+        lPath.attr('stroke-dasharray',len).attr('stroke-dashoffset',len).transition().duration(1000).ease(d3.easeCubicOut).attr('stroke-dashoffset',0);
+        aPath.transition().delay(300).duration(600).style('opacity',1);
+
+        svg.selectAll('.dot').data(data).join('circle')
+            .attr('cx',d=>x(d.date)).attr('cy',d=>y(d.count)).attr('r',0)
+            .attr('fill',C.primary).attr('stroke','var(--bg-card)').attr('stroke-width',2)
+            .on('mouseover',(e,d)=>showTip(e,`<div class="tooltip-label">${d3.timeFormat('%b %d, %Y')(d.date)}</div><div class="tooltip-value">${d.count} transactions</div><div style="color:var(--text-muted);font-size:12px">Volume: KES ${fmt(d.amount)}</div>`))
+            .on('mouseout',hideTip)
+            .transition().delay((d,i)=>600+i*25).duration(250).attr('r',4);
+
+        svg.append('g').attr('class','axis').attr('transform',`translate(0,${height})`).call(d3.axisBottom(x).ticks(Math.min(data.length, 8)).tickFormat(d3.timeFormat('%b %d')));
+        svg.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(5).tickFormat(d=>fmtShort(d)));
     }
 
-    const margin = { top: 20, right: 30, bottom: 40, left: 60 };
-    const width = container.node().clientWidth - margin.left - margin.right;
-    const height = 280 - margin.top - margin.bottom;
+    drawVolume(30);
 
-    const svg = container.append('svg')
-        .attr('viewBox', `0 0 ${width + margin.left + margin.right} ${height + margin.top + margin.bottom}`)
-        .append('g').attr('transform', `translate(${margin.left},${margin.top})`);
-
-    const data = dailyVolume.map(d => ({ date: new Date(d.date), count: d.count, amount: d.total_amount }));
-
-    const x = d3.scaleTime().domain(d3.extent(data, d => d.date)).range([0, width]);
-    const y = d3.scaleLinear().domain([0, d3.max(data, d => d.count) * 1.15]).nice().range([height, 0]);
-
-    // Grid
-    svg.append('g').attr('class', 'grid').call(d3.axisLeft(y).ticks(5).tickSize(-width).tickFormat(''));
-
-    // Area
-    const area = d3.area().x(d => x(d.date)).y0(height).y1(d => y(d.count)).curve(d3.curveMonotoneX);
-    const grad = svg.append('defs').append('linearGradient').attr('id', 'areaGrad').attr('x1', 0).attr('y1', 0).attr('x2', 0).attr('y2', 1);
-    grad.append('stop').attr('offset', '0%').attr('stop-color', COLORS.primary).attr('stop-opacity', 0.3);
-    grad.append('stop').attr('offset', '100%').attr('stop-color', COLORS.primary).attr('stop-opacity', 0.02);
-
-    const areaPath = svg.append('path').datum(data).attr('fill', 'url(#areaGrad)').attr('d', area);
-
-    // Line
-    const line = d3.line().x(d => x(d.date)).y(d => y(d.count)).curve(d3.curveMonotoneX);
-    const linePath = svg.append('path').datum(data)
-        .attr('fill', 'none').attr('stroke', COLORS.primary).attr('stroke-width', 2.5)
-        .attr('d', line);
-
-    // Animate
-    const totalLen = linePath.node().getTotalLength();
-    linePath.attr('stroke-dasharray', totalLen).attr('stroke-dashoffset', totalLen)
-        .transition().duration(1200).ease(d3.easeCubicOut).attr('stroke-dashoffset', 0);
-    areaPath.style('opacity', 0).transition().delay(400).duration(800).style('opacity', 1);
-
-    // Dots
-    svg.selectAll('.dot').data(data).join('circle')
-        .attr('cx', d => x(d.date)).attr('cy', d => y(d.count))
-        .attr('r', 0).attr('fill', COLORS.primary).attr('stroke', '#060E1F').attr('stroke-width', 2)
-        .on('mouseover', (e, d) => showTooltip(e, `<div class="tooltip-label">${d3.timeFormat('%b %d, %Y')(d.date)}</div><div class="tooltip-value">${d.count} txns</div><div style="color:var(--text-muted);font-size:12px">Vol: KES ${fmt(d.amount)}</div>`))
-        .on('mouseout', hideTooltip)
-        .transition().delay((d, i) => 800 + i * 30).duration(300).attr('r', 4);
-
-    // Axes
-    svg.append('g').attr('class', 'axis').attr('transform', `translate(0,${height})`).call(d3.axisBottom(x).ticks(7).tickFormat(d3.timeFormat('%b %d')));
-    svg.append('g').attr('class', 'axis').call(d3.axisLeft(y).ticks(5).tickFormat(d => fmtShort(d)));
+    document.querySelectorAll('#volume-period-tabs .period-tab').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('#volume-period-tabs .period-tab').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            drawVolume(parseInt(this.dataset.days));
+        });
+    });
 })();
 
-// ═══════════════════════════════════════════════════════════════════════
-// 2. VOLUME BY TYPE BAR CHART
-// ═══════════════════════════════════════════════════════════════════════
+// 2. VOLUME BY TYPE
 (function() {
     const container = d3.select('#volume-type-chart');
-    const volumeData = volumeByType.filter(d => d.count > 0);
-    if (!volumeData.length) { container.html('<div class="no-data">No transactions yet</div>'); return; }
+    const data = volumeByType.filter(d => d.count > 0);
+    if (!data.length) { container.html('<div class="no-data">No data</div>'); return; }
 
-    const margin = { top: 10, right: 20, bottom: 50, left: 50 };
-    const width = container.node().clientWidth - margin.left - margin.right;
-    const height = 280 - margin.top - margin.bottom;
-
-    const svg = container.append('svg')
-        .attr('viewBox', `0 0 ${width + margin.left + margin.right} ${height + margin.top + margin.bottom}`)
-        .append('g').attr('transform', `translate(${margin.left},${margin.top})`);
-
-    const x = d3.scaleBand().domain(volumeData.map(d => d.type)).range([0, width]).padding(0.35);
-    const y = d3.scaleLinear().domain([0, d3.max(volumeData, d => d.count) * 1.15]).nice().range([height, 0]);
-
-    svg.append('g').attr('class', 'grid').call(d3.axisLeft(y).ticks(5).tickSize(-width).tickFormat(''));
-
-    svg.selectAll('.bar').data(volumeData).join('rect')
-        .attr('x', d => x(d.type)).attr('width', x.bandwidth())
-        .attr('y', height).attr('height', 0)
-        .attr('rx', 4).attr('fill', (d, i) => CHART_COLORS[i % CHART_COLORS.length])
-        .on('mouseover', (e, d) => showTooltip(e, `<div class="tooltip-label">${d.type}</div><div class="tooltip-value">${fmt(d.count)} txns</div><div style="color:var(--text-muted);font-size:12px">Vol: KES ${fmt(d.total_amount)}</div>`))
-        .on('mouseout', hideTooltip)
-        .transition().delay((d, i) => i * 80).duration(600).ease(d3.easeCubicOut)
-        .attr('y', d => y(d.count)).attr('height', d => height - y(d.count));
-
-    svg.append('g').attr('class', 'axis').attr('transform', `translate(0,${height})`)
-        .call(d3.axisBottom(x)).selectAll('text')
-        .attr('transform', 'rotate(-30)').style('text-anchor', 'end').style('font-size', '10px');
-    svg.append('g').attr('class', 'axis').call(d3.axisLeft(y).ticks(5).tickFormat(d => fmtShort(d)));
-})();
-
-// ═══════════════════════════════════════════════════════════════════════
-// 3. TRANSACTION STATUS PIE CHART
-// ═══════════════════════════════════════════════════════════════════════
-(function() {
-    const container = d3.select('#status-chart');
-    if (!statusDistribution.length) { container.html('<div class="no-data">No transactions yet</div>'); return; }
-
-    const w = container.node().clientWidth;
-    const size = Math.min(w, 300);
-    const radius = size / 2 - 20;
-
-    const svg = container.append('svg')
-        .attr('viewBox', `0 0 ${size} ${size}`)
-        .append('g').attr('transform', `translate(${size/2},${size/2})`);
-
-    // Filter out zero-count entries
-    const statusData = statusDistribution.filter(d => d.count > 0);
-    if (!statusData.length) { container.html('<div class="no-data">No transactions yet</div>'); return; }
-
-    // Single-segment fix: draw a full circle to avoid invalid arc flag in D3
-    if (statusData.length === 1) {
-        svg.append('circle')
-            .attr('r', radius)
-            .attr('fill', STATUS_COLORS[statusData[0].status] || '#666')
-            .attr('stroke', '#060E1F').attr('stroke-width', 2)
-            .style('opacity', 0)
-            .on('mouseover', (e) => showTooltip(e, `<div class="tooltip-label">${statusData[0].status.toUpperCase()}</div><div class="tooltip-value">${fmt(statusData[0].count)}</div>`))
-            .on('mouseout', hideTooltip)
-            .transition().duration(800).style('opacity', 1);
-    } else {
-        const pie = d3.pie().value(d => d.count).sort(null).padAngle(0.02);
-        const arc = d3.arc().innerRadius(0).outerRadius(radius);
-        const arcHover = d3.arc().innerRadius(0).outerRadius(radius + 6);
-
-        const arcs = svg.selectAll('.arc').data(pie(statusData)).join('g').attr('class', 'arc');
-
-        arcs.append('path')
-            .attr('fill', d => STATUS_COLORS[d.data.status] || '#666')
-            .attr('stroke', '#060E1F').attr('stroke-width', 2)
-            .on('mouseover', function(e, d) {
-                d3.select(this).transition().duration(150).attr('d', arcHover);
-                showTooltip(e, `<div class="tooltip-label">${d.data.status.toUpperCase()}</div><div class="tooltip-value">${fmt(d.data.count)}</div>`);
-            })
-            .on('mouseout', function(e, d) {
-                d3.select(this).transition().duration(150).attr('d', arc);
-                hideTooltip();
-            })
-            .transition().duration(800).attrTween('d', function(d) {
-                const i = d3.interpolate({ startAngle: 0, endAngle: 0 }, d);
-                return t => arc(i(t));
-            });
-    }
-
-    // Legend
-    const legend = container.append('div').style('display', 'flex').style('flex-wrap', 'wrap').style('gap', '8px 16px').style('margin-top', '12px').style('justify-content', 'center');
-    statusData.forEach(d => {
-        legend.append('div').style('display', 'flex').style('align-items', 'center').style('gap', '6px').style('font-size', '12px')
-            .html(`<span style="width:10px;height:10px;border-radius:3px;background:${STATUS_COLORS[d.status] || '#666'};display:inline-block"></span>${d.status} (${d.count})`);
-    });
-})();
-
-// ═══════════════════════════════════════════════════════════════════════
-// 4. KYC TIER DONUT CHART
-// ═══════════════════════════════════════════════════════════════════════
-(function() {
-    const container = d3.select('#kyc-chart');
-    if (!kycDistribution.length) { container.html('<div class="no-data">No user data</div>'); return; }
-
-    const w = container.node().clientWidth;
-    const size = Math.min(w, 300);
-    const radius = size / 2 - 20;
-    const innerRadius = radius * 0.55;
-
-    const svg = container.append('svg')
-        .attr('viewBox', `0 0 ${size} ${size}`)
-        .append('g').attr('transform', `translate(${size/2},${size/2})`);
-
-    // Filter out zero-count entries
-    const kycData = kycDistribution.filter(d => d.count > 0);
-    if (!kycData.length) { container.html('<div class="no-data">No user data</div>'); return; }
-
-    const total = d3.sum(kycData, d => d.count);
-
-    // Center text
-    svg.append('text').attr('text-anchor', 'middle').attr('dy', '-0.2em')
-        .attr('fill', 'var(--text)').attr('font-size', '24px').attr('font-weight', '700').text(total);
-    svg.append('text').attr('text-anchor', 'middle').attr('dy', '1.2em')
-        .attr('fill', 'var(--text-muted)').attr('font-size', '12px').text('Total Users');
-
-    const kycColors = [COLORS.danger, COLORS.accent, COLORS.info, COLORS.primary];
-
-    // Single-segment fix: draw a full donut ring to avoid invalid arc flag in D3
-    if (kycData.length === 1) {
-        svg.append('path')
-            .attr('d', d3.arc()({innerRadius: innerRadius, outerRadius: radius, startAngle: 0, endAngle: 2 * Math.PI}))
-            .attr('fill', kycColors[kycDistribution.indexOf(kycData[0]) % kycColors.length])
-            .attr('stroke', '#060E1F').attr('stroke-width', 2)
-            .style('opacity', 0)
-            .on('mouseover', (e) => showTooltip(e, `<div class="tooltip-label">${kycData[0].label}</div><div class="tooltip-value">${fmt(kycData[0].count)} users</div><div style="color:var(--text-muted);font-size:12px">100%</div>`))
-            .on('mouseout', hideTooltip)
-            .transition().duration(800).style('opacity', 1);
-    } else {
-        const pie = d3.pie().value(d => d.count).sort(null).padAngle(0.03);
-        const arc = d3.arc().innerRadius(innerRadius).outerRadius(radius).cornerRadius(4);
-        const arcHover = d3.arc().innerRadius(innerRadius).outerRadius(radius + 6).cornerRadius(4);
-
-        const arcs = svg.selectAll('.arc').data(pie(kycData)).join('g').attr('class', 'arc');
-        arcs.append('path')
-            .attr('fill', (d, i) => kycColors[kycDistribution.indexOf(d.data) % kycColors.length])
-            .attr('stroke', '#060E1F').attr('stroke-width', 2)
-            .on('mouseover', function(e, d) {
-                d3.select(this).transition().duration(150).attr('d', arcHover);
-                showTooltip(e, `<div class="tooltip-label">${d.data.label}</div><div class="tooltip-value">${fmt(d.data.count)} users</div><div style="color:var(--text-muted);font-size:12px">${(d.data.count / total * 100).toFixed(1)}%</div>`);
-            })
-            .on('mouseout', function(e, d) {
-                d3.select(this).transition().duration(150).attr('d', arc);
-                hideTooltip();
-            })
-            .transition().duration(800).attrTween('d', function(d) {
-                const i = d3.interpolate({ startAngle: 0, endAngle: 0 }, d);
-                return t => arc(i(t));
-            });
-    }
-
-    // Legend
-    const legend = container.append('div').style('display', 'flex').style('flex-wrap', 'wrap').style('gap', '8px 16px').style('margin-top', '12px').style('justify-content', 'center');
-    kycData.forEach((d) => {
-        const colorIdx = kycDistribution.indexOf(d) % kycColors.length;
-        legend.append('div').style('display', 'flex').style('align-items', 'center').style('gap', '6px').style('font-size', '12px')
-            .html(`<span style="width:10px;height:10px;border-radius:3px;background:${kycColors[colorIdx]};display:inline-block"></span>${d.label} (${d.count})`);
-    });
-})();
-
-// ═══════════════════════════════════════════════════════════════════════
-// 5. REGION HORIZONTAL BAR CHART
-// ═══════════════════════════════════════════════════════════════════════
-(function() {
-    const container = d3.select('#region-chart');
-    if (!regionDistribution.length) { container.html('<div class="no-data">No phone data available</div>'); return; }
-
-    const margin = { top: 10, right: 40, bottom: 20, left: 140 };
-    const width = container.node().clientWidth - margin.left - margin.right;
-    const barH = 36;
-    const height = regionDistribution.length * barH;
-
-    const svg = container.append('svg')
-        .attr('viewBox', `0 0 ${width + margin.left + margin.right} ${height + margin.top + margin.bottom}`)
-        .append('g').attr('transform', `translate(${margin.left},${margin.top})`);
-
-    const x = d3.scaleLinear().domain([0, d3.max(regionDistribution, d => d.count) * 1.15]).range([0, width]);
-    const y = d3.scaleBand().domain(regionDistribution.map(d => d.label)).range([0, height]).padding(0.3);
-
-    svg.selectAll('.bar').data(regionDistribution).join('rect')
-        .attr('y', d => y(d.label)).attr('height', y.bandwidth())
-        .attr('x', 0).attr('width', 0)
-        .attr('rx', 4).attr('fill', (d, i) => CHART_COLORS[i % CHART_COLORS.length])
-        .on('mouseover', (e, d) => showTooltip(e, `<div class="tooltip-label">${d.label}</div><div class="tooltip-value">${fmt(d.count)} users</div>`))
-        .on('mouseout', hideTooltip)
-        .transition().delay((d, i) => i * 100).duration(600).ease(d3.easeCubicOut)
-        .attr('width', d => x(d.count));
-
-    // Value labels
-    svg.selectAll('.val-label').data(regionDistribution).join('text')
-        .attr('x', d => x(d.count) + 6).attr('y', d => y(d.label) + y.bandwidth() / 2)
-        .attr('dy', '0.35em').attr('fill', 'var(--text-muted)').attr('font-size', '12px').attr('font-weight', '600')
-        .text(d => fmt(d.count)).style('opacity', 0)
-        .transition().delay((d, i) => 400 + i * 100).duration(300).style('opacity', 1);
-
-    svg.append('g').attr('class', 'axis').call(d3.axisLeft(y)).select('.domain').remove();
-})();
-
-// ═══════════════════════════════════════════════════════════════════════
-// 6. CRYPTO HOLDINGS BAR CHART
-// ═══════════════════════════════════════════════════════════════════════
-(function() {
-    const container = d3.select('#holdings-chart');
-    if (!cryptoHoldings.length) { container.html('<div class="no-data">No wallet data</div>'); return; }
-
-    const margin = { top: 10, right: 20, bottom: 40, left: 80 };
+    const margin = { top: 8, right: 16, bottom: 48, left: 48 };
     const width = container.node().clientWidth - margin.left - margin.right;
     const height = 260 - margin.top - margin.bottom;
 
     const svg = container.append('svg')
-        .attr('viewBox', `0 0 ${width + margin.left + margin.right} ${height + margin.top + margin.bottom}`)
+        .attr('viewBox', `0 0 ${width+margin.left+margin.right} ${height+margin.top+margin.bottom}`)
         .append('g').attr('transform', `translate(${margin.left},${margin.top})`);
 
-    const x = d3.scaleBand().domain(cryptoHoldings.map(d => d.currency)).range([0, width]).padding(0.35);
-    const y = d3.scaleLinear().domain([0, d3.max(cryptoHoldings, d => d.total_balance) * 1.15 || 1]).nice().range([height, 0]);
+    const x = d3.scaleBand().domain(data.map(d=>d.type)).range([0,width]).padding(0.35);
+    const y = d3.scaleLinear().domain([0,d3.max(data,d=>d.count)*1.15]).nice().range([height,0]);
+    svg.append('g').attr('class','grid').call(d3.axisLeft(y).ticks(5).tickSize(-width).tickFormat(''));
 
-    svg.append('g').attr('class', 'grid').call(d3.axisLeft(y).ticks(5).tickSize(-width).tickFormat(''));
+    svg.selectAll('.bar').data(data).join('rect')
+        .attr('x',d=>x(d.type)).attr('width',x.bandwidth()).attr('y',height).attr('height',0)
+        .attr('rx',5).attr('fill',(d,i)=>PALETTE[i%PALETTE.length])
+        .on('mouseover',(e,d)=>showTip(e,`<div class="tooltip-label">${d.type}</div><div class="tooltip-value">${fmt(d.count)} txns</div><div style="color:var(--text-muted);font-size:12px">Vol: KES ${fmt(d.total_amount)}</div>`))
+        .on('mouseout',hideTip)
+        .transition().delay((d,i)=>i*80).duration(600).ease(d3.easeCubicOut)
+        .attr('y',d=>y(d.count)).attr('height',d=>height-y(d.count));
 
-    const currencyColors = { BTC: '#F7931A', ETH: '#627EEA', USDT: '#26A17B', USDC: '#2775CA', SOL: '#9945FF', KES: COLORS.primary };
-
-    svg.selectAll('.bar').data(cryptoHoldings).join('rect')
-        .attr('x', d => x(d.currency)).attr('width', x.bandwidth())
-        .attr('y', height).attr('height', 0)
-        .attr('rx', 4).attr('fill', d => currencyColors[d.currency] || COLORS.info)
-        .on('mouseover', (e, d) => showTooltip(e, `<div class="tooltip-label">${d.currency}</div><div class="tooltip-value">${fmt(d.total_balance)}</div><div style="color:var(--text-muted);font-size:12px">Locked: ${fmt(d.total_locked)}<br>${d.wallet_count} wallets</div>`))
-        .on('mouseout', hideTooltip)
-        .transition().delay((d, i) => i * 80).duration(600).ease(d3.easeCubicOut)
-        .attr('y', d => y(d.total_balance)).attr('height', d => height - y(d.total_balance));
-
-    svg.append('g').attr('class', 'axis').attr('transform', `translate(0,${height})`).call(d3.axisBottom(x));
-    svg.append('g').attr('class', 'axis').call(d3.axisLeft(y).ticks(5).tickFormat(d => fmtShort(d)));
+    svg.append('g').attr('class','axis').attr('transform',`translate(0,${height})`).call(d3.axisBottom(x)).selectAll('text').attr('transform','rotate(-25)').style('text-anchor','end').style('font-size','9px');
+    svg.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(5).tickFormat(d=>fmtShort(d)));
 })();
 
-// ═══════════════════════════════════════════════════════════════════════
+// 3. STATUS PIE
+(function() {
+    const container = d3.select('#status-chart');
+    const data = statusDistribution.filter(d => d.count > 0);
+    if (!data.length) { container.html('<div class="no-data">No data</div>'); return; }
+
+    const w = container.node().clientWidth, size = Math.min(w, 280), r = size/2-20;
+    const svg = container.append('svg').attr('viewBox',`0 0 ${size} ${size}`).append('g').attr('transform',`translate(${size/2},${size/2})`);
+
+    if (data.length === 1) {
+        svg.append('circle').attr('r',r).attr('fill',STATUS_C[data[0].status]||'#666').attr('stroke','var(--bg-card)').attr('stroke-width',2)
+            .on('mouseover',(e)=>showTip(e,`<div class="tooltip-label">${data[0].status.toUpperCase()}</div><div class="tooltip-value">${fmt(data[0].count)}</div>`))
+            .on('mouseout',hideTip);
+    } else {
+        const pie = d3.pie().value(d=>d.count).sort(null).padAngle(0.02);
+        const arc = d3.arc().innerRadius(0).outerRadius(r);
+        const arcH = d3.arc().innerRadius(0).outerRadius(r+6);
+        svg.selectAll('.arc').data(pie(data)).join('g').append('path')
+            .attr('fill',d=>STATUS_C[d.data.status]||'#666').attr('stroke','var(--bg-card)').attr('stroke-width',2)
+            .on('mouseover',function(e,d){d3.select(this).transition().duration(150).attr('d',arcH);showTip(e,`<div class="tooltip-label">${d.data.status.toUpperCase()}</div><div class="tooltip-value">${fmt(d.data.count)}</div>`);})
+            .on('mouseout',function(e,d){d3.select(this).transition().duration(150).attr('d',arc);hideTip();})
+            .transition().duration(800).attrTween('d',function(d){const i=d3.interpolate({startAngle:0,endAngle:0},d);return t=>arc(i(t));});
+    }
+    const leg = container.append('div').style('display','flex').style('flex-wrap','wrap').style('gap','6px 14px').style('margin-top','12px').style('justify-content','center');
+    data.forEach(d => { leg.append('div').style('display','flex').style('align-items','center').style('gap','5px').style('font-size','11px').style('font-weight','500')
+        .html(`<span style="width:8px;height:8px;border-radius:2px;background:${STATUS_C[d.status]||'#666'};display:inline-block"></span>${d.status} (${d.count})`); });
+})();
+
+// 4. KYC DONUT
+(function() {
+    const container = d3.select('#kyc-chart');
+    const data = kycDistribution.filter(d => d.count > 0);
+    if (!data.length) { container.html('<div class="no-data">No data</div>'); return; }
+    const total = d3.sum(data,d=>d.count);
+    const w = container.node().clientWidth, size = Math.min(w,280), r = size/2-20, ir = r*0.55;
+    const svg = container.append('svg').attr('viewBox',`0 0 ${size} ${size}`).append('g').attr('transform',`translate(${size/2},${size/2})`);
+    svg.append('text').attr('text-anchor','middle').attr('dy','-0.2em').attr('fill','var(--text)').attr('font-size','22px').attr('font-weight','700').attr('font-family','var(--font)').text(total);
+    svg.append('text').attr('text-anchor','middle').attr('dy','1.2em').attr('fill','var(--text-muted)').attr('font-size','11px').attr('font-family','var(--font)').text('Users');
+    const kc = [C.danger,C.accent,C.info,C.primary];
+    if (data.length === 1) {
+        svg.append('path').attr('d',d3.arc()({innerRadius:ir,outerRadius:r,startAngle:0,endAngle:2*Math.PI}))
+            .attr('fill',kc[kycDistribution.indexOf(data[0])%kc.length]).attr('stroke','var(--bg-card)').attr('stroke-width',2);
+    } else {
+        const pie = d3.pie().value(d=>d.count).sort(null).padAngle(0.03);
+        const arc = d3.arc().innerRadius(ir).outerRadius(r).cornerRadius(3);
+        const arcH = d3.arc().innerRadius(ir).outerRadius(r+5).cornerRadius(3);
+        svg.selectAll('.arc').data(pie(data)).join('g').append('path')
+            .attr('fill',(d,i)=>kc[kycDistribution.indexOf(d.data)%kc.length]).attr('stroke','var(--bg-card)').attr('stroke-width',2)
+            .on('mouseover',function(e,d){d3.select(this).transition().duration(150).attr('d',arcH);showTip(e,`<div class="tooltip-label">${d.data.label}</div><div class="tooltip-value">${fmt(d.data.count)} users</div><div style="color:var(--text-muted);font-size:12px">${(d.data.count/total*100).toFixed(1)}%</div>`);})
+            .on('mouseout',function(e,d){d3.select(this).transition().duration(150).attr('d',arc);hideTip();})
+            .transition().duration(800).attrTween('d',function(d){const i=d3.interpolate({startAngle:0,endAngle:0},d);return t=>arc(i(t));});
+    }
+    const leg = container.append('div').style('display','flex').style('flex-wrap','wrap').style('gap','6px 14px').style('margin-top','12px').style('justify-content','center');
+    data.forEach(d => { const ci = kycDistribution.indexOf(d)%kc.length; leg.append('div').style('display','flex').style('align-items','center').style('gap','5px').style('font-size','11px').style('font-weight','500')
+        .html(`<span style="width:8px;height:8px;border-radius:2px;background:${kc[ci]};display:inline-block"></span>${d.label} (${d.count})`); });
+})();
+
+// 5. REGION BARS
+(function() {
+    const container = d3.select('#region-chart');
+    if (!regionDistribution.length) { container.html('<div class="no-data">No data</div>'); return; }
+    const margin = { top:8,right:40,bottom:16,left:130 }, width = container.node().clientWidth-margin.left-margin.right, barH=36, height=regionDistribution.length*barH;
+    const svg = container.append('svg').attr('viewBox',`0 0 ${width+margin.left+margin.right} ${height+margin.top+margin.bottom}`)
+        .append('g').attr('transform',`translate(${margin.left},${margin.top})`);
+    const x = d3.scaleLinear().domain([0,d3.max(regionDistribution,d=>d.count)*1.15]).range([0,width]);
+    const y = d3.scaleBand().domain(regionDistribution.map(d=>d.label)).range([0,height]).padding(0.3);
+    svg.selectAll('.bar').data(regionDistribution).join('rect').attr('y',d=>y(d.label)).attr('height',y.bandwidth()).attr('x',0).attr('width',0)
+        .attr('rx',4).attr('fill',(d,i)=>PALETTE[i%PALETTE.length])
+        .on('mouseover',(e,d)=>showTip(e,`<div class="tooltip-label">${d.label}</div><div class="tooltip-value">${fmt(d.count)} users</div>`))
+        .on('mouseout',hideTip)
+        .transition().delay((d,i)=>i*100).duration(600).ease(d3.easeCubicOut).attr('width',d=>x(d.count));
+    svg.selectAll('.val').data(regionDistribution).join('text').attr('x',d=>x(d.count)+6).attr('y',d=>y(d.label)+y.bandwidth()/2)
+        .attr('dy','0.35em').attr('fill','var(--text-muted)').attr('font-size','12px').attr('font-weight','600').attr('font-family','var(--mono)')
+        .text(d=>fmt(d.count)).style('opacity',0).transition().delay((d,i)=>400+i*100).duration(300).style('opacity',1);
+    svg.append('g').attr('class','axis').call(d3.axisLeft(y)).select('.domain').remove();
+})();
+
+// 6. CRYPTO HOLDINGS
+(function() {
+    const container = d3.select('#holdings-chart');
+    if (!cryptoHoldings.length) { container.html('<div class="no-data">No data</div>'); return; }
+    const margin = { top:8,right:16,bottom:36,left:72 }, width = container.node().clientWidth-margin.left-margin.right, height=240-margin.top-margin.bottom;
+    const svg = container.append('svg').attr('viewBox',`0 0 ${width+margin.left+margin.right} ${height+margin.top+margin.bottom}`)
+        .append('g').attr('transform',`translate(${margin.left},${margin.top})`);
+    const x = d3.scaleBand().domain(cryptoHoldings.map(d=>d.currency)).range([0,width]).padding(0.35);
+    const y = d3.scaleLinear().domain([0,d3.max(cryptoHoldings,d=>d.total_balance)*1.15||1]).nice().range([height,0]);
+    svg.append('g').attr('class','grid').call(d3.axisLeft(y).ticks(5).tickSize(-width).tickFormat(''));
+    const cc = { BTC:'#F7931A',ETH:'#627EEA',USDT:'#26A17B',USDC:'#2775CA',SOL:'#9945FF',KES:C.primary };
+    svg.selectAll('.bar').data(cryptoHoldings).join('rect').attr('x',d=>x(d.currency)).attr('width',x.bandwidth()).attr('y',height).attr('height',0)
+        .attr('rx',5).attr('fill',d=>cc[d.currency]||C.info)
+        .on('mouseover',(e,d)=>showTip(e,`<div class="tooltip-label">${d.currency}</div><div class="tooltip-value">${fmt(d.total_balance)}</div><div style="color:var(--text-muted);font-size:12px">Locked: ${fmt(d.total_locked)} · ${d.wallet_count} wallets</div>`))
+        .on('mouseout',hideTip)
+        .transition().delay((d,i)=>i*80).duration(600).ease(d3.easeCubicOut).attr('y',d=>y(d.total_balance)).attr('height',d=>height-y(d.total_balance));
+    svg.append('g').attr('class','axis').attr('transform',`translate(0,${height})`).call(d3.axisBottom(x));
+    svg.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(5).tickFormat(d=>fmtShort(d)));
+})();
+
 // 7. RECENT TRANSACTIONS TABLE
-// ═══════════════════════════════════════════════════════════════════════
 (function() {
     const wrap = d3.select('#recent-table');
     if (!recentTransactions.length) { wrap.html('<div class="no-data">No transactions yet</div>'); return; }
-
-    const statusClass = s => {
-        if (s === 'completed') return 'badge-completed';
-        if (s === 'failed') return 'badge-failed';
-        if (s === 'reversed') return 'badge-reversed';
-        return 'badge-pending';
-    };
-
+    const sc = s => s==='completed'?'badge-completed':s==='failed'?'badge-failed':s==='reversed'?'badge-reversed':'badge-pending';
     let html = '<table><thead><tr>';
-    ['ID', 'User', 'Type', 'Status', 'Amount', 'Currency', 'Dest Amount', 'Dest Currency', 'Fee', 'Date'].forEach(h => html += `<th>${h}</th>`);
+    ['ID','User','Type','Status','Amount','Currency','Dest','Dest Cur','Fee','Date'].forEach(h => html += `<th>${h}</th>`);
     html += '</tr></thead><tbody>';
     recentTransactions.forEach(tx => {
-        html += '<tr>';
-        html += `<td style="font-family:monospace;color:var(--text-muted)">${tx.id}...</td>`;
-        html += `<td>${tx.user_phone}</td>`;
-        html += `<td><span class="type-badge">${tx.type}</span></td>`;
-        html += `<td><span class="badge ${statusClass(tx.status)}">${tx.status}</span></td>`;
-        html += `<td style="text-align:right;font-weight:600">${fmt(tx.source_amount)}</td>`;
-        html += `<td>${tx.source_currency}</td>`;
-        html += `<td style="text-align:right">${fmt(tx.dest_amount)}</td>`;
-        html += `<td>${tx.dest_currency}</td>`;
-        html += `<td style="text-align:right;color:var(--accent)">${fmt(tx.fee_amount)}</td>`;
-        html += `<td style="color:var(--text-muted)">${tx.created_at}</td>`;
-        html += '</tr>';
+        html += `<tr><td style="font-family:var(--mono);color:var(--text-muted);font-size:11px">${tx.id}…</td>`;
+        html += `<td>${tx.user_phone}</td><td><span class="type-badge">${tx.type}</span></td>`;
+        html += `<td><span class="badge ${sc(tx.status)}">${tx.status}</span></td>`;
+        html += `<td style="text-align:right;font-weight:600;font-family:var(--mono)">${fmt(tx.source_amount)}</td><td>${tx.source_currency}</td>`;
+        html += `<td style="text-align:right;font-family:var(--mono)">${fmt(tx.dest_amount)}</td><td>${tx.dest_currency}</td>`;
+        html += `<td style="text-align:right;color:var(--accent);font-family:var(--mono)">${fmt(tx.fee_amount)}</td>`;
+        html += `<td style="color:var(--text-muted);font-family:var(--mono);font-size:11px">${tx.created_at}</td></tr>`;
     });
     html += '</tbody></table>';
     wrap.html(html);
 })();
 
-// ═══════════════════════════════════════════════════════════════════════
-// 8. AUTO-REFRESH COUNTDOWN
-// ═══════════════════════════════════════════════════════════════════════
+// 8. AUTO-REFRESH
 (function() {
-    let countdown = 60;
-    const uptimeEl = document.getElementById('uptime-val');
-    if (!uptimeEl) return;
-
-    function tick() {
-        uptimeEl.textContent = countdown + 's';
-        if (countdown <= 0) {
-            window.location.reload();
-            return;
-        }
-        countdown--;
-        setTimeout(tick, 1000);
-    }
+    let cd = 60; const el = document.getElementById('uptime-val');
+    if (!el) return;
+    function tick() { el.textContent = cd + 's'; if (cd <= 0) { window.location.reload(); return; } cd--; setTimeout(tick, 1000); }
     tick();
 })();
 </script>

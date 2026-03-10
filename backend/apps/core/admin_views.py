@@ -22,17 +22,44 @@ class DecimalEncoder(json.JSONEncoder):
         return super().default(obj)
 
 
+def _period_comparison(qs_base, now, days, amount_field="source_amount"):
+    """Compare current period vs previous period, return (current, previous, pct_change)."""
+    current_start = now - timedelta(days=days)
+    previous_start = now - timedelta(days=days * 2)
+    current = qs_base.filter(created_at__gte=current_start).aggregate(
+        count=Count("id"), volume=Sum(amount_field)
+    )
+    previous = qs_base.filter(
+        created_at__gte=previous_start, created_at__lt=current_start
+    ).aggregate(count=Count("id"), volume=Sum(amount_field))
+    cur_count = current["count"] or 0
+    prev_count = previous["count"] or 0
+    cur_vol = float(current["volume"] or 0)
+    prev_vol = float(previous["volume"] or 0)
+    count_pct = ((cur_count - prev_count) / prev_count * 100) if prev_count else (100 if cur_count else 0)
+    vol_pct = ((cur_vol - prev_vol) / prev_vol * 100) if prev_vol else (100 if cur_vol else 0)
+    return {
+        "count": cur_count, "prev_count": prev_count,
+        "volume": cur_vol, "prev_volume": prev_vol,
+        "count_change": round(count_pct, 1),
+        "volume_change": round(vol_pct, 1),
+    }
+
+
 @staff_member_required
 def admin_stats_dashboard(request):
     """Admin statistics dashboard with comprehensive platform metrics."""
     now = timezone.now()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     thirty_days_ago = now - timedelta(days=30)
+    seven_days_ago = now - timedelta(days=7)
 
     # ── User Stats ──────────────────────────────────────────────────────
     total_users = User.objects.count()
     active_users = User.objects.filter(is_active=True).count()
     new_users_today = User.objects.filter(created_at__gte=today_start).count()
+    new_users_7d = User.objects.filter(created_at__gte=seven_days_ago).count()
+    new_users_30d = User.objects.filter(created_at__gte=thirty_days_ago).count()
     suspended_users = User.objects.filter(is_suspended=True).count()
 
     # ── Transaction Stats ───────────────────────────────────────────────
@@ -42,6 +69,7 @@ def admin_stats_dashboard(request):
     pending_transactions = Transaction.objects.filter(
         status__in=["pending", "processing", "confirming"]
     ).count()
+    success_rate = round(completed_transactions / total_transactions * 100, 1) if total_transactions else 0
 
     # ── Revenue (fees from completed transactions) ──────────────────────
     revenue_result = Transaction.objects.filter(
@@ -49,6 +77,23 @@ def admin_stats_dashboard(request):
         fee_amount__gt=0,
     ).aggregate(total_fees=Sum("fee_amount"))
     total_revenue = revenue_result["total_fees"] or Decimal("0")
+
+    # ── Trend Comparisons (24h, 7d, 30d) ───────────────────────────────
+    completed_qs = Transaction.objects.filter(status="completed")
+    trends_24h = _period_comparison(completed_qs, now, 1)
+    trends_7d = _period_comparison(completed_qs, now, 7)
+    trends_30d = _period_comparison(completed_qs, now, 30)
+
+    # ── Revenue by period ──────────────────────────────────────────────
+    rev_24h = float(Transaction.objects.filter(
+        status="completed", fee_amount__gt=0, created_at__gte=now - timedelta(days=1)
+    ).aggregate(s=Sum("fee_amount"))["s"] or 0)
+    rev_7d = float(Transaction.objects.filter(
+        status="completed", fee_amount__gt=0, created_at__gte=seven_days_ago
+    ).aggregate(s=Sum("fee_amount"))["s"] or 0)
+    rev_30d = float(Transaction.objects.filter(
+        status="completed", fee_amount__gt=0, created_at__gte=thirty_days_ago
+    ).aggregate(s=Sum("fee_amount"))["s"] or 0)
 
     # ── Transaction Volume by Type ──────────────────────────────────────
     volume_by_type_qs = (
@@ -195,14 +240,24 @@ def admin_stats_dashboard(request):
         "total_users": total_users,
         "active_users": active_users,
         "new_users_today": new_users_today,
+        "new_users_7d": new_users_7d,
+        "new_users_30d": new_users_30d,
         "suspended_users": suspended_users,
         "total_transactions": total_transactions,
         "completed_transactions": completed_transactions,
         "failed_transactions": failed_transactions,
         "pending_transactions": pending_transactions,
+        "success_rate": success_rate,
         "total_revenue": float(total_revenue),
+        "rev_24h": rev_24h,
+        "rev_7d": rev_7d,
+        "rev_30d": rev_30d,
         "active_wallets": active_wallets,
         "total_wallets": total_wallets,
+        # Trend data
+        "trends_24h_json": json.dumps(trends_24h),
+        "trends_7d_json": json.dumps(trends_7d),
+        "trends_30d_json": json.dumps(trends_30d),
         # JSON data for D3 charts
         "volume_by_type_json": json.dumps(volume_by_type, cls=DecimalEncoder),
         "daily_volume_json": json.dumps(daily_volume, cls=DecimalEncoder),
