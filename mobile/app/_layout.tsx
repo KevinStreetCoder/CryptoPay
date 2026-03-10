@@ -14,6 +14,7 @@ import { DashboardLayout } from "../src/components/WebSidebar";
 import { usePushNotifications } from "../src/hooks/usePushNotifications";
 import { storage } from "../src/utils/storage";
 import { initTheme } from "../src/stores/theme";
+import { initPrivacy } from "../src/utils/privacy";
 import { OnboardingModal, ONBOARDING_COMPLETED_KEY } from "./onboarding";
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -35,7 +36,7 @@ function RootNavigator() {
 
   useEffect(() => {
     const init = async () => {
-      await Promise.all([bootstrap(), initTheme()]);
+      await Promise.all([bootstrap(), initTheme(), initPrivacy()]);
       setAppReady(true);
       await SplashScreen.hideAsync().catch(() => {});
     };

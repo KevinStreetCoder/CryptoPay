@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from "react";
-import { View, Text, Pressable, Platform, useWindowDimensions } from "react-native";
+import { View, Text, Pressable, Platform, useWindowDimensions, Image } from "react-native";
 import { useRouter, usePathname } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../stores/auth";
@@ -438,38 +438,49 @@ export function WebSidebar() {
         {/* User card */}
         {collapsed ? (
           /* Collapsed: just the avatar */
-          <View
-            style={{
-              alignItems: "center",
-              marginBottom: 10,
-            }}
-          >
-            <View
-              style={{
-                width: 42,
-                height: 42,
-                borderRadius: 12,
-                backgroundColor: colors.primary[500] + "30",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <Text
+          <View style={{ alignItems: "center", marginBottom: 10 }}>
+            {user?.avatar_url ? (
+              <Image
+                source={{ uri: user.avatar_url }}
                 style={{
-                  color: colors.primary[400],
-                  fontSize: 14,
-                  fontFamily: "Inter_700Bold",
+                  width: 42,
+                  height: 42,
+                  borderRadius: 12,
+                  borderWidth: 1.5,
+                  borderColor: colors.primary[500] + "40",
+                }}
+              />
+            ) : (
+              <View
+                style={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: 12,
+                  backgroundColor: colors.primary[500] + "30",
+                  alignItems: "center",
+                  justifyContent: "center",
                 }}
               >
-                {getInitials(user?.full_name)}
-              </Text>
-            </View>
+                <Text
+                  style={{
+                    color: colors.primary[400],
+                    fontSize: 14,
+                    fontFamily: "Inter_700Bold",
+                  }}
+                >
+                  {getInitials(user?.full_name)}
+                </Text>
+              </View>
+            )}
           </View>
         ) : (
-          /* Expanded: full user card */
-          <View
-            style={{
-              backgroundColor: isDark ? "rgba(255, 255, 255, 0.04)" : "rgba(0, 0, 0, 0.04)",
+          /* Expanded: user card — avatar + name only, no phone */
+          <Pressable
+            onPress={() => router.push("/(tabs)/profile" as any)}
+            style={({ hovered }: any) => ({
+              backgroundColor: hovered
+                ? (isDark ? "rgba(255, 255, 255, 0.06)" : "rgba(0, 0, 0, 0.06)")
+                : (isDark ? "rgba(255, 255, 255, 0.04)" : "rgba(0, 0, 0, 0.04)"),
               borderRadius: 14,
               padding: 14,
               flexDirection: "row",
@@ -478,51 +489,54 @@ export function WebSidebar() {
               marginBottom: 10,
               borderWidth: 1,
               borderColor: isDark ? "rgba(255, 255, 255, 0.06)" : "rgba(0, 0, 0, 0.06)",
-            }}
+              ...(Platform.OS === "web" ? { cursor: "pointer", transition: "background-color 0.15s ease" } as any : {}),
+            })}
           >
-            <View
+            {user?.avatar_url ? (
+              <Image
+                source={{ uri: user.avatar_url }}
+                style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: 10,
+                  borderWidth: 1.5,
+                  borderColor: colors.primary[500] + "30",
+                }}
+              />
+            ) : (
+              <View
+                style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: 10,
+                  backgroundColor: colors.primary[500] + "30",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Text
+                  style={{
+                    color: colors.primary[400],
+                    fontSize: 14,
+                    fontFamily: "Inter_700Bold",
+                  }}
+                >
+                  {getInitials(user?.full_name)}
+                </Text>
+              </View>
+            )}
+            <Text
               style={{
-                width: 38,
-                height: 38,
-                borderRadius: 10,
-                backgroundColor: colors.primary[500] + "30",
-                alignItems: "center",
-                justifyContent: "center",
+                flex: 1,
+                color: tc.textPrimary,
+                fontSize: 13,
+                fontFamily: "Inter_600SemiBold",
               }}
+              numberOfLines={1}
             >
-              <Text
-                style={{
-                  color: colors.primary[400],
-                  fontSize: 14,
-                  fontFamily: "Inter_700Bold",
-                }}
-              >
-                {getInitials(user?.full_name)}
-              </Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text
-                style={{
-                  color: tc.textPrimary,
-                  fontSize: 13,
-                  fontFamily: "Inter_600SemiBold",
-                }}
-                numberOfLines={1}
-              >
-                {user?.full_name || "User"}
-              </Text>
-              <Text
-                style={{
-                  color: tc.textMuted,
-                  fontSize: 11,
-                  fontFamily: "Inter_400Regular",
-                }}
-                numberOfLines={1}
-              >
-                {user?.phone || ""}
-              </Text>
-            </View>
-          </View>
+              {user?.full_name || "User"}
+            </Text>
+          </Pressable>
         )}
 
         {/* Logout */}

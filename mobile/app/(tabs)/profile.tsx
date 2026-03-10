@@ -18,6 +18,7 @@ import * as ImagePicker from "expo-image-picker";
 import { useAuth, isBiometricEnabled, setBiometricEnabled } from "../../src/stores/auth";
 import { useBiometricAuth } from "../../src/hooks/useBiometricAuth";
 import { useToast } from "../../src/components/Toast";
+import { usePhonePrivacy, maskPhone } from "../../src/utils/privacy";
 import { useLocale } from "../../src/hooks/useLocale";
 import { colors, getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
@@ -163,6 +164,7 @@ export default function ProfileScreen() {
   const { isDark, toggle: toggleTheme } = useThemeMode();
   const tc = getThemeColors(isDark);
   const ts = getThemeShadows(isDark);
+  const { formatPhone, phoneVisible, toggle: togglePhoneVisibility } = usePhonePrivacy();
 
   const isWeb = Platform.OS === "web";
   const isDesktop = isWeb && width >= 900;
@@ -434,7 +436,7 @@ export default function ProfileScreen() {
                           fontFamily: "Inter_400Regular",
                         }}
                       >
-                        {user?.phone || "+254 ***"}
+                        {formatPhone(user?.phone)}
                       </Text>
                     </View>
                   </View>
@@ -727,6 +729,23 @@ export default function ProfileScreen() {
                 />
                 <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 72 }} />
                 <MenuItem
+                  icon={phoneVisible ? "eye-outline" : "eye-off-outline"}
+                  label="Show Phone Number"
+                  onPress={togglePhoneVisibility}
+                  iconBg={colors.info + "20"}
+                  iconColor={colors.info}
+                  tc={tc}
+                  trailing={
+                    <Switch
+                      value={phoneVisible}
+                      onValueChange={togglePhoneVisibility}
+                      trackColor={{ false: tc.dark.elevated, true: colors.primary[500] + "60" }}
+                      thumbColor={phoneVisible ? colors.primary[500] : tc.dark.muted}
+                    />
+                  }
+                />
+                <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 72 }} />
+                <MenuItem
                   icon="language-outline"
                   label={t("profile.language")}
                   subtitle={locale === "en" ? t("profile.english") : t("profile.swahili")}
@@ -889,7 +908,7 @@ export default function ProfileScreen() {
                         fontFamily: "Inter_400Regular",
                       }}
                     >
-                      {user?.phone || "+254 ***"}
+                      {formatPhone(user?.phone)}
                     </Text>
                   </View>
                 </View>
@@ -1134,6 +1153,23 @@ export default function ProfileScreen() {
                 iconBg={colors.primary[500] + "20"}
                 iconColor={colors.primary[400]}
                 tc={tc}
+              />
+              <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 72 }} />
+              <MenuItem
+                icon={phoneVisible ? "eye-outline" : "eye-off-outline"}
+                label="Show Phone Number"
+                onPress={togglePhoneVisibility}
+                iconBg={colors.info + "20"}
+                iconColor={colors.info}
+                tc={tc}
+                trailing={
+                  <Switch
+                    value={phoneVisible}
+                    onValueChange={togglePhoneVisibility}
+                    trackColor={{ false: tc.dark.elevated, true: colors.primary[500] + "60" }}
+                    thumbColor={phoneVisible ? colors.primary[500] : tc.dark.muted}
+                  />
+                }
               />
               <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 72 }} />
               <MenuItem
