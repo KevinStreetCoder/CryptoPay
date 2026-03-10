@@ -17,7 +17,8 @@ import { useToast } from "../../src/components/Toast";
 import { useWallets } from "../../src/hooks/useWallets";
 import { ratesApi, Quote } from "../../src/api/rates";
 import { normalizeError } from "../../src/utils/apiErrors";
-import { CURRENCIES, CurrencyCode, colors } from "../../src/constants/theme";
+import { getThemeColors, getThemeShadows, CURRENCIES, CurrencyCode, colors } from "../../src/constants/theme";
+import { useThemeMode } from "../../src/stores/theme";
 
 const CRYPTO_OPTIONS: CurrencyCode[] = ["USDT", "BTC", "ETH"];
 
@@ -33,6 +34,10 @@ export default function SendMpesaScreen() {
   const [loading, setLoading] = useState(false);
   const [phoneFocused, setPhoneFocused] = useState(false);
   const [amountFocused, setAmountFocused] = useState(false);
+
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
+  const ts = getThemeShadows(isDark);
 
   const selectedWallet = wallets?.find((w) => w.currency === selectedCrypto);
   const balance = selectedWallet ? parseFloat(selectedWallet.balance) : 0;
@@ -89,7 +94,7 @@ export default function SendMpesaScreen() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.dark.bg }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={{ flex: 1 }}
@@ -116,23 +121,55 @@ export default function SendMpesaScreen() {
             <Pressable
               onPress={() => router.back()}
               hitSlop={12}
-              style={{ padding: 8 }}
+              style={({ pressed, hovered }: any) => ({
+                width: 42,
+                height: 42,
+                borderRadius: 14,
+                backgroundColor: hovered ? tc.dark.elevated : tc.dark.card,
+                alignItems: "center",
+                justifyContent: "center",
+                borderWidth: 1,
+                borderColor: tc.glass.border,
+                opacity: pressed ? 0.8 : 1,
+                ...(Platform.OS === 'web' ? { cursor: 'pointer', transition: 'all 0.15s ease' } as any : {}),
+              })}
               accessibilityRole="button"
               accessibilityLabel="Go back"
             >
-              <Ionicons name="arrow-back" size={24} color="#fff" />
+              <Ionicons name="arrow-back" size={20} color={tc.textPrimary} />
             </Pressable>
             <Text
               style={{
-                color: "#fff",
+                color: tc.textPrimary,
                 fontSize: 18,
                 fontFamily: "Inter_600SemiBold",
-                marginLeft: 8,
+                marginLeft: 14,
+                flex: 1,
               }}
               maxFontSizeMultiplier={1.3}
             >
               Send to M-Pesa
             </Text>
+
+            {/* Step indicator pills */}
+            <View style={{ flexDirection: "row", gap: 6 }}>
+              <View
+                style={{
+                  width: 24,
+                  height: 4,
+                  borderRadius: 2,
+                  backgroundColor: tc.primary[500],
+                }}
+              />
+              <View
+                style={{
+                  width: 24,
+                  height: 4,
+                  borderRadius: 2,
+                  backgroundColor: tc.dark.elevated,
+                }}
+              />
+            </View>
           </View>
 
           <View
@@ -140,12 +177,20 @@ export default function SendMpesaScreen() {
               paddingHorizontal: 20,
               marginTop: 8,
               width: isDesktop ? 560 : "100%",
+              ...(isDesktop ? {
+                backgroundColor: tc.dark.card,
+                borderRadius: 20,
+                padding: 24,
+                borderWidth: 1,
+                borderColor: tc.glass.border,
+                ...(Platform.OS === 'web' ? { boxShadow: '0 8px 32px rgba(0,0,0,0.3)' } as any : {}),
+              } : {}),
             }}
           >
             {/* Phone Number */}
             <Text
               style={{
-                color: colors.textSecondary,
+                color: tc.textSecondary,
                 fontSize: 14,
                 fontFamily: "Inter_500Medium",
                 marginBottom: 8,
@@ -158,12 +203,12 @@ export default function SendMpesaScreen() {
               style={{
                 flexDirection: "row",
                 alignItems: "center",
-                backgroundColor: "#0C1A2E",
+                backgroundColor: tc.dark.card,
                 borderRadius: 16,
                 borderWidth: 1,
                 borderColor: phoneFocused
-                  ? colors.primary[500]
-                  : colors.dark.border,
+                  ? tc.primary[500]
+                  : tc.dark.border,
                 paddingHorizontal: 16,
                 ...(Platform.OS === 'web' ? { transition: 'border-color 0.2s ease, box-shadow 0.2s ease' } as any : {}),
                 ...(phoneFocused && Platform.OS === 'web' ? { boxShadow: '0 0 0 3px rgba(16, 185, 129, 0.15)' } as any : {}),
@@ -171,7 +216,7 @@ export default function SendMpesaScreen() {
             >
               <Text
                 style={{
-                  color: colors.textSecondary,
+                  color: tc.textSecondary,
                   fontSize: 16,
                   fontFamily: "Inter_600SemiBold",
                   marginRight: 4,
@@ -186,12 +231,12 @@ export default function SendMpesaScreen() {
                   setQuote(null);
                 }}
                 placeholder="7XXXXXXXX"
-                placeholderTextColor={colors.dark.muted}
+                placeholderTextColor={tc.dark.muted}
                 keyboardType="phone-pad"
                 maxLength={10}
                 style={{
                   flex: 1,
-                  color: "#fff",
+                  color: tc.textPrimary,
                   fontSize: 16,
                   fontFamily: "Inter_400Regular",
                   paddingVertical: 14,
@@ -208,7 +253,7 @@ export default function SendMpesaScreen() {
             {/* Amount */}
             <Text
               style={{
-                color: colors.textSecondary,
+                color: tc.textSecondary,
                 fontSize: 14,
                 fontFamily: "Inter_500Medium",
                 marginTop: 20,
@@ -222,12 +267,12 @@ export default function SendMpesaScreen() {
               style={{
                 flexDirection: "row",
                 alignItems: "center",
-                backgroundColor: "#0C1A2E",
+                backgroundColor: tc.dark.card,
                 borderRadius: 16,
                 borderWidth: 1,
                 borderColor: amountFocused
-                  ? colors.primary[500]
-                  : colors.dark.border,
+                  ? tc.primary[500]
+                  : tc.dark.border,
                 paddingHorizontal: 16,
                 ...(Platform.OS === 'web' ? { transition: 'border-color 0.2s ease, box-shadow 0.2s ease' } as any : {}),
                 ...(amountFocused && Platform.OS === 'web' ? { boxShadow: '0 0 0 3px rgba(16, 185, 129, 0.15)' } as any : {}),
@@ -235,7 +280,7 @@ export default function SendMpesaScreen() {
             >
               <Text
                 style={{
-                  color: colors.textSecondary,
+                  color: tc.textSecondary,
                   fontSize: 18,
                   fontFamily: "Inter_700Bold",
                   marginRight: 4,
@@ -250,11 +295,11 @@ export default function SendMpesaScreen() {
                   setQuote(null);
                 }}
                 placeholder="0"
-                placeholderTextColor={colors.dark.muted}
+                placeholderTextColor={tc.dark.muted}
                 keyboardType="numeric"
                 style={{
                   flex: 1,
-                  color: "#fff",
+                  color: tc.textPrimary,
                   fontSize: 24,
                   fontFamily: "Inter_700Bold",
                   paddingVertical: 12,
@@ -271,7 +316,7 @@ export default function SendMpesaScreen() {
             {/* Crypto Selector */}
             <Text
               style={{
-                color: colors.textSecondary,
+                color: tc.textSecondary,
                 fontSize: 14,
                 fontFamily: "Inter_500Medium",
                 marginTop: 20,
@@ -287,6 +332,7 @@ export default function SendMpesaScreen() {
                 const isSelected = selectedCrypto === crypto;
                 const wallet = wallets?.find((w) => w.currency === crypto);
                 const bal = wallet ? parseFloat(wallet.balance) : 0;
+                const brandColor = colors.crypto[crypto] ?? tc.primary[500];
 
                 return (
                   <Pressable
@@ -301,30 +347,53 @@ export default function SendMpesaScreen() {
                       padding: 12,
                       borderWidth: 1,
                       borderColor: isSelected
-                        ? colors.primary[500]
-                        : colors.dark.border,
+                        ? tc.primary[500]
+                        : tc.dark.border,
                       backgroundColor: isSelected
-                        ? colors.primary[500] + "1A"
-                        : "#0C1A2E",
+                        ? tc.primary[500] + "1A"
+                        : tc.dark.card,
                       ...(Platform.OS === 'web' ? { cursor: 'pointer', transition: 'all 0.15s ease' } as any : {}),
                     }}
                     accessibilityRole="button"
                     accessibilityLabel={`Pay with ${crypto}`}
                     accessibilityState={{ selected: isSelected }}
                   >
+                    <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 4 }}>
+                      <View
+                        style={{
+                          width: 26,
+                          height: 26,
+                          borderRadius: 13,
+                          backgroundColor: isSelected ? brandColor : tc.dark.border,
+                          alignItems: "center",
+                          justifyContent: "center",
+                          marginRight: 6,
+                        }}
+                      >
+                        <Text
+                          style={{
+                            color: isSelected ? "#fff" : tc.textSecondary,
+                            fontSize: 13,
+                            fontWeight: "700",
+                          }}
+                        >
+                          {info.iconSymbol}
+                        </Text>
+                      </View>
+                      <Text
+                        style={{
+                          fontSize: 14,
+                          fontFamily: "Inter_600SemiBold",
+                          color: isSelected ? tc.primary[400] : tc.textPrimary,
+                        }}
+                        maxFontSizeMultiplier={1.3}
+                      >
+                        {info.symbol}
+                      </Text>
+                    </View>
                     <Text
                       style={{
-                        fontSize: 14,
-                        fontFamily: "Inter_600SemiBold",
-                        color: isSelected ? colors.primary[400] : "#fff",
-                      }}
-                      maxFontSizeMultiplier={1.3}
-                    >
-                      {info.symbol}
-                    </Text>
-                    <Text
-                      style={{
-                        color: colors.textMuted,
+                        color: tc.textMuted,
                         fontSize: 12,
                         fontFamily: "Inter_400Regular",
                         marginTop: 2,
@@ -342,10 +411,10 @@ export default function SendMpesaScreen() {
             {quote && (
               <View
                 style={{
-                  backgroundColor: "#0C1A2E",
+                  backgroundColor: tc.dark.card,
                   borderRadius: 16,
                   borderWidth: 1,
-                  borderColor: colors.primary[500] + "4D",
+                  borderColor: tc.primary[500] + "4D",
                   padding: 16,
                   marginTop: 20,
                 }}
@@ -359,7 +428,7 @@ export default function SendMpesaScreen() {
                 >
                   <Text
                     style={{
-                      color: colors.textMuted,
+                      color: tc.textMuted,
                       fontSize: 14,
                       fontFamily: "Inter_400Regular",
                     }}
@@ -369,7 +438,7 @@ export default function SendMpesaScreen() {
                   </Text>
                   <Text
                     style={{
-                      color: "#fff",
+                      color: tc.textPrimary,
                       fontSize: 14,
                       fontFamily: "Inter_500Medium",
                     }}
@@ -388,7 +457,7 @@ export default function SendMpesaScreen() {
                 >
                   <Text
                     style={{
-                      color: colors.textMuted,
+                      color: tc.textMuted,
                       fontSize: 14,
                       fontFamily: "Inter_400Regular",
                     }}
@@ -398,7 +467,7 @@ export default function SendMpesaScreen() {
                   </Text>
                   <Text
                     style={{
-                      color: "#fff",
+                      color: tc.textPrimary,
                       fontSize: 14,
                       fontFamily: "Inter_500Medium",
                     }}
@@ -407,10 +476,43 @@ export default function SendMpesaScreen() {
                     KSh {quote.fee_kes}
                   </Text>
                 </View>
+
+                {/* Excise Duty */}
+                {quote.excise_duty_kes && parseFloat(quote.excise_duty_kes) > 0 && (
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      marginBottom: 8,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: tc.textMuted,
+                        fontSize: 14,
+                        fontFamily: "Inter_400Regular",
+                      }}
+                      maxFontSizeMultiplier={1.3}
+                    >
+                      Excise Duty (10%)
+                    </Text>
+                    <Text
+                      style={{
+                        color: tc.textPrimary,
+                        fontSize: 14,
+                        fontFamily: "Inter_500Medium",
+                      }}
+                      maxFontSizeMultiplier={1.3}
+                    >
+                      KSh {parseFloat(quote.excise_duty_kes).toLocaleString()}
+                    </Text>
+                  </View>
+                )}
+
                 <View
                   style={{
                     height: 1,
-                    backgroundColor: colors.dark.border,
+                    backgroundColor: tc.dark.border,
                     marginVertical: 8,
                   }}
                 />
@@ -422,7 +524,7 @@ export default function SendMpesaScreen() {
                 >
                   <Text
                     style={{
-                      color: colors.textSecondary,
+                      color: tc.textSecondary,
                       fontSize: 14,
                       fontFamily: "Inter_500Medium",
                     }}
@@ -432,7 +534,7 @@ export default function SendMpesaScreen() {
                   </Text>
                   <Text
                     style={{
-                      color: colors.primary[400],
+                      color: tc.primary[400],
                       fontSize: 16,
                       fontFamily: "Inter_700Bold",
                     }}
@@ -444,7 +546,7 @@ export default function SendMpesaScreen() {
                 {parseFloat(quote.crypto_amount) > balance && (
                   <Text
                     style={{
-                      color: colors.error,
+                      color: tc.error,
                       fontSize: 12,
                       fontFamily: "Inter_400Regular",
                       marginTop: 8,
@@ -456,7 +558,7 @@ export default function SendMpesaScreen() {
                 )}
                 <Text
                   style={{
-                    color: colors.textMuted,
+                    color: tc.textMuted,
                     fontSize: 12,
                     fontFamily: "Inter_400Regular",
                     marginTop: 8,
