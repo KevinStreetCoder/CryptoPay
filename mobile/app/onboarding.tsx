@@ -13,19 +13,15 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { storage } from "../src/utils/storage";
+import { colors, getThemeColors } from "../src/constants/theme";
+import { useThemeMode } from "../src/stores/theme";
 
 const isWeb = Platform.OS === "web";
 
-const C = {
-  bg: "#060E1F",
-  card: "#0C1A2E",
-  elevated: "#162742",
-  border: "#1E3350",
-  primary: "#10B981",
-  primaryDark: "#059669",
-  textPrimary: "#F0F4F8",
-  textSecondary: "#8899AA",
-  textMuted: "#556B82",
+// Static colors that don't change with theme
+const S = {
+  primary: colors.primary[500],
+  primaryDark: colors.primary[600],
   white: "#FFFFFF",
   backdrop: "rgba(0,0,0,0.7)",
 };
@@ -86,10 +82,12 @@ function Dot({
   index,
   scrollX,
   itemWidth,
+  tc,
 }: {
   index: number;
   scrollX: Animated.Value;
   itemWidth: number;
+  tc: ReturnType<typeof getThemeColors>;
 }) {
   const inputRange = [
     (index - 1) * itemWidth,
@@ -103,7 +101,7 @@ function Dot({
   });
   const bg = scrollX.interpolate({
     inputRange,
-    outputRange: [C.textMuted, C.primary, C.textMuted],
+    outputRange: [tc.textMuted, S.primary, tc.textMuted],
     extrapolate: "clamp",
   });
   const o = scrollX.interpolate({
@@ -115,27 +113,27 @@ function Dot({
 }
 
 // ── Web popup card slide ─────────────────────────────────────────────────────
-function WebSlide({ item }: { item: Slide }) {
+function WebSlide({ item, tc }: { item: Slide; tc: ReturnType<typeof getThemeColors> }) {
   return (
     <View style={s.webSlide}>
       <View style={[s.iconCircle, { backgroundColor: item.iconBg }]}>
         <Ionicons name={item.icon} size={48} color={item.iconColor} />
       </View>
-      <Text style={s.webTitle}>{item.title}</Text>
-      <Text style={s.webDesc}>{item.description}</Text>
+      <Text style={[s.webTitle, { color: tc.textPrimary }]}>{item.title}</Text>
+      <Text style={[s.webDesc, { color: tc.textSecondary }]}>{item.description}</Text>
     </View>
   );
 }
 
 // ── Mobile slide ─────────────────────────────────────────────────────────────
-function MobileSlide({ item, width }: { item: Slide; width: number }) {
+function MobileSlide({ item, width, tc }: { item: Slide; width: number; tc: ReturnType<typeof getThemeColors> }) {
   return (
     <View style={[s.mobileSlide, { width }]}>
       <View style={[s.iconCircleLarge, { backgroundColor: item.iconBg }]}>
         <Ionicons name={item.icon} size={72} color={item.iconColor} />
       </View>
-      <Text style={s.mobileTitle}>{item.title}</Text>
-      <Text style={s.mobileDesc}>{item.description}</Text>
+      <Text style={[s.mobileTitle, { color: tc.textPrimary }]}>{item.title}</Text>
+      <Text style={[s.mobileDesc, { color: tc.textSecondary }]}>{item.description}</Text>
     </View>
   );
 }
@@ -149,6 +147,8 @@ export function OnboardingModal({
   onComplete: () => void;
 }) {
   const { width: screenW, height: screenH } = useWindowDimensions();
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
   const isDesktop = isWeb && screenW >= 768;
   const scrollX = useRef(new Animated.Value(0)).current;
   const flatListRef = useRef<FlatList>(null);
@@ -219,6 +219,8 @@ export function OnboardingModal({
           style={[
             s.webCard,
             {
+              backgroundColor: tc.dark.card,
+              borderColor: tc.dark.border,
               width: CARD_W,
               transform: [
                 {
@@ -234,18 +236,18 @@ export function OnboardingModal({
         >
           {/* Step indicator */}
           <View style={s.webStepRow}>
-            <Text style={s.webStepLabel}>
+            <Text style={[s.webStepLabel, { color: tc.textMuted }]}>
               {currentIndex + 1} of {slides.length}
             </Text>
             {!isLast && (
               <Pressable onPress={handleFinish} hitSlop={12}>
-                <Text style={s.webSkipText}>Skip</Text>
+                <Text style={[s.webSkipText, { color: tc.textSecondary }]}>Skip</Text>
               </Pressable>
             )}
           </View>
 
           {/* Slide content */}
-          <WebSlide item={slides[currentIndex]} />
+          <WebSlide item={slides[currentIndex]} tc={tc} />
 
           {/* Dots */}
           <View style={s.webDots}>
@@ -254,7 +256,8 @@ export function OnboardingModal({
                 key={i}
                 style={[
                   s.webDot,
-                  i === currentIndex && s.webDotActive,
+                  { backgroundColor: tc.textMuted },
+                  i === currentIndex && [s.webDotActive, { backgroundColor: S.primary }],
                 ]}
               />
             ))}
@@ -268,7 +271,7 @@ export function OnboardingModal({
             }}
             style={({ pressed }) => [
               s.webButton,
-              pressed && { backgroundColor: C.primaryDark },
+              pressed && { backgroundColor: S.primaryDark },
             ]}
           >
             <Text style={s.webButtonText}>
@@ -277,7 +280,7 @@ export function OnboardingModal({
             <Ionicons
               name={isLast ? "checkmark-circle" : "arrow-forward"}
               size={18}
-              color={C.white}
+              color={S.white}
             />
           </Pressable>
         </Animated.View>
@@ -295,12 +298,12 @@ export function OnboardingModal({
       transparent
       statusBarTranslucent
     >
-      <View style={s.mobileOverlay}>
+      <View style={[s.mobileOverlay, { backgroundColor: tc.dark.bg }]}>
         {/* Header */}
         <View style={s.mobileHeader}>
           <View style={s.mobileLogoRow}>
-            <Ionicons name="diamond" size={20} color={C.primary} />
-            <Text style={s.mobileLogo}>CryptoPay</Text>
+            <Ionicons name="diamond" size={20} color={S.primary} />
+            <Text style={[s.mobileLogo, { color: tc.textPrimary }]}>CryptoPay</Text>
           </View>
           {!isLast && (
             <Pressable
@@ -311,8 +314,8 @@ export function OnboardingModal({
                 pressed && { opacity: 0.6 },
               ]}
             >
-              <Text style={s.mobileSkipText}>Skip</Text>
-              <Ionicons name="chevron-forward" size={14} color={C.textSecondary} />
+              <Text style={[s.mobileSkipText, { color: tc.textSecondary }]}>Skip</Text>
+              <Ionicons name="chevron-forward" size={14} color={tc.textSecondary} />
             </Pressable>
           )}
         </View>
@@ -334,7 +337,7 @@ export function OnboardingModal({
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={viewabilityConfig}
           renderItem={({ item }) => (
-            <MobileSlide item={item} width={slideWidth} />
+            <MobileSlide item={item} width={slideWidth} tc={tc} />
           )}
           getItemLayout={(_, index) => ({
             length: slideWidth,
@@ -347,7 +350,7 @@ export function OnboardingModal({
         <View style={s.mobileFooter}>
           <View style={s.mobileDots}>
             {slides.map((_, i) => (
-              <Dot key={i} index={i} scrollX={scrollX} itemWidth={slideWidth} />
+              <Dot key={i} index={i} scrollX={scrollX} itemWidth={slideWidth} tc={tc} />
             ))}
           </View>
 
@@ -356,7 +359,7 @@ export function OnboardingModal({
             style={({ pressed }) => [
               s.mobileNextBtn,
               isLast && s.mobileFinishBtn,
-              pressed && { backgroundColor: C.primaryDark, transform: [{ scale: 0.97 }] },
+              pressed && { backgroundColor: S.primaryDark, transform: [{ scale: 0.97 }] },
             ]}
           >
             <Text style={s.mobileNextText}>
@@ -365,7 +368,7 @@ export function OnboardingModal({
             <Ionicons
               name={isLast ? "checkmark-circle" : "arrow-forward"}
               size={18}
-              color={C.white}
+              color={S.white}
             />
           </Pressable>
         </View>
@@ -394,14 +397,12 @@ const s = StyleSheet.create({
   },
   webBackdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: C.backdrop,
+    backgroundColor: S.backdrop,
   },
   webCard: {
-    backgroundColor: C.card,
     borderRadius: 24,
     padding: 40,
     borderWidth: 1,
-    borderColor: C.border,
     alignItems: "center",
     ...(isWeb
       ? ({ boxShadow: "0 25px 80px rgba(0,0,0,0.6)" } as any)
@@ -417,14 +418,12 @@ const s = StyleSheet.create({
   webStepLabel: {
     fontSize: 13,
     fontWeight: "600",
-    color: C.textMuted,
     letterSpacing: 0.5,
     textTransform: "uppercase",
   },
   webSkipText: {
     fontSize: 14,
     fontWeight: "600",
-    color: C.textSecondary,
   },
   webSlide: {
     alignItems: "center",
@@ -433,7 +432,6 @@ const s = StyleSheet.create({
   webTitle: {
     fontSize: 22,
     fontWeight: "800",
-    color: C.textPrimary,
     textAlign: "center",
     marginBottom: 12,
     letterSpacing: -0.3,
@@ -441,7 +439,6 @@ const s = StyleSheet.create({
   webDesc: {
     fontSize: 15,
     lineHeight: 22,
-    color: C.textSecondary,
     textAlign: "center",
     maxWidth: 360,
   },
@@ -455,12 +452,10 @@ const s = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: C.textMuted,
     opacity: 0.4,
   },
   webDotActive: {
     width: 24,
-    backgroundColor: C.primary,
     opacity: 1,
   },
   webButton: {
@@ -468,7 +463,7 @@ const s = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: C.primary,
+    backgroundColor: S.primary,
     paddingVertical: 14,
     paddingHorizontal: 36,
     borderRadius: 14,
@@ -478,7 +473,7 @@ const s = StyleSheet.create({
   webButtonText: {
     fontSize: 16,
     fontWeight: "700",
-    color: C.white,
+    color: S.white,
   },
 
   // ── Shared ──
@@ -510,7 +505,6 @@ const s = StyleSheet.create({
   // ── Mobile ──
   mobileOverlay: {
     flex: 1,
-    backgroundColor: C.bg,
   },
   mobileHeader: {
     flexDirection: "row",
@@ -528,7 +522,6 @@ const s = StyleSheet.create({
   mobileLogo: {
     fontSize: 18,
     fontWeight: "700",
-    color: C.textPrimary,
     letterSpacing: 0.3,
   },
   mobileSkipBtn: {
@@ -543,7 +536,6 @@ const s = StyleSheet.create({
   mobileSkipText: {
     fontSize: 14,
     fontWeight: "600",
-    color: C.textSecondary,
   },
   mobileSlide: {
     flex: 1,
@@ -554,7 +546,6 @@ const s = StyleSheet.create({
   mobileTitle: {
     fontSize: 26,
     fontWeight: "800",
-    color: C.textPrimary,
     textAlign: "center",
     marginBottom: 14,
     letterSpacing: -0.3,
@@ -562,7 +553,6 @@ const s = StyleSheet.create({
   mobileDesc: {
     fontSize: 15,
     lineHeight: 23,
-    color: C.textSecondary,
     textAlign: "center",
     maxWidth: 340,
   },
@@ -583,7 +573,7 @@ const s = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: C.primary,
+    backgroundColor: S.primary,
     paddingVertical: 14,
     paddingHorizontal: 28,
     borderRadius: 14,
@@ -594,6 +584,6 @@ const s = StyleSheet.create({
   mobileNextText: {
     fontSize: 16,
     fontWeight: "700",
-    color: C.white,
+    color: S.white,
   },
 });

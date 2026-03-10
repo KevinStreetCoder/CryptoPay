@@ -24,12 +24,14 @@ import { colors, getThemeColors, getThemeShadows } from "../../src/constants/the
 import { useThemeMode } from "../../src/stores/theme";
 import { authApi } from "../../src/api/auth";
 
-const KYC_TIERS = [
-  { tier: 0, label: "Phone Only", limit: "KSh 5,000/day", color: colors.dark.muted },
-  { tier: 1, label: "ID Verified", limit: "KSh 50,000/day", color: colors.warning },
-  { tier: 2, label: "KRA PIN", limit: "KSh 250,000/day", color: colors.info },
-  { tier: 3, label: "Enhanced DD", limit: "KSh 1,000,000/day", color: colors.success },
-];
+function getKycTiers(tc: ReturnType<typeof getThemeColors>) {
+  return [
+    { tier: 0, label: "Phone Only", limit: "KSh 5,000/day", color: tc.dark.muted },
+    { tier: 1, label: "ID Verified", limit: "KSh 50,000/day", color: colors.warning },
+    { tier: 2, label: "KRA PIN", limit: "KSh 250,000/day", color: colors.info },
+    { tier: 3, label: "Enhanced DD", limit: "KSh 1,000,000/day", color: colors.success },
+  ];
+}
 
 interface MenuItemProps {
   icon: string;
@@ -170,6 +172,7 @@ export default function ProfileScreen() {
   const isDesktop = isWeb && width >= 900;
   const isLargeDesktop = isWeb && width >= 1200;
 
+  const KYC_TIERS = getKycTiers(tc);
   const currentTier = KYC_TIERS.find((t) => t.tier === (user?.kyc_tier ?? 0));
   const tierProgress = ((user?.kyc_tier ?? 0) + 1) / KYC_TIERS.length;
 

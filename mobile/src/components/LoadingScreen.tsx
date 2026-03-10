@@ -1,10 +1,14 @@
 import { useEffect, useRef } from "react";
 import { View, Text, Animated, Easing, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { getThemeColors } from "../constants/theme";
+import { useThemeMode } from "../stores/theme";
 
 const useNative = Platform.OS !== "web";
 
 export function LoadingScreen() {
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
   const pulseAnim = useRef(new Animated.Value(0.6)).current;
   const rotateAnim = useRef(new Animated.Value(0)).current;
 
@@ -47,7 +51,7 @@ export function LoadingScreen() {
     <View
       style={{
         flex: 1,
-        backgroundColor: "#060E1F",
+        backgroundColor: tc.dark.bg,
         alignItems: "center",
         justifyContent: "center",
       }}
@@ -72,7 +76,7 @@ export function LoadingScreen() {
           width: 80,
           height: 80,
           borderRadius: 24,
-          backgroundColor: "#10B981",
+          backgroundColor: tc.primary[500],
           alignItems: "center",
           justifyContent: "center",
           opacity: pulseAnim,
@@ -101,7 +105,7 @@ export function LoadingScreen() {
       {/* Brand name */}
       <Text
         style={{
-          color: "#F0F4F8",
+          color: tc.textPrimary,
           fontSize: 28,
           fontFamily: "Inter_700Bold",
           marginTop: 24,
@@ -113,7 +117,7 @@ export function LoadingScreen() {
 
       <Text
         style={{
-          color: "#8899AA",
+          color: tc.textSecondary,
           fontSize: 14,
           fontFamily: "Inter_400Regular",
           marginTop: 8,

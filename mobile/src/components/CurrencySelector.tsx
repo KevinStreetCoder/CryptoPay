@@ -1,6 +1,7 @@
 import { ScrollView, Pressable, View, Text } from "react-native";
 import * as Haptics from "expo-haptics";
-import { CURRENCIES, CurrencyCode, colors } from "../constants/theme";
+import { CURRENCIES, CurrencyCode, colors, getThemeColors } from "../constants/theme";
+import { useThemeMode } from "../stores/theme";
 
 interface CurrencyBalance {
   currency: CurrencyCode;
@@ -20,12 +21,14 @@ export function CurrencySelector({
   onSelect,
   label = "Pay with",
 }: CurrencySelectorProps) {
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
   return (
     <View>
       {label && (
         <Text
           style={{
-            color: colors.textSecondary,
+            color: tc.textSecondary,
             fontSize: 14,
             fontFamily: "Inter_500Medium",
             marginBottom: 10,
@@ -64,10 +67,10 @@ export function CurrencySelector({
                   ? colors.primary[500]
                   : isEmpty
                   ? "rgba(71, 85, 105, 0.5)"
-                  : colors.dark.border,
+                  : tc.dark.border,
                 backgroundColor: isSelected
                   ? "rgba(13, 159, 110, 0.1)"
-                  : colors.dark.card,
+                  : tc.dark.card,
                 opacity: isEmpty ? 0.5 : 1,
                 gap: 10,
                 minWidth: 130,
@@ -81,7 +84,7 @@ export function CurrencySelector({
                   borderRadius: 18,
                   backgroundColor: isSelected
                     ? "rgba(13, 159, 110, 0.2)"
-                    : colors.dark.elevated,
+                    : tc.dark.elevated,
                   alignItems: "center",
                   justifyContent: "center",
                 }}
@@ -92,7 +95,7 @@ export function CurrencySelector({
               <View style={{ flex: 1 }}>
                 <Text
                   style={{
-                    color: isSelected ? colors.primary[400] : "#FFFFFF",
+                    color: isSelected ? colors.primary[400] : tc.textPrimary,
                     fontSize: 14,
                     fontFamily: "Inter_600SemiBold",
                   }}
@@ -101,7 +104,7 @@ export function CurrencySelector({
                 </Text>
                 <Text
                   style={{
-                    color: colors.textMuted,
+                    color: tc.textMuted,
                     fontSize: 11,
                     fontFamily: "Inter_400Regular",
                     marginTop: 1,

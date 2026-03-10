@@ -1,7 +1,8 @@
 import React from "react";
 import { View, Text, Pressable, Animated, StyleSheet, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { colors } from "../constants/theme";
+import { colors, getThemeColors } from "../constants/theme";
+import { useThemeMode } from "../stores/theme";
 
 const useNative = Platform.OS !== "web";
 
@@ -18,6 +19,8 @@ export function QuickAction({
   color = colors.primary[400],
   onPress,
 }: QuickActionProps) {
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
   const scaleAnim = React.useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () => {
@@ -64,7 +67,7 @@ export function QuickAction({
         >
           <Ionicons name={icon as any} size={24} color={color} />
         </View>
-        <Text style={styles.label} maxFontSizeMultiplier={1.3}>
+        <Text style={[styles.label, { color: tc.textMuted }]} maxFontSizeMultiplier={1.3}>
           {label}
         </Text>
       </Pressable>
@@ -94,7 +97,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 12,
     fontFamily: "Inter_600SemiBold",
-    color: colors.textMuted,
+    // color set dynamically via tc.textMuted
     textAlign: "center",
   },
 });

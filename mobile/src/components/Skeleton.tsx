@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { View, Animated, Easing, ViewStyle, StyleSheet, Platform } from "react-native";
-import { colors } from "../constants/theme";
+import { colors, getThemeColors } from "../constants/theme";
+import { useThemeMode } from "../stores/theme";
 
 const useNative = Platform.OS !== "web";
 
@@ -17,6 +18,8 @@ export function Skeleton({
   borderRadius = 8,
   style,
 }: SkeletonProps) {
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
   const shimmer = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -50,7 +53,7 @@ export function Skeleton({
           width: width as any,
           height,
           borderRadius,
-          backgroundColor: colors.dark.elevated,
+          backgroundColor: tc.dark.elevated,
           opacity,
         },
         style,
@@ -60,8 +63,10 @@ export function Skeleton({
 }
 
 export function BalanceCardSkeleton() {
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
   return (
-    <View style={skeletonStyles.balanceCard}>
+    <View style={[skeletonStyles.balanceCard, { backgroundColor: tc.dark.card, borderColor: tc.glass.border }]}>
       <Skeleton width={100} height={14} style={{ marginBottom: 10 }} />
       <Skeleton width={200} height={34} borderRadius={10} style={{ marginBottom: 20 }} />
       <View style={skeletonStyles.row}>
@@ -80,6 +85,8 @@ export function BalanceCardSkeleton() {
 }
 
 export function TransactionSkeleton() {
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
   return (
     <View style={skeletonStyles.transactionContainer}>
       {[1, 2, 3].map((i) => (
@@ -100,8 +107,10 @@ export function TransactionSkeleton() {
 }
 
 export function WalletCardSkeleton() {
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
   return (
-    <View style={skeletonStyles.walletCard}>
+    <View style={[skeletonStyles.walletCard, { backgroundColor: tc.dark.card, borderColor: tc.glass.border }]}>
       <View style={skeletonStyles.walletRow}>
         <View style={skeletonStyles.walletLeft}>
           <Skeleton width={44} height={44} borderRadius={14} />
@@ -121,8 +130,10 @@ export function WalletCardSkeleton() {
 
 /** Skeleton for a single crypto price card with sparkline */
 export function CryptoCardSkeleton() {
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
   return (
-    <View style={skeletonStyles.cryptoCard}>
+    <View style={[skeletonStyles.cryptoCard, { backgroundColor: tc.dark.card, borderColor: tc.glass.border }]}>
       {/* Icon + symbol row */}
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 }}>
         <Skeleton width={32} height={32} borderRadius={10} />
@@ -143,6 +154,8 @@ export function CryptoCardSkeleton() {
 
 /** Row of 4 crypto card skeletons */
 export function CryptoChartsSkeleton() {
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
   return (
     <View style={{ marginBottom: 24 }}>
       <Skeleton width={110} height={11} style={{ marginBottom: 14, marginLeft: 4 }} />
@@ -159,8 +172,10 @@ export function CryptoChartsSkeleton() {
 
 /** Rate ticker skeleton */
 export function RateTickerSkeleton() {
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
   return (
-    <View style={skeletonStyles.rateTicker}>
+    <View style={[skeletonStyles.rateTicker, { backgroundColor: tc.dark.card, borderColor: tc.glass.border }]}>
       <View style={{ flexDirection: "row", gap: 24, alignItems: "center" }}>
         {[1, 2, 3, 4].map((i) => (
           <View key={i} style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -176,8 +191,10 @@ export function RateTickerSkeleton() {
 
 /** Portfolio chart skeleton (sidebar panel) */
 export function PortfolioChartSkeleton() {
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
   return (
-    <View style={skeletonStyles.portfolioChart}>
+    <View style={[skeletonStyles.portfolioChart, { backgroundColor: tc.dark.card, borderColor: tc.glass.border }]}>
       <Skeleton width={100} height={12} style={{ marginBottom: 8 }} />
       <Skeleton width={60} height={22} borderRadius={8} style={{ marginBottom: 4 }} />
       <Skeleton width={80} height={12} style={{ marginBottom: 16 }} />
@@ -193,12 +210,10 @@ export function PortfolioChartSkeleton() {
 
 const skeletonStyles = StyleSheet.create({
   balanceCard: {
-    backgroundColor: colors.dark.card,
     borderRadius: 24,
     padding: 24,
     marginHorizontal: 16,
     borderWidth: 1,
-    borderColor: colors.glass.border,
   },
   row: {
     flexDirection: "row",
@@ -220,12 +235,10 @@ const skeletonStyles = StyleSheet.create({
     alignItems: "flex-end",
   },
   walletCard: {
-    backgroundColor: colors.dark.card,
     borderRadius: 20,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: colors.glass.border,
   },
   walletRow: {
     flexDirection: "row",
@@ -240,24 +253,18 @@ const skeletonStyles = StyleSheet.create({
     alignItems: "flex-end",
   },
   cryptoCard: {
-    backgroundColor: colors.dark.card,
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: colors.glass.border,
   },
   rateTicker: {
-    backgroundColor: colors.dark.card,
     borderRadius: 14,
     padding: 14,
     borderWidth: 1,
-    borderColor: colors.glass.border,
   },
   portfolioChart: {
-    backgroundColor: colors.dark.card,
     borderRadius: 20,
     padding: 20,
     borderWidth: 1,
-    borderColor: colors.glass.border,
   },
 });

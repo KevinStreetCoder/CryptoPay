@@ -1,7 +1,8 @@
 import { View, Text, Pressable, ViewStyle } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { colors } from "../constants/theme";
+import { getThemeColors } from "../constants/theme";
+import { useThemeMode } from "../stores/theme";
 
 interface HeaderProps {
   title: string;
@@ -22,6 +23,8 @@ export function Header({
   transparent = false,
 }: HeaderProps) {
   const router = useRouter();
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
 
   const handleBack = () => {
     if (onBackPress) {
@@ -38,7 +41,7 @@ export function Header({
     paddingHorizontal: 8,
     paddingVertical: 8,
     minHeight: 56,
-    backgroundColor: transparent ? "transparent" : colors.dark.bg,
+    backgroundColor: transparent ? "transparent" : tc.dark.bg,
   };
 
   return (
@@ -56,10 +59,10 @@ export function Header({
             justifyContent: "center",
             backgroundColor: transparent
               ? "rgba(30, 41, 59, 0.6)"
-              : colors.dark.card,
+              : tc.dark.card,
           }}
         >
-          <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
+          <Ionicons name="arrow-back" size={22} color={tc.textPrimary} />
         </Pressable>
       ) : (
         <View style={{ width: 48 }} />
@@ -68,7 +71,7 @@ export function Header({
       {/* Center: title */}
       <Text
         style={{
-          color: "#FFFFFF",
+          color: tc.textPrimary,
           fontSize: 17,
           fontFamily: "Inter_600SemiBold",
           flex: 1,
@@ -92,13 +95,13 @@ export function Header({
             justifyContent: "center",
             backgroundColor: transparent
               ? "rgba(30, 41, 59, 0.6)"
-              : colors.dark.card,
+              : tc.dark.card,
           }}
         >
           <Ionicons
             name={rightAction.icon as any}
             size={22}
-            color="#FFFFFF"
+            color={tc.textPrimary}
           />
         </Pressable>
       ) : (

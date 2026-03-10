@@ -18,7 +18,8 @@ import Svg, {
   Circle,
   Rect,
 } from "react-native-svg";
-import { colors, shadows } from "../constants/theme";
+import { colors, getThemeColors, getThemeShadows } from "../constants/theme";
+import { useThemeMode } from "../stores/theme";
 
 /* ─── Types ─── */
 export interface ChartDataPoint {
@@ -122,6 +123,8 @@ function buildSmoothPath(
 
 /* ─── Skeleton Shimmer ─── */
 function ChartSkeleton({ height }: { height: number }) {
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
   const shimmer = useRef(new Animated.Value(0)).current;
   const useNative = Platform.OS !== "web";
 
@@ -156,7 +159,7 @@ function ChartSkeleton({ height }: { height: number }) {
           width: "40%",
           height: 14,
           borderRadius: 6,
-          backgroundColor: colors.dark.elevated,
+          backgroundColor: tc.dark.elevated,
           opacity,
           marginBottom: 8,
         }}
@@ -166,7 +169,7 @@ function ChartSkeleton({ height }: { height: number }) {
           width: "60%",
           height: 28,
           borderRadius: 8,
-          backgroundColor: colors.dark.elevated,
+          backgroundColor: tc.dark.elevated,
           opacity,
           marginBottom: 16,
         }}
@@ -176,7 +179,7 @@ function ChartSkeleton({ height }: { height: number }) {
           width: "100%",
           height: height,
           borderRadius: 12,
-          backgroundColor: colors.dark.elevated,
+          backgroundColor: tc.dark.elevated,
           opacity,
           marginBottom: 16,
         }}
@@ -189,7 +192,7 @@ function ChartSkeleton({ height }: { height: number }) {
               width: 48,
               height: 28,
               borderRadius: 14,
-              backgroundColor: colors.dark.elevated,
+              backgroundColor: tc.dark.elevated,
               opacity,
             }}
           />
@@ -209,6 +212,8 @@ function PeriodSelector({
   onSelect: (p: Period) => void;
   accentColor: string;
 }) {
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
   const periods: Period[] = ["1D", "7D", "1M", "3M"];
 
   return (
@@ -234,7 +239,7 @@ function PeriodSelector({
               borderRadius: 14,
               backgroundColor: isActive ? accentColor + "22" : "transparent",
               borderWidth: 1,
-              borderColor: isActive ? accentColor + "44" : colors.dark.border,
+              borderColor: isActive ? accentColor + "44" : tc.dark.border,
               opacity: pressed ? 0.7 : 1,
               ...(Platform.OS === "web"
                 ? ({ cursor: "pointer", transition: "all 0.15s ease" } as any)
@@ -243,7 +248,7 @@ function PeriodSelector({
           >
             <Text
               style={{
-                color: isActive ? accentColor : colors.textMuted,
+                color: isActive ? accentColor : tc.textMuted,
                 fontSize: 12,
                 fontFamily: "Inter_600SemiBold",
                 letterSpacing: 0.5,
@@ -274,6 +279,9 @@ function Tooltip({
   chartWidth: number;
   color: string;
 }) {
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
+  const ts = getThemeShadows(isDark);
   const tooltipWidth = 140;
   // Keep tooltip within bounds
   let left = x - tooltipWidth / 2;
@@ -287,19 +295,19 @@ function Tooltip({
         left,
         top: Math.max(y - 60, 0),
         width: tooltipWidth,
-        backgroundColor: colors.dark.elevated,
+        backgroundColor: tc.dark.elevated,
         borderRadius: 10,
         padding: 8,
         borderWidth: 1,
         borderColor: color + "44",
-        ...shadows.md,
+        ...ts.md,
         zIndex: 10,
       }}
       pointerEvents="none"
     >
       <Text
         style={{
-          color: colors.textPrimary,
+          color: tc.textPrimary,
           fontSize: 13,
           fontFamily: "Inter_700Bold",
           textAlign: "center",
@@ -311,7 +319,7 @@ function Tooltip({
       </Text>
       <Text
         style={{
-          color: colors.textMuted,
+          color: tc.textMuted,
           fontSize: 10,
           fontFamily: "Inter_400Regular",
           textAlign: "center",
@@ -341,6 +349,9 @@ export function CryptoChart({
   onPeriodChange,
   loading = false,
 }: CryptoChartProps) {
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
+  const ts = getThemeShadows(isDark);
   const [period, setPeriod] = useState<Period>("7D");
 
   const handlePeriodChange = useCallback(
@@ -524,17 +535,17 @@ export function CryptoChart({
     return (
       <View
         style={{
-          backgroundColor: colors.dark.card,
+          backgroundColor: tc.dark.card,
           borderRadius: 20,
           padding: 24,
           borderWidth: 1,
-          borderColor: colors.glass.border,
+          borderColor: tc.glass.border,
           minHeight: height + 80,
         }}
       >
         <Text
           style={{
-            color: colors.textMuted,
+            color: tc.textMuted,
             fontSize: 14,
             fontFamily: "Inter_500Medium",
             textAlign: "center",
@@ -557,12 +568,12 @@ export function CryptoChart({
   return (
     <View
       style={{
-        backgroundColor: colors.dark.card,
+        backgroundColor: tc.dark.card,
         borderRadius: 20,
         padding: 20,
         borderWidth: 1,
-        borderColor: colors.glass.border,
-        ...shadows.md,
+        borderColor: tc.glass.border,
+        ...ts.md,
       }}
     >
       {/* Price Header */}
@@ -577,7 +588,7 @@ export function CryptoChart({
         <View>
           <Text
             style={{
-              color: colors.textSecondary,
+              color: tc.textSecondary,
               fontSize: 12,
               fontFamily: "Inter_500Medium",
               letterSpacing: 0.5,
@@ -589,7 +600,7 @@ export function CryptoChart({
           </Text>
           <Text
             style={{
-              color: colors.textPrimary,
+              color: tc.textPrimary,
               fontSize: 24,
               fontFamily: "Inter_700Bold",
               letterSpacing: -0.5,
@@ -658,7 +669,7 @@ export function CryptoChart({
                 y1={gl.y}
                 x2={containerWidth - PADDING_H}
                 y2={gl.y}
-                stroke={colors.dark.border}
+                stroke={tc.dark.border}
                 strokeWidth={1}
                 strokeDasharray="4 4"
                 opacity={0.5}
@@ -698,7 +709,7 @@ export function CryptoChart({
                   cy={activePoint.y}
                   r={5}
                   fill={color}
-                  stroke={colors.dark.card}
+                  stroke={tc.dark.card}
                   strokeWidth={2}
                 />
               </>

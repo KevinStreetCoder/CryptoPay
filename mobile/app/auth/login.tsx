@@ -20,31 +20,19 @@ import { useAuth } from "../../src/stores/auth";
 import { useScreenSecurity } from "../../src/hooks/useScreenSecurity";
 import { normalizeError } from "../../src/utils/apiErrors";
 import { useGoogleAuth } from "../../src/hooks/useGoogleAuth";
+import { getThemeColors, getThemeShadows } from "../../src/constants/theme";
+import { useThemeMode } from "../../src/stores/theme";
 
 type Step = "phone" | "pin";
 
-const COLORS = {
-  bg: "#060E1F",
-  card: "#0C1A2E",
-  elevated: "#162742",
-  border: "#1E3350",
-  primary: "#10B981",
-  primaryLight: "#34D399",
-  accent: "#F59E0B",
-  error: "#EF4444",
-  textPrimary: "#F0F4F8",
-  textSecondary: "#8899AA",
-  textMuted: "#556B82",
-};
-
-function KeBadge() {
+function KeBadge({ tc }: { tc: ReturnType<typeof getThemeColors> }) {
   return (
     <View
       style={{
         width: 28,
         height: 20,
         borderRadius: 4,
-        backgroundColor: COLORS.primary,
+        backgroundColor: tc.primary[500],
         alignItems: "center",
         justifyContent: "center",
         marginRight: 8,
@@ -64,7 +52,7 @@ function KeBadge() {
   );
 }
 
-function BrandPanel() {
+function BrandPanel({ tc }: { tc: ReturnType<typeof getThemeColors> }) {
   return (
     <View
       style={{
@@ -108,11 +96,11 @@ function BrandPanel() {
             width: 80,
             height: 80,
             borderRadius: 24,
-            backgroundColor: COLORS.primary,
+            backgroundColor: tc.primary[500],
             alignItems: "center",
             justifyContent: "center",
             marginBottom: 24,
-            shadowColor: COLORS.primary,
+            shadowColor: tc.primary[500],
             shadowOffset: { width: 0, height: 8 },
             shadowOpacity: 0.4,
             shadowRadius: 24,
@@ -122,7 +110,7 @@ function BrandPanel() {
         </View>
         <Text
           style={{
-            color: COLORS.textPrimary,
+            color: tc.textPrimary,
             fontSize: 36,
             fontFamily: "Inter_700Bold",
             letterSpacing: -1,
@@ -133,7 +121,7 @@ function BrandPanel() {
         </Text>
         <Text
           style={{
-            color: COLORS.textSecondary,
+            color: tc.textSecondary,
             fontSize: 18,
             fontFamily: "Inter_400Regular",
             textAlign: "center",
@@ -170,11 +158,11 @@ function BrandPanel() {
                 justifyContent: "center",
               }}
             >
-              <Ionicons name={item.icon} size={20} color={COLORS.primaryLight} />
+              <Ionicons name={item.icon} size={20} color={tc.primary[300]} />
             </View>
             <Text
               style={{
-                color: COLORS.textSecondary,
+                color: tc.textSecondary,
                 fontSize: 15,
                 fontFamily: "Inter_500Medium",
               }}
@@ -192,6 +180,8 @@ export default function LoginScreen() {
   const router = useRouter();
   const { login, googleLogin } = useAuth();
   const toast = useToast();
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
   const [step, setStep] = useState<Step>("phone");
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
@@ -292,7 +282,7 @@ export default function LoginScreen() {
       {/* Card Container */}
       <View
         style={{
-          backgroundColor: COLORS.card,
+          backgroundColor: tc.dark.card,
           borderRadius: 24,
           padding: isDesktop ? 40 : 32,
           borderWidth: 1,
@@ -349,7 +339,7 @@ export default function LoginScreen() {
                   width: 64,
                   height: 64,
                   borderRadius: 20,
-                  backgroundColor: COLORS.primary,
+                  backgroundColor: tc.primary[500],
                   alignItems: "center",
                   justifyContent: "center",
                 }}
@@ -360,7 +350,7 @@ export default function LoginScreen() {
 
             <Text
               style={{
-                color: COLORS.textPrimary,
+                color: tc.textPrimary,
                 fontSize: 30,
                 fontFamily: "Inter_700Bold",
                 letterSpacing: -0.5,
@@ -371,7 +361,7 @@ export default function LoginScreen() {
             </Text>
             <Text
               style={{
-                color: COLORS.textSecondary,
+                color: tc.textSecondary,
                 fontSize: 15,
                 fontFamily: "Inter_400Regular",
                 marginTop: 6,
@@ -389,7 +379,7 @@ export default function LoginScreen() {
           <View style={{ marginBottom: 32 }}>
             <Text
               style={{
-                color: COLORS.textPrimary,
+                color: tc.textPrimary,
                 fontSize: 28,
                 fontFamily: "Inter_700Bold",
                 letterSpacing: -0.5,
@@ -400,7 +390,7 @@ export default function LoginScreen() {
             </Text>
             <Text
               style={{
-                color: COLORS.textMuted,
+                color: tc.textMuted,
                 fontSize: 15,
                 fontFamily: "Inter_400Regular",
                 lineHeight: 22,
@@ -421,7 +411,7 @@ export default function LoginScreen() {
                 <>
                   <Text
                     style={{
-                      color: COLORS.textPrimary,
+                      color: tc.textPrimary,
                       fontSize: 21,
                       fontFamily: "Inter_600SemiBold",
                       marginBottom: 6,
@@ -432,7 +422,7 @@ export default function LoginScreen() {
                   </Text>
                   <Text
                     style={{
-                      color: COLORS.textMuted,
+                      color: tc.textMuted,
                       fontSize: 14,
                       fontFamily: "Inter_400Regular",
                       marginBottom: 24,
@@ -450,7 +440,7 @@ export default function LoginScreen() {
                 style={{
                   flexDirection: "row",
                   alignItems: "center",
-                  backgroundColor: COLORS.elevated,
+                  backgroundColor: tc.dark.elevated,
                   borderRadius: 18,
                   borderWidth: 2,
                   borderColor: phoneFocused
@@ -462,7 +452,7 @@ export default function LoginScreen() {
                   ...(phoneFocused
                     ? isWeb
                       ? ({
-                          shadowColor: COLORS.primary,
+                          shadowColor: tc.primary[500],
                           shadowOffset: { width: 0, height: 0 },
                           shadowOpacity: 0.3,
                           shadowRadius: 12,
@@ -471,10 +461,10 @@ export default function LoginScreen() {
                     : {}),
                 }}
               >
-                <KeBadge />
+                <KeBadge tc={tc} />
                 <Text
                   style={{
-                    color: COLORS.textSecondary,
+                    color: tc.textSecondary,
                     fontSize: 16,
                     fontFamily: "Inter_500Medium",
                     marginRight: 10,
@@ -486,7 +476,7 @@ export default function LoginScreen() {
                   style={{
                     width: 1,
                     height: 24,
-                    backgroundColor: COLORS.border,
+                    backgroundColor: tc.dark.border,
                     marginRight: 12,
                   }}
                 />
@@ -494,7 +484,7 @@ export default function LoginScreen() {
                   value={phone}
                   onChangeText={setPhone}
                   placeholder="712 345 678"
-                  placeholderTextColor={COLORS.textMuted}
+                  placeholderTextColor={tc.textMuted}
                   keyboardType="phone-pad"
                   maxLength={10}
                   autoFocus
@@ -503,7 +493,7 @@ export default function LoginScreen() {
                   onSubmitEditing={handlePhoneSubmit}
                   style={{
                     flex: 1,
-                    color: COLORS.textPrimary,
+                    color: tc.textPrimary,
                     fontSize: 16,
                     fontFamily: "Inter_400Regular",
                     paddingVertical: 16,
@@ -522,7 +512,7 @@ export default function LoginScreen() {
                 disabled={!isPhoneValid}
                 style={({ pressed }) => ({
                   backgroundColor: isPhoneValid
-                    ? COLORS.primary
+                    ? tc.primary[500]
                     : "rgba(16, 185, 129, 0.3)",
                   borderRadius: 18,
                   paddingVertical: 16,
@@ -535,7 +525,7 @@ export default function LoginScreen() {
                   ...(isPhoneValid
                     ? isWeb
                       ? ({
-                          shadowColor: COLORS.primary,
+                          shadowColor: tc.primary[500],
                           shadowOffset: { width: 0, height: 4 },
                           shadowOpacity: 0.3,
                           shadowRadius: 16,
@@ -570,10 +560,10 @@ export default function LoginScreen() {
                   marginBottom: 4,
                 }}
               >
-                <View style={{ flex: 1, height: 1, backgroundColor: COLORS.border }} />
+                <View style={{ flex: 1, height: 1, backgroundColor: tc.dark.border }} />
                 <Text
                   style={{
-                    color: COLORS.textMuted,
+                    color: tc.textMuted,
                     fontSize: 12,
                     fontFamily: "Inter_500Medium",
                     paddingHorizontal: 14,
@@ -581,7 +571,7 @@ export default function LoginScreen() {
                 >
                   OR
                 </Text>
-                <View style={{ flex: 1, height: 1, backgroundColor: COLORS.border }} />
+                <View style={{ flex: 1, height: 1, backgroundColor: tc.dark.border }} />
               </View>
 
               {/* Google Sign-In Button */}
@@ -595,7 +585,7 @@ export default function LoginScreen() {
                   flexDirection: "row",
                   alignItems: "center",
                   justifyContent: "center",
-                  backgroundColor: COLORS.elevated,
+                  backgroundColor: tc.dark.elevated,
                   borderRadius: 18,
                   paddingVertical: 14,
                   marginTop: 16,
@@ -612,13 +602,13 @@ export default function LoginScreen() {
                 testID="google-signin-button"
               >
                 {googleLoading ? (
-                  <ActivityIndicator size="small" color={COLORS.textSecondary} />
+                  <ActivityIndicator size="small" color={tc.textSecondary} />
                 ) : (
                   <Text style={{ fontSize: 18 }}>G</Text>
                 )}
                 <Text
                   style={{
-                    color: COLORS.textPrimary,
+                    color: tc.textPrimary,
                     fontSize: 15,
                     fontFamily: "Inter_600SemiBold",
                   }}
@@ -632,7 +622,7 @@ export default function LoginScreen() {
               <View style={{ marginTop: 24, alignItems: "center" }}>
                 <Text
                   style={{
-                    color: COLORS.textMuted,
+                    color: tc.textMuted,
                     fontSize: 14,
                     fontFamily: "Inter_400Regular",
                   }}
@@ -641,7 +631,7 @@ export default function LoginScreen() {
                   Don't have an account?{" "}
                   <Text
                     style={{
-                      color: COLORS.primaryLight,
+                      color: tc.primary[300],
                       fontFamily: "Inter_600SemiBold",
                     }}
                     onPress={() => router.push("/auth/register")}
@@ -671,12 +661,12 @@ export default function LoginScreen() {
                     <Ionicons
                       name="lock-closed"
                       size={28}
-                      color={COLORS.primaryLight}
+                      color={tc.primary[300]}
                     />
                   </View>
                   <Text
                     style={{
-                      color: COLORS.textPrimary,
+                      color: tc.textPrimary,
                       fontSize: 21,
                       fontFamily: "Inter_600SemiBold",
                       marginBottom: 6,
@@ -688,7 +678,7 @@ export default function LoginScreen() {
                   </Text>
                   <Text
                     style={{
-                      color: COLORS.textMuted,
+                      color: tc.textMuted,
                       fontSize: 14,
                       fontFamily: "Inter_400Regular",
                       textAlign: "center",
@@ -712,7 +702,7 @@ export default function LoginScreen() {
               {loading && (
                 <Text
                   style={{
-                    color: COLORS.primaryLight,
+                    color: tc.primary[300],
                     fontSize: 14,
                     fontFamily: "Inter_500Medium",
                     textAlign: "center",
@@ -741,12 +731,12 @@ export default function LoginScreen() {
                 <Ionicons
                   name="arrow-back"
                   size={16}
-                  color={COLORS.textMuted}
+                  color={tc.textMuted}
                   style={{ marginRight: 6 }}
                 />
                 <Text
                   style={{
-                    color: COLORS.textMuted,
+                    color: tc.textMuted,
                     fontSize: 14,
                     fontFamily: "Inter_500Medium",
                   }}
@@ -770,10 +760,10 @@ export default function LoginScreen() {
           gap: 8,
         }}
       >
-        <Ionicons name="shield-checkmark" size={16} color={COLORS.textMuted} />
+        <Ionicons name="shield-checkmark" size={16} color={tc.textMuted} />
         <Text
           style={{
-            color: COLORS.textMuted,
+            color: tc.textMuted,
             fontSize: 12,
             fontFamily: "Inter_400Regular",
           }}
@@ -788,12 +778,12 @@ export default function LoginScreen() {
   // Desktop web: split layout with brand panel + form
   if (isDesktop) {
     return (
-      <View style={{ flex: 1, flexDirection: "row", backgroundColor: COLORS.bg }}>
-        <BrandPanel />
+      <View style={{ flex: 1, flexDirection: "row", backgroundColor: tc.dark.bg }}>
+        <BrandPanel tc={tc} />
         <View
           style={{
             flex: 1,
-            backgroundColor: COLORS.bg,
+            backgroundColor: tc.dark.bg,
             justifyContent: "center",
           }}
         >
@@ -810,7 +800,7 @@ export default function LoginScreen() {
 
   // Mobile & tablet: standard centered layout
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.bg }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={{ flex: 1 }}

@@ -1,8 +1,9 @@
-import { View, Text, Pressable, StyleSheet } from "react-native";
+import { View, Text, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { Transaction, getTxKesAmount, getTxRecipient } from "../api/payments";
-import { colors } from "../constants/theme";
+import { colors, getThemeColors } from "../constants/theme";
+import { useThemeMode } from "../stores/theme";
 import { usePhonePrivacy } from "../utils/privacy";
 
 const TYPE_CONFIG: Record<
@@ -44,22 +45,6 @@ const TYPE_CONFIG: Record<
     label: "Sell",
     color: colors.accentDark,
   },
-  FEE: {
-    icon: "pricetag-outline",
-    label: "Fee",
-    color: colors.dark.muted,
-  },
-};
-
-const STATUS_CONFIG: Record<
-  string,
-  { color: string; bg: string }
-> = {
-  completed: { color: colors.success, bg: colors.success + "1F" },
-  pending: { color: colors.warning, bg: colors.warning + "1F" },
-  processing: { color: colors.info, bg: colors.info + "1F" },
-  failed: { color: colors.error, bg: colors.error + "1F" },
-  reversed: { color: colors.dark.muted, bg: colors.dark.muted + "1F" },
 };
 
 interface TransactionItemProps {
@@ -70,6 +55,8 @@ interface TransactionItemProps {
 export function TransactionItem({ transaction, onPress }: TransactionItemProps) {
   const router = useRouter();
   const { formatPhone } = usePhonePrivacy();
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
 
   const handlePress = () => {
     if (onPress) {
@@ -82,12 +69,24 @@ export function TransactionItem({ transaction, onPress }: TransactionItemProps) 
   const config = TYPE_CONFIG[transaction.type] || {
     icon: "ellipsis-horizontal",
     label: transaction.type,
-    color: colors.dark.muted,
+    color: tc.dark.muted,
   };
 
-  const statusConfig = STATUS_CONFIG[transaction.status] || {
-    color: colors.dark.muted,
-    bg: colors.dark.muted + "1F",
+  // FEE type uses theme-dependent muted color
+  const resolvedColor =
+    transaction.type === "FEE" ? tc.dark.muted : config.color;
+
+  const statusConfig: Record<string, { color: string; bg: string }> = {
+    completed: { color: colors.success, bg: colors.success + "1F" },
+    pending: { color: colors.warning, bg: colors.warning + "1F" },
+    processing: { color: colors.info, bg: colors.info + "1F" },
+    failed: { color: colors.error, bg: colors.error + "1F" },
+    reversed: { color: tc.dark.muted, bg: tc.dark.muted + "1F" },
+  };
+
+  const currentStatus = statusConfig[transaction.status] || {
+    color: tc.dark.muted,
+    bg: tc.dark.muted + "1F",
   };
 
   const kesAmount = getTxKesAmount(transaction);
@@ -112,8 +111,13 @@ export function TransactionItem({ transaction, onPress }: TransactionItemProps) 
       <Pressable
         onPress={handlePress}
         style={({ pressed }) => [
-          styles.container,
-          pressed && styles.containerPressed,
+          {
+            flexDirection: "row" as const,
+            alignItems: "center" as const,
+            paddingHorizontal: 16,
+            paddingVertical: 14,
+          },
+          pressed && { backgroundColor: tc.glass.bgLight },
         ]}
         accessibilityRole="button"
         accessibilityLabel={`${config.label} ${
@@ -122,47 +126,84 @@ export function TransactionItem({ transaction, onPress }: TransactionItemProps) 
       >
         {/* Icon */}
         <View
-          style={[
-            styles.iconContainer,
-            { backgroundColor: config.color + "1A" }, // 10% opacity
-          ]}
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: 14,
+            alignItems: "center",
+            justifyContent: "center",
+            marginRight: 12,
+            backgroundColor: resolvedColor + "1A",
+          }}
         >
-          <Ionicons name={config.icon as any} size={22} color={config.color} />
+          <Ionicons name={config.icon as any} size={22} color={resolvedColor} />
         </View>
 
         {/* Details */}
-        <View style={styles.details}>
-          <Text style={styles.label} maxFontSizeMultiplier={1.3}>
+        <View style={{ flex: 1 }}>
+          <Text
+            style={{
+              color: tc.textPrimary,
+              fontSize: 15,
+              fontFamily: "Inter_600SemiBold",
+              marginBottom: 2,
+            }}
+            maxFontSizeMultiplier={1.3}
+          >
             {config.label}
           </Text>
-          <Text style={styles.subtitle} numberOfLines={1}>
+          <Text
+            style={{
+              color: tc.dark.muted,
+              fontSize: 13,
+              fontFamily: "Inter_400Regular",
+            }}
+            numberOfLines={1}
+          >
             {recipient || `${dateStr} ${timeStr}`}
           </Text>
         </View>
 
         {/* Amount & Status */}
-        <View style={styles.amountContainer}>
-          <Text style={styles.amount} maxFontSizeMultiplier={1.2}>
+        <View style={{ alignItems: "flex-end" as const }}>
+          <Text
+            style={{
+              color: tc.textPrimary,
+              fontSize: 15,
+              fontFamily: "Inter_700Bold",
+              marginBottom: 4,
+            }}
+            maxFontSizeMultiplier={1.2}
+          >
             KSh{" "}
             {kesAmount.toLocaleString("en-KE", { minimumFractionDigits: 0 })}
           </Text>
           <View
-            style={[
-              styles.statusPill,
-              { backgroundColor: statusConfig.bg },
-            ]}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              paddingHorizontal: 8,
+              paddingVertical: 3,
+              borderRadius: 10,
+              gap: 4,
+              backgroundColor: currentStatus.bg,
+            }}
           >
             <View
-              style={[
-                styles.statusDot,
-                { backgroundColor: statusConfig.color },
-              ]}
+              style={{
+                width: 5,
+                height: 5,
+                borderRadius: 2.5,
+                backgroundColor: currentStatus.color,
+              }}
             />
             <Text
-              style={[
-                styles.statusText,
-                { color: statusConfig.color },
-              ]}
+              style={{
+                fontSize: 11,
+                fontFamily: "Inter_500Medium",
+                textTransform: "capitalize",
+                color: currentStatus.color,
+              }}
             >
               {transaction.status}
             </Text>
@@ -171,73 +212,13 @@ export function TransactionItem({ transaction, onPress }: TransactionItemProps) 
       </Pressable>
 
       {/* Subtle divider */}
-      <View style={styles.divider} />
+      <View
+        style={{
+          height: 1,
+          backgroundColor: tc.glass.border,
+          marginLeft: 72,
+        }}
+      />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  containerPressed: {
-    backgroundColor: "rgba(22, 39, 66, 0.4)",
-  },
-  iconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-  details: {
-    flex: 1,
-  },
-  label: {
-    color: colors.textPrimary,
-    fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
-    marginBottom: 2,
-  },
-  subtitle: {
-    color: colors.dark.muted,
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-  },
-  amountContainer: {
-    alignItems: "flex-end",
-  },
-  amount: {
-    color: "#FFFFFF",
-    fontSize: 15,
-    fontFamily: "Inter_700Bold",
-    marginBottom: 4,
-  },
-  statusPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-    gap: 4,
-  },
-  statusDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-  },
-  statusText: {
-    fontSize: 11,
-    fontFamily: "Inter_500Medium",
-    textTransform: "capitalize",
-  },
-  divider: {
-    height: 1,
-    backgroundColor: "rgba(255, 255, 255, 0.04)",
-    marginLeft: 72, // align with text after icon
-  },
-});

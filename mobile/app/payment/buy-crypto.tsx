@@ -23,7 +23,8 @@ import { ratesApi, Quote } from "../../src/api/rates";
 import { normalizeError } from "../../src/utils/apiErrors";
 import { useScreenSecurity } from "../../src/hooks/useScreenSecurity";
 import { useAuth } from "../../src/stores/auth";
-import { colors, shadows, CURRENCIES } from "../../src/constants/theme";
+import { colors, shadows, CURRENCIES, getThemeColors, getThemeShadows } from "../../src/constants/theme";
+import { useThemeMode } from "../../src/stores/theme";
 
 type CryptoOption = "USDT" | "BTC" | "ETH";
 
@@ -87,6 +88,9 @@ export default function BuyCryptoScreen() {
   const { width } = useWindowDimensions();
   const isWeb = Platform.OS === "web";
   const isDesktop = isWeb && width >= 768;
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
+  const ts = getThemeShadows(isDark);
 
   const [step, setStep] = useState<"form" | "preview" | "pin">("form");
   const [selectedCrypto, setSelectedCrypto] = useState<CryptoOption>("USDT");
@@ -231,7 +235,7 @@ export default function BuyCryptoScreen() {
   // --- RENDER: Form Step ---
   if (step === "form") {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: colors.dark.bg }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
         {/* Header */}
         <View
           style={{
@@ -254,21 +258,21 @@ export default function BuyCryptoScreen() {
               width: 42,
               height: 42,
               borderRadius: 14,
-              backgroundColor: colors.dark.card,
+              backgroundColor: tc.dark.card,
               alignItems: "center",
               justifyContent: "center",
               borderWidth: 1,
-              borderColor: colors.glass.border,
+              borderColor: tc.glass.border,
             }}
             accessibilityRole="button"
             accessibilityLabel="Go back"
             testID="back-button"
           >
-            <Ionicons name="arrow-back" size={20} color={colors.textPrimary} />
+            <Ionicons name="arrow-back" size={20} color={tc.textPrimary} />
           </Pressable>
           <Text
             style={{
-              color: colors.textPrimary,
+              color: tc.textPrimary,
               fontSize: 18,
               fontFamily: "Inter_600SemiBold",
               marginLeft: 14,
@@ -294,7 +298,7 @@ export default function BuyCryptoScreen() {
           {/* Crypto Selector */}
           <Text
             style={{
-              color: colors.textMuted,
+              color: tc.textMuted,
               fontSize: 11,
               fontFamily: "Inter_600SemiBold",
               textTransform: "uppercase",
@@ -324,7 +328,7 @@ export default function BuyCryptoScreen() {
                     flex: 1,
                     backgroundColor: isSelected
                       ? crypto.color + "1A"
-                      : colors.dark.card,
+                      : tc.dark.card,
                     borderRadius: 16,
                     paddingVertical: 14,
                     paddingHorizontal: 12,
@@ -332,7 +336,7 @@ export default function BuyCryptoScreen() {
                     borderWidth: 1.5,
                     borderColor: isSelected
                       ? crypto.color + "60"
-                      : colors.glass.border,
+                      : tc.glass.border,
                     opacity: pressed ? 0.85 : 1,
                     transform: [{ scale: pressed ? 0.97 : 1 }],
                   })}
@@ -362,7 +366,7 @@ export default function BuyCryptoScreen() {
                   </View>
                   <Text
                     style={{
-                      color: isSelected ? colors.textPrimary : colors.textSecondary,
+                      color: isSelected ? tc.textPrimary : tc.textSecondary,
                       fontSize: 14,
                       fontFamily: "Inter_600SemiBold",
                     }}
@@ -372,7 +376,7 @@ export default function BuyCryptoScreen() {
                   </Text>
                   <Text
                     style={{
-                      color: colors.textMuted,
+                      color: tc.textMuted,
                       fontSize: 11,
                       fontFamily: "Inter_400Regular",
                       marginTop: 2,
@@ -389,7 +393,7 @@ export default function BuyCryptoScreen() {
           {/* Amount Input */}
           <Text
             style={{
-              color: colors.textMuted,
+              color: tc.textMuted,
               fontSize: 11,
               fontFamily: "Inter_600SemiBold",
               textTransform: "uppercase",
@@ -403,12 +407,12 @@ export default function BuyCryptoScreen() {
           </Text>
           <View
             style={{
-              backgroundColor: colors.dark.card,
+              backgroundColor: tc.dark.card,
               borderRadius: 16,
               flexDirection: "row",
               alignItems: "center",
               borderWidth: 1,
-              borderColor: colors.glass.border,
+              borderColor: tc.glass.border,
               paddingHorizontal: 16,
               marginBottom: 8,
             }}
@@ -416,7 +420,7 @@ export default function BuyCryptoScreen() {
           >
             <Text
               style={{
-                color: colors.textMuted,
+                color: tc.textMuted,
                 fontSize: 16,
                 fontFamily: "Inter_600SemiBold",
                 marginRight: 8,
@@ -429,11 +433,11 @@ export default function BuyCryptoScreen() {
               value={amountKES}
               onChangeText={handleAmountChange}
               placeholder="0.00"
-              placeholderTextColor={colors.dark.muted}
+              placeholderTextColor={tc.dark.muted}
               keyboardType="decimal-pad"
               style={{
                 flex: 1,
-                color: colors.textPrimary,
+                color: tc.textPrimary,
                 fontSize: 24,
                 fontFamily: "Inter_700Bold",
                 paddingVertical: 18,
@@ -447,7 +451,7 @@ export default function BuyCryptoScreen() {
             {quoteLoading && (
               <ActivityIndicator
                 size="small"
-                color={colors.primary[400]}
+                color={tc.primary[400]}
                 style={{ marginLeft: 8 }}
               />
             )}
@@ -457,7 +461,7 @@ export default function BuyCryptoScreen() {
           {quote && !quoteLoading && parsedAmount >= 10 && (
             <View
               style={{
-                backgroundColor: colors.primary[500] + "0D",
+                backgroundColor: tc.primary[500] + "0D",
                 borderRadius: 12,
                 paddingHorizontal: 14,
                 paddingVertical: 10,
@@ -466,16 +470,16 @@ export default function BuyCryptoScreen() {
                 gap: 8,
                 marginBottom: 24,
                 borderWidth: 1,
-                borderColor: colors.primary[500] + "1A",
+                borderColor: tc.primary[500] + "1A",
               }}
               accessibilityRole="text"
               accessibilityLabel={`You will receive approximately ${quote.crypto_amount} ${selectedCrypto}`}
               testID="rate-preview"
             >
-              <Ionicons name="swap-horizontal" size={16} color={colors.primary[400]} />
+              <Ionicons name="swap-horizontal" size={16} color={tc.primary[400]} />
               <Text
                 style={{
-                  color: colors.primary[400],
+                  color: tc.primary[400],
                   fontSize: 14,
                   fontFamily: "Inter_500Medium",
                   flex: 1,
@@ -483,7 +487,7 @@ export default function BuyCryptoScreen() {
                 maxFontSizeMultiplier={1.3}
               >
                 You'll get{" "}
-                <Text style={{ fontFamily: "Inter_700Bold", color: colors.textPrimary }}>
+                <Text style={{ fontFamily: "Inter_700Bold", color: tc.textPrimary }}>
                   {quote.crypto_amount} {selectedCrypto}
                 </Text>
               </Text>
@@ -493,7 +497,7 @@ export default function BuyCryptoScreen() {
           {quoteError && !quoteLoading && (
             <View
               style={{
-                backgroundColor: colors.error + "12",
+                backgroundColor: tc.error + "12",
                 borderRadius: 12,
                 paddingHorizontal: 14,
                 paddingVertical: 10,
@@ -502,15 +506,15 @@ export default function BuyCryptoScreen() {
                 gap: 8,
                 marginBottom: 24,
                 borderWidth: 1,
-                borderColor: colors.error + "30",
+                borderColor: tc.error + "30",
               }}
               accessibilityRole="alert"
               testID="quote-error"
             >
-              <Ionicons name="alert-circle" size={16} color={colors.error} />
+              <Ionicons name="alert-circle" size={16} color={tc.error} />
               <Text
                 style={{
-                  color: colors.error,
+                  color: tc.error,
                   fontSize: 13,
                   fontFamily: "Inter_400Regular",
                   flex: 1,
@@ -529,7 +533,7 @@ export default function BuyCryptoScreen() {
           {/* Phone Number Input */}
           <Text
             style={{
-              color: colors.textMuted,
+              color: tc.textMuted,
               fontSize: 11,
               fontFamily: "Inter_600SemiBold",
               textTransform: "uppercase",
@@ -543,12 +547,12 @@ export default function BuyCryptoScreen() {
           </Text>
           <View
             style={{
-              backgroundColor: colors.dark.card,
+              backgroundColor: tc.dark.card,
               borderRadius: 16,
               flexDirection: "row",
               alignItems: "center",
               borderWidth: 1,
-              borderColor: colors.glass.border,
+              borderColor: tc.glass.border,
               paddingHorizontal: 16,
               marginBottom: 8,
             }}
@@ -557,18 +561,18 @@ export default function BuyCryptoScreen() {
             <Ionicons
               name="phone-portrait-outline"
               size={18}
-              color={colors.textMuted}
+              color={tc.textMuted}
               style={{ marginRight: 10 }}
             />
             <TextInput
               value={phone}
               onChangeText={setPhone}
               placeholder="07XXXXXXXX"
-              placeholderTextColor={colors.dark.muted}
+              placeholderTextColor={tc.dark.muted}
               keyboardType="phone-pad"
               style={{
                 flex: 1,
-                color: colors.textPrimary,
+                color: tc.textPrimary,
                 fontSize: 16,
                 fontFamily: "Inter_500Medium",
                 paddingVertical: 16,
@@ -583,7 +587,7 @@ export default function BuyCryptoScreen() {
           </View>
           <Text
             style={{
-              color: colors.textMuted,
+              color: tc.textMuted,
               fontSize: 12,
               fontFamily: "Inter_400Regular",
               paddingLeft: 4,
@@ -605,10 +609,10 @@ export default function BuyCryptoScreen() {
               marginBottom: 20,
             }}
           >
-            <Ionicons name="shield-checkmark" size={14} color={colors.primary[400]} />
+            <Ionicons name="shield-checkmark" size={14} color={tc.primary[400]} />
             <Text
               style={{
-                color: colors.textMuted,
+                color: tc.textMuted,
                 fontSize: 12,
                 fontFamily: "Inter_400Regular",
               }}
@@ -628,7 +632,7 @@ export default function BuyCryptoScreen() {
               disabled={!amountKES || parsedAmount < 10 || !phone || phone.length < 10 || !quote || quoteLoading}
               testID="continue-button"
               style={{
-                ...shadows.glow(colors.primary[500], 0.35),
+                ...ts.glow(tc.primary[500], 0.35),
               }}
             />
           </View>
@@ -640,7 +644,7 @@ export default function BuyCryptoScreen() {
   // --- RENDER: Preview Step ---
   if (step === "preview" && quote) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: colors.dark.bg }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
         {/* Header */}
         <View
           style={{
@@ -660,21 +664,21 @@ export default function BuyCryptoScreen() {
               width: 42,
               height: 42,
               borderRadius: 14,
-              backgroundColor: colors.dark.card,
+              backgroundColor: tc.dark.card,
               alignItems: "center",
               justifyContent: "center",
               borderWidth: 1,
-              borderColor: colors.glass.border,
+              borderColor: tc.glass.border,
             }}
             accessibilityRole="button"
             accessibilityLabel="Go back"
             testID="back-button"
           >
-            <Ionicons name="arrow-back" size={20} color={colors.textPrimary} />
+            <Ionicons name="arrow-back" size={20} color={tc.textPrimary} />
           </Pressable>
           <Text
             style={{
-              color: colors.textPrimary,
+              color: tc.textPrimary,
               fontSize: 18,
               fontFamily: "Inter_600SemiBold",
               marginLeft: 14,
@@ -692,7 +696,7 @@ export default function BuyCryptoScreen() {
                 width: 24,
                 height: 4,
                 borderRadius: 2,
-                backgroundColor: colors.primary[500],
+                backgroundColor: tc.primary[500],
               }}
             />
             <View
@@ -700,7 +704,7 @@ export default function BuyCryptoScreen() {
                 width: 24,
                 height: 4,
                 borderRadius: 2,
-                backgroundColor: colors.primary[500],
+                backgroundColor: tc.primary[500],
               }}
             />
             <View
@@ -708,7 +712,7 @@ export default function BuyCryptoScreen() {
                 width: 24,
                 height: 4,
                 borderRadius: 2,
-                backgroundColor: colors.dark.elevated,
+                backgroundColor: tc.dark.elevated,
               }}
             />
           </View>
@@ -729,12 +733,12 @@ export default function BuyCryptoScreen() {
           {/* Premium Receipt Card */}
           <View
             style={{
-              backgroundColor: colors.dark.card,
+              backgroundColor: tc.dark.card,
               borderRadius: 24,
               marginTop: isDesktop ? 0 : 12,
               overflow: "hidden",
               borderWidth: 1,
-              borderColor: colors.glass.border,
+              borderColor: tc.glass.border,
               ...(isWeb ? { boxShadow: '0 8px 32px rgba(0,0,0,0.3)' } as any : {}),
             }}
             testID="preview-card"
@@ -773,7 +777,7 @@ export default function BuyCryptoScreen() {
 
               <Text
                 style={{
-                  color: colors.textMuted,
+                  color: tc.textMuted,
                   fontSize: 12,
                   fontFamily: "Inter_500Medium",
                   marginBottom: 10,
@@ -787,7 +791,7 @@ export default function BuyCryptoScreen() {
 
               <Text
                 style={{
-                  color: colors.textPrimary,
+                  color: tc.textPrimary,
                   fontSize: 38,
                   fontFamily: "Inter_700Bold",
                   letterSpacing: -1,
@@ -803,7 +807,7 @@ export default function BuyCryptoScreen() {
             <View
               style={{
                 borderBottomWidth: 1.5,
-                borderBottomColor: colors.dark.border + "40",
+                borderBottomColor: tc.dark.border + "40",
                 borderStyle: "dashed",
                 marginHorizontal: 20,
               }}
@@ -821,7 +825,7 @@ export default function BuyCryptoScreen() {
               >
                 <Text
                   style={{
-                    color: colors.textMuted,
+                    color: tc.textMuted,
                     fontSize: 14,
                     fontFamily: "Inter_400Regular",
                   }}
@@ -834,7 +838,7 @@ export default function BuyCryptoScreen() {
                     flexDirection: "row",
                     alignItems: "center",
                     gap: 6,
-                    backgroundColor: colors.primary[500] + "1A",
+                    backgroundColor: tc.primary[500] + "1A",
                     borderRadius: 10,
                     paddingHorizontal: 12,
                     paddingVertical: 5,
@@ -842,7 +846,7 @@ export default function BuyCryptoScreen() {
                 >
                   <Text
                     style={{
-                      color: colors.primary[400],
+                      color: tc.primary[400],
                       fontSize: 14,
                       fontFamily: "Inter_600SemiBold",
                     }}
@@ -863,7 +867,7 @@ export default function BuyCryptoScreen() {
               >
                 <Text
                   style={{
-                    color: colors.textMuted,
+                    color: tc.textMuted,
                     fontSize: 14,
                     fontFamily: "Inter_400Regular",
                   }}
@@ -873,7 +877,7 @@ export default function BuyCryptoScreen() {
                 </Text>
                 <Text
                   style={{
-                    color: colors.textPrimary,
+                    color: tc.textPrimary,
                     fontSize: 14,
                     fontFamily: "Inter_600SemiBold",
                   }}
@@ -887,7 +891,7 @@ export default function BuyCryptoScreen() {
               <View
                 style={{
                   borderBottomWidth: 1,
-                  borderBottomColor: colors.dark.border + "30",
+                  borderBottomColor: tc.dark.border + "30",
                   borderStyle: "dashed",
                 }}
               />
@@ -902,7 +906,7 @@ export default function BuyCryptoScreen() {
               >
                 <Text
                   style={{
-                    color: colors.textMuted,
+                    color: tc.textMuted,
                     fontSize: 14,
                     fontFamily: "Inter_400Regular",
                   }}
@@ -912,7 +916,7 @@ export default function BuyCryptoScreen() {
                 </Text>
                 <Text
                   style={{
-                    color: colors.textSecondary,
+                    color: tc.textSecondary,
                     fontSize: 14,
                     fontFamily: "Inter_500Medium",
                   }}
@@ -933,7 +937,7 @@ export default function BuyCryptoScreen() {
               >
                 <Text
                   style={{
-                    color: colors.textMuted,
+                    color: tc.textMuted,
                     fontSize: 14,
                     fontFamily: "Inter_400Regular",
                   }}
@@ -943,7 +947,7 @@ export default function BuyCryptoScreen() {
                 </Text>
                 <Text
                   style={{
-                    color: colors.textSecondary,
+                    color: tc.textSecondary,
                     fontSize: 14,
                     fontFamily: "Inter_500Medium",
                   }}
@@ -957,7 +961,7 @@ export default function BuyCryptoScreen() {
               <View
                 style={{
                   borderTopWidth: 1,
-                  borderTopColor: colors.dark.border + "30",
+                  borderTopColor: tc.dark.border + "30",
                   borderStyle: "dashed",
                   paddingTop: 18,
                   flexDirection: "row",
@@ -967,7 +971,7 @@ export default function BuyCryptoScreen() {
               >
                 <Text
                   style={{
-                    color: colors.textMuted,
+                    color: tc.textMuted,
                     fontSize: 14,
                     fontFamily: "Inter_500Medium",
                   }}
@@ -977,7 +981,7 @@ export default function BuyCryptoScreen() {
                 </Text>
                 <Text
                   style={{
-                    color: colors.textPrimary,
+                    color: tc.textPrimary,
                     fontSize: 16,
                     fontFamily: "Inter_700Bold",
                   }}
@@ -997,7 +1001,7 @@ export default function BuyCryptoScreen() {
               size="lg"
               testID="buy-now-button"
               style={{
-                ...shadows.glow(colors.primary[500], 0.35),
+                ...ts.glow(tc.primary[500], 0.35),
               }}
             />
           </View>
@@ -1012,10 +1016,10 @@ export default function BuyCryptoScreen() {
               marginBottom: isDesktop ? 0 : 16,
             }}
           >
-            <Ionicons name="shield-checkmark" size={14} color={colors.primary[400]} />
+            <Ionicons name="shield-checkmark" size={14} color={tc.primary[400]} />
             <Text
               style={{
-                color: colors.textMuted,
+                color: tc.textMuted,
                 fontSize: 12,
                 fontFamily: "Inter_400Regular",
               }}
@@ -1032,7 +1036,7 @@ export default function BuyCryptoScreen() {
 
   // --- RENDER: PIN Step ---
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.dark.bg }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
       {/* Header */}
       <View
         style={{
@@ -1052,21 +1056,21 @@ export default function BuyCryptoScreen() {
             width: 42,
             height: 42,
             borderRadius: 14,
-            backgroundColor: colors.dark.card,
+            backgroundColor: tc.dark.card,
             alignItems: "center",
             justifyContent: "center",
             borderWidth: 1,
-            borderColor: colors.glass.border,
+            borderColor: tc.glass.border,
           }}
           accessibilityRole="button"
           accessibilityLabel="Go back"
           testID="back-button"
         >
-          <Ionicons name="arrow-back" size={20} color={colors.textPrimary} />
+          <Ionicons name="arrow-back" size={20} color={tc.textPrimary} />
         </Pressable>
         <Text
           style={{
-            color: colors.textPrimary,
+            color: tc.textPrimary,
             fontSize: 18,
             fontFamily: "Inter_600SemiBold",
             marginLeft: 14,
@@ -1084,7 +1088,7 @@ export default function BuyCryptoScreen() {
               width: 24,
               height: 4,
               borderRadius: 2,
-              backgroundColor: colors.primary[500],
+              backgroundColor: tc.primary[500],
             }}
           />
           <View
@@ -1092,7 +1096,7 @@ export default function BuyCryptoScreen() {
               width: 24,
               height: 4,
               borderRadius: 2,
-              backgroundColor: colors.primary[500],
+              backgroundColor: tc.primary[500],
             }}
           />
           <View
@@ -1100,7 +1104,7 @@ export default function BuyCryptoScreen() {
               width: 24,
               height: 4,
               borderRadius: 2,
-              backgroundColor: colors.primary[500],
+              backgroundColor: tc.primary[500],
             }}
           />
         </View>
@@ -1119,11 +1123,11 @@ export default function BuyCryptoScreen() {
         {/* PIN card wrapper for desktop */}
         <View
           style={isDesktop ? {
-            backgroundColor: colors.dark.card,
+            backgroundColor: tc.dark.card,
             borderRadius: 28,
             padding: 40,
             borderWidth: 1,
-            borderColor: colors.glass.border,
+            borderColor: tc.glass.border,
             ...(isWeb ? { boxShadow: '0 8px 32px rgba(0,0,0,0.3)' } as any : {}),
           } : { paddingTop: 40 }}
         >
@@ -1134,20 +1138,20 @@ export default function BuyCryptoScreen() {
                 width: 68,
                 height: 68,
                 borderRadius: 20,
-                backgroundColor: colors.primary[500] + "1A",
+                backgroundColor: tc.primary[500] + "1A",
                 alignItems: "center",
                 justifyContent: "center",
                 borderWidth: 1.5,
-                borderColor: colors.primary[500] + "25",
+                borderColor: tc.primary[500] + "25",
               }}
             >
-              <Ionicons name="lock-closed" size={30} color={colors.primary[400]} />
+              <Ionicons name="lock-closed" size={30} color={tc.primary[400]} />
             </View>
           </View>
 
           <Text
             style={{
-              color: colors.textPrimary,
+              color: tc.textPrimary,
               fontSize: 22,
               fontFamily: "Inter_700Bold",
               textAlign: "center",
@@ -1159,7 +1163,7 @@ export default function BuyCryptoScreen() {
           </Text>
           <Text
             style={{
-              color: colors.textMuted,
+              color: tc.textMuted,
               fontSize: 14,
               fontFamily: "Inter_400Regular",
               textAlign: "center",
@@ -1175,7 +1179,7 @@ export default function BuyCryptoScreen() {
           <View
             style={{
               alignSelf: "center",
-              backgroundColor: isDesktop ? colors.dark.elevated : colors.dark.card,
+              backgroundColor: isDesktop ? tc.dark.elevated : tc.dark.card,
               borderRadius: 16,
               paddingHorizontal: 20,
               paddingVertical: 12,
@@ -1184,22 +1188,22 @@ export default function BuyCryptoScreen() {
               gap: 10,
               marginBottom: 36,
               borderWidth: 1,
-              borderColor: colors.glass.border,
+              borderColor: tc.glass.border,
             }}
           >
             <Text
               style={{
-                color: colors.textPrimary,
+                color: tc.textPrimary,
                 fontSize: 17,
                 fontFamily: "Inter_700Bold",
               }}
             >
               {quote?.crypto_amount} {selectedCrypto}
             </Text>
-            <Ionicons name="arrow-forward" size={14} color={colors.textMuted} />
+            <Ionicons name="arrow-forward" size={14} color={tc.textMuted} />
             <Text
               style={{
-                color: colors.textSecondary,
+                color: tc.textSecondary,
                 fontSize: 15,
                 fontFamily: "Inter_500Medium",
               }}
@@ -1223,7 +1227,7 @@ export default function BuyCryptoScreen() {
               <PulsingDot />
               <Text
                 style={{
-                  color: colors.primary[400],
+                  color: tc.primary[400],
                   fontSize: 14,
                   fontFamily: "Inter_500Medium",
                 }}
@@ -1244,10 +1248,10 @@ export default function BuyCryptoScreen() {
               opacity: 0.6,
             }}
           >
-            <Ionicons name="shield-checkmark" size={14} color={colors.textMuted} />
+            <Ionicons name="shield-checkmark" size={14} color={tc.textMuted} />
             <Text
               style={{
-                color: colors.textMuted,
+                color: tc.textMuted,
                 fontSize: 12,
                 fontFamily: "Inter_400Regular",
               }}

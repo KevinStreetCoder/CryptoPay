@@ -10,7 +10,7 @@ import { useToast } from "../../src/components/Toast";
 import { paymentsApi } from "../../src/api/payments";
 import { normalizeError } from "../../src/utils/apiErrors";
 import { useScreenSecurity } from "../../src/hooks/useScreenSecurity";
-import { CURRENCIES, CurrencyCode, colors, shadows } from "../../src/constants/theme";
+import { CURRENCIES, CurrencyCode, colors } from "../../src/constants/theme";
 import { getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
 
@@ -52,6 +52,8 @@ function PulsingDot() {
 const QUOTE_TTL_SECONDS = 90;
 
 function QuoteCountdown({ onExpired }: { onExpired: () => void }) {
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
   const [secondsLeft, setSecondsLeft] = useState(QUOTE_TTL_SECONDS);
   const hasExpired = useRef(false);
 
@@ -121,7 +123,7 @@ function QuoteCountdown({ onExpired }: { onExpired: () => void }) {
           maxWidth: 60,
           height: 3,
           borderRadius: 2,
-          backgroundColor: colors.dark.elevated,
+          backgroundColor: tc.dark.elevated,
           overflow: "hidden",
         }}
       >

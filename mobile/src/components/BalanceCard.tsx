@@ -2,13 +2,17 @@ import { View, Text, Pressable, StyleSheet } from "react-native";
 import { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { Wallet } from "../api/wallets";
-import { CURRENCIES, CurrencyCode, colors, shadows } from "../constants/theme";
+import { CURRENCIES, CurrencyCode, colors, shadows, getThemeColors, getThemeShadows } from "../constants/theme";
+import { useThemeMode } from "../stores/theme";
 
 interface BalanceCardProps {
   wallets: Wallet[];
 }
 
 export function BalanceCard({ wallets }: BalanceCardProps) {
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
+  const ts = getThemeShadows(isDark);
   const [hidden, setHidden] = useState(false);
 
   // Defensive: ensure wallets is always an array
@@ -21,7 +25,7 @@ export function BalanceCard({ wallets }: BalanceCardProps) {
 
   return (
     <View
-      style={[styles.card, shadows.md]}
+      style={[styles.card, ts.md]}
       accessibilityRole="summary"
       accessibilityLabel={
         hidden
