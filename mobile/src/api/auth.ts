@@ -4,6 +4,7 @@ export interface User {
   id: string;
   phone: string;
   full_name: string;
+  avatar_url: string | null;
   kyc_tier: number;
   kyc_status: string;
   created_at: string;
@@ -44,6 +45,11 @@ export const authApi = {
     api.post<{ access: string }>("/auth/token/refresh/", { refresh }),
 
   getProfile: () => api.get<User>("/auth/profile/"),
+
+  updateProfile: (data: FormData) =>
+    api.patch<User>("/auth/profile/", data, {
+      headers: { "Content-Type": "multipart/form-data" },
+    }),
 
   changePin: (data: { current_pin: string; new_pin: string }) =>
     api.post("/auth/change-pin/", data),

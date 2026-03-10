@@ -19,6 +19,9 @@ djangorestframework-simplejwt==5.4.0
 bcrypt==4.2.1
 cryptography==44.0.0
 
+# Image processing
+Pillow==11.2.1
+
 # API Documentation
 drf-spectacular==0.28.0
 

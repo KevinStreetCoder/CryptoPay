@@ -8,17 +8,20 @@ import {
   Linking,
   Switch,
   useWindowDimensions,
+  Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useState, useEffect } from "react";
+import * as ImagePicker from "expo-image-picker";
 import { useAuth, isBiometricEnabled, setBiometricEnabled } from "../../src/stores/auth";
 import { useBiometricAuth } from "../../src/hooks/useBiometricAuth";
 import { useToast } from "../../src/components/Toast";
 import { useLocale } from "../../src/hooks/useLocale";
 import { colors, getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
+import { authApi } from "../../src/api/auth";
 
 const KYC_TIERS = [
   { tier: 0, label: "Phone Only", limit: "KSh 5,000/day", color: colors.dark.muted },
@@ -175,6 +178,41 @@ export default function ProfileScreen() {
   const biometric = useBiometricAuth();
   const { locale, setLocale, t } = useLocale();
 
+  const [avatarUri, setAvatarUri] = useState<string | null>(user?.avatar_url || null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  const handlePickAvatar = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        setUploadingAvatar(true);
+        try {
+          const formData = new FormData();
+          formData.append("avatar", {
+            uri: asset.uri,
+            type: asset.mimeType || "image/jpeg",
+            name: "avatar.jpg",
+          } as any);
+          const { data } = await authApi.updateProfile(formData);
+          setAvatarUri(data.avatar_url);
+          toast.success("Updated", "Profile photo updated");
+        } catch (err: any) {
+          toast.error("Upload Failed", "Could not upload photo");
+        } finally {
+          setUploadingAvatar(false);
+        }
+      }
+    } catch {
+      toast.error("Error", "Could not open image picker");
+    }
+  };
+
   // Load biometric preference
   useEffect(() => {
     isBiometricEnabled().then(setBiometricOn);
@@ -327,46 +365,72 @@ export default function ProfileScreen() {
               >
                 {/* Avatar + Info */}
                 <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 24 }}>
-                  <View
-                    style={{
-                      width: 72,
-                      height: 72,
-                      borderRadius: 20,
-                      backgroundColor: colors.primary[500] + "33",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      marginRight: 20,
-                      borderWidth: 2,
-                      borderColor: colors.primary[400] + "59",
-                    }}
-                  >
-                    <Text
+                  <Pressable onPress={handlePickAvatar} style={{ position: "relative", marginRight: 20 }}>
+                    {avatarUri ? (
+                      <Image
+                        source={{ uri: avatarUri }}
+                        style={{
+                          width: 72,
+                          height: 72,
+                          borderRadius: 24,
+                          borderWidth: 2,
+                          borderColor: tc.primary[500] + "40",
+                        }}
+                      />
+                    ) : (
+                      <View
+                        style={{
+                          width: 72,
+                          height: 72,
+                          borderRadius: 24,
+                          backgroundColor: tc.primary[500] + "20",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          borderWidth: 2,
+                          borderColor: tc.primary[500] + "30",
+                        }}
+                      >
+                        <Text style={{ color: tc.primary[400], fontSize: 24, fontWeight: "700" }}>
+                          {getInitials(user?.full_name)}
+                        </Text>
+                      </View>
+                    )}
+                    {/* Camera overlay */}
+                    <View
                       style={{
-                        color: colors.primary[400],
-                        fontSize: 28,
-                        fontFamily: "Inter_700Bold",
+                        position: "absolute",
+                        bottom: -2,
+                        right: -2,
+                        width: 28,
+                        height: 28,
+                        borderRadius: 14,
+                        backgroundColor: tc.primary[500],
+                        alignItems: "center",
+                        justifyContent: "center",
+                        borderWidth: 2,
+                        borderColor: tc.dark.bg,
                       }}
                     >
-                      {getInitials(user?.full_name)}
-                    </Text>
-                  </View>
+                      <Ionicons name={uploadingAvatar ? "sync" : "camera"} size={14} color="#fff" />
+                    </View>
+                  </Pressable>
                   <View style={{ flex: 1 }}>
                     <Text
                       style={{
                         color: tc.textPrimary,
-                        fontSize: 24,
-                        fontFamily: "Inter_700Bold",
+                        fontSize: 22,
+                        fontWeight: "700",
                         marginBottom: 6,
                       }}
                     >
                       {user?.full_name || "User"}
                     </Text>
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                      <Ionicons name="call-outline" size={14} color={tc.textMuted} />
+                      <Ionicons name="call-outline" size={14} color={tc.textSecondary} />
                       <Text
                         style={{
-                          color: tc.textMuted,
-                          fontSize: 15,
+                          color: tc.textSecondary,
+                          fontSize: 14,
                           fontFamily: "Inter_400Regular",
                         }}
                       >
@@ -756,45 +820,71 @@ export default function ProfileScreen() {
             >
               {/* Avatar + Info */}
               <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 20 }}>
-                <View
-                  style={{
-                    width: 64,
-                    height: 64,
-                    borderRadius: 18,
-                    backgroundColor: colors.primary[500] + "33",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    marginRight: 16,
-                    borderWidth: 2,
-                    borderColor: colors.primary[400] + "59",
-                  }}
-                >
-                  <Text
+                <Pressable onPress={handlePickAvatar} style={{ position: "relative", marginRight: 16 }}>
+                  {avatarUri ? (
+                    <Image
+                      source={{ uri: avatarUri }}
+                      style={{
+                        width: 72,
+                        height: 72,
+                        borderRadius: 24,
+                        borderWidth: 2,
+                        borderColor: tc.primary[500] + "40",
+                      }}
+                    />
+                  ) : (
+                    <View
+                      style={{
+                        width: 72,
+                        height: 72,
+                        borderRadius: 24,
+                        backgroundColor: tc.primary[500] + "20",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        borderWidth: 2,
+                        borderColor: tc.primary[500] + "30",
+                      }}
+                    >
+                      <Text style={{ color: tc.primary[400], fontSize: 24, fontWeight: "700" }}>
+                        {getInitials(user?.full_name)}
+                      </Text>
+                    </View>
+                  )}
+                  {/* Camera overlay */}
+                  <View
                     style={{
-                      color: colors.primary[400],
-                      fontSize: 24,
-                      fontFamily: "Inter_700Bold",
+                      position: "absolute",
+                      bottom: -2,
+                      right: -2,
+                      width: 28,
+                      height: 28,
+                      borderRadius: 14,
+                      backgroundColor: tc.primary[500],
+                      alignItems: "center",
+                      justifyContent: "center",
+                      borderWidth: 2,
+                      borderColor: tc.dark.bg,
                     }}
                   >
-                    {getInitials(user?.full_name)}
-                  </Text>
-                </View>
+                    <Ionicons name={uploadingAvatar ? "sync" : "camera"} size={14} color="#fff" />
+                  </View>
+                </Pressable>
                 <View style={{ flex: 1 }}>
                   <Text
                     style={{
                       color: tc.textPrimary,
-                      fontSize: 21,
-                      fontFamily: "Inter_700Bold",
+                      fontSize: 22,
+                      fontWeight: "700",
                       marginBottom: 6,
                     }}
                   >
                     {user?.full_name || "User"}
                   </Text>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                    <Ionicons name="call-outline" size={13} color={tc.textMuted} />
+                    <Ionicons name="call-outline" size={13} color={tc.textSecondary} />
                     <Text
                       style={{
-                        color: tc.textMuted,
+                        color: tc.textSecondary,
                         fontSize: 14,
                         fontFamily: "Inter_400Regular",
                       }}

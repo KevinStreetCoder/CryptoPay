@@ -3,7 +3,8 @@ import { View, Text, Pressable, Platform, useWindowDimensions } from "react-nati
 import { useRouter, usePathname } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../stores/auth";
-import { colors } from "../constants/theme";
+import { colors, getThemeColors, getThemeShadows } from "../constants/theme";
+import { useThemeMode } from "../stores/theme";
 
 const SIDEBAR_EXPANDED = 260;
 const SIDEBAR_COLLAPSED = 68;
@@ -108,6 +109,8 @@ export function WebSidebar() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
 
   const sidebarWidth = collapsed ? SIDEBAR_COLLAPSED : SIDEBAR_EXPANDED;
 
@@ -134,9 +137,9 @@ export function WebSidebar() {
     <View
       style={{
         width: sidebarWidth,
-        backgroundColor: "#0A1628",
+        backgroundColor: isDark ? "#0A1628" : "#FFFFFF",
         borderRightWidth: 1,
-        borderRightColor: "rgba(255, 255, 255, 0.06)",
+        borderRightColor: isDark ? "rgba(255, 255, 255, 0.06)" : "rgba(0, 0, 0, 0.08)",
         paddingTop: 24,
         paddingBottom: 20,
         justifyContent: "space-between",
@@ -180,7 +183,7 @@ export function WebSidebar() {
             <View style={{ flex: 1 }}>
               <Text
                 style={{
-                  color: "#FFFFFF",
+                  color: tc.textPrimary,
                   fontSize: 18,
                   fontFamily: "Inter_700Bold",
                   letterSpacing: -0.3,
@@ -190,7 +193,7 @@ export function WebSidebar() {
               </Text>
               <Text
                 style={{
-                  color: colors.textMuted,
+                  color: tc.textMuted,
                   fontSize: 11,
                   fontFamily: "Inter_400Regular",
                 }}
@@ -216,8 +219,8 @@ export function WebSidebar() {
               height: 32,
               borderRadius: 8,
               backgroundColor: hovered
-                ? "rgba(255, 255, 255, 0.08)"
-                : "rgba(255, 255, 255, 0.04)",
+                ? isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.06)"
+                : isDark ? "rgba(255, 255, 255, 0.04)" : "rgba(0, 0, 0, 0.03)",
               alignItems: "center",
               justifyContent: "center",
               opacity: pressed ? 0.7 : 1,
@@ -231,7 +234,7 @@ export function WebSidebar() {
             <Ionicons
               name={collapsed ? "chevron-forward" : "chevron-back"}
               size={16}
-              color={colors.textMuted}
+              color={tc.textMuted}
             />
           </Pressable>
         </View>
@@ -240,7 +243,7 @@ export function WebSidebar() {
         <View
           style={{
             height: 1,
-            backgroundColor: "rgba(255, 255, 255, 0.06)",
+            backgroundColor: isDark ? "rgba(255, 255, 255, 0.06)" : "rgba(0, 0, 0, 0.06)",
             marginHorizontal: collapsed ? 10 : 16,
             marginBottom: 16,
           }}
@@ -251,7 +254,7 @@ export function WebSidebar() {
           {!collapsed && (
             <Text
               style={{
-                color: colors.textMuted,
+                color: tc.textMuted,
                 fontSize: 10,
                 fontFamily: "Inter_600SemiBold",
                 letterSpacing: 1.2,
@@ -280,7 +283,7 @@ export function WebSidebar() {
                     backgroundColor: active
                       ? "rgba(16, 185, 129, 0.12)"
                       : hovered
-                        ? "rgba(255, 255, 255, 0.04)"
+                        ? isDark ? "rgba(255, 255, 255, 0.04)" : "rgba(0, 0, 0, 0.04)"
                         : "transparent",
                     borderWidth: active ? 1 : 0,
                     borderColor: active ? "rgba(16, 185, 129, 0.2)" : "transparent",
@@ -302,7 +305,7 @@ export function WebSidebar() {
                       borderRadius: 10,
                       backgroundColor: active
                         ? colors.primary[500] + "20"
-                        : "rgba(255, 255, 255, 0.04)",
+                        : isDark ? "rgba(255, 255, 255, 0.04)" : "rgba(0, 0, 0, 0.04)",
                       alignItems: "center",
                       justifyContent: "center",
                     }}
@@ -310,13 +313,13 @@ export function WebSidebar() {
                     <Ionicons
                       name={active ? item.iconActive : item.icon}
                       size={20}
-                      color={active ? colors.primary[400] : colors.textMuted}
+                      color={active ? colors.primary[400] : tc.textMuted}
                     />
                   </View>
                   {!collapsed && (
                     <Text
                       style={{
-                        color: active ? colors.primary[400] : colors.textSecondary,
+                        color: active ? colors.primary[400] : tc.textSecondary,
                         fontSize: 14,
                         fontFamily: active ? "Inter_600SemiBold" : "Inter_500Medium",
                         ...(Platform.OS === "web"
@@ -348,7 +351,7 @@ export function WebSidebar() {
         <View
           style={{
             height: 1,
-            backgroundColor: "rgba(255, 255, 255, 0.06)",
+            backgroundColor: isDark ? "rgba(255, 255, 255, 0.06)" : "rgba(0, 0, 0, 0.06)",
             marginHorizontal: collapsed ? 10 : 16,
             marginTop: 16,
             marginBottom: 16,
@@ -360,7 +363,7 @@ export function WebSidebar() {
           {!collapsed && (
             <Text
               style={{
-                color: colors.textMuted,
+                color: tc.textMuted,
                 fontSize: 10,
                 fontFamily: "Inter_600SemiBold",
                 letterSpacing: 1.2,
@@ -385,7 +388,7 @@ export function WebSidebar() {
                   paddingVertical: 10,
                   borderRadius: 12,
                   backgroundColor: hovered
-                    ? "rgba(255, 255, 255, 0.04)"
+                    ? isDark ? "rgba(255, 255, 255, 0.04)" : "rgba(0, 0, 0, 0.04)"
                     : "transparent",
                   opacity: pressed ? 0.8 : 1,
                   ...(Platform.OS === "web"
@@ -403,17 +406,17 @@ export function WebSidebar() {
                     width: 36,
                     height: 36,
                     borderRadius: 10,
-                    backgroundColor: "rgba(255, 255, 255, 0.04)",
+                    backgroundColor: isDark ? "rgba(255, 255, 255, 0.04)" : "rgba(0, 0, 0, 0.04)",
                     alignItems: "center",
                     justifyContent: "center",
                   }}
                 >
-                  <Ionicons name={item.icon} size={18} color={colors.textMuted} />
+                  <Ionicons name={item.icon} size={18} color={tc.textMuted} />
                 </View>
                 {!collapsed && (
                   <Text
                     style={{
-                      color: colors.textSecondary,
+                      color: tc.textSecondary,
                       fontSize: 13,
                       fontFamily: "Inter_500Medium",
                       ...(Platform.OS === "web"
@@ -466,7 +469,7 @@ export function WebSidebar() {
           /* Expanded: full user card */
           <View
             style={{
-              backgroundColor: "rgba(255, 255, 255, 0.04)",
+              backgroundColor: isDark ? "rgba(255, 255, 255, 0.04)" : "rgba(0, 0, 0, 0.04)",
               borderRadius: 14,
               padding: 14,
               flexDirection: "row",
@@ -474,7 +477,7 @@ export function WebSidebar() {
               gap: 12,
               marginBottom: 10,
               borderWidth: 1,
-              borderColor: "rgba(255, 255, 255, 0.06)",
+              borderColor: isDark ? "rgba(255, 255, 255, 0.06)" : "rgba(0, 0, 0, 0.06)",
             }}
           >
             <View
@@ -500,7 +503,7 @@ export function WebSidebar() {
             <View style={{ flex: 1 }}>
               <Text
                 style={{
-                  color: "#FFFFFF",
+                  color: tc.textPrimary,
                   fontSize: 13,
                   fontFamily: "Inter_600SemiBold",
                 }}
@@ -510,7 +513,7 @@ export function WebSidebar() {
               </Text>
               <Text
                 style={{
-                  color: colors.textMuted,
+                  color: tc.textMuted,
                   fontSize: 11,
                   fontFamily: "Inter_400Regular",
                 }}
@@ -583,6 +586,8 @@ export function WebSidebar() {
  */
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { width } = useWindowDimensions();
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
 
   if (Platform.OS !== "web" || width < 900) {
     return <>{children}</>;
@@ -593,7 +598,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
       style={{
         flex: 1,
         flexDirection: "row",
-        backgroundColor: colors.dark.bg,
+        backgroundColor: tc.dark.bg,
         ...(Platform.OS === "web" ? ({ minHeight: "100vh" } as any) : {}),
       }}
     >
@@ -601,7 +606,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
       <View
         style={{
           flex: 1,
-          backgroundColor: colors.dark.bg,
+          backgroundColor: tc.dark.bg,
           ...(Platform.OS === "web" ? ({ overflow: "auto" } as any) : {}),
         }}
       >

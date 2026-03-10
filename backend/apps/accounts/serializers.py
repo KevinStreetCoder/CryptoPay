@@ -129,7 +129,30 @@ class PushTokenSerializer(serializers.Serializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
+    avatar_url = serializers.SerializerMethodField()
+
     class Meta:
         model = User
-        fields = ("id", "phone", "email", "full_name", "kyc_tier", "kyc_status", "created_at")
+        fields = ("id", "phone", "email", "full_name", "avatar_url", "kyc_tier", "kyc_status", "created_at")
         read_only_fields = fields
+
+    def get_avatar_url(self, obj):
+        if obj.avatar:
+            request = self.context.get("request")
+            if request:
+                return request.build_absolute_uri(obj.avatar.url)
+            return obj.avatar.url
+        return None
+
+
+class ProfileUpdateSerializer(serializers.Serializer):
+    full_name = serializers.CharField(max_length=150, required=False)
+    email = serializers.EmailField(required=False, allow_blank=True)
+
+    def validate_email(self, value):
+        if not value:
+            return value
+        user = self.context.get("user")
+        if User.objects.filter(email=value).exclude(id=user.id).exists():
+            raise serializers.ValidationError("Email already in use")
+        return value
