@@ -111,7 +111,7 @@ export default function TransactionDetailScreen() {
             style={{
               color: tc.textMuted,
               fontSize: 14,
-              fontFamily: "Inter_400Regular",
+              fontFamily: "DMSans_400Regular",
             }}
           >
             {label}
@@ -121,7 +121,7 @@ export default function TransactionDetailScreen() {
           style={{
             color: tc.textPrimary,
             fontSize: 14,
-            fontFamily: "Inter_500Medium",
+            fontFamily: "DMSans_500Medium",
             textAlign: "right",
             flex: 1,
             marginLeft: 12,
@@ -169,7 +169,7 @@ export default function TransactionDetailScreen() {
           style={{
             color: "#FFFFFF",
             fontSize: 18,
-            fontFamily: "Inter_600SemiBold",
+            fontFamily: "DMSans_600SemiBold",
             marginLeft: 12,
           }}
         >
@@ -191,7 +191,7 @@ export default function TransactionDetailScreen() {
               style={{
                 color: tc.textMuted,
                 fontSize: 14,
-                fontFamily: "Inter_400Regular",
+                fontFamily: "DMSans_400Regular",
                 marginTop: 16,
               }}
             >
@@ -217,7 +217,7 @@ export default function TransactionDetailScreen() {
               style={{
                 color: "#FFFFFF",
                 fontSize: 18,
-                fontFamily: "Inter_600SemiBold",
+                fontFamily: "DMSans_600SemiBold",
                 marginBottom: 8,
               }}
             >
@@ -227,7 +227,7 @@ export default function TransactionDetailScreen() {
               style={{
                 color: tc.textMuted,
                 fontSize: 14,
-                fontFamily: "Inter_400Regular",
+                fontFamily: "DMSans_400Regular",
                 textAlign: "center",
               }}
             >
@@ -251,7 +251,7 @@ export default function TransactionDetailScreen() {
                 style={{
                   color: "#FFFFFF",
                   fontSize: 15,
-                  fontFamily: "Inter_600SemiBold",
+                  fontFamily: "DMSans_600SemiBold",
                 }}
               >
                 Go Back
@@ -285,7 +285,7 @@ export default function TransactionDetailScreen() {
                 style={{
                   color: "#FFFFFF",
                   fontSize: 18,
-                  fontFamily: "Inter_600SemiBold",
+                  fontFamily: "DMSans_600SemiBold",
                   marginBottom: 8,
                 }}
               >
@@ -316,7 +316,7 @@ export default function TransactionDetailScreen() {
                   style={{
                     color: statusConfig!.color,
                     fontSize: 13,
-                    fontFamily: "Inter_600SemiBold",
+                    fontFamily: "DMSans_600SemiBold",
                     textTransform: "capitalize",
                   }}
                 >
@@ -331,7 +331,7 @@ export default function TransactionDetailScreen() {
                 style={{
                   color: "#FFFFFF",
                   fontSize: 40,
-                  fontFamily: "Inter_700Bold",
+                  fontFamily: "DMSans_700Bold",
                   letterSpacing: -1,
                 }}
               >
@@ -348,7 +348,7 @@ export default function TransactionDetailScreen() {
                     style={{
                       color: tc.textSecondary,
                       fontSize: 15,
-                      fontFamily: "Inter_500Medium",
+                      fontFamily: "DMSans_500Medium",
                       marginTop: 6,
                     }}
                   >
@@ -453,7 +453,7 @@ export default function TransactionDetailScreen() {
                 style={{
                   color: "#FFFFFF",
                   fontSize: 16,
-                  fontFamily: "Inter_600SemiBold",
+                  fontFamily: "DMSans_600SemiBold",
                 }}
               >
                 Back

@@ -10,7 +10,7 @@ export interface AppError {
 
 const ERROR_MESSAGES: Record<number, { title: string; message: string }> = {
   400: { title: "Invalid Request", message: "Please check your input and try again." },
-  401: { title: "Session Expired", message: "Please log in again to continue." },
+  401: { title: "Authentication Failed", message: "Invalid credentials. Please try again." },
   403: { title: "Access Denied", message: "You don't have permission for this action." },
   404: { title: "Not Found", message: "The requested resource was not found." },
   408: { title: "Request Timeout", message: "The request took too long. Please try again." },

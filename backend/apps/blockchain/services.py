@@ -190,21 +190,49 @@ def _get_master_seed() -> bytes:
     """
     Get the master seed for HD wallet derivation.
 
-    Uses WALLET_MASTER_SEED env var if set, otherwise derives from SECRET_KEY.
-    In production, WALLET_MASTER_SEED should be a 64-byte hex string from a
-    BIP-39 mnemonic, stored securely (KMS, HSM, or encrypted env).
+    Priority order:
+      1. WALLET_MASTER_SEED env var (hex-encoded 64-byte seed) — direct seed
+      2. WALLET_MNEMONIC env var (BIP-39 24-word phrase) — derive seed via BIP-39
+      3. Fallback: PBKDF2 from SECRET_KEY (development only, NOT for production)
+
+    In production, use either:
+      - A BIP-39 mnemonic stored in WALLET_MNEMONIC (preferred, human-readable backup)
+      - The hex seed in WALLET_MASTER_SEED (derived from mnemonic, for KMS/HSM storage)
+
+    Generate a mnemonic with: python manage.py generate_wallet_seed
     """
+    # Option 1: Direct hex seed (highest priority)
     master_seed_hex = getattr(settings, "WALLET_MASTER_SEED", "")
     if master_seed_hex:
-        return bytes.fromhex(master_seed_hex)
+        seed = bytes.fromhex(master_seed_hex)
+        if len(seed) < 16:
+            raise ValueError("WALLET_MASTER_SEED must be at least 16 bytes (32 hex chars)")
+        logger.info("Using WALLET_MASTER_SEED for HD wallet derivation.")
+        return seed
 
-    # Fallback: derive from SECRET_KEY (acceptable for development)
+    # Option 2: BIP-39 mnemonic phrase
+    mnemonic_phrase = getattr(settings, "WALLET_MNEMONIC", "")
+    if mnemonic_phrase:
+        from mnemonic import Mnemonic
+
+        mnemo = Mnemonic("english")
+        if not mnemo.check(mnemonic_phrase):
+            raise ValueError(
+                "WALLET_MNEMONIC is not a valid BIP-39 mnemonic. "
+                "Generate one with: python manage.py generate_wallet_seed"
+            )
+        # BIP-39 seed derivation with empty passphrase (standard)
+        seed = mnemo.to_seed(mnemonic_phrase, passphrase="")
+        logger.info("Using WALLET_MNEMONIC (BIP-39) for HD wallet derivation.")
+        return seed
+
+    # Option 3: Fallback — derive from SECRET_KEY (development only)
     secret = getattr(settings, "SECRET_KEY", "dev-secret-key")
     logger.warning(
         "Using SECRET_KEY for wallet seed derivation. "
-        "Set WALLET_MASTER_SEED for production use."
+        "Set WALLET_MNEMONIC or WALLET_MASTER_SEED for production use. "
+        "Generate with: python manage.py generate_wallet_seed"
     )
-    # Use PBKDF2 to stretch the secret into a proper seed
     return hashlib.pbkdf2_hmac(
         "sha512",
         secret.encode(),

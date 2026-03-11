@@ -1,6 +1,6 @@
 # CryptoPay — Development Progress
 
-**Last updated:** 2026-03-10 (Session 2)
+**Last updated:** 2026-03-11
 
 > See also: [ROADMAP.md](./ROADMAP.md) for strategic vision, fundraising, and expansion plans.
 > See also: [SYSTEM-DESIGN.md](./SYSTEM-DESIGN.md) for technical architecture and liquidity engine design.
@@ -119,6 +119,61 @@
 | PinInput redesign | ✅ Done | 50x58 rounded-xl boxes, green dot indicators, themed fill states |
 | Profile menu icons | ✅ Done | 42x42 colored icon containers (shield=green, lock=blue, fingerprint=amber) |
 | Splash/config colors | ✅ Done | `app.json` splash bg updated to `#060E1F` |
+
+---
+
+## Professional UI Redesign Phase 2 — IMPLEMENTED ✅
+
+**Last updated:** 2026-03-11
+
+| Change | Status | Details |
+|--------|--------|---------|
+| CDN Icons (crypto logos) | ✅ Done | CoinGecko CDN for USDT/BTC/ETH/SOL logos, CryptoLogo component with fallback |
+| CDN Icons (service providers) | ✅ Done | Clearbit logo CDN for KPLC, Safaricom, Airtel, DSTV, GOtv, Showmax, NHIF, KRA |
+| CDN Icons (brand) | ✅ Done | Icons8 Google logo, flagcdn.com Kenya flag — replaced custom-built icons |
+| Centralized logo constants | ✅ Done | `src/constants/logos.ts` — single source for all CDN URLs |
+| SectionHeader component | ✅ Done | Consistent section headers with icons across all screens |
+| OTPInput component | ✅ Done | Clean modern OTP input with focus states, resend timer |
+| Login redesign | ✅ Done | Centered text, Kenya flag CDN, Google CDN icon, hover states |
+| Register redesign | ✅ Done | Same improvements as login, step indicator |
+| Dashboard crypto logos | ✅ Done | Real CoinGecko coin images in portfolio cards |
+| Wallet crypto logos | ✅ Done | Real coin images in asset list |
+| Pay screen logos | ✅ Done | Real company logos for 10+ Kenyan service providers |
+| Buy crypto logos | ✅ Done | Real coin images in crypto selector |
+| Send screen logos | ✅ Done | Real coin images in currency picker |
+| Profile redesign | ✅ Done | Avatar, KYC chips, SectionHeaders, hover effects |
+| Settings redesign | ✅ Done | ProfileCard, SectionHeaders, hover animations |
+| Help/FAQ redesign | ✅ Done | Category filtering, search glow, FAQ accordion |
+| Notifications inbox | ✅ Done | Grouped by date, filter tabs, animated entries |
+| Payment flows | ✅ Done | SectionHeaders, focus glow, hover states on paybill/till/send |
+| Success screen | ✅ Done | Clean enterprise animations (no confetti) |
+| StatusAnimation component | ✅ Done | Simple spring scale-in for success/error/warning/loading |
+
+---
+
+## Security & Auth Enhancements — COMPLETE ✅
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| TOTP Authenticator | ✅ Done | pyotp TOTP, bcrypt-hashed backup codes, QR setup, SetupTOTPView (GET/POST/DELETE) |
+| OTP Challenge (3 wrong PINs) | ✅ Done | Progressive lockout, auto-send OTP, model fields + migration |
+| Device change detection | ✅ Done | New device requires OTP verification, Device model tracking, auto-trust on verify |
+| IP change detection | ✅ Done | `last_login_ip` tracking, OTP required on IP change, audit logging |
+| Email verification tokens | ✅ Done | 24-hour expiry, secure token generation |
+| Recovery contacts | ✅ Done | Recovery email + phone fields on User model |
+
+---
+
+## Production Infrastructure — MOSTLY COMPLETE ✅
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| HD Wallet (BIP-44) | ✅ Done | Real secp256k1/Ed25519 derivation, multi-chain (Tron/ETH/BTC/Solana/Polygon) |
+| BIP-39 Mnemonic | ✅ Done | `WALLET_MNEMONIC` env var support, `mnemonic` lib, `generate_wallet_seed` management command |
+| Master Seed Priority | ✅ Done | 3-tier: WALLET_MASTER_SEED (hex) → WALLET_MNEMONIC (BIP-39) → SECRET_KEY fallback (dev only) |
+| Wallet Seed Management | ⬜ TODO | AWS KMS encryption, HSM integration for production |
+| DeFi Wallet Connect | ⬜ TODO | Reown AppKit v2 research complete, implementation pending |
+| Multi-chain listeners | ⬜ TODO | ETH (Alchemy), BTC (Mempool), SOL (Helius) blockchain monitoring |
 
 ---
 
@@ -264,7 +319,7 @@
 
 ## Phase 3 — Production Ready & Launch (In Progress)
 
-**Last updated:** 2026-03-10
+**Last updated:** 2026-03-11
 
 ### Production Infrastructure — IMPLEMENTED ✅
 
@@ -349,6 +404,40 @@ What's real vs placeholder in the current codebase:
 | 2 | **Full theme support — auth screens** | Frontend | Removed hardcoded `COLORS` constants from login.tsx and register.tsx. Removed hardcoded `C` constant from onboarding.tsx. All replaced with `getThemeColors(isDark)` → `tc.*` pattern. Sub-components accept `tc` as prop. | `login.tsx`, `register.tsx`, `onboarding.tsx` |
 | 3 | **Full theme support — layouts** | Frontend | All 4 layout files (`_layout.tsx`, `auth/_layout.tsx`, `payment/_layout.tsx`, `settings/_layout.tsx`) replaced hardcoded `#060E1F` with `tc.dark.bg`. Root layout StatusBar now theme-aware. | 4 layout files |
 | 4 | **Full theme support — remaining screens** | Frontend | buy-crypto.tsx: all `colors.dark.*` → `tc.dark.*`. confirm.tsx: QuoteCountdown themed. profile.tsx: KYC tiers themed. | `buy-crypto.tsx`, `confirm.tsx`, `profile.tsx` |
+
+#### ✅ COMPLETED (March 11, 2026 Session)
+
+| # | Task | Area | Details | Files |
+|---|------|------|---------|-------|
+| 1 | **OTP challenge after 3 wrong PINs** | Full stack | After 3 consecutive failed PIN attempts, auto-sends SMS OTP and requires verification before further login. `otp_challenge_required` flag on User model. Frontend login screen shows OTP step. | `models.py`, `views.py`, `login.tsx`, `auth.ts` |
+| 2 | **Email verification flow** | Full stack | `EmailVerificationToken` model with 24hr expiry. Send verification → enter code → confirm. Token-based or 6-char code. Verification status on User model (`email_verified`). | `models.py`, `views.py`, `serializers.py`, `urls.py`, `email_verification.html` |
+| 3 | **TOTP authenticator app support** | Full stack | `pyotp` for TOTP generation. Setup flow: generate secret → QR/manual entry → verify first code → generate 10 backup codes (bcrypt hashed). Login checks TOTP if enabled. Backup codes work as fallback. | `models.py`, `views.py`, `totp-setup.tsx`, `auth.ts` |
+| 4 | **Recovery email & phone** | Full stack | `recovery_email`, `recovery_phone`, `recovery_email_verified` fields on User. Recovery settings endpoint with email verification. Security settings overview endpoint. | `models.py`, `views.py`, `serializers.py`, `security.tsx` |
+| 5 | **SMS transaction notifications** | Backend | Celery task `send_transaction_sms_task` — sends SMS via Africa's Talking on completed transactions with reference number. | `tasks.py`, `email.py` |
+| 6 | **Email transaction notifications** | Backend | Enhanced `send_transaction_notifications()` — single entry point that dispatches email receipt, SMS, push notification, and PDF receipt generation. Triggered on saga completion. | `email.py`, `saga.py` |
+| 7 | **PDF receipt generation** | Full stack | `weasyprint` HTML→PDF generator. Branded receipt template with CryptoPay header, transaction details, reference, amounts, fees, status badge. Download endpoint `GET /payments/{id}/receipt/`. Frontend download button on success screen. | `pdf_receipt.py`, `receipt.html`, `views.py`, `urls.py`, `success.tsx` |
+| 8 | **Security settings screen** | Frontend | New `/settings/security` screen with sections for: email verification, TOTP setup, recovery email, trusted devices, change PIN, login protection info. | `security.tsx` |
+| 9 | **TOTP setup screen** | Frontend | New `/settings/totp-setup` screen with 4-step flow: intro → secret key display → code verification → backup codes display. Copy functionality for secret and codes. | `totp-setup.tsx` |
+| 10 | **Success screen receipt download** | Frontend | PDF receipt download button alongside share button. Web downloads via blob URL, mobile shows generation confirmation. Transaction ID passed through from confirm screen. | `success.tsx`, `confirm.tsx` |
+| 11 | **New API endpoints (7)** | Backend | `email/verify/`, `email/confirm/`, `totp/setup/`, `recovery/`, `security/`, `{tx_id}/receipt/`, updated `login/` with OTP+TOTP params | `urls.py` (accounts + payments) |
+| 12 | **Implementation plan document** | Docs | `NEW-FEATURES-PLAN-2026-03-11.md` — comprehensive plan with research, priorities, effort estimates for all new features from Grok conversation. | `docs/research/` |
+
+#### ✅ COMPLETED (March 11, 2026 Session 2 — QA & Polish)
+
+| # | Task | Area | Details | Files |
+|---|------|------|---------|-------|
+| 1 | **Fix login "Session Expired" on wrong PIN** | Frontend | Response interceptor was checking `_sessionExpired` flag BEFORE `isAuthEndpoint` — login 401s were being swallowed. Reordered checks so auth endpoints always pass errors through. Also reset `_sessionExpired` flag on login screen mount. | `client.ts`, `apiErrors.ts`, `login.tsx` |
+| 2 | **Fix 401 error title** | Frontend | Changed 401 default title from "Session Expired" to "Authentication Failed" in `normalizeError()`. Wrong PIN now shows "Authentication Failed: Invalid credentials" instead of misleading session expiry. | `apiErrors.ts` |
+| 3 | **Device registration on login/register** | Full stack | Frontend now sends `device_id`, `device_name`, `platform` via `expo-device` on every login/register/Google login. Backend creates Device records in LoginView, RegisterView, and GoogleLoginView. Web uses stable UUID from localStorage. | `auth.ts`, `views.py` |
+| 4 | **Active Sessions page** | Frontend | `settings/devices.tsx` — lists logged-in devices with name, platform, IP, last active. Current device highlighted with green badge. Remove button with confirmation. 2-column grid on desktop. | `devices.tsx`, `auth.ts` |
+| 5 | **Profile header full-width redesign** | Frontend | Removed `maxWidth: 720` constraint. Desktop uses horizontal 3-panel layout: avatar+name+actions on left, vertical divider, info chips+KYC progress on right. Content fills available width. | `profile.tsx` |
+| 6 | **Service provider real logos** | Frontend | Downloaded real logos (KPLC, Nairobi Water, Safaricom, GOtv, StarTimes, NHIF, Zuku, Uber, Bolt) as local PNGs. Fixed `ServiceLogo` to handle both `require()` return types (number on native, string on web). Removed services without usable logos (Airtel, DSTV, KRA, Showmax). | `logos.ts`, `pay.tsx`, `assets/logos/services/` |
+| 7 | **DM Sans font across all screens** | Frontend | Replaced all `fontWeight` without `fontFamily` across 35+ files. Every text element now uses `DMSans_400Regular`/`500Medium`/`600SemiBold`/`700Bold`. | All app files |
+| 8 | **Full i18n translations** | Frontend | Wired `useLocale()` + `t()` calls across ALL screens: Dashboard, Wallet, Profile, Pay, Settings (Security, KYC, Notifications, Help). All section headers, labels, descriptions, toasts, and buttons translated to English + Swahili. | All screen + i18n files |
+| 9 | **Desktop layout for settings sub-pages** | Frontend | Security, KYC, Notifications pages: removed maxWidth constraints, added `paddingHorizontal: 48` + 2-column grids. Buttons capped at `maxWidth: 360-480` to prevent full-width spanning. | `security.tsx`, `kyc.tsx`, `notifications.tsx` |
+| 10 | **Dev OTP bypass** | Backend | In DEBUG mode, OTP is included in API response (`dev_otp` field) for easy development testing. Shown in frontend toast when OTP challenge is triggered. | `views.py`, `login.tsx` |
+| 11 | **PIN error pass-through for payments** | Frontend | 401 responses with business-logic `error` field (e.g., "Invalid PIN") now pass through the interceptor instead of triggering token refresh → session expiry. | `client.ts` |
+| 12 | **Profile avatar display** | Frontend | Added `resolveAvatarUrl()` helper to handle Django relative URLs. Avatar now displays on Profile page and Settings page header. | `profile.tsx`, `settings/index.tsx` |
 
 #### 🟡 HIGH PRIORITY — Remaining (Before Beta Launch)
 
@@ -487,7 +576,7 @@ eas build --platform ios --profile production
 
 | Document | Purpose | Last Updated |
 |----------|---------|-------------|
-| [PROGRESS.md](./PROGRESS.md) | This file — development status and test results | 2026-03-09 |
+| [PROGRESS.md](./PROGRESS.md) | This file — development status and test results | 2026-03-11 |
 | [ROADMAP.md](./ROADMAP.md) | Strategic roadmap, fundraising, go-to-market, expansion plans, competitive landscape | 2026-03-09 |
 | [SYSTEM-DESIGN.md](./SYSTEM-DESIGN.md) | Technical architecture, liquidity engine, payment saga, security, regulatory compliance | 2026-03-09 |
 | [STARTUP-CHECKLIST.md](./STARTUP-CHECKLIST.md) | Legal, regulatory, financial checklists — updated with VASP Act 2025 requirements | 2026-03-09 |

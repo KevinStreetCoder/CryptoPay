@@ -178,3 +178,12 @@ class PaymentSaga:
         self.tx.completed_at = timezone.now()
         self.tx.save(update_fields=["mpesa_receipt", "status", "completed_at", "updated_at"])
         logger.info(f"Payment completed: tx {self.tx.id}, receipt {mpesa_receipt}")
+
+        # Send all notifications (email, SMS, push, PDF receipt)
+        try:
+            from apps.core.email import send_transaction_notifications
+
+            send_transaction_notifications(self.tx.user, self.tx)
+        except Exception as e:
+            # Notifications are non-critical — log but don't fail the payment
+            logger.error(f"Notification dispatch failed for tx {self.tx.id}: {e}")

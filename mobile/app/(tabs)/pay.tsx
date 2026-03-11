@@ -1,11 +1,91 @@
+import { useState } from "react";
 import { View, Text, Pressable, ScrollView, Platform, useWindowDimensions, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
+import { SectionHeader } from "../../src/components/SectionHeader";
+import { SERVICE_LOGOS } from "../../src/constants/logos";
+import { useLocale } from "../../src/hooks/useLocale";
 
 const isWeb = Platform.OS === "web";
+
+/** Renders a company logo from local asset or CDN URL with fallback.
+ *  Accepts: require() source (number on native, string on web), URL string array, or undefined. */
+function ServiceLogo({
+  logos,
+  name,
+  size = 28,
+  color,
+  bg,
+}: {
+  logos?: any;
+  name: string;
+  size?: number;
+  color: string;
+  bg?: string;
+}) {
+  const [failed, setFailed] = useState(false);
+  const [urlIndex, setUrlIndex] = useState(0);
+
+  // Local require() asset: number on native, string URI on web
+  if (!failed && (typeof logos === "number" || (typeof logos === "string" && !logos.startsWith("http")))) {
+    const source = typeof logos === "number" ? logos : { uri: logos };
+    return (
+      <Image
+        source={source as any}
+        style={{ width: size, height: size, borderRadius: 6 }}
+        onError={() => setFailed(true)}
+        resizeMode="contain"
+      />
+    );
+  }
+
+  // URL string or URL array with cascading fallback
+  const urls = Array.isArray(logos) ? logos : typeof logos === "string" ? [logos] : [];
+  const currentUrl = urls[urlIndex];
+
+  if (currentUrl && !failed) {
+    return (
+      <Image
+        source={{ uri: currentUrl }}
+        style={{ width: size, height: size, borderRadius: 6 }}
+        onError={() => {
+          if (urlIndex < urls.length - 1) setUrlIndex((i) => i + 1);
+          else setFailed(true);
+        }}
+        resizeMode="contain"
+      />
+    );
+  }
+
+  // Colored initial-letter fallback
+  const initial = name.charAt(0).toUpperCase();
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        borderRadius: 6,
+        backgroundColor: color + "30",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <Text
+        style={{
+          color: color,
+          fontSize: size * 0.52,
+          fontFamily: "DMSans_700Bold",
+          lineHeight: size * 0.65,
+        }}
+      >
+        {initial}
+      </Text>
+    </View>
+  );
+}
 
 // ── Real Kenyan Service Providers ──────────────────────────────────────────
 interface ServiceProvider {
@@ -13,6 +93,7 @@ interface ServiceProvider {
   paybill?: string;
   till?: string;
   icon: keyof typeof Ionicons.glyphMap;
+  logos?: any;
   color: string;
   bg: string;
   category: "utility" | "telecom" | "entertainment" | "government" | "other";
@@ -24,6 +105,7 @@ const POPULAR_SERVICES: ServiceProvider[] = [
     name: "KPLC Prepaid",
     paybill: "888880",
     icon: "flash",
+    logos: SERVICE_LOGOS["KPLC Prepaid"],
     color: "#F59E0B",
     bg: "rgba(245,158,11,0.12)",
     category: "utility",
@@ -33,6 +115,7 @@ const POPULAR_SERVICES: ServiceProvider[] = [
     name: "KPLC Postpaid",
     paybill: "888888",
     icon: "flash-outline",
+    logos: SERVICE_LOGOS["KPLC Postpaid"],
     color: "#F59E0B",
     bg: "rgba(245,158,11,0.12)",
     category: "utility",
@@ -42,6 +125,7 @@ const POPULAR_SERVICES: ServiceProvider[] = [
     name: "Nairobi Water",
     paybill: "444400",
     icon: "water",
+    logos: SERVICE_LOGOS["Nairobi Water"],
     color: "#3B82F6",
     bg: "rgba(59,130,246,0.12)",
     category: "utility",
@@ -51,33 +135,17 @@ const POPULAR_SERVICES: ServiceProvider[] = [
     name: "Safaricom",
     paybill: "174379",
     icon: "phone-portrait",
+    logos: SERVICE_LOGOS["Safaricom"],
     color: "#10B981",
     bg: "rgba(16,185,129,0.12)",
     category: "telecom",
     route: "/payment/paybill",
   },
   {
-    name: "Airtel Kenya",
-    paybill: "220220",
-    icon: "cellular",
-    color: "#EF4444",
-    bg: "rgba(239,68,68,0.12)",
-    category: "telecom",
-    route: "/payment/paybill",
-  },
-  {
-    name: "DSTV",
-    paybill: "444900",
-    icon: "tv",
-    color: "#8B5CF6",
-    bg: "rgba(139,92,246,0.12)",
-    category: "entertainment",
-    route: "/payment/paybill",
-  },
-  {
     name: "GOtv",
     paybill: "444900",
     icon: "play-circle",
+    logos: SERVICE_LOGOS["GOtv"],
     color: "#F97316",
     bg: "rgba(249,115,22,0.12)",
     category: "entertainment",
@@ -87,24 +155,17 @@ const POPULAR_SERVICES: ServiceProvider[] = [
     name: "StarTimes",
     paybill: "585858",
     icon: "star",
+    logos: SERVICE_LOGOS["StarTimes"],
     color: "#FBBF24",
     bg: "rgba(251,191,36,0.12)",
     category: "entertainment",
     route: "/payment/paybill",
   },
   {
-    name: "KRA iTax",
-    paybill: "572572",
-    icon: "document-text",
-    color: "#06B6D4",
-    bg: "rgba(6,182,212,0.12)",
-    category: "government",
-    route: "/payment/paybill",
-  },
-  {
     name: "NHIF",
     paybill: "200222",
     icon: "medkit",
+    logos: SERVICE_LOGOS["NHIF"],
     color: "#EC4899",
     bg: "rgba(236,72,153,0.12)",
     category: "government",
@@ -114,18 +175,10 @@ const POPULAR_SERVICES: ServiceProvider[] = [
     name: "Zuku",
     paybill: "320320",
     icon: "wifi",
+    logos: SERVICE_LOGOS["Zuku"],
     color: "#14B8A6",
     bg: "rgba(20,184,166,0.12)",
     category: "telecom",
-    route: "/payment/paybill",
-  },
-  {
-    name: "Showmax",
-    paybill: "444900",
-    icon: "videocam",
-    color: "#EF4444",
-    bg: "rgba(239,68,68,0.12)",
-    category: "entertainment",
     route: "/payment/paybill",
   },
 ];
@@ -133,8 +186,8 @@ const POPULAR_SERVICES: ServiceProvider[] = [
 const PAYMENT_OPTIONS = [
   {
     id: "paybill",
-    title: "Pay Bill",
-    subtitle: "Utilities, subscriptions & more",
+    titleKey: "payment.payBill",
+    subtitleKey: "payment.payBillSubtitle",
     icon: "receipt-outline" as const,
     accent: "#10B981",
     accentBg: "rgba(16, 185, 129, 0.12)",
@@ -142,8 +195,8 @@ const PAYMENT_OPTIONS = [
   },
   {
     id: "till",
-    title: "Buy Goods",
-    subtitle: "Pay merchants via Till number",
+    titleKey: "payment.payTill",
+    subtitleKey: "payment.buyGoodsSubtitle",
     icon: "cart-outline" as const,
     accent: "#3B82F6",
     accentBg: "rgba(59, 130, 246, 0.12)",
@@ -151,8 +204,8 @@ const PAYMENT_OPTIONS = [
   },
   {
     id: "send",
-    title: "Send to M-Pesa",
-    subtitle: "Send money to any phone number",
+    titleKey: "payment.sendToMpesa",
+    subtitleKey: "payment.sendMpesaSubtitle",
     icon: "phone-portrait-outline" as const,
     accent: "#F59E0B",
     accentBg: "rgba(245, 158, 11, 0.12)",
@@ -163,22 +216,22 @@ const PAYMENT_OPTIONS = [
 const HOW_IT_WORKS = [
   {
     step: 1,
-    title: "Enter details",
-    desc: "Paybill/Till number and amount in KES",
+    titleKey: "payment.enterDetails",
+    descKey: "payment.enterDetailsDesc",
     icon: "create-outline" as const,
     color: "#10B981",
   },
   {
     step: 2,
-    title: "Auto convert",
-    desc: "We convert your crypto at the best rate",
+    titleKey: "payment.autoConvert",
+    descKey: "payment.autoConvertDesc",
     icon: "swap-horizontal-outline" as const,
     color: "#3B82F6",
   },
   {
     step: 3,
-    title: "Instant payment",
-    desc: "Payment sent via M-Pesa in seconds",
+    titleKey: "payment.instantPayment",
+    descKey: "payment.instantPaymentDesc",
     icon: "flash-outline" as const,
     color: "#F59E0B",
   },
@@ -186,20 +239,20 @@ const HOW_IT_WORKS = [
 
 const TRUST_STATS = [
   {
-    title: "256-bit Encryption",
-    desc: "Bank-grade security on every transaction",
+    titleKey: "payment.encryption256",
+    descKey: "payment.encryptionDesc",
     icon: "shield-checkmark-outline" as const,
     color: "#10B981",
   },
   {
-    title: "Instant Settlement",
-    desc: "Payments confirmed in under 30 seconds",
+    titleKey: "payment.instantSettlement",
+    descKey: "payment.instantSettlementDesc",
     icon: "flash-outline" as const,
     color: "#3B82F6",
   },
   {
-    title: "24/7 Support",
-    desc: "Real human help whenever you need it",
+    titleKey: "payment.support247",
+    descKey: "payment.support247Desc",
     icon: "headset-outline" as const,
     color: "#A78BFA",
   },
@@ -211,6 +264,7 @@ export default function PayScreen() {
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
   const ts = getThemeShadows(isDark);
+  const { t } = useLocale();
 
   const isDesktop = isWeb && width >= 900;
   const isLargeDesktop = isWeb && width >= 1200;
@@ -219,7 +273,6 @@ export default function PayScreen() {
   const textColor = isDark ? "#FFFFFF" : tc.textPrimary;
 
   const handleServicePress = (service: ServiceProvider) => {
-    // Navigate with prefilled paybill/till number
     if (service.paybill) {
       router.push(`/payment/paybill?prefill=${service.paybill}&name=${encodeURIComponent(service.name)}` as any);
     } else if (service.till) {
@@ -231,10 +284,17 @@ export default function PayScreen() {
     <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 32 }}
+        contentContainerStyle={{ paddingBottom: 40 }}
       >
-        {/* Back Button + Header */}
-        <View style={{ paddingHorizontal: hPad, paddingTop: isDesktop ? 16 : 8 }}>
+        {/* ── Header ─────────────────────────────────────────────────── */}
+        <View
+          style={{
+            paddingHorizontal: hPad,
+            paddingTop: isDesktop ? 20 : 12,
+            paddingBottom: 8,
+          }}
+        >
+          {/* Back button */}
           <Pressable
             onPress={() => {
               if (router.canGoBack()) router.back();
@@ -253,7 +313,7 @@ export default function PayScreen() {
                   ? tc.dark.elevated
                   : "transparent",
               alignSelf: "flex-start",
-              marginBottom: 12,
+              marginBottom: 16,
               opacity: pressed ? 0.9 : 1,
               ...(isWeb
                 ? ({ cursor: "pointer", transition: "all 0.15s ease" } as any)
@@ -263,177 +323,212 @@ export default function PayScreen() {
             accessibilityLabel="Go back"
           >
             <Ionicons name="arrow-back" size={20} color={tc.textSecondary} />
-            <Text style={{ color: tc.textSecondary, fontSize: 15, fontWeight: "500" }}>
-              Back
+            <Text style={{ color: tc.textSecondary, fontSize: 15, fontFamily: "DMSans_500Medium" }}>
+              {t("common.back")}
             </Text>
           </Pressable>
 
-          <Text
-            style={{
-              color: textColor,
-              fontSize: isDesktop ? 32 : 28,
-              fontFamily: "Inter_700Bold",
-              letterSpacing: -0.5,
-            }}
-          >
-            Pay
-          </Text>
-          <Text
-            style={{
-              color: tc.textSecondary,
-              fontSize: isDesktop ? 15 : 14,
-              fontFamily: "Inter_400Regular",
-              marginTop: 4,
-              marginBottom: 4,
-            }}
-          >
-            Pay any Kenyan bill or merchant with crypto
-          </Text>
-        </View>
-
-        {/* Payment Option Cards */}
-        <View
-          style={{
-            paddingHorizontal: hPad,
-            marginTop: 12,
-            ...(isDesktop
-              ? {
-                  flexDirection: "row" as const,
-                  gap: isLargeDesktop ? 20 : 16,
-                  flexWrap: "wrap" as const,
-                }
-              : { gap: 12 }),
-          }}
-        >
-          {PAYMENT_OPTIONS.map((option) => (
-            <Pressable
-              key={option.id}
-              onPress={() => router.push(option.route)}
-              style={({ pressed, hovered }: any) => ({
-                flex: isDesktop ? 1 : undefined,
-                minWidth: isDesktop ? 0 : undefined,
-                backgroundColor: hovered ? tc.dark.elevated : tc.dark.card,
-                borderRadius: 20,
-                padding: isDesktop ? 28 : 20,
-                alignItems: isDesktop ? ("center" as const) : ("flex-start" as const),
-                flexDirection: isDesktop ? ("column" as const) : ("row" as const),
-                borderWidth: 1,
-                borderColor: pressed
-                  ? option.accent + "4D"
-                  : hovered
-                    ? option.accent + "40"
-                    : tc.glass.border,
-                opacity: pressed ? 0.9 : 1,
-                transform: [
-                  { scale: pressed ? 0.98 : hovered ? 1.02 : 1 },
-                ],
-                ...(isWeb
-                  ? ({ cursor: "pointer", transition: "all 0.2s ease" } as any)
-                  : {}),
-                ...(hovered ? ts.md : ts.sm),
-              })}
+          {/* Page title and subtitle */}
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 6 }}>
+            <View
+              style={{
+                width: isDesktop ? 48 : 42,
+                height: isDesktop ? 48 : 42,
+                borderRadius: isDesktop ? 16 : 14,
+                backgroundColor: colors.primary[500] + "18",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
             >
-              <View
+              <Ionicons
+                name="wallet-outline"
+                size={isDesktop ? 24 : 22}
+                color={colors.primary[400]}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text
                 style={{
-                  width: isDesktop ? 60 : 52,
-                  height: isDesktop ? 60 : 52,
-                  borderRadius: isDesktop ? 20 : 16,
-                  backgroundColor: option.accentBg,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  marginBottom: isDesktop ? 14 : 0,
-                  marginRight: isDesktop ? 0 : 16,
+                  color: textColor,
+                  fontSize: isDesktop ? 32 : 28,
+                  fontFamily: "DMSans_700Bold",
+                  letterSpacing: -0.5,
                 }}
               >
-                <Ionicons name={option.icon} size={isDesktop ? 28 : 24} color={option.accent} />
-              </View>
-              {isDesktop ? (
-                <View style={{ alignItems: "center" }}>
-                  <Text
-                    style={{
-                      color: textColor,
-                      fontSize: 16,
-                      fontFamily: "Inter_600SemiBold",
-                      textAlign: "center",
-                    }}
-                  >
-                    {option.title}
-                  </Text>
-                  <Text
-                    style={{
-                      color: tc.textMuted,
-                      fontSize: 12,
-                      fontFamily: "Inter_400Regular",
-                      marginTop: 4,
-                      textAlign: "center",
-                    }}
-                  >
-                    {option.subtitle}
-                  </Text>
+                {t("payment.payments")}
+              </Text>
+              <Text
+                style={{
+                  color: tc.textSecondary,
+                  fontSize: isDesktop ? 15 : 14,
+                  fontFamily: "DMSans_400Regular",
+                  marginTop: 2,
+                }}
+              >
+                {t("payment.payAnyBill")}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* ── Payment Methods ────────────────────────────────────────── */}
+        <View style={{ paddingHorizontal: hPad, marginTop: 20 }}>
+          <SectionHeader
+            title={t("payment.paymentMethods")}
+            icon="card-outline"
+            iconColor={colors.primary[400]}
+          />
+          <View
+            style={{
+              ...(isDesktop
+                ? {
+                    flexDirection: "row" as const,
+                    gap: isLargeDesktop ? 20 : 16,
+                    flexWrap: "wrap" as const,
+                  }
+                : { gap: 12 }),
+            }}
+          >
+            {PAYMENT_OPTIONS.map((option) => (
+              <Pressable
+                key={option.id}
+                onPress={() => router.push(option.route)}
+                style={({ pressed, hovered }: any) => ({
+                  flex: isDesktop ? 1 : undefined,
+                  minWidth: isDesktop ? 0 : undefined,
+                  backgroundColor: hovered ? tc.dark.elevated : tc.dark.card,
+                  borderRadius: 20,
+                  padding: isDesktop ? 28 : 20,
+                  alignItems: isDesktop ? ("center" as const) : ("flex-start" as const),
+                  flexDirection: isDesktop ? ("column" as const) : ("row" as const),
+                  borderWidth: 1,
+                  borderColor: pressed
+                    ? option.accent + "4D"
+                    : hovered
+                      ? option.accent + "40"
+                      : tc.glass.border,
+                  opacity: pressed ? 0.9 : 1,
+                  transform: [
+                    { scale: pressed ? 0.98 : hovered ? 1.02 : 1 },
+                  ],
+                  ...(isWeb
+                    ? ({
+                        cursor: "pointer",
+                        transition: "all 0.2s ease",
+                      } as any)
+                    : {}),
+                  ...(hovered
+                    ? {
+                        ...ts.md,
+                        ...(isWeb
+                          ? ({
+                              boxShadow: `0 4px 20px ${option.accent}25, 0 4px 16px rgba(0,0,0,0.2)`,
+                            } as any)
+                          : {}),
+                      }
+                    : ts.sm),
+                })}
+              >
+                <View
+                  style={{
+                    width: isDesktop ? 60 : 52,
+                    height: isDesktop ? 60 : 52,
+                    borderRadius: isDesktop ? 20 : 16,
+                    backgroundColor: option.accentBg,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    marginBottom: isDesktop ? 14 : 0,
+                    marginRight: isDesktop ? 0 : 16,
+                  }}
+                >
+                  <Ionicons name={option.icon} size={isDesktop ? 28 : 24} color={option.accent} />
                 </View>
-              ) : (
-                <View style={{ flex: 1, flexDirection: "row", alignItems: "center" }}>
-                  <View style={{ flex: 1 }}>
+                {isDesktop ? (
+                  <View style={{ alignItems: "center" }}>
                     <Text
                       style={{
                         color: textColor,
                         fontSize: 16,
-                        fontFamily: "Inter_600SemiBold",
+                        fontFamily: "DMSans_600SemiBold",
+                        textAlign: "center",
                       }}
                     >
-                      {option.title}
+                      {t(option.titleKey)}
                     </Text>
                     <Text
                       style={{
                         color: tc.textMuted,
                         fontSize: 12,
-                        fontFamily: "Inter_400Regular",
-                        marginTop: 2,
+                        fontFamily: "DMSans_400Regular",
+                        marginTop: 4,
+                        textAlign: "center",
                       }}
                     >
-                      {option.subtitle}
+                      {t(option.subtitleKey)}
                     </Text>
                   </View>
-                  <View
-                    style={{
-                      width: 34,
-                      height: 34,
-                      borderRadius: 12,
-                      backgroundColor: tc.dark.elevated,
-                      alignItems: "center",
-                      justifyContent: "center",
-                      borderWidth: 1,
-                      borderColor: tc.glass.border,
-                    }}
-                  >
-                    <Ionicons name="chevron-forward" size={18} color={tc.textSecondary} />
+                ) : (
+                  <View style={{ flex: 1, flexDirection: "row", alignItems: "center" }}>
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={{
+                          color: textColor,
+                          fontSize: 16,
+                          fontFamily: "DMSans_600SemiBold",
+                        }}
+                      >
+                        {t(option.titleKey)}
+                      </Text>
+                      <Text
+                        style={{
+                          color: tc.textMuted,
+                          fontSize: 12,
+                          fontFamily: "DMSans_400Regular",
+                          marginTop: 2,
+                        }}
+                      >
+                        {t(option.subtitleKey)}
+                      </Text>
+                    </View>
+                    <View
+                      style={{
+                        width: 34,
+                        height: 34,
+                        borderRadius: 12,
+                        backgroundColor: tc.dark.elevated,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        borderWidth: 1,
+                        borderColor: tc.glass.border,
+                      }}
+                    >
+                      <Ionicons name="chevron-forward" size={18} color={tc.textSecondary} />
+                    </View>
                   </View>
-                </View>
-              )}
-            </Pressable>
-          ))}
+                )}
+              </Pressable>
+            ))}
+          </View>
         </View>
 
-        {/* Popular Services - clickable with prefill */}
-        <View style={{ paddingHorizontal: hPad, marginTop: 28 }}>
-          <Text
-            style={{
-              color: tc.textMuted,
-              fontSize: 11,
-              fontFamily: "Inter_600SemiBold",
-              textTransform: "uppercase",
-              letterSpacing: 1.2,
-              marginBottom: 14,
-              paddingLeft: 4,
-            }}
-          >
-            Popular Services
-          </Text>
+        {/* ── Popular Services ───────────────────────────────────────── */}
+        <View style={{ paddingHorizontal: hPad, marginTop: 32 }}>
+          <SectionHeader
+            title={t("payment.popularServices")}
+            icon="star-outline"
+            iconColor="#F59E0B"
+            count={POPULAR_SERVICES.length}
+          />
           <View
             style={{
               flexDirection: "row",
               flexWrap: "wrap",
-              gap: isDesktop ? 12 : 10,
+              gap: isDesktop ? 14 : 10,
+              ...(isDesktop
+                ? {
+                    display: "flex" as any,
+                  }
+                : {}),
             }}
           >
             {POPULAR_SERVICES.map((service) => (
@@ -444,16 +539,35 @@ export default function PayScreen() {
                   flexDirection: "row",
                   alignItems: "center",
                   backgroundColor: hovered ? tc.dark.elevated : tc.dark.card,
-                  borderRadius: 14,
-                  paddingHorizontal: isDesktop ? 16 : 14,
-                  paddingVertical: isDesktop ? 12 : 10,
+                  borderRadius: 16,
+                  paddingHorizontal: isDesktop ? 18 : 14,
+                  paddingVertical: isDesktop ? 14 : 10,
                   gap: 10,
                   borderWidth: 1,
                   borderColor: hovered ? service.color + "40" : tc.glass.border,
                   opacity: pressed ? 0.85 : 1,
-                  transform: [{ scale: pressed ? 0.97 : 1 }],
+                  transform: [{ scale: pressed ? 0.97 : hovered ? 1.01 : 1 }],
+                  ...(isDesktop
+                    ? {
+                        width: `calc(33.333% - ${14 * 2 / 3}px)` as any,
+                        minWidth: 200,
+                      }
+                    : {}),
                   ...(isWeb
-                    ? ({ cursor: "pointer", transition: "all 0.15s ease" } as any)
+                    ? ({
+                        cursor: "pointer",
+                        transition: "all 0.2s ease",
+                      } as any)
+                    : {}),
+                  ...(hovered
+                    ? {
+                        ...ts.sm,
+                        ...(isWeb
+                          ? ({
+                              boxShadow: `0 2px 12px ${service.color}20, 0 2px 8px rgba(0,0,0,0.15)`,
+                            } as any)
+                          : {}),
+                      }
                     : {}),
                 })}
                 accessibilityRole="button"
@@ -461,22 +575,29 @@ export default function PayScreen() {
               >
                 <View
                   style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: 10,
+                    width: isDesktop ? 40 : 32,
+                    height: isDesktop ? 40 : 32,
+                    borderRadius: isDesktop ? 12 : 10,
                     backgroundColor: service.bg,
                     alignItems: "center",
                     justifyContent: "center",
+                    overflow: "hidden",
                   }}
                 >
-                  <Ionicons name={service.icon} size={16} color={service.color} />
+                  <ServiceLogo
+                    logos={service.logos}
+                    name={service.name}
+                    size={isDesktop ? 34 : 28}
+                    color={service.color}
+                    bg={service.bg}
+                  />
                 </View>
-                <View>
+                <View style={{ flex: 1 }}>
                   <Text
                     style={{
                       color: tc.textPrimary,
-                      fontSize: 13,
-                      fontFamily: "Inter_600SemiBold",
+                      fontSize: isDesktop ? 14 : 13,
+                      fontFamily: "DMSans_600SemiBold",
                     }}
                   >
                     {service.name}
@@ -484,34 +605,33 @@ export default function PayScreen() {
                   <Text
                     style={{
                       color: tc.textMuted,
-                      fontSize: 11,
-                      fontFamily: "Inter_400Regular",
+                      fontSize: isDesktop ? 12 : 11,
+                      fontFamily: "DMSans_400Regular",
+                      marginTop: 1,
                     }}
                   >
                     {service.paybill || service.till}
                   </Text>
                 </View>
+                {isDesktop && (
+                  <Ionicons name="chevron-forward" size={16} color={tc.textMuted} />
+                )}
               </Pressable>
             ))}
           </View>
         </View>
 
-        {/* How It Works */}
+        {/* ── How It Works ───────────────────────────────────────────── */}
+        <View style={{ paddingHorizontal: hPad, marginTop: 32 }}>
+          <SectionHeader
+            title={t("payment.howItWorks")}
+            icon="sparkles"
+            iconColor={colors.primary[400]}
+            uppercase={false}
+          />
+        </View>
         {isDesktop ? (
-          <View style={{ paddingHorizontal: hPad, marginTop: 32 }}>
-            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 20 }}>
-              <Ionicons name="sparkles" size={18} color={colors.primary[400]} />
-              <Text
-                style={{
-                  color: colors.primary[400],
-                  fontSize: 15,
-                  fontFamily: "Inter_600SemiBold",
-                  marginLeft: 8,
-                }}
-              >
-                How it works
-              </Text>
-            </View>
+          <View style={{ paddingHorizontal: hPad }}>
             <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
               {HOW_IT_WORKS.map((item, index) => (
                 <View
@@ -542,7 +662,7 @@ export default function PayScreen() {
                         style={{
                           color: "#FFFFFF",
                           fontSize: 11,
-                          fontFamily: "Inter_700Bold",
+                          fontFamily: "DMSans_700Bold",
                         }}
                       >
                         {item.step}
@@ -567,11 +687,24 @@ export default function PayScreen() {
                       style={{
                         color: textColor,
                         fontSize: 15,
-                        fontFamily: "Inter_600SemiBold",
+                        fontFamily: "DMSans_600SemiBold",
                         textAlign: "center",
                       }}
                     >
-                      {item.title}
+                      {t(item.titleKey)}
+                    </Text>
+                    <Text
+                      style={{
+                        color: tc.textMuted,
+                        fontSize: 12,
+                        fontFamily: "DMSans_400Regular",
+                        textAlign: "center",
+                        marginTop: 4,
+                        lineHeight: 17,
+                        maxWidth: 180,
+                      }}
+                    >
+                      {t(item.descKey)}
                     </Text>
                   </View>
                   {index < HOW_IT_WORKS.length - 1 && (
@@ -593,28 +726,14 @@ export default function PayScreen() {
           <View
             style={{
               marginHorizontal: hPad,
-              marginTop: 28,
               backgroundColor: tc.dark.card,
               borderRadius: 24,
               padding: 22,
               borderWidth: 1,
               borderColor: tc.glass.border,
+              ...ts.sm,
             }}
           >
-            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 22 }}>
-              <Ionicons name="sparkles" size={18} color={colors.primary[400]} />
-              <Text
-                style={{
-                  color: colors.primary[400],
-                  fontSize: 14,
-                  fontFamily: "Inter_600SemiBold",
-                  marginLeft: 8,
-                }}
-              >
-                How it works
-              </Text>
-            </View>
-
             {HOW_IT_WORKS.map((item, index) => (
               <View
                 key={item.step}
@@ -656,21 +775,21 @@ export default function PayScreen() {
                     style={{
                       color: textColor,
                       fontSize: 14,
-                      fontFamily: "Inter_600SemiBold",
+                      fontFamily: "DMSans_600SemiBold",
                       marginBottom: 3,
                     }}
                   >
-                    {item.title}
+                    {t(item.titleKey)}
                   </Text>
                   <Text
                     style={{
                       color: tc.textMuted,
                       fontSize: 13,
-                      fontFamily: "Inter_400Regular",
+                      fontFamily: "DMSans_400Regular",
                       lineHeight: 18,
                     }}
                   >
-                    {item.desc}
+                    {t(item.descKey)}
                   </Text>
                 </View>
               </View>
@@ -678,68 +797,77 @@ export default function PayScreen() {
           </View>
         )}
 
-        {/* Trust Stats */}
-        <View
-          style={{
-            flexDirection: "row",
-            paddingHorizontal: hPad,
-            gap: isLargeDesktop ? 16 : 12,
-            marginTop: 24,
-            ...(isDesktop ? {} : { flexWrap: "wrap" as const }),
-          }}
-        >
-          {TRUST_STATS.map((stat) => (
-            <View
-              key={stat.title}
-              style={{
-                flex: isDesktop ? 1 : undefined,
-                width: isDesktop ? undefined : "100%",
-                backgroundColor: tc.dark.card,
-                borderRadius: 18,
-                padding: 20,
-                borderWidth: 1,
-                borderColor: tc.glass.border,
-                alignItems: "center",
-                ...ts.sm,
-              }}
-            >
+        {/* ── Trust & Security ───────────────────────────────────────── */}
+        <View style={{ paddingHorizontal: hPad, marginTop: 32 }}>
+          <SectionHeader
+            title={t("payment.trustAndSecurity")}
+            icon="shield-checkmark-outline"
+            iconColor="#10B981"
+          />
+          <View
+            style={{
+              flexDirection: "row",
+              gap: isLargeDesktop ? 16 : 12,
+              ...(isDesktop ? {} : { flexWrap: "wrap" as const }),
+            }}
+          >
+            {TRUST_STATS.map((stat) => (
               <View
+                key={t(stat.titleKey)}
                 style={{
-                  width: 42,
-                  height: 42,
-                  borderRadius: 14,
-                  backgroundColor: stat.color + "18",
+                  flex: isDesktop ? 1 : undefined,
+                  width: isDesktop ? undefined : "100%",
+                  backgroundColor: tc.dark.card,
+                  borderRadius: 18,
+                  padding: isDesktop ? 24 : 20,
+                  borderWidth: 1,
+                  borderColor: tc.glass.border,
                   alignItems: "center",
-                  justifyContent: "center",
-                  marginBottom: 12,
+                  ...ts.sm,
                 }}
               >
-                <Ionicons name={stat.icon} size={20} color={stat.color} />
+                <View
+                  style={{
+                    width: isDesktop ? 48 : 42,
+                    height: isDesktop ? 48 : 42,
+                    borderRadius: isDesktop ? 16 : 14,
+                    backgroundColor: stat.color + "18",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    marginBottom: 12,
+                  }}
+                >
+                  <Ionicons
+                    name={stat.icon}
+                    size={isDesktop ? 24 : 20}
+                    color={stat.color}
+                  />
+                </View>
+                <Text
+                  style={{
+                    color: textColor,
+                    fontSize: isDesktop ? 15 : 14,
+                    fontFamily: "DMSans_600SemiBold",
+                    marginBottom: 4,
+                    textAlign: "center",
+                  }}
+                >
+                  {t(stat.titleKey)}
+                </Text>
+                <Text
+                  style={{
+                    color: tc.textMuted,
+                    fontSize: 12,
+                    fontFamily: "DMSans_400Regular",
+                    textAlign: "center",
+                    lineHeight: 17,
+                  }}
+                >
+                  {t(stat.descKey)}
+                </Text>
               </View>
-              <Text
-                style={{
-                  color: textColor,
-                  fontSize: 14,
-                  fontFamily: "Inter_600SemiBold",
-                  marginBottom: 4,
-                  textAlign: "center",
-                }}
-              >
-                {stat.title}
-              </Text>
-              <Text
-                style={{
-                  color: tc.textMuted,
-                  fontSize: 12,
-                  fontFamily: "Inter_400Regular",
-                  textAlign: "center",
-                  lineHeight: 17,
-                }}
-              >
-                {stat.desc}
-              </Text>
-            </View>
-          ))}
+            ))}
+          </View>
         </View>
       </ScrollView>
     </SafeAreaView>

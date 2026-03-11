@@ -71,7 +71,7 @@ export function StatusBadge({ status, size = "sm" }: StatusBadgeProps) {
         style={{
           color: config.text,
           fontSize: isSmall ? 11 : 13,
-          fontFamily: "Inter_500Medium",
+          fontFamily: "DMSans_500Medium",
         }}
       >
         {config.label}

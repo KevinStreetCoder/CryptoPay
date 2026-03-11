@@ -250,7 +250,7 @@ function PeriodSelector({
               style={{
                 color: isActive ? accentColor : tc.textMuted,
                 fontSize: 12,
-                fontFamily: "Inter_600SemiBold",
+                fontFamily: "DMSans_600SemiBold",
                 letterSpacing: 0.5,
               }}
             >
@@ -309,7 +309,7 @@ function Tooltip({
         style={{
           color: tc.textPrimary,
           fontSize: 13,
-          fontFamily: "Inter_700Bold",
+          fontFamily: "DMSans_700Bold",
           textAlign: "center",
           marginBottom: 2,
         }}
@@ -321,7 +321,7 @@ function Tooltip({
         style={{
           color: tc.textMuted,
           fontSize: 10,
-          fontFamily: "Inter_400Regular",
+          fontFamily: "DMSans_400Regular",
           textAlign: "center",
         }}
         numberOfLines={1}
@@ -547,7 +547,7 @@ export function CryptoChart({
           style={{
             color: tc.textMuted,
             fontSize: 14,
-            fontFamily: "Inter_500Medium",
+            fontFamily: "DMSans_500Medium",
             textAlign: "center",
             marginTop: height / 3,
           }}
@@ -590,7 +590,7 @@ export function CryptoChart({
             style={{
               color: tc.textSecondary,
               fontSize: 12,
-              fontFamily: "Inter_500Medium",
+              fontFamily: "DMSans_500Medium",
               letterSpacing: 0.5,
               textTransform: "uppercase",
               marginBottom: 4,
@@ -602,7 +602,7 @@ export function CryptoChart({
             style={{
               color: tc.textPrimary,
               fontSize: 24,
-              fontFamily: "Inter_700Bold",
+              fontFamily: "DMSans_700Bold",
               letterSpacing: -0.5,
             }}
           >
@@ -624,7 +624,7 @@ export function CryptoChart({
             style={{
               color: changeColor,
               fontSize: 13,
-              fontFamily: "Inter_600SemiBold",
+              fontFamily: "DMSans_600SemiBold",
             }}
           >
             {isPositive ? "+" : ""}

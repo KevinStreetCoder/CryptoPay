@@ -150,7 +150,7 @@ const styles = StyleSheet.create({
   },
   liveText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: "DMSans_600SemiBold",
     letterSpacing: 1,
   },
   rateContainer: {
@@ -160,11 +160,11 @@ const styles = StyleSheet.create({
   },
   symbolText: {
     fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: "DMSans_600SemiBold",
   },
   rateText: {
     fontSize: 15,
-    fontFamily: "Inter_700Bold",
+    fontFamily: "DMSans_700Bold",
   },
   changePill: {
     flexDirection: "row",
@@ -176,6 +176,6 @@ const styles = StyleSheet.create({
   },
   changeText: {
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: "DMSans_600SemiBold",
   },
 });

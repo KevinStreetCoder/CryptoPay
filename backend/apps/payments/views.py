@@ -463,3 +463,54 @@ class TransactionHistoryView(ListAPIView):
 
     def get_queryset(self):
         return Transaction.objects.filter(user=self.request.user)
+
+
+class TransactionReceiptView(APIView):
+    """Download PDF receipt for a completed transaction."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, transaction_id):
+        import os
+        from django.http import FileResponse, HttpResponse
+        from django.conf import settings as _settings
+
+        try:
+            tx = Transaction.objects.get(id=transaction_id, user=request.user)
+        except Transaction.DoesNotExist:
+            return Response(
+                {"error": "Transaction not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Check if PDF already exists
+        receipt_filename = f"receipt_{str(tx.id)[:8]}_{tx.created_at.strftime('%Y%m%d')}.pdf"
+        receipt_path = os.path.join(_settings.MEDIA_ROOT, "receipts", receipt_filename)
+
+        if not os.path.exists(receipt_path):
+            # Generate on demand
+            from apps.core.pdf_receipt import generate_receipt_pdf
+
+            receipt_path = generate_receipt_pdf(tx)
+
+        if receipt_path and os.path.exists(receipt_path):
+            if receipt_path.endswith(".pdf"):
+                return FileResponse(
+                    open(receipt_path, "rb"),
+                    content_type="application/pdf",
+                    as_attachment=True,
+                    filename=receipt_filename,
+                )
+            else:
+                # HTML fallback
+                return FileResponse(
+                    open(receipt_path, "rb"),
+                    content_type="text/html",
+                    as_attachment=True,
+                    filename=receipt_filename.replace(".pdf", ".html"),
+                )
+
+        return Response(
+            {"error": "Receipt generation failed. Please try again."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )

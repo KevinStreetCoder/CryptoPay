@@ -124,6 +124,16 @@ export function WebSidebar() {
     return pathname.includes(item.key);
   };
 
+  const isSecondaryActive = (item: (typeof SECONDARY_ITEMS)[0]) => {
+    if (item.key === "help") {
+      return pathname === "/settings/help";
+    }
+    if (item.key === "settings") {
+      return pathname.startsWith("/settings") && pathname !== "/settings/help";
+    }
+    return pathname === item.path;
+  };
+
   const handleLogout = async () => {
     await logout();
     router.replace("/auth/login");
@@ -185,7 +195,7 @@ export function WebSidebar() {
                 style={{
                   color: tc.textPrimary,
                   fontSize: 18,
-                  fontFamily: "Inter_700Bold",
+                  fontFamily: "DMSans_700Bold",
                   letterSpacing: -0.3,
                 }}
               >
@@ -195,7 +205,7 @@ export function WebSidebar() {
                 style={{
                   color: tc.textMuted,
                   fontSize: 11,
-                  fontFamily: "Inter_400Regular",
+                  fontFamily: "DMSans_400Regular",
                 }}
               >
                 Dashboard
@@ -256,7 +266,7 @@ export function WebSidebar() {
               style={{
                 color: tc.textMuted,
                 fontSize: 10,
-                fontFamily: "Inter_600SemiBold",
+                fontFamily: "DMSans_600SemiBold",
                 letterSpacing: 1.2,
                 textTransform: "uppercase",
                 paddingHorizontal: 12,
@@ -321,7 +331,7 @@ export function WebSidebar() {
                       style={{
                         color: active ? colors.primary[400] : tc.textSecondary,
                         fontSize: 14,
-                        fontFamily: active ? "Inter_600SemiBold" : "Inter_500Medium",
+                        fontFamily: active ? "DMSans_600SemiBold" : "DMSans_500Medium",
                         ...(Platform.OS === "web"
                           ? ({ whiteSpace: "nowrap" } as any)
                           : {}),
@@ -365,7 +375,7 @@ export function WebSidebar() {
               style={{
                 color: tc.textMuted,
                 fontSize: 10,
-                fontFamily: "Inter_600SemiBold",
+                fontFamily: "DMSans_600SemiBold",
                 letterSpacing: 1.2,
                 textTransform: "uppercase",
                 paddingHorizontal: 12,
@@ -375,61 +385,81 @@ export function WebSidebar() {
               OTHER
             </Text>
           )}
-          {SECONDARY_ITEMS.map((item) => (
-            <NavTooltip key={item.key} label={item.label} collapsed={collapsed}>
-              <Pressable
-                onPress={() => item.path && router.push(item.path as any)}
-                style={({ pressed, hovered }: any) => ({
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: collapsed ? "center" : "flex-start",
-                  gap: collapsed ? 0 : 12,
-                  paddingHorizontal: collapsed ? 0 : 14,
-                  paddingVertical: 10,
-                  borderRadius: 12,
-                  backgroundColor: hovered
-                    ? isDark ? "rgba(255, 255, 255, 0.04)" : "rgba(0, 0, 0, 0.04)"
-                    : "transparent",
-                  opacity: pressed ? 0.8 : 1,
-                  ...(Platform.OS === "web"
-                    ? ({
-                        cursor: "pointer",
-                        transition: "all 0.15s ease",
-                      } as any)
-                    : {}),
-                })}
-                accessibilityRole="button"
-                accessibilityLabel={item.label}
-              >
-                <View
-                  style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 10,
-                    backgroundColor: isDark ? "rgba(255, 255, 255, 0.04)" : "rgba(0, 0, 0, 0.04)",
+          {SECONDARY_ITEMS.map((item) => {
+            const active = isSecondaryActive(item);
+            return (
+              <NavTooltip key={item.key} label={item.label} collapsed={collapsed}>
+                <Pressable
+                  onPress={() => item.path && router.push(item.path as any)}
+                  style={({ pressed, hovered }: any) => ({
+                    flexDirection: "row",
                     alignItems: "center",
-                    justifyContent: "center",
-                  }}
+                    justifyContent: collapsed ? "center" : "flex-start",
+                    gap: collapsed ? 0 : 12,
+                    paddingHorizontal: collapsed ? 0 : 14,
+                    paddingVertical: 10,
+                    borderRadius: 12,
+                    backgroundColor: active
+                      ? "rgba(16, 185, 129, 0.12)"
+                      : hovered
+                        ? isDark ? "rgba(255, 255, 255, 0.04)" : "rgba(0, 0, 0, 0.04)"
+                        : "transparent",
+                    borderWidth: active ? 1 : 0,
+                    borderColor: active ? "rgba(16, 185, 129, 0.2)" : "transparent",
+                    opacity: pressed ? 0.8 : 1,
+                    ...(Platform.OS === "web"
+                      ? ({
+                          cursor: "pointer",
+                          transition: "all 0.15s ease",
+                        } as any)
+                      : {}),
+                  })}
+                  accessibilityRole="button"
+                  accessibilityLabel={item.label}
                 >
-                  <Ionicons name={item.icon} size={18} color={tc.textMuted} />
-                </View>
-                {!collapsed && (
-                  <Text
+                  <View
                     style={{
-                      color: tc.textSecondary,
-                      fontSize: 13,
-                      fontFamily: "Inter_500Medium",
-                      ...(Platform.OS === "web"
-                        ? ({ whiteSpace: "nowrap" } as any)
-                        : {}),
+                      width: 36,
+                      height: 36,
+                      borderRadius: 10,
+                      backgroundColor: active
+                        ? colors.primary[500] + "20"
+                        : isDark ? "rgba(255, 255, 255, 0.04)" : "rgba(0, 0, 0, 0.04)",
+                      alignItems: "center",
+                      justifyContent: "center",
                     }}
                   >
-                    {item.label}
-                  </Text>
-                )}
-              </Pressable>
-            </NavTooltip>
-          ))}
+                    <Ionicons name={item.icon} size={18} color={active ? colors.primary[400] : tc.textMuted} />
+                  </View>
+                  {!collapsed && (
+                    <Text
+                      style={{
+                        color: active ? colors.primary[400] : tc.textSecondary,
+                        fontSize: 13,
+                        fontFamily: active ? "DMSans_600SemiBold" : "DMSans_500Medium",
+                        ...(Platform.OS === "web"
+                          ? ({ whiteSpace: "nowrap" } as any)
+                          : {}),
+                      }}
+                    >
+                      {item.label}
+                    </Text>
+                  )}
+                  {active && !collapsed && (
+                    <View
+                      style={{
+                        marginLeft: "auto",
+                        width: 4,
+                        height: 20,
+                        borderRadius: 2,
+                        backgroundColor: colors.primary[500],
+                      }}
+                    />
+                  )}
+                </Pressable>
+              </NavTooltip>
+            );
+          })}
         </View>
       </View>
 
@@ -465,7 +495,7 @@ export function WebSidebar() {
                   style={{
                     color: colors.primary[400],
                     fontSize: 14,
-                    fontFamily: "Inter_700Bold",
+                    fontFamily: "DMSans_700Bold",
                   }}
                 >
                   {getInitials(user?.full_name)}
@@ -518,7 +548,7 @@ export function WebSidebar() {
                   style={{
                     color: colors.primary[400],
                     fontSize: 14,
-                    fontFamily: "Inter_700Bold",
+                    fontFamily: "DMSans_700Bold",
                   }}
                 >
                   {getInitials(user?.full_name)}
@@ -530,7 +560,7 @@ export function WebSidebar() {
                 flex: 1,
                 color: tc.textPrimary,
                 fontSize: 13,
-                fontFamily: "Inter_600SemiBold",
+                fontFamily: "DMSans_600SemiBold",
               }}
               numberOfLines={1}
             >
@@ -581,7 +611,7 @@ export function WebSidebar() {
               style={{
                 color: colors.error,
                 fontSize: 13,
-                fontFamily: "Inter_500Medium",
+                fontFamily: "DMSans_500Medium",
               }}
             >
               Logout

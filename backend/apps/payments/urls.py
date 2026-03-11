@@ -10,4 +10,5 @@ urlpatterns = [
     path("send-mpesa/", views.SendMpesaView.as_view(), name="send-mpesa"),
     path("buy-crypto/", views.BuyCryptoView.as_view(), name="buy-crypto"),
     path("history/", views.TransactionHistoryView.as_view(), name="history"),
+    path("<uuid:transaction_id>/receipt/", views.TransactionReceiptView.as_view(), name="transaction-receipt"),
 ]

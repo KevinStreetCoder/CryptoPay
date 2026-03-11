@@ -145,7 +145,7 @@ export function TransactionItem({ transaction, onPress }: TransactionItemProps) 
             style={{
               color: tc.textPrimary,
               fontSize: 15,
-              fontFamily: "Inter_600SemiBold",
+              fontFamily: "DMSans_600SemiBold",
               marginBottom: 2,
             }}
             maxFontSizeMultiplier={1.3}
@@ -156,7 +156,7 @@ export function TransactionItem({ transaction, onPress }: TransactionItemProps) 
             style={{
               color: tc.dark.muted,
               fontSize: 13,
-              fontFamily: "Inter_400Regular",
+              fontFamily: "DMSans_400Regular",
             }}
             numberOfLines={1}
           >
@@ -170,7 +170,7 @@ export function TransactionItem({ transaction, onPress }: TransactionItemProps) 
             style={{
               color: tc.textPrimary,
               fontSize: 15,
-              fontFamily: "Inter_700Bold",
+              fontFamily: "DMSans_700Bold",
               marginBottom: 4,
             }}
             maxFontSizeMultiplier={1.2}
@@ -200,7 +200,7 @@ export function TransactionItem({ transaction, onPress }: TransactionItemProps) 
             <Text
               style={{
                 fontSize: 11,
-                fontFamily: "Inter_500Medium",
+                fontFamily: "DMSans_500Medium",
                 textTransform: "capitalize",
                 color: currentStatus.color,
               }}

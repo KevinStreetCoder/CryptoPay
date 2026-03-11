@@ -6,16 +6,21 @@ import {
   Pressable,
   Platform,
   useWindowDimensions,
+  Animated,
+  Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../src/stores/auth";
 import { useBalanceVisibility } from "../../src/stores/balance";
+import { config } from "../../src/constants/config";
 import { colors, getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
+import { SectionHeader } from "../../src/components/SectionHeader";
 import { storage } from "../../src/utils/storage";
 import { usePhonePrivacy } from "../../src/utils/privacy";
+import { useLocale } from "../../src/hooks/useLocale";
 
 const isWeb = Platform.OS === "web";
 
@@ -35,6 +40,8 @@ interface MenuItem {
 
 interface MenuSection {
   title: string;
+  icon: string;
+  iconColor: string;
   items: MenuItem[];
 }
 
@@ -43,11 +50,13 @@ function SettingsItem({
   isDesktop,
   onPress,
   tc,
+  ts,
 }: {
   item: MenuItem;
   isDesktop: boolean;
   onPress: () => void;
   tc: ReturnType<typeof getThemeColors>;
+  ts: ReturnType<typeof getThemeShadows>;
 }) {
   return (
     <Pressable
@@ -64,7 +73,11 @@ function SettingsItem({
         opacity: pressed ? 0.8 : 1,
         gap: 14,
         ...(isWeb
-          ? ({ cursor: "pointer", transition: "background-color 0.15s ease" } as any)
+          ? ({
+              cursor: "pointer",
+              transition: "all 0.2s ease",
+              transform: hovered ? "translateX(4px)" : "translateX(0px)",
+            } as any)
           : {}),
       })}
       accessibilityRole="button"
@@ -88,7 +101,7 @@ function SettingsItem({
             style={{
               color: tc.textPrimary,
               fontSize: 15,
-              fontWeight: "600",
+              fontFamily: "DMSans_600SemiBold",
             }}
           >
             {item.label}
@@ -106,7 +119,7 @@ function SettingsItem({
                 style={{
                   color: colors.primary[400],
                   fontSize: 10,
-                  fontWeight: "700",
+                  fontFamily: "DMSans_700Bold",
                 }}
               >
                 {item.badge}
@@ -114,6 +127,16 @@ function SettingsItem({
             </View>
           )}
         </View>
+        <Text
+          style={{
+            color: tc.textMuted,
+            fontSize: 13,
+            marginTop: 2,
+          }}
+          numberOfLines={1}
+        >
+          {item.description}
+        </Text>
       </View>
       {item.rightElement || (
         <Ionicons
@@ -169,15 +192,25 @@ function ToggleItem({
           style={{
             color: tc.textPrimary,
             fontSize: 15,
-            fontWeight: "600",
+            fontFamily: "DMSans_600SemiBold",
           }}
         >
           {item.label}
         </Text>
+        <Text
+          style={{
+            color: tc.textMuted,
+            fontSize: 13,
+            marginTop: 2,
+          }}
+          numberOfLines={1}
+        >
+          {item.description}
+        </Text>
       </View>
       <Pressable
         onPress={onToggle}
-        style={{
+        style={({ hovered }: any) => ({
           width: 52,
           height: 30,
           borderRadius: 15,
@@ -185,9 +218,13 @@ function ToggleItem({
           justifyContent: "center",
           paddingHorizontal: 3,
           ...(isWeb
-            ? ({ cursor: "pointer", transition: "background-color 0.2s ease" } as any)
+            ? ({
+                cursor: "pointer",
+                transition: "background-color 0.2s ease",
+                transform: hovered ? "scale(1.05)" : "scale(1)",
+              } as any)
             : {}),
-        }}
+        })}
         accessibilityRole="switch"
         accessibilityState={{ checked: value }}
       >
@@ -233,19 +270,11 @@ function SectionCard({
 }) {
   return (
     <View style={{ marginBottom: 20 }}>
-      <Text
-        style={{
-          color: tc.textMuted,
-          fontSize: 12,
-          fontWeight: "600",
-          letterSpacing: 0.8,
-          textTransform: "uppercase",
-          paddingHorizontal: isDesktop ? 18 : 16,
-          marginBottom: 8,
-        }}
-      >
-        {section.title}
-      </Text>
+      <SectionHeader
+        title={section.title}
+        icon={section.icon}
+        iconColor={section.iconColor}
+      />
       <View
         style={{
           backgroundColor: tc.dark.card,
@@ -271,7 +300,13 @@ function SectionCard({
                   ts={ts}
                 />
               ) : (
-                <SettingsItem item={item} isDesktop={isDesktop} onPress={() => handleItemPress(item)} tc={tc} />
+                <SettingsItem
+                  item={item}
+                  isDesktop={isDesktop}
+                  onPress={() => handleItemPress(item)}
+                  tc={tc}
+                  ts={ts}
+                />
               )}
               {showDivider && (
                 <View
@@ -290,6 +325,145 @@ function SectionCard({
   );
 }
 
+// ── Profile Card ────────────────────────────────────────────────────────────
+function ProfileCard({
+  user,
+  formatPhone,
+  isDesktop,
+  tc,
+  ts,
+  router,
+}: {
+  user: any;
+  formatPhone: (phone?: string) => string;
+  isDesktop: boolean;
+  tc: ReturnType<typeof getThemeColors>;
+  ts: ReturnType<typeof getThemeShadows>;
+  router: any;
+}) {
+  const { t } = useLocale();
+  const initials = (user?.full_name || "U")
+    .split(" ")
+    .map((n: string) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+
+  return (
+    <Pressable
+      onPress={() => router.push("/(tabs)/profile" as any)}
+      style={({ pressed, hovered }: any) => ({
+        backgroundColor: tc.dark.card,
+        borderRadius: 22,
+        padding: isDesktop ? 28 : 22,
+        borderWidth: 1,
+        borderColor: hovered ? tc.glass.borderStrong : tc.glass.border,
+        marginBottom: 28,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 18,
+        maxWidth: undefined,
+        alignSelf: undefined,
+        width: "100%" as const,
+        opacity: pressed ? 0.95 : 1,
+        ...ts.md,
+        ...(isWeb
+          ? ({
+              cursor: "pointer",
+              transition: "all 0.25s ease",
+              transform: hovered ? "translateY(-2px)" : "translateY(0px)",
+            } as any)
+          : {}),
+      })}
+      accessibilityRole="button"
+      accessibilityLabel="View profile"
+    >
+      {/* Avatar */}
+      {(() => {
+        const avatarSize = isDesktop ? 64 : 56;
+        const avatarUrl = user?.avatar_url
+          ? (user.avatar_url.startsWith("http") ? user.avatar_url : `${config.apiUrl.replace(/\/api\/v1\/?$/, "")}${user.avatar_url.startsWith("/") ? "" : "/"}${user.avatar_url}`)
+          : null;
+        return avatarUrl ? (
+          <Image
+            source={{ uri: avatarUrl }}
+            style={{
+              width: avatarSize,
+              height: avatarSize,
+              borderRadius: isDesktop ? 20 : 18,
+              borderWidth: 2,
+              borderColor: colors.primary[500] + "40",
+            }}
+          />
+        ) : (
+          <View
+            style={{
+              width: avatarSize,
+              height: avatarSize,
+              borderRadius: isDesktop ? 20 : 18,
+              backgroundColor: colors.primary[500] + "20",
+              alignItems: "center",
+              justifyContent: "center",
+              borderWidth: 2,
+              borderColor: colors.primary[500] + "40",
+            }}
+          >
+            <Text
+              style={{
+                color: colors.primary[400],
+                fontSize: isDesktop ? 24 : 20,
+                fontFamily: "DMSans_700Bold",
+              }}
+            >
+              {initials}
+            </Text>
+          </View>
+        );
+      })()}
+
+      {/* Info */}
+      <View style={{ flex: 1 }}>
+        <Text
+          style={{
+            color: tc.textPrimary,
+            fontSize: isDesktop ? 20 : 18,
+            fontFamily: "DMSans_700Bold",
+            letterSpacing: -0.3,
+          }}
+        >
+          {user?.full_name || "User"}
+        </Text>
+        <Text
+          style={{
+            color: tc.textMuted,
+            fontSize: 14,
+            marginTop: 3,
+          }}
+        >
+          {formatPhone(user?.phone)}
+        </Text>
+      </View>
+
+      {/* Status + Chevron */}
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+        <View
+          style={{
+            backgroundColor: colors.success + "18",
+            borderRadius: 10,
+            paddingHorizontal: 10,
+            paddingVertical: 5,
+          }}
+        >
+          <Text style={{ color: colors.success, fontSize: 12, fontFamily: "DMSans_600SemiBold" }}>
+            {t("common.active")}
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={tc.textMuted} />
+      </View>
+    </Pressable>
+  );
+}
+
 // ── Main Settings Screen ────────────────────────────────────────────────────
 export default function SettingsScreen() {
   const router = useRouter();
@@ -303,6 +477,7 @@ export default function SettingsScreen() {
   const { user } = useAuth();
   const { formatPhone } = usePhonePrivacy();
   const { balanceHidden, toggleBalance } = useBalanceVisibility();
+  const { t } = useLocale();
   const [biometricEnabled, setBiometricEnabled] = useState(false);
 
   // Load biometric pref
@@ -320,15 +495,17 @@ export default function SettingsScreen() {
 
   const sections: MenuSection[] = [
     {
-      title: "Account",
+      title: t("settings.account"),
+      icon: "person-circle-outline",
+      iconColor: colors.primary[400],
       items: [
         {
           key: "profile",
           icon: "person-outline",
           iconColor: colors.primary[400],
           iconBg: colors.primary[500] + "18",
-          label: "Profile",
-          description: "Name, phone number, account info",
+          label: t("settings.profile"),
+          description: t("settings.profileDesc"),
           route: "/(tabs)/profile",
         },
         {
@@ -336,8 +513,8 @@ export default function SettingsScreen() {
           icon: "shield-checkmark-outline",
           iconColor: colors.info,
           iconBg: colors.info + "18",
-          label: "Identity Verification",
-          description: "KYC documents and verification status",
+          label: t("settings.identityVerification"),
+          description: t("settings.identityVerificationDesc"),
           route: "/settings/kyc",
           badge: "KYC",
         },
@@ -346,22 +523,34 @@ export default function SettingsScreen() {
           icon: "key-outline",
           iconColor: colors.accent,
           iconBg: colors.accent + "18",
-          label: "Change PIN",
-          description: "Update your transaction PIN",
+          label: t("settings.changePin"),
+          description: t("settings.changePinDesc"),
           route: "/settings/change-pin",
+        },
+        {
+          key: "security",
+          icon: "shield-half-outline",
+          iconColor: "#8B5CF6",
+          iconBg: "rgba(139, 92, 246, 0.15)",
+          label: t("settings.securitySettings"),
+          description: t("settings.securitySettingsDesc"),
+          route: "/settings/security",
+          badge: "NEW",
         },
       ],
     },
     {
-      title: "Preferences",
+      title: t("settings.preferences"),
+      icon: "options-outline",
+      iconColor: "#60A5FA",
       items: [
         {
           key: "notifications",
           icon: "notifications-outline",
           iconColor: "#A78BFA",
           iconBg: "rgba(167,139,250,0.15)",
-          label: "Notifications",
-          description: "Transaction alerts, deposits, promotions",
+          label: t("settings.notifications"),
+          description: t("settings.notificationsDesc"),
           route: "/settings/notifications",
         },
         {
@@ -369,8 +558,8 @@ export default function SettingsScreen() {
           icon: "language-outline",
           iconColor: "#60A5FA",
           iconBg: "rgba(96,165,250,0.15)",
-          label: "Language",
-          description: "English, Swahili",
+          label: t("settings.language"),
+          description: t("settings.languageDesc"),
           route: "/settings/language",
           badge: "EN",
         },
@@ -379,57 +568,70 @@ export default function SettingsScreen() {
           icon: "cash-outline",
           iconColor: colors.success,
           iconBg: colors.success + "18",
-          label: "Default Currency",
-          description: "Display amounts in KES",
+          label: t("settings.defaultCurrency"),
+          description: t("settings.defaultCurrencyDesc"),
           action: () => {},
           rightElement: (
-            <Text style={{ color: tc.textSecondary, fontSize: 14, fontWeight: "600" }}>
-              KES
-            </Text>
+            <View
+              style={{
+                backgroundColor: colors.success + "15",
+                borderRadius: 8,
+                paddingHorizontal: 10,
+                paddingVertical: 4,
+              }}
+            >
+              <Text style={{ color: colors.success, fontSize: 13, fontFamily: "DMSans_700Bold" }}>
+                KES
+              </Text>
+            </View>
           ),
         },
       ],
     },
     {
-      title: "Security",
+      title: t("settings.security"),
+      icon: "lock-closed-outline",
+      iconColor: colors.warning,
       items: [
         {
           key: "hide-balance",
           icon: "eye-off-outline",
           iconColor: colors.warning,
           iconBg: colors.warning + "18",
-          label: "Hide Balance",
-          description: "Mask amounts on screen for privacy",
+          label: t("settings.hideBalance"),
+          description: t("settings.hideBalanceDesc"),
         },
         {
           key: "biometric",
           icon: "finger-print",
           iconColor: "#EC4899",
           iconBg: "rgba(236,72,153,0.15)",
-          label: "Biometric Lock",
-          description: "Use fingerprint or Face ID to unlock",
+          label: t("settings.biometricLock"),
+          description: t("settings.biometricLockDesc"),
         },
         {
           key: "sessions",
           icon: "phone-portrait-outline",
           iconColor: "#06B6D4",
           iconBg: "rgba(6,182,212,0.15)",
-          label: "Active Sessions",
-          description: "Manage logged-in devices",
-          action: () => {},
+          label: t("settings.activeSessions"),
+          description: t("settings.activeSessionsDesc"),
+          route: "/settings/devices",
         },
       ],
     },
     {
-      title: "About",
+      title: t("settings.about"),
+      icon: "information-circle-outline",
+      iconColor: tc.textSecondary,
       items: [
         {
           key: "help",
           icon: "help-circle-outline",
           iconColor: tc.textSecondary,
           iconBg: "rgba(136,153,170,0.12)",
-          label: "Help & Support",
-          description: "FAQs, contact support",
+          label: t("settings.helpSupport"),
+          description: t("settings.helpSupportDesc"),
           route: "/settings/help",
         },
         {
@@ -437,8 +639,8 @@ export default function SettingsScreen() {
           icon: "document-text-outline",
           iconColor: tc.textSecondary,
           iconBg: "rgba(136,153,170,0.12)",
-          label: "Terms & Privacy",
-          description: "Legal documents and data policy",
+          label: t("settings.termsPrivacy"),
+          description: t("settings.termsPrivacyDesc"),
           action: () => {},
         },
         {
@@ -446,13 +648,24 @@ export default function SettingsScreen() {
           icon: "information-circle-outline",
           iconColor: tc.textSecondary,
           iconBg: "rgba(136,153,170,0.12)",
-          label: "App Version",
-          description: "CryptoPay v1.0.0",
+          label: t("settings.appVersion"),
+          description: t("settings.appVersionDesc"),
           action: () => {},
           rightElement: (
-            <Text style={{ color: tc.textMuted, fontSize: 13, fontWeight: "500" }}>
-              1.0.0
-            </Text>
+            <View
+              style={{
+                backgroundColor: tc.glass.highlight,
+                borderRadius: 8,
+                paddingHorizontal: 10,
+                paddingVertical: 4,
+                borderWidth: 1,
+                borderColor: tc.glass.border,
+              }}
+            >
+              <Text style={{ color: tc.textMuted, fontSize: 13, fontFamily: "DMSans_600SemiBold" }}>
+                1.0.0
+              </Text>
+            </View>
           ),
         },
       ],
@@ -467,13 +680,16 @@ export default function SettingsScreen() {
     }
   };
 
+  const contentMaxWidth = undefined;
+  const horizontalPadding = isDesktop ? 48 : isTablet ? 32 : 20;
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
-          paddingHorizontal: isDesktop ? 32 : 16,
-          paddingTop: 8,
+          paddingHorizontal: horizontalPadding,
+          paddingTop: isDesktop ? 12 : 8,
           paddingBottom: 40,
         }}
       >
@@ -496,94 +712,63 @@ export default function SettingsScreen() {
                 ? tc.dark.elevated
                 : "transparent",
             alignSelf: "flex-start",
-            marginBottom: 12,
+            marginBottom: 8,
             opacity: pressed ? 0.9 : 1,
             ...(isWeb
-              ? ({ cursor: "pointer", transition: "all 0.15s ease" } as any)
+              ? ({
+                  cursor: "pointer",
+                  transition: "all 0.2s ease",
+                  transform: hovered ? "translateX(-2px)" : "translateX(0px)",
+                } as any)
               : {}),
           })}
           accessibilityRole="button"
           accessibilityLabel="Go back"
         >
           <Ionicons name="arrow-back" size={20} color={tc.textSecondary} />
-          <Text style={{ color: tc.textSecondary, fontSize: 15, fontWeight: "500" }}>
-            Back
+          <Text style={{ color: tc.textSecondary, fontSize: 15, fontFamily: "DMSans_500Medium" }}>
+            {t("common.back")}
           </Text>
         </Pressable>
 
-        {/* User header card */}
+        {/* Page Title */}
         <View
           style={{
-            backgroundColor: tc.dark.card,
-            borderRadius: 20,
-            padding: isDesktop ? 24 : 20,
-            borderWidth: 1,
-            borderColor: tc.glass.border,
-            marginBottom: 24,
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 16,
-            maxWidth: 600,
-            alignSelf: "center" as const,
-            width: "100%" as const,
-            ...ts.sm,
+            marginBottom: isDesktop ? 28 : 20,
+            paddingHorizontal: 4,
           }}
         >
-          <View
+          <Text
             style={{
-              width: 52,
-              height: 52,
-              borderRadius: 16,
-              backgroundColor: colors.primary[500] + "25",
-              alignItems: "center",
-              justifyContent: "center",
-              borderWidth: 1.5,
-              borderColor: colors.primary[500] + "40",
+              color: tc.textPrimary,
+              fontSize: isDesktop ? 32 : 26,
+              fontFamily: "DMSans_700Bold",
+              letterSpacing: -0.5,
             }}
           >
-            <Text
-              style={{
-                color: colors.primary[400],
-                fontSize: 20,
-                fontWeight: "700",
-              }}
-            >
-              {user?.full_name?.[0]?.toUpperCase() || "U"}
-            </Text>
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text
-              style={{
-                color: tc.textPrimary,
-                fontSize: 18,
-                fontWeight: "700",
-              }}
-            >
-              {user?.full_name || "User"}
-            </Text>
-            <Text
-              style={{
-                color: tc.textMuted,
-                fontSize: 14,
-                marginTop: 2,
-              }}
-            >
-              {formatPhone(user?.phone)}
-            </Text>
-          </View>
-          <View
+            {t("settings.settings")}
+          </Text>
+          <Text
             style={{
-              backgroundColor: colors.success + "18",
-              borderRadius: 10,
-              paddingHorizontal: 10,
-              paddingVertical: 5,
+              color: tc.textMuted,
+              fontSize: isDesktop ? 16 : 14,
+              marginTop: 4,
+              lineHeight: 22,
             }}
           >
-            <Text style={{ color: colors.success, fontSize: 12, fontWeight: "600" }}>
-              Active
-            </Text>
-          </View>
+            {t("settings.manageAccount")}
+          </Text>
         </View>
+
+        {/* Profile Card */}
+        <ProfileCard
+          user={user}
+          formatPhone={formatPhone}
+          isDesktop={isDesktop}
+          tc={tc}
+          ts={ts}
+          router={router}
+        />
 
         {/* Settings sections - 2x2 grid on desktop/tablet, single column on mobile */}
         {useGrid ? (
@@ -620,6 +805,19 @@ export default function SettingsScreen() {
             />
           ))
         )}
+
+        {/* Footer */}
+        <View style={{ alignItems: "center", marginTop: 12, paddingBottom: 8 }}>
+          <Text
+            style={{
+              color: tc.textMuted,
+              fontSize: 12,
+              fontFamily: "DMSans_500Medium",
+            }}
+          >
+            CryptoPay v1.0.0
+          </Text>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );

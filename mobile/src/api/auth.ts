@@ -1,12 +1,44 @@
+import { Platform } from "react-native";
 import { api } from "./client";
+import * as Device from "expo-device";
+
+/** Generate a stable device ID and collect device metadata for session tracking */
+async function getDeviceInfo() {
+  const deviceName = Device.deviceName || `${Device.brand ?? "Unknown"} ${Device.modelName ?? "Device"}`;
+  const platform = Platform.OS === "web"
+    ? `Web (${navigator.userAgent.includes("Windows") ? "Windows" : navigator.userAgent.includes("Mac") ? "macOS" : "Linux"})`
+    : `${Platform.OS === "ios" ? "iOS" : "Android"} ${Device.osVersion ?? ""}`.trim();
+
+  // Use a stable device ID: on web use a stored UUID, on native use Device constants
+  let deviceId = "";
+  if (Platform.OS === "web") {
+    try {
+      let stored = localStorage.getItem("cryptopay_device_id");
+      if (!stored) {
+        stored = crypto.randomUUID();
+        localStorage.setItem("cryptopay_device_id", stored);
+      }
+      deviceId = stored;
+    } catch {
+      deviceId = `web-${Date.now()}`;
+    }
+  } else {
+    deviceId = `${Device.brand}-${Device.modelId || Device.modelName}-${Device.osVersion}`;
+  }
+
+  return { device_id: deviceId, device_name: deviceName, platform };
+}
 
 export interface User {
   id: string;
   phone: string;
+  email?: string;
   full_name: string;
   avatar_url: string | null;
   kyc_tier: number;
   kyc_status: string;
+  email_verified?: boolean;
+  totp_enabled?: boolean;
   created_at: string;
 }
 
@@ -32,14 +64,20 @@ export interface KYCDocument {
 export const authApi = {
   requestOTP: (phone: string) => api.post("/auth/otp/", { phone }),
 
-  register: (data: { phone: string; pin: string; otp: string; full_name?: string }) =>
-    api.post<LoginResponse>("/auth/register/", data),
+  register: async (data: { phone: string; pin: string; otp: string; full_name?: string }) => {
+    const device = await getDeviceInfo();
+    return api.post<LoginResponse>("/auth/register/", { ...data, ...device });
+  },
 
-  login: (data: { phone: string; pin: string }) =>
-    api.post<LoginResponse>("/auth/login/", data),
+  login: async (data: { phone: string; pin: string; otp?: string; totp_code?: string }) => {
+    const device = await getDeviceInfo();
+    return api.post<LoginResponse>("/auth/login/", { ...data, ...device });
+  },
 
-  googleLogin: (idToken: string) =>
-    api.post<LoginResponse>("/auth/google/", { id_token: idToken }),
+  googleLogin: async (idToken: string) => {
+    const device = await getDeviceInfo();
+    return api.post<LoginResponse>("/auth/google/", { id_token: idToken, ...device });
+  },
 
   refreshToken: (refresh: string) =>
     api.post<{ access: string }>("/auth/token/refresh/", { refresh }),
@@ -64,4 +102,56 @@ export const authApi = {
   // Push notifications
   registerPushToken: (token: string, platform: "ios" | "android") =>
     api.post("/auth/push-token/", { token, platform }),
+
+  // Email verification
+  sendEmailVerification: (email?: string) =>
+    api.post("/auth/email/verify/", email ? { email } : {}),
+
+  confirmEmailVerification: (token: string) =>
+    api.post("/auth/email/confirm/", { token }),
+
+  // TOTP authenticator
+  setupTOTP: () =>
+    api.get<{ secret: string; provisioning_uri: string; already_enabled: boolean }>("/auth/totp/setup/"),
+
+  enableTOTP: (code: string) =>
+    api.post<{ message: string; backup_codes: string[] }>("/auth/totp/setup/", { code }),
+
+  disableTOTP: (pin: string) =>
+    api.delete("/auth/totp/setup/", { data: { pin } }),
+
+  // Recovery settings
+  getRecoverySettings: () =>
+    api.get<{
+      recovery_email: string | null;
+      recovery_email_verified: boolean;
+      recovery_phone: string;
+      email_verified: boolean;
+      totp_enabled: boolean;
+    }>("/auth/recovery/"),
+
+  updateRecoverySettings: (data: { recovery_email?: string; recovery_phone?: string }) =>
+    api.post("/auth/recovery/", data),
+
+  // Security overview
+  getSecuritySettings: () =>
+    api.get<{
+      email: string | null;
+      email_verified: boolean;
+      recovery_email: string | null;
+      recovery_email_verified: boolean;
+      recovery_phone: string;
+      totp_enabled: boolean;
+      totp_backup_codes_remaining: number;
+      devices_count: number;
+    }>("/auth/security/"),
+
+  // Devices / sessions
+  getDevices: () => api.get("/auth/devices/"),
+
+  removeDevice: (deviceId: string) => api.delete(`/auth/devices/${deviceId}/`),
+
+  // Transaction receipt
+  downloadReceipt: (transactionId: string) =>
+    api.get(`/payments/${transactionId}/receipt/`, { responseType: "blob" }),
 };

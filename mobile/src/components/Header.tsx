@@ -73,7 +73,7 @@ export function Header({
         style={{
           color: tc.textPrimary,
           fontSize: 17,
-          fontFamily: "Inter_600SemiBold",
+          fontFamily: "DMSans_600SemiBold",
           flex: 1,
           textAlign: "center",
         }}

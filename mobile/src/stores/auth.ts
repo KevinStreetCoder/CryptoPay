@@ -91,8 +91,8 @@ export function useAuth() {
     }
   }, []);
 
-  const login = useCallback(async (phone: string, pin: string) => {
-    const { data } = await authApi.login({ phone, pin });
+  const login = useCallback(async (phone: string, pin: string, otp?: string) => {
+    const { data } = await authApi.login({ phone, pin, otp });
     await storage.setItemAsync("access_token", data.tokens.access);
     await storage.setItemAsync("refresh_token", data.tokens.refresh);
     resetSessionExpired(); // Allow API requests again after re-login

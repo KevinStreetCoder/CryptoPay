@@ -10,45 +10,37 @@ import {
   ScrollView,
   ActivityIndicator,
   useWindowDimensions,
+  Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { PinInput } from "../../src/components/PinInput";
+import { OTPInput } from "../../src/components/OTPInput";
 import { useToast } from "../../src/components/Toast";
 import { useAuth } from "../../src/stores/auth";
+import { resetSessionExpired } from "../../src/api/client";
 import { useScreenSecurity } from "../../src/hooks/useScreenSecurity";
 import { normalizeError } from "../../src/utils/apiErrors";
 import { useGoogleAuth } from "../../src/hooks/useGoogleAuth";
 import { getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
+import { BRAND_LOGOS } from "../../src/constants/logos";
 
-type Step = "phone" | "pin";
+type Step = "phone" | "pin" | "otp";
 
-function KeBadge({ tc }: { tc: ReturnType<typeof getThemeColors> }) {
+function KenyaFlag() {
   return (
-    <View
+    <Image
+      source={{ uri: BRAND_LOGOS.kenyaFlag }}
       style={{
-        width: 28,
-        height: 20,
-        borderRadius: 4,
-        backgroundColor: tc.primary[500],
-        alignItems: "center",
-        justifyContent: "center",
+        width: 24,
+        height: 16,
+        borderRadius: 2,
         marginRight: 8,
       }}
-    >
-      <Text
-        style={{
-          color: "#FFFFFF",
-          fontSize: 10,
-          fontFamily: "Inter_700Bold",
-          letterSpacing: 0.5,
-        }}
-      >
-        KE
-      </Text>
-    </View>
+      accessibilityLabel="Kenya flag"
+    />
   );
 }
 
@@ -112,7 +104,7 @@ function BrandPanel({ tc }: { tc: ReturnType<typeof getThemeColors> }) {
           style={{
             color: tc.textPrimary,
             fontSize: 36,
-            fontFamily: "Inter_700Bold",
+            fontFamily: "DMSans_700Bold",
             letterSpacing: -1,
             marginBottom: 12,
           }}
@@ -123,7 +115,7 @@ function BrandPanel({ tc }: { tc: ReturnType<typeof getThemeColors> }) {
           style={{
             color: tc.textSecondary,
             fontSize: 18,
-            fontFamily: "Inter_400Regular",
+            fontFamily: "DMSans_400Regular",
             textAlign: "center",
             lineHeight: 26,
             maxWidth: 320,
@@ -164,7 +156,7 @@ function BrandPanel({ tc }: { tc: ReturnType<typeof getThemeColors> }) {
               style={{
                 color: tc.textSecondary,
                 fontSize: 15,
-                fontFamily: "Inter_500Medium",
+                fontFamily: "DMSans_500Medium",
               }}
             >
               {item.text}
@@ -181,6 +173,9 @@ export default function LoginScreen() {
   const { login, googleLogin } = useAuth();
   const toast = useToast();
   const { isDark } = useThemeMode();
+
+  // Clear stale session-expired flag so login API calls work
+  useEffect(() => { resetSessionExpired(); }, []);
   const tc = getThemeColors(isDark);
   const [step, setStep] = useState<Step>("phone");
   const [phone, setPhone] = useState("");
@@ -188,6 +183,9 @@ export default function LoginScreen() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [pinError, setPinError] = useState(false);
   const [phoneFocused, setPhoneFocused] = useState(false);
+  const [otpRequired, setOtpRequired] = useState(false);
+  const [securityChallenge, setSecurityChallenge] = useState(false);
+  const [pendingPin, setPendingPin] = useState("");
   const { width } = useWindowDimensions();
   const { ready: googleReady, response: googleResponse, promptAsync } = useGoogleAuth();
 
@@ -258,7 +256,34 @@ export default function LoginScreen() {
       await login(phone, pin);
       router.replace("/(tabs)");
     } catch (err: unknown) {
-      setPinError(true);
+      // Check if OTP challenge is required (3+ wrong PINs)
+      const errorData = (err as any)?.response?.data;
+      if (errorData?.otp_required) {
+        setPendingPin(pin);
+        setOtpRequired(true);
+        setSecurityChallenge(!!errorData.security_challenge);
+        animateTransition("otp");
+        const devOtp = errorData.dev_otp ? ` [DEV OTP: ${errorData.dev_otp}]` : "";
+        toast.warning(
+          errorData.security_challenge ? "Security Alert" : "Verification Required",
+          (errorData.message || "Enter the OTP sent to your phone") + devOtp
+        );
+      } else {
+        setPinError(true);
+        const appError = normalizeError(err);
+        toast.error(appError.title, appError.message);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOtpComplete = async (otp: string) => {
+    setLoading(true);
+    try {
+      await login(phone, pendingPin, otp);
+      router.replace("/(tabs)");
+    } catch (err: unknown) {
       const appError = normalizeError(err);
       toast.error(appError.title, appError.message);
     } finally {
@@ -352,7 +377,7 @@ export default function LoginScreen() {
               style={{
                 color: tc.textPrimary,
                 fontSize: 30,
-                fontFamily: "Inter_700Bold",
+                fontFamily: "DMSans_700Bold",
                 letterSpacing: -0.5,
               }}
               maxFontSizeMultiplier={1.3}
@@ -363,7 +388,7 @@ export default function LoginScreen() {
               style={{
                 color: tc.textSecondary,
                 fontSize: 15,
-                fontFamily: "Inter_400Regular",
+                fontFamily: "DMSans_400Regular",
                 marginTop: 6,
                 textAlign: "center",
               }}
@@ -376,14 +401,15 @@ export default function LoginScreen() {
 
         {/* Desktop: simple header text */}
         {isDesktop && (
-          <View style={{ marginBottom: 32 }}>
+          <View style={{ marginBottom: 32, alignItems: "center" }}>
             <Text
               style={{
                 color: tc.textPrimary,
                 fontSize: 28,
-                fontFamily: "Inter_700Bold",
+                fontFamily: "DMSans_700Bold",
                 letterSpacing: -0.5,
-                marginBottom: 8,
+                marginBottom: 10,
+                textAlign: "center",
               }}
             >
               {step === "phone" ? "Sign in" : "Enter your PIN"}
@@ -391,9 +417,11 @@ export default function LoginScreen() {
             <Text
               style={{
                 color: tc.textMuted,
-                fontSize: 15,
-                fontFamily: "Inter_400Regular",
-                lineHeight: 22,
+                fontSize: 14,
+                fontFamily: "DMSans_400Regular",
+                lineHeight: 21,
+                textAlign: "center",
+                maxWidth: 300,
               }}
             >
               {step === "phone"
@@ -408,31 +436,34 @@ export default function LoginScreen() {
           {step === "phone" ? (
             <View>
               {!isDesktop && (
-                <>
+                <View style={{ alignItems: "center", marginBottom: 24 }}>
                   <Text
                     style={{
                       color: tc.textPrimary,
-                      fontSize: 21,
-                      fontFamily: "Inter_600SemiBold",
-                      marginBottom: 6,
+                      fontSize: 22,
+                      fontFamily: "DMSans_700Bold",
+                      marginBottom: 8,
+                      textAlign: "center",
+                      letterSpacing: -0.3,
                     }}
                     maxFontSizeMultiplier={1.3}
                   >
-                    Welcome back
+                    Sign in
                   </Text>
                   <Text
                     style={{
                       color: tc.textMuted,
-                      fontSize: 14,
-                      fontFamily: "Inter_400Regular",
-                      marginBottom: 24,
-                      lineHeight: 20,
+                      fontSize: 13,
+                      fontFamily: "DMSans_400Regular",
+                      lineHeight: 19,
+                      textAlign: "center",
+                      maxWidth: 260,
                     }}
                     maxFontSizeMultiplier={1.3}
                   >
                     Enter the M-Pesa number linked to your account
                   </Text>
-                </>
+                </View>
               )}
 
               {/* Phone Input */}
@@ -461,12 +492,12 @@ export default function LoginScreen() {
                     : {}),
                 }}
               >
-                <KeBadge tc={tc} />
+                <KenyaFlag />
                 <Text
                   style={{
                     color: tc.textSecondary,
                     fontSize: 16,
-                    fontFamily: "Inter_500Medium",
+                    fontFamily: "DMSans_500Medium",
                     marginRight: 10,
                   }}
                 >
@@ -495,7 +526,7 @@ export default function LoginScreen() {
                     flex: 1,
                     color: tc.textPrimary,
                     fontSize: 16,
-                    fontFamily: "Inter_400Regular",
+                    fontFamily: "DMSans_400Regular",
                     paddingVertical: 16,
                     ...(isWeb ? ({ outlineStyle: "none" } as any) : {}),
                   }}
@@ -510,9 +541,9 @@ export default function LoginScreen() {
               <Pressable
                 onPress={handlePhoneSubmit}
                 disabled={!isPhoneValid}
-                style={({ pressed }) => ({
+                style={({ pressed, hovered }: any) => ({
                   backgroundColor: isPhoneValid
-                    ? tc.primary[500]
+                    ? hovered ? tc.primary[400] : tc.primary[500]
                     : "rgba(16, 185, 129, 0.3)",
                   borderRadius: 18,
                   paddingVertical: 16,
@@ -522,13 +553,13 @@ export default function LoginScreen() {
                   minHeight: 56,
                   opacity: !isPhoneValid ? 0.6 : pressed ? 0.9 : 1,
                   transform: [{ scale: pressed ? 0.98 : 1 }],
+                  ...(isWeb ? { cursor: isPhoneValid ? "pointer" : "default", transition: "all 0.2s ease" } as any : {}),
                   ...(isPhoneValid
                     ? isWeb
                       ? ({
-                          shadowColor: tc.primary[500],
-                          shadowOffset: { width: 0, height: 4 },
-                          shadowOpacity: 0.3,
-                          shadowRadius: 16,
+                          boxShadow: hovered
+                            ? `0 6px 20px rgba(16, 185, 129, 0.35)`
+                            : `0 4px 16px rgba(16, 185, 129, 0.25)`,
                         } as any)
                       : { elevation: 8 }
                     : {}),
@@ -542,7 +573,7 @@ export default function LoginScreen() {
                   style={{
                     color: "#FFFFFF",
                     fontSize: 17,
-                    fontFamily: "Inter_600SemiBold",
+                    fontFamily: "DMSans_600SemiBold",
                     letterSpacing: 0.3,
                   }}
                   maxFontSizeMultiplier={1.3}
@@ -565,7 +596,7 @@ export default function LoginScreen() {
                   style={{
                     color: tc.textMuted,
                     fontSize: 12,
-                    fontFamily: "Inter_500Medium",
+                    fontFamily: "DMSans_500Medium",
                     paddingHorizontal: 14,
                   }}
                 >
@@ -581,20 +612,21 @@ export default function LoginScreen() {
                   promptAsync();
                 }}
                 disabled={!googleReady || googleLoading}
-                style={({ pressed }) => ({
+                style={({ pressed, hovered }: any) => ({
                   flexDirection: "row",
                   alignItems: "center",
                   justifyContent: "center",
-                  backgroundColor: tc.dark.elevated,
+                  backgroundColor: isWeb && hovered ? "rgba(255,255,255,0.06)" : tc.dark.elevated,
                   borderRadius: 18,
                   paddingVertical: 14,
                   marginTop: 16,
                   minHeight: 56,
                   borderWidth: 1,
-                  borderColor: "rgba(255, 255, 255, 0.08)",
+                  borderColor: isWeb && hovered ? "rgba(255,255,255,0.14)" : "rgba(255, 255, 255, 0.08)",
                   opacity: googleLoading ? 0.7 : pressed ? 0.9 : 1,
                   transform: [{ scale: pressed ? 0.98 : 1 }],
-                  gap: 10,
+                  gap: 12,
+                  ...(isWeb ? { cursor: "pointer", transition: "all 0.2s ease" } as any : {}),
                 })}
                 accessibilityRole="button"
                 accessibilityLabel="Sign in with Google"
@@ -604,17 +636,21 @@ export default function LoginScreen() {
                 {googleLoading ? (
                   <ActivityIndicator size="small" color={tc.textSecondary} />
                 ) : (
-                  <Text style={{ fontSize: 18 }}>G</Text>
+                  <Image
+                    source={{ uri: BRAND_LOGOS.google }}
+                    style={{ width: 20, height: 20 }}
+                    accessibilityLabel="Google"
+                  />
                 )}
                 <Text
                   style={{
                     color: tc.textPrimary,
                     fontSize: 15,
-                    fontFamily: "Inter_600SemiBold",
+                    fontFamily: "DMSans_600SemiBold",
                   }}
                   maxFontSizeMultiplier={1.3}
                 >
-                  {googleLoading ? "Signing in..." : "Continue with Google"}
+                  {googleLoading ? "Signing in..." : "Sign in with Google"}
                 </Text>
               </Pressable>
 
@@ -624,7 +660,7 @@ export default function LoginScreen() {
                   style={{
                     color: tc.textMuted,
                     fontSize: 14,
-                    fontFamily: "Inter_400Regular",
+                    fontFamily: "DMSans_400Regular",
                   }}
                   maxFontSizeMultiplier={1.3}
                 >
@@ -632,7 +668,7 @@ export default function LoginScreen() {
                   <Text
                     style={{
                       color: tc.primary[300],
-                      fontFamily: "Inter_600SemiBold",
+                      fontFamily: "DMSans_600SemiBold",
                     }}
                     onPress={() => router.push("/auth/register")}
                     accessibilityRole="link"
@@ -643,7 +679,7 @@ export default function LoginScreen() {
                 </Text>
               </View>
             </View>
-          ) : (
+          ) : step === "pin" ? (
             <View>
               {!isDesktop && (
                 <View style={{ alignItems: "center", marginBottom: 8 }}>
@@ -668,7 +704,7 @@ export default function LoginScreen() {
                     style={{
                       color: tc.textPrimary,
                       fontSize: 21,
-                      fontFamily: "Inter_600SemiBold",
+                      fontFamily: "DMSans_600SemiBold",
                       marginBottom: 6,
                       textAlign: "center",
                     }}
@@ -680,7 +716,7 @@ export default function LoginScreen() {
                     style={{
                       color: tc.textMuted,
                       fontSize: 14,
-                      fontFamily: "Inter_400Regular",
+                      fontFamily: "DMSans_400Regular",
                       textAlign: "center",
                       lineHeight: 20,
                     }}
@@ -704,7 +740,7 @@ export default function LoginScreen() {
                   style={{
                     color: tc.primary[300],
                     fontSize: 14,
-                    fontFamily: "Inter_500Medium",
+                    fontFamily: "DMSans_500Medium",
                     textAlign: "center",
                     marginTop: 20,
                   }}
@@ -716,14 +752,18 @@ export default function LoginScreen() {
 
               <Pressable
                 onPress={() => animateTransition("phone")}
-                style={({ pressed }) => ({
+                style={({ pressed, hovered }: any) => ({
                   flexDirection: "row",
                   alignItems: "center",
                   justifyContent: "center",
                   marginTop: 28,
-                  paddingVertical: 8,
-                  opacity: pressed ? 0.9 : 1,
+                  paddingVertical: 10,
+                  paddingHorizontal: 16,
+                  borderRadius: 10,
+                  backgroundColor: isWeb && hovered ? tc.dark.elevated : "transparent",
+                  opacity: pressed ? 0.7 : 1,
                   transform: [{ scale: pressed ? 0.98 : 1 }],
+                  ...(isWeb ? { cursor: "pointer", transition: "all 0.15s ease" } as any : {}),
                 })}
                 accessibilityRole="button"
                 accessibilityLabel="Go back to phone number"
@@ -738,11 +778,63 @@ export default function LoginScreen() {
                   style={{
                     color: tc.textMuted,
                     fontSize: 14,
-                    fontFamily: "Inter_500Medium",
+                    fontFamily: "DMSans_500Medium",
                   }}
                   maxFontSizeMultiplier={1.3}
                 >
                   Back to phone number
+                </Text>
+              </Pressable>
+            </View>
+          ) : (
+            /* OTP Challenge Step */
+            <View>
+              <OTPInput
+                length={6}
+                onComplete={handleOtpComplete}
+                error={pinError ? "Invalid code. Please try again." : undefined}
+                loading={loading}
+                icon={securityChallenge ? "phone-portrait" : "shield-checkmark"}
+                iconColor={securityChallenge ? "#3B82F6" : "#F59E0B"}
+                title={securityChallenge ? "New Device Detected" : "Security Verification"}
+                subtitle={securityChallenge
+                  ? "We detected a login from a new device or location. Enter the 6-digit code sent to your phone to verify."
+                  : "Too many failed attempts. Enter the 6-digit code sent to your phone to continue."}
+              />
+
+              <Pressable
+                onPress={() => {
+                  setOtpRequired(false);
+                  animateTransition("pin");
+                }}
+                style={({ pressed, hovered }: any) => ({
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginTop: 28,
+                  paddingVertical: 8,
+                  borderRadius: 8,
+                  backgroundColor: Platform.OS === "web" && hovered ? tc.dark.elevated : "transparent",
+                  opacity: pressed ? 0.7 : 1,
+                  ...(Platform.OS === "web" ? { cursor: "pointer", transition: "all 0.15s ease" } as any : {}),
+                })}
+                accessibilityRole="button"
+                accessibilityLabel="Go back to PIN entry"
+              >
+                <Ionicons
+                  name="arrow-back"
+                  size={16}
+                  color={tc.textMuted}
+                  style={{ marginRight: 6 }}
+                />
+                <Text
+                  style={{
+                    color: tc.textMuted,
+                    fontSize: 14,
+                    fontFamily: "DMSans_500Medium",
+                  }}
+                >
+                  Back to PIN
                 </Text>
               </Pressable>
             </View>
@@ -765,7 +857,7 @@ export default function LoginScreen() {
           style={{
             color: tc.textMuted,
             fontSize: 12,
-            fontFamily: "Inter_400Regular",
+            fontFamily: "DMSans_400Regular",
           }}
           maxFontSizeMultiplier={1.3}
         >

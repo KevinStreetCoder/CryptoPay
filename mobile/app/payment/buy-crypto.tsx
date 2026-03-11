@@ -15,6 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import { CryptoLogo } from "../../src/components/CryptoLogo";
 import { PinInput } from "../../src/components/PinInput";
 import { Button } from "../../src/components/Button";
 import { useToast } from "../../src/components/Toast";
@@ -274,7 +275,7 @@ export default function BuyCryptoScreen() {
             style={{
               color: tc.textPrimary,
               fontSize: 18,
-              fontFamily: "Inter_600SemiBold",
+              fontFamily: "DMSans_600SemiBold",
               marginLeft: 14,
               flex: 1,
             }}
@@ -300,7 +301,7 @@ export default function BuyCryptoScreen() {
             style={{
               color: tc.textMuted,
               fontSize: 11,
-              fontFamily: "Inter_600SemiBold",
+              fontFamily: "DMSans_600SemiBold",
               textTransform: "uppercase",
               letterSpacing: 1.2,
               marginBottom: 12,
@@ -358,17 +359,17 @@ export default function BuyCryptoScreen() {
                       borderColor: crypto.color + "30",
                     }}
                   >
-                    <Ionicons
-                      name={crypto.icon as any}
-                      size={20}
-                      color={crypto.color}
+                    <CryptoLogo
+                      currency={crypto.id}
+                      size={24}
+                      fallbackColor={crypto.color}
                     />
                   </View>
                   <Text
                     style={{
                       color: isSelected ? tc.textPrimary : tc.textSecondary,
                       fontSize: 14,
-                      fontFamily: "Inter_600SemiBold",
+                      fontFamily: "DMSans_600SemiBold",
                     }}
                     maxFontSizeMultiplier={1.3}
                   >
@@ -378,7 +379,7 @@ export default function BuyCryptoScreen() {
                     style={{
                       color: tc.textMuted,
                       fontSize: 11,
-                      fontFamily: "Inter_400Regular",
+                      fontFamily: "DMSans_400Regular",
                       marginTop: 2,
                     }}
                     maxFontSizeMultiplier={1.3}
@@ -395,7 +396,7 @@ export default function BuyCryptoScreen() {
             style={{
               color: tc.textMuted,
               fontSize: 11,
-              fontFamily: "Inter_600SemiBold",
+              fontFamily: "DMSans_600SemiBold",
               textTransform: "uppercase",
               letterSpacing: 1.2,
               marginBottom: 12,
@@ -422,7 +423,7 @@ export default function BuyCryptoScreen() {
               style={{
                 color: tc.textMuted,
                 fontSize: 16,
-                fontFamily: "Inter_600SemiBold",
+                fontFamily: "DMSans_600SemiBold",
                 marginRight: 8,
               }}
             >
@@ -439,7 +440,7 @@ export default function BuyCryptoScreen() {
                 flex: 1,
                 color: tc.textPrimary,
                 fontSize: 24,
-                fontFamily: "Inter_700Bold",
+                fontFamily: "DMSans_700Bold",
                 paddingVertical: 18,
                 ...(isWeb ? { outline: "none" } as any : {}),
               }}
@@ -481,13 +482,13 @@ export default function BuyCryptoScreen() {
                 style={{
                   color: tc.primary[400],
                   fontSize: 14,
-                  fontFamily: "Inter_500Medium",
+                  fontFamily: "DMSans_500Medium",
                   flex: 1,
                 }}
                 maxFontSizeMultiplier={1.3}
               >
                 You'll get{" "}
-                <Text style={{ fontFamily: "Inter_700Bold", color: tc.textPrimary }}>
+                <Text style={{ fontFamily: "DMSans_700Bold", color: tc.textPrimary }}>
                   {quote.crypto_amount} {selectedCrypto}
                 </Text>
               </Text>
@@ -516,7 +517,7 @@ export default function BuyCryptoScreen() {
                 style={{
                   color: tc.error,
                   fontSize: 13,
-                  fontFamily: "Inter_400Regular",
+                  fontFamily: "DMSans_400Regular",
                   flex: 1,
                 }}
                 maxFontSizeMultiplier={1.3}
@@ -535,7 +536,7 @@ export default function BuyCryptoScreen() {
             style={{
               color: tc.textMuted,
               fontSize: 11,
-              fontFamily: "Inter_600SemiBold",
+              fontFamily: "DMSans_600SemiBold",
               textTransform: "uppercase",
               letterSpacing: 1.2,
               marginBottom: 12,
@@ -574,7 +575,7 @@ export default function BuyCryptoScreen() {
                 flex: 1,
                 color: tc.textPrimary,
                 fontSize: 16,
-                fontFamily: "Inter_500Medium",
+                fontFamily: "DMSans_500Medium",
                 paddingVertical: 16,
                 ...(isWeb ? { outline: "none" } as any : {}),
               }}
@@ -589,7 +590,7 @@ export default function BuyCryptoScreen() {
             style={{
               color: tc.textMuted,
               fontSize: 12,
-              fontFamily: "Inter_400Regular",
+              fontFamily: "DMSans_400Regular",
               paddingLeft: 4,
               marginBottom: 24,
             }}
@@ -614,7 +615,7 @@ export default function BuyCryptoScreen() {
               style={{
                 color: tc.textMuted,
                 fontSize: 12,
-                fontFamily: "Inter_400Regular",
+                fontFamily: "DMSans_400Regular",
               }}
             >
               Secured by end-to-end encryption
@@ -680,7 +681,7 @@ export default function BuyCryptoScreen() {
             style={{
               color: tc.textPrimary,
               fontSize: 18,
-              fontFamily: "Inter_600SemiBold",
+              fontFamily: "DMSans_600SemiBold",
               marginLeft: 14,
               flex: 1,
             }}
@@ -768,10 +769,10 @@ export default function BuyCryptoScreen() {
                   borderColor: selectedOption.color + "30",
                 }}
               >
-                <Ionicons
-                  name={selectedOption.icon as any}
-                  size={28}
-                  color={selectedOption.color}
+                <CryptoLogo
+                  currency={selectedOption.id}
+                  size={32}
+                  fallbackColor={selectedOption.color}
                 />
               </View>
 
@@ -779,7 +780,7 @@ export default function BuyCryptoScreen() {
                 style={{
                   color: tc.textMuted,
                   fontSize: 12,
-                  fontFamily: "Inter_500Medium",
+                  fontFamily: "DMSans_500Medium",
                   marginBottom: 10,
                   textTransform: "uppercase",
                   letterSpacing: 1.2,
@@ -793,7 +794,7 @@ export default function BuyCryptoScreen() {
                 style={{
                   color: tc.textPrimary,
                   fontSize: 38,
-                  fontFamily: "Inter_700Bold",
+                  fontFamily: "DMSans_700Bold",
                   letterSpacing: -1,
                 }}
                 maxFontSizeMultiplier={1.2}
@@ -827,7 +828,7 @@ export default function BuyCryptoScreen() {
                   style={{
                     color: tc.textMuted,
                     fontSize: 14,
-                    fontFamily: "Inter_400Regular",
+                    fontFamily: "DMSans_400Regular",
                   }}
                   maxFontSizeMultiplier={1.3}
                 >
@@ -848,7 +849,7 @@ export default function BuyCryptoScreen() {
                     style={{
                       color: tc.primary[400],
                       fontSize: 14,
-                      fontFamily: "Inter_600SemiBold",
+                      fontFamily: "DMSans_600SemiBold",
                     }}
                     maxFontSizeMultiplier={1.3}
                   >
@@ -869,7 +870,7 @@ export default function BuyCryptoScreen() {
                   style={{
                     color: tc.textMuted,
                     fontSize: 14,
-                    fontFamily: "Inter_400Regular",
+                    fontFamily: "DMSans_400Regular",
                   }}
                   maxFontSizeMultiplier={1.3}
                 >
@@ -879,7 +880,7 @@ export default function BuyCryptoScreen() {
                   style={{
                     color: tc.textPrimary,
                     fontSize: 14,
-                    fontFamily: "Inter_600SemiBold",
+                    fontFamily: "DMSans_600SemiBold",
                   }}
                   maxFontSizeMultiplier={1.3}
                 >
@@ -908,7 +909,7 @@ export default function BuyCryptoScreen() {
                   style={{
                     color: tc.textMuted,
                     fontSize: 14,
-                    fontFamily: "Inter_400Regular",
+                    fontFamily: "DMSans_400Regular",
                   }}
                   maxFontSizeMultiplier={1.3}
                 >
@@ -918,7 +919,7 @@ export default function BuyCryptoScreen() {
                   style={{
                     color: tc.textSecondary,
                     fontSize: 14,
-                    fontFamily: "Inter_500Medium",
+                    fontFamily: "DMSans_500Medium",
                   }}
                   maxFontSizeMultiplier={1.3}
                 >
@@ -939,7 +940,7 @@ export default function BuyCryptoScreen() {
                   style={{
                     color: tc.textMuted,
                     fontSize: 14,
-                    fontFamily: "Inter_400Regular",
+                    fontFamily: "DMSans_400Regular",
                   }}
                   maxFontSizeMultiplier={1.3}
                 >
@@ -949,7 +950,7 @@ export default function BuyCryptoScreen() {
                   style={{
                     color: tc.textSecondary,
                     fontSize: 14,
-                    fontFamily: "Inter_500Medium",
+                    fontFamily: "DMSans_500Medium",
                   }}
                   maxFontSizeMultiplier={1.3}
                 >
@@ -973,7 +974,7 @@ export default function BuyCryptoScreen() {
                   style={{
                     color: tc.textMuted,
                     fontSize: 14,
-                    fontFamily: "Inter_500Medium",
+                    fontFamily: "DMSans_500Medium",
                   }}
                   maxFontSizeMultiplier={1.3}
                 >
@@ -983,7 +984,7 @@ export default function BuyCryptoScreen() {
                   style={{
                     color: tc.textPrimary,
                     fontSize: 16,
-                    fontFamily: "Inter_700Bold",
+                    fontFamily: "DMSans_700Bold",
                   }}
                   maxFontSizeMultiplier={1.3}
                 >
@@ -1021,7 +1022,7 @@ export default function BuyCryptoScreen() {
               style={{
                 color: tc.textMuted,
                 fontSize: 12,
-                fontFamily: "Inter_400Regular",
+                fontFamily: "DMSans_400Regular",
               }}
             >
               Secured by end-to-end encryption
@@ -1072,7 +1073,7 @@ export default function BuyCryptoScreen() {
           style={{
             color: tc.textPrimary,
             fontSize: 18,
-            fontFamily: "Inter_600SemiBold",
+            fontFamily: "DMSans_600SemiBold",
             marginLeft: 14,
             flex: 1,
           }}
@@ -1153,7 +1154,7 @@ export default function BuyCryptoScreen() {
             style={{
               color: tc.textPrimary,
               fontSize: 22,
-              fontFamily: "Inter_700Bold",
+              fontFamily: "DMSans_700Bold",
               textAlign: "center",
               marginBottom: 8,
             }}
@@ -1165,7 +1166,7 @@ export default function BuyCryptoScreen() {
             style={{
               color: tc.textMuted,
               fontSize: 14,
-              fontFamily: "Inter_400Regular",
+              fontFamily: "DMSans_400Regular",
               textAlign: "center",
               marginBottom: 8,
               lineHeight: 20,
@@ -1195,7 +1196,7 @@ export default function BuyCryptoScreen() {
               style={{
                 color: tc.textPrimary,
                 fontSize: 17,
-                fontFamily: "Inter_700Bold",
+                fontFamily: "DMSans_700Bold",
               }}
             >
               {quote?.crypto_amount} {selectedCrypto}
@@ -1205,7 +1206,7 @@ export default function BuyCryptoScreen() {
               style={{
                 color: tc.textSecondary,
                 fontSize: 15,
-                fontFamily: "Inter_500Medium",
+                fontFamily: "DMSans_500Medium",
               }}
             >
               KSh {parsedAmount.toLocaleString()}
@@ -1229,7 +1230,7 @@ export default function BuyCryptoScreen() {
                 style={{
                   color: tc.primary[400],
                   fontSize: 14,
-                  fontFamily: "Inter_500Medium",
+                  fontFamily: "DMSans_500Medium",
                 }}
               >
                 Processing purchase...
@@ -1253,7 +1254,7 @@ export default function BuyCryptoScreen() {
               style={{
                 color: tc.textMuted,
                 fontSize: 12,
-                fontFamily: "Inter_400Regular",
+                fontFamily: "DMSans_400Regular",
               }}
             >
               Your PIN is never stored or shared

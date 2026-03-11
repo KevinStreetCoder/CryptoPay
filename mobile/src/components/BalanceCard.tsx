@@ -162,7 +162,7 @@ const styles = StyleSheet.create({
   totalLabel: {
     color: colors.primary[100],
     fontSize: 13,
-    fontFamily: "Inter_500Medium",
+    fontFamily: "DMSans_500Medium",
     letterSpacing: 1.5,
   },
   eyeButton: {
@@ -175,7 +175,7 @@ const styles = StyleSheet.create({
   balance: {
     color: "#FFFFFF",
     fontSize: 34,
-    fontFamily: "Inter_700Bold",
+    fontFamily: "DMSans_700Bold",
     letterSpacing: -1,
     marginBottom: 20,
   },
@@ -206,11 +206,11 @@ const styles = StyleSheet.create({
   cryptoSymbol: {
     color: "rgba(255, 255, 255, 0.7)",
     fontSize: 12,
-    fontFamily: "Inter_500Medium",
+    fontFamily: "DMSans_500Medium",
   },
   cryptoBalance: {
     color: "#FFFFFF",
     fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: "DMSans_600SemiBold",
   },
 });

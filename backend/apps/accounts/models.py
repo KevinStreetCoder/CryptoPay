@@ -1,3 +1,4 @@
+import secrets
 import uuid
 
 import bcrypt
@@ -31,6 +32,27 @@ class User(AbstractBaseUser, PermissionsMixin):
     pin_attempts = models.SmallIntegerField(default=0)
     pin_locked_until = models.DateTimeField(null=True, blank=True)
     device_id = models.CharField(max_length=255, blank=True)
+
+    # OTP challenge — triggered after 3 consecutive wrong PINs
+    otp_challenge_required = models.BooleanField(default=False)
+
+    # Email verification
+    email_verified = models.BooleanField(default=False)
+
+    # Recovery contacts
+    recovery_email = models.EmailField(blank=True, null=True)
+    recovery_email_verified = models.BooleanField(default=False)
+    recovery_phone = models.CharField(max_length=15, blank=True, default="")
+
+    # Login tracking for device/IP change detection
+    last_login_ip = models.GenericIPAddressField(null=True, blank=True)
+    last_login_country = models.CharField(max_length=2, blank=True, default="")
+
+    # TOTP (authenticator app) — encrypted secret key
+    totp_secret = models.CharField(max_length=64, blank=True, default="")
+    totp_enabled = models.BooleanField(default=False)
+    totp_backup_codes = models.JSONField(default=list, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -98,6 +120,7 @@ class Device(models.Model):
     device_name = models.CharField(max_length=255, blank=True)
     platform = models.CharField(max_length=50, blank=True)
     os_version = models.CharField(max_length=50, blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
     is_trusted = models.BooleanField(default=False)
     last_seen = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -129,6 +152,42 @@ class PushToken(models.Model):
 
     def __str__(self):
         return f"{self.user.phone} - {self.platform} - {self.token[:20]}..."
+
+
+class EmailVerificationToken(models.Model):
+    """Token for email verification (24-hour expiry)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="email_tokens")
+    email = models.EmailField()
+    token = models.CharField(max_length=64, unique=True, db_index=True)
+    is_used = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+
+    class Meta:
+        db_table = "email_verification_tokens"
+
+    def __str__(self):
+        return f"Email verification for {self.email}"
+
+    @classmethod
+    def create_for_user(cls, user, email):
+        from django.utils import timezone
+        from datetime import timedelta
+
+        token = secrets.token_urlsafe(48)
+        return cls.objects.create(
+            user=user,
+            email=email,
+            token=token,
+            expires_at=timezone.now() + timedelta(hours=24),
+        )
+
+    @property
+    def is_expired(self):
+        from django.utils import timezone
+        return timezone.now() > self.expires_at
 
 
 class AuditLog(models.Model):

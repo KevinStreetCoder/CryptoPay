@@ -13,9 +13,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { useState, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { BalanceCard } from "../../src/components/BalanceCard";
-import { QuickAction } from "../../src/components/QuickAction";
+import { QuickAction, DesktopQuickActionCard } from "../../src/components/QuickAction";
 import { TransactionItem } from "../../src/components/TransactionItem";
 import { RateTicker } from "../../src/components/RateTicker";
+import { SectionHeader } from "../../src/components/SectionHeader";
 import {
   Skeleton,
   BalanceCardSkeleton,
@@ -38,6 +39,8 @@ import {
   apiDataToChartPoints,
   ChartDataPoint,
 } from "../../src/components/CryptoChart";
+import { CryptoLogo } from "../../src/components/CryptoLogo";
+import { useLocale } from "../../src/hooks/useLocale";
 
 function useRates() {
   return useQuery<Rate[]>({
@@ -60,11 +63,13 @@ function useRates() {
   });
 }
 
-function getGreeting(): string {
+function getGreeting(): { textKey: string; icon: string; emoji: string } {
   const hour = new Date().getHours();
-  if (hour < 12) return "Good morning";
-  if (hour < 17) return "Good afternoon";
-  return "Good evening";
+  if (hour < 6) return { textKey: "home.goodNight", icon: "moon-outline", emoji: "" };
+  if (hour < 12) return { textKey: "home.goodMorning", icon: "sunny-outline", emoji: "" };
+  if (hour < 17) return { textKey: "home.goodAfternoon", icon: "partly-sunny-outline", emoji: "" };
+  if (hour < 21) return { textKey: "home.goodEvening", icon: "cloudy-night-outline", emoji: "" };
+  return { textKey: "home.goodNight", icon: "moon-outline", emoji: "" };
 }
 
 function getInitials(name: string | undefined): string {
@@ -207,7 +212,7 @@ function PortfolioChart({
             style={{
               color: tc.textSecondary,
               fontSize: 12,
-              fontFamily: "Inter_500Medium",
+              fontFamily: "DMSans_500Medium",
               letterSpacing: 0.5,
               textTransform: "uppercase",
               marginBottom: 4,
@@ -219,7 +224,7 @@ function PortfolioChart({
             style={{
               color: tc.textPrimary,
               fontSize: 22,
-              fontFamily: "Inter_700Bold",
+              fontFamily: "DMSans_700Bold",
             }}
           >
             7-Day Trend
@@ -241,7 +246,7 @@ function PortfolioChart({
             style={{
               color: trendColor,
               fontSize: 13,
-              fontFamily: "Inter_600SemiBold",
+              fontFamily: "DMSans_600SemiBold",
             }}
           >
             {changePercent}
@@ -355,7 +360,7 @@ function PortfolioChart({
             style={{
               color: tc.textMuted,
               fontSize: 10,
-              fontFamily: "Inter_400Regular",
+              fontFamily: "DMSans_400Regular",
               textAlign: "center",
               width: chartWidth / chartLabels.length,
             }}
@@ -430,7 +435,7 @@ function TransactionSummary({ transactions, tc, ts }: { transactions: Transactio
         style={{
           color: tc.textPrimary,
           fontSize: 16,
-          fontFamily: "Inter_600SemiBold",
+          fontFamily: "DMSans_600SemiBold",
           marginBottom: 20,
         }}
       >
@@ -464,7 +469,7 @@ function TransactionSummary({ transactions, tc, ts }: { transactions: Transactio
               style={{
                 color: tc.textPrimary,
                 fontSize: 14,
-                fontFamily: "Inter_600SemiBold",
+                fontFamily: "DMSans_600SemiBold",
                 marginBottom: 2,
               }}
             >
@@ -474,7 +479,7 @@ function TransactionSummary({ transactions, tc, ts }: { transactions: Transactio
               style={{
                 color: tc.textMuted,
                 fontSize: 12,
-                fontFamily: "Inter_400Regular",
+                fontFamily: "DMSans_400Regular",
               }}
             >
               {cat.count} transaction{cat.count !== 1 ? "s" : ""}
@@ -484,7 +489,7 @@ function TransactionSummary({ transactions, tc, ts }: { transactions: Transactio
             style={{
               color: tc.textPrimary,
               fontSize: 14,
-              fontFamily: "Inter_700Bold",
+              fontFamily: "DMSans_700Bold",
             }}
           >
             KSh {cat.total.toLocaleString("en-KE", { minimumFractionDigits: 0 })}
@@ -514,7 +519,7 @@ function TransactionSummary({ transactions, tc, ts }: { transactions: Transactio
           style={{
             color: tc.textSecondary,
             fontSize: 13,
-            fontFamily: "Inter_500Medium",
+            fontFamily: "DMSans_500Medium",
           }}
         >
           Total Volume
@@ -523,7 +528,7 @@ function TransactionSummary({ transactions, tc, ts }: { transactions: Transactio
           style={{
             color: colors.primary[400],
             fontSize: 16,
-            fontFamily: "Inter_700Bold",
+            fontFamily: "DMSans_700Bold",
           }}
         >
           KSh{" "}
@@ -536,78 +541,7 @@ function TransactionSummary({ transactions, tc, ts }: { transactions: Transactio
   );
 }
 
-/* ─── Desktop Quick Action Card (richer than mobile) ─── */
-function DesktopQuickActionCard({
-  icon,
-  label,
-  description,
-  color,
-  onPress,
-  tc,
-  ts,
-}: {
-  icon: string;
-  label: string;
-  description: string;
-  color: string;
-  onPress: () => void;
-  tc: ReturnType<typeof getThemeColors>;
-  ts: ReturnType<typeof getThemeShadows>;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      style={({ pressed, hovered }: any) => ({
-        flex: 1,
-        backgroundColor: Platform.OS === "web" && hovered ? tc.dark.elevated : tc.dark.card,
-        borderRadius: 16,
-        padding: 18,
-        borderWidth: 1,
-        borderColor: pressed ? color + "40" : Platform.OS === "web" && hovered ? tc.glass.borderStrong : tc.glass.border,
-        opacity: pressed ? 0.9 : 1,
-        transform: [{ scale: pressed ? 0.98 : 1 }],
-        ...(Platform.OS === "web" ? { cursor: "pointer", transition: "all 0.2s ease" } as any : {}),
-        ...ts.sm,
-      })}
-    >
-      <View
-        style={{
-          width: 44,
-          height: 44,
-          borderRadius: 14,
-          backgroundColor: color + "1A",
-          alignItems: "center",
-          justifyContent: "center",
-          marginBottom: 12,
-        }}
-      >
-        <Ionicons name={icon as any} size={22} color={color} />
-      </View>
-      <Text
-        style={{
-          color: tc.textPrimary,
-          fontSize: 14,
-          fontFamily: "Inter_600SemiBold",
-          marginBottom: 4,
-        }}
-      >
-        {label}
-      </Text>
-      <Text
-        style={{
-          color: tc.textMuted,
-          fontSize: 12,
-          fontFamily: "Inter_400Regular",
-          lineHeight: 17,
-        }}
-      >
-        {description}
-      </Text>
-    </Pressable>
-  );
-}
+/* DesktopQuickActionCard imported from QuickAction.tsx */
 
 /* ─── Crypto Price Charts Section (Desktop) ─── */
 const CHART_CURRENCIES: { symbol: string; name: string; color: string }[] = [
@@ -677,7 +611,7 @@ function CryptoPriceChartsSection({
         style={{
           color: tc.dark.muted,
           fontSize: 11,
-          fontFamily: "Inter_600SemiBold",
+          fontFamily: "DMSans_600SemiBold",
           letterSpacing: 1.2,
           textTransform: "uppercase",
           marginBottom: 14,
@@ -750,22 +684,14 @@ function CryptoPriceChartsSection({
                     justifyContent: "center",
                   }}
                 >
-                  <Text
-                    style={{
-                      color: cur.color,
-                      fontSize: 16,
-                      fontFamily: "Inter_700Bold",
-                    }}
-                  >
-                    {iconSymbol}
-                  </Text>
+                  <CryptoLogo currency={cur.symbol} size={28} fallbackColor={cur.color} />
                 </View>
                 <View>
                   <Text
                     style={{
                       color: tc.textPrimary,
                       fontSize: 13,
-                      fontFamily: "Inter_600SemiBold",
+                      fontFamily: "DMSans_600SemiBold",
                     }}
                   >
                     {cur.symbol}
@@ -774,7 +700,7 @@ function CryptoPriceChartsSection({
                     style={{
                       color: tc.textMuted,
                       fontSize: 10,
-                      fontFamily: "Inter_400Regular",
+                      fontFamily: "DMSans_400Regular",
                     }}
                   >
                     {cur.name}
@@ -787,7 +713,7 @@ function CryptoPriceChartsSection({
                 style={{
                   color: tc.textPrimary,
                   fontSize: 14,
-                  fontFamily: "Inter_700Bold",
+                  fontFamily: "DMSans_700Bold",
                   marginBottom: 2,
                 }}
                 numberOfLines={1}
@@ -802,7 +728,7 @@ function CryptoPriceChartsSection({
                 style={{
                   color: changeColor,
                   fontSize: 11,
-                  fontFamily: "Inter_600SemiBold",
+                  fontFamily: "DMSans_600SemiBold",
                   marginBottom: 8,
                 }}
               >
@@ -896,7 +822,7 @@ function MobileCryptoCharts({
         style={{
           color: tc.dark.muted,
           fontSize: 11,
-          fontFamily: "Inter_600SemiBold",
+          fontFamily: "DMSans_600SemiBold",
           letterSpacing: 1.2,
           textTransform: "uppercase",
           marginBottom: 14,
@@ -948,16 +874,14 @@ function MobileCryptoCharts({
                     justifyContent: "center",
                   }}
                 >
-                  <Text style={{ color: cur.color, fontSize: 14, fontFamily: "Inter_700Bold" }}>
-                    {iconSymbol}
-                  </Text>
+                  <CryptoLogo currency={cur.symbol} size={24} fallbackColor={cur.color} />
                 </View>
-                <Text style={{ color: tc.textPrimary, fontSize: 13, fontFamily: "Inter_600SemiBold" }}>
+                <Text style={{ color: tc.textPrimary, fontSize: 13, fontFamily: "DMSans_600SemiBold" }}>
                   {cur.symbol}
                 </Text>
               </View>
               <Text
-                style={{ color: tc.textPrimary, fontSize: 13, fontFamily: "Inter_700Bold", marginBottom: 2 }}
+                style={{ color: tc.textPrimary, fontSize: 13, fontFamily: "DMSans_700Bold", marginBottom: 2 }}
                 numberOfLines={1}
               >
                 KES {tr.rate >= 1000
@@ -965,7 +889,7 @@ function MobileCryptoCharts({
                   : tr.rate.toFixed(2)}
               </Text>
               <Text
-                style={{ color: changeColor, fontSize: 11, fontFamily: "Inter_600SemiBold", marginBottom: 6 }}
+                style={{ color: changeColor, fontSize: 11, fontFamily: "DMSans_600SemiBold", marginBottom: 6 }}
               >
                 {isPos ? "+" : ""}{tr.change24h.toFixed(2)}%
               </Text>
@@ -1003,6 +927,7 @@ function MobileCryptoCharts({
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { t } = useLocale();
   const { width } = useWindowDimensions();
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
@@ -1105,7 +1030,7 @@ export default function HomeScreen() {
                   style={{
                     color: "#FFFFFF",
                     fontSize: 17,
-                    fontFamily: "Inter_700Bold",
+                    fontFamily: "DMSans_700Bold",
                     letterSpacing: 0.5,
                   }}
                 >
@@ -1113,22 +1038,25 @@ export default function HomeScreen() {
                 </Text>
               </View>
               <View>
-                <Text
-                  style={{
-                    color: tc.textSecondary,
-                    fontSize: 13,
-                    fontFamily: "Inter_400Regular",
-                    marginBottom: 1,
-                  }}
-                >
-                  {getGreeting()}
-                </Text>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <Ionicons name={getGreeting().icon as any} size={14} color={tc.textMuted} />
+                  <Text
+                    style={{
+                      color: tc.textSecondary,
+                      fontSize: 13,
+                      fontFamily: "DMSans_400Regular",
+                      marginBottom: 1,
+                    }}
+                  >
+                    {t(getGreeting().textKey)}
+                  </Text>
+                </View>
                 <Text
                   style={{
                     color: tc.textPrimary,
-                    fontSize: 20,
-                    fontFamily: "Inter_700Bold",
-                    letterSpacing: -0.3,
+                    fontSize: 22,
+                    fontFamily: "DMSans_700Bold",
+                    letterSpacing: -0.4,
                   }}
                 >
                   {firstName}
@@ -1197,19 +1125,11 @@ export default function HomeScreen() {
               marginBottom: 24,
             }}
           >
-            <Text
-              style={{
-                color: tc.dark.muted,
-                fontSize: 11,
-                fontFamily: "Inter_600SemiBold",
-                letterSpacing: 1.2,
-                textTransform: "uppercase",
-                marginBottom: 14,
-                paddingHorizontal: 4,
-              }}
-            >
-              QUICK ACTIONS
-            </Text>
+            <SectionHeader
+              title={t("home.quickActions")}
+              icon="flash-outline"
+              iconColor={colors.primary[400]}
+            />
             <View
               style={{
                 flexDirection: "row",
@@ -1218,32 +1138,32 @@ export default function HomeScreen() {
                 padding: 18,
                 borderWidth: 1,
                 borderColor: tc.glass.border,
+                ...ts.sm,
               }}
             >
               <QuickAction
                 icon="receipt-outline"
-                label="Pay Bill"
+                label={t("home.payBill")}
                 color={colors.primary[400]}
                 onPress={() => router.push("/payment/paybill")}
               />
               <QuickAction
                 icon="cart-outline"
-                label="Buy Goods"
+                label={t("home.payTill")}
                 color={colors.info}
                 onPress={() => router.push("/payment/till")}
               />
               <QuickAction
                 icon="arrow-down-circle-outline"
-                label="Deposit"
+                label={t("wallet.deposit")}
                 color={colors.success}
                 onPress={() => router.push("/(tabs)/wallet")}
               />
               <QuickAction
-                icon="swap-horizontal-outline"
-                label="Convert"
+                icon="send-outline"
+                label={t("wallet.send")}
                 color={colors.accent}
-                // TODO: convert will be a separate screen later
-                onPress={() => router.push("/(tabs)/wallet")}
+                onPress={() => router.push("/payment/send")}
               />
             </View>
           </View>
@@ -1353,7 +1273,7 @@ export default function HomeScreen() {
                           style={{
                             color: "#FFFFFF",
                             fontSize: 10,
-                            fontFamily: "Inter_700Bold",
+                            fontFamily: "DMSans_700Bold",
                             letterSpacing: 1.2,
                             textTransform: "uppercase",
                           }}
@@ -1366,7 +1286,7 @@ export default function HomeScreen() {
                       style={{
                         color: "#FFFFFF",
                         fontSize: 21,
-                        fontFamily: "Inter_700Bold",
+                        fontFamily: "DMSans_700Bold",
                         marginBottom: 6,
                         lineHeight: 27,
                       }}
@@ -1377,7 +1297,7 @@ export default function HomeScreen() {
                       style={{
                         color: "rgba(255,255,255,0.7)",
                         fontSize: 14,
-                        fontFamily: "Inter_400Regular",
+                        fontFamily: "DMSans_400Regular",
                         marginBottom: 16,
                         lineHeight: 20,
                       }}
@@ -1400,7 +1320,7 @@ export default function HomeScreen() {
                         style={{
                           color: "#FFFFFF",
                           fontSize: 13,
-                          fontFamily: "Inter_600SemiBold",
+                          fontFamily: "DMSans_600SemiBold",
                         }}
                       >
                         Get started
@@ -1430,49 +1350,15 @@ export default function HomeScreen() {
 
           {/* Recent Transactions */}
           <View style={{ paddingHorizontal: 16 }}>
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "space-between",
-                marginBottom: 14,
-                paddingHorizontal: 4,
-              }}
-            >
-              <Text
-                style={{
-                  color: tc.textPrimary,
-                  fontSize: 17,
-                  fontFamily: "Inter_600SemiBold",
-                  letterSpacing: -0.2,
-                }}
-              >
-                Recent Activity
-              </Text>
-              <Pressable
-                onPress={() => router.push("/(tabs)/wallet")}
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 4,
-                }}
-              >
-                <Text
-                  style={{
-                    color: colors.primary[400],
-                    fontSize: 13,
-                    fontFamily: "Inter_600SemiBold",
-                  }}
-                >
-                  See All
-                </Text>
-                <Ionicons
-                  name="chevron-forward"
-                  size={14}
-                  color={colors.primary[400]}
-                />
-              </Pressable>
-            </View>
+            <SectionHeader
+              title={t("home.recentActivity")}
+              uppercase={false}
+              icon="time-outline"
+              iconColor={tc.textSecondary}
+              actionLabel={t("home.seeAll")}
+              onAction={() => router.push("/(tabs)/wallet")}
+              count={recentTx.length}
+            />
 
             <View
               style={{
@@ -1527,7 +1413,7 @@ export default function HomeScreen() {
                     style={{
                       color: tc.textPrimary,
                       fontSize: 16,
-                      fontFamily: "Inter_600SemiBold",
+                      fontFamily: "DMSans_600SemiBold",
                       marginBottom: 6,
                       textAlign: "center",
                     }}
@@ -1538,7 +1424,7 @@ export default function HomeScreen() {
                     style={{
                       color: tc.textMuted,
                       fontSize: 13,
-                      fontFamily: "Inter_400Regular",
+                      fontFamily: "DMSans_400Regular",
                       marginBottom: 24,
                       textAlign: "center",
                       lineHeight: 19,
@@ -1574,7 +1460,7 @@ export default function HomeScreen() {
                       style={{
                         color: "#FFFFFF",
                         fontSize: 14,
-                        fontFamily: "Inter_600SemiBold",
+                        fontFamily: "DMSans_600SemiBold",
                       }}
                     >
                       Make a Payment
@@ -1638,29 +1524,55 @@ export default function HomeScreen() {
           }}
         >
           <View>
-            <Text
-              style={{
-                color: tc.textSecondary,
-                fontSize: 14,
-                fontFamily: "Inter_400Regular",
-                marginBottom: 4,
-              }}
-            >
-              {getGreeting()}, {firstName}
-            </Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
+              <Ionicons name={getGreeting().icon as any} size={16} color={tc.textMuted} />
+              <Text
+                style={{
+                  color: tc.textSecondary,
+                  fontSize: 14,
+                  fontFamily: "DMSans_400Regular",
+                }}
+              >
+                {t(getGreeting().textKey)}, {firstName}
+              </Text>
+            </View>
             <Text
               style={{
                 color: tc.textPrimary,
-                fontSize: 28,
-                fontFamily: "Inter_700Bold",
-                letterSpacing: -0.5,
+                fontSize: 30,
+                fontFamily: "DMSans_700Bold",
+                letterSpacing: -0.6,
               }}
             >
               Dashboard
             </Text>
           </View>
 
-          {/* Notification Bell */}
+          {/* Notification Bell + Settings */}
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <Pressable
+            onPress={() => router.push("/settings")}
+            accessibilityRole="button"
+            accessibilityLabel="Settings"
+            style={({ pressed, hovered }: any) => ({
+              width: 44,
+              height: 44,
+              borderRadius: 14,
+              backgroundColor: Platform.OS === "web" && hovered
+                ? tc.dark.elevated
+                : tc.dark.card,
+              alignItems: "center",
+              justifyContent: "center",
+              borderWidth: 1,
+              borderColor: Platform.OS === "web" && hovered
+                ? tc.glass.borderStrong
+                : tc.glass.border,
+              opacity: pressed ? 0.85 : 1,
+              ...(Platform.OS === "web" ? { cursor: "pointer", transition: "all 0.15s ease" } as any : {}),
+            })}
+          >
+            <Ionicons name="settings-outline" size={20} color={tc.textSecondary} />
+          </Pressable>
           <Pressable
             onPress={() => router.push("/settings/notifications-inbox")}
             accessibilityRole="button"
@@ -1706,6 +1618,7 @@ export default function HomeScreen() {
               />
             )}
           </Pressable>
+          </View>
         </View>
 
         {/* Live Stats Row — visible on large desktop */}
@@ -1777,22 +1690,14 @@ export default function HomeScreen() {
                       justifyContent: "center",
                     }}
                   >
-                    <Text
-                      style={{
-                        color: cur?.color || colors.primary[400],
-                        fontSize: 16,
-                        fontFamily: "Inter_700Bold",
-                      }}
-                    >
-                      {(CURRENCIES as any)[tr.symbol]?.iconSymbol || tr.symbol[0]}
-                    </Text>
+                    <CryptoLogo currency={tr.symbol} size={28} fallbackColor={cur?.color || colors.primary[400]} />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text
                       style={{
                         color: tc.textPrimary,
                         fontSize: 14,
-                        fontFamily: "Inter_600SemiBold",
+                        fontFamily: "DMSans_600SemiBold",
                       }}
                       numberOfLines={1}
                     >
@@ -1804,7 +1709,7 @@ export default function HomeScreen() {
                       style={{
                         color: tc.textMuted,
                         fontSize: 11,
-                        fontFamily: "Inter_400Regular",
+                        fontFamily: "DMSans_400Regular",
                       }}
                     >
                       {tr.symbol}
@@ -1822,7 +1727,7 @@ export default function HomeScreen() {
                       style={{
                         color: changeColor,
                         fontSize: 11,
-                        fontFamily: "Inter_600SemiBold",
+                        fontFamily: "DMSans_600SemiBold",
                       }}
                     >
                       {isPos ? "+" : ""}{tr.change24h.toFixed(2)}%
@@ -1870,21 +1775,13 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Row 2: Quick Actions (contained, not full width) */}
+        {/* Row 2: Quick Actions */}
         <View style={{ marginBottom: 24 }}>
-          <Text
-            style={{
-              color: tc.dark.muted,
-              fontSize: 11,
-              fontFamily: "Inter_600SemiBold",
-              letterSpacing: 1.2,
-              textTransform: "uppercase",
-              marginBottom: 14,
-              paddingHorizontal: 4,
-            }}
-          >
-            QUICK ACTIONS
-          </Text>
+          <SectionHeader
+            title={t("home.quickActions")}
+            icon="flash-outline"
+            iconColor={colors.primary[400]}
+          />
           <View
             style={{
               flexDirection: "row",
@@ -1893,40 +1790,31 @@ export default function HomeScreen() {
           >
             <DesktopQuickActionCard
               icon="receipt-outline"
-              label="Pay Bill"
-              description="Pay utility & service bills"
+              label={t("home.payBill")}
+              description={t("home.payBillDesc")}
               color={colors.primary[400]}
               onPress={() => router.push("/payment/paybill")}
-              tc={tc}
-              ts={ts}
             />
             <DesktopQuickActionCard
               icon="cart-outline"
-              label="Buy Goods"
-              description="Pay merchants directly"
+              label={t("home.payTill")}
+              description={t("home.payTillDesc")}
               color={colors.info}
               onPress={() => router.push("/payment/till")}
-              tc={tc}
-              ts={ts}
             />
             <DesktopQuickActionCard
               icon="arrow-down-circle-outline"
-              label="Deposit"
-              description="Add crypto to your wallet"
+              label={t("wallet.deposit")}
+              description={t("home.depositDesc")}
               color={colors.success}
               onPress={() => router.push("/(tabs)/wallet")}
-              tc={tc}
-              ts={ts}
             />
             <DesktopQuickActionCard
-              icon="swap-horizontal-outline"
-              label="Convert"
-              description="Swap between currencies"
+              icon="send-outline"
+              label={t("wallet.send")}
+              description={t("home.sendDesc")}
               color={colors.accent}
-              // TODO: convert will be a separate screen later
-              onPress={() => router.push("/(tabs)/wallet")}
-              tc={tc}
-              ts={ts}
+              onPress={() => router.push("/payment/send")}
             />
           </View>
         </View>
@@ -1959,49 +1847,15 @@ export default function HomeScreen() {
         >
           {/* Recent Transactions */}
           <View style={{ flex: 6 }}>
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "space-between",
-                marginBottom: 14,
-                paddingHorizontal: 4,
-              }}
-            >
-              <Text
-                style={{
-                  color: tc.textPrimary,
-                  fontSize: 17,
-                  fontFamily: "Inter_600SemiBold",
-                  letterSpacing: -0.2,
-                }}
-              >
-                Recent Activity
-              </Text>
-              <Pressable
-                onPress={() => router.push("/(tabs)/wallet")}
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 4,
-                }}
-              >
-                <Text
-                  style={{
-                    color: colors.primary[400],
-                    fontSize: 13,
-                    fontFamily: "Inter_600SemiBold",
-                  }}
-                >
-                  See All
-                </Text>
-                <Ionicons
-                  name="chevron-forward"
-                  size={14}
-                  color={colors.primary[400]}
-                />
-              </Pressable>
-            </View>
+            <SectionHeader
+              title={t("home.recentActivity")}
+              uppercase={false}
+              icon="time-outline"
+              iconColor={tc.textSecondary}
+              actionLabel={t("home.seeAll")}
+              onAction={() => router.push("/(tabs)/wallet")}
+              count={recentTx.length}
+            />
 
             <View
               style={{
@@ -2055,7 +1909,7 @@ export default function HomeScreen() {
                     style={{
                       color: tc.textPrimary,
                       fontSize: 16,
-                      fontFamily: "Inter_600SemiBold",
+                      fontFamily: "DMSans_600SemiBold",
                       marginBottom: 6,
                       textAlign: "center",
                     }}
@@ -2066,7 +1920,7 @@ export default function HomeScreen() {
                     style={{
                       color: tc.textMuted,
                       fontSize: 13,
-                      fontFamily: "Inter_400Regular",
+                      fontFamily: "DMSans_400Regular",
                       marginBottom: 24,
                       textAlign: "center",
                       lineHeight: 19,
@@ -2094,7 +1948,7 @@ export default function HomeScreen() {
                       style={{
                         color: "#FFFFFF",
                         fontSize: 14,
-                        fontFamily: "Inter_600SemiBold",
+                        fontFamily: "DMSans_600SemiBold",
                       }}
                     >
                       Make a Payment

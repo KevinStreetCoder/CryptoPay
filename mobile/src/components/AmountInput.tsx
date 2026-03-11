@@ -74,7 +74,7 @@ export function AmountInput({
           style={{
             color: tc.textSecondary,
             fontSize: 14,
-            fontFamily: "Inter_500Medium",
+            fontFamily: "DMSans_500Medium",
             marginBottom: 8,
           }}
         >
@@ -99,7 +99,7 @@ export function AmountInput({
           style={{
             color: focused ? colors.primary[400] : tc.textMuted,
             fontSize: 22,
-            fontFamily: "Inter_700Bold",
+            fontFamily: "DMSans_700Bold",
             marginRight: 4,
           }}
         >
@@ -119,7 +119,7 @@ export function AmountInput({
             flex: 1,
             color: tc.textPrimary,
             fontSize: 32,
-            fontFamily: "Inter_700Bold",
+            fontFamily: "DMSans_700Bold",
             paddingVertical: 16,
           }}
           maxLength={12}
@@ -139,7 +139,7 @@ export function AmountInput({
           style={{
             color: colors.error,
             fontSize: 12,
-            fontFamily: "Inter_400Regular",
+            fontFamily: "DMSans_400Regular",
             marginTop: 6,
             marginLeft: 4,
           }}
@@ -188,7 +188,7 @@ export function AmountInput({
                     ? colors.primary[400]
                     : tc.textSecondary,
                 fontSize: 13,
-                fontFamily: "Inter_500Medium",
+                fontFamily: "DMSans_500Medium",
               }}
             >
               {amount.toLocaleString()}

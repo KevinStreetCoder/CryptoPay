@@ -17,8 +17,10 @@ import { useToast } from "../../src/components/Toast";
 import { useWallets } from "../../src/hooks/useWallets";
 import { ratesApi, Quote } from "../../src/api/rates";
 import { normalizeError } from "../../src/utils/apiErrors";
-import { getThemeColors, getThemeShadows, CURRENCIES, CurrencyCode, colors } from "../../src/constants/theme";
+import { colors, getThemeColors, getThemeShadows, CURRENCIES, CurrencyCode } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
+import { SectionHeader } from "../../src/components/SectionHeader";
+import { useLocale } from "../../src/hooks/useLocale";
 
 const CRYPTO_OPTIONS: CurrencyCode[] = ["USDT", "BTC", "ETH"];
 
@@ -26,15 +28,15 @@ export default function PayTillScreen() {
   const router = useRouter();
   const { prefill, name: prefillName } = useLocalSearchParams<{ prefill?: string; name?: string }>();
   const { width } = useWindowDimensions();
-  const isDesktop = Platform.OS === "web" && width >= 768;
+  const isWeb = Platform.OS === "web";
+  const isDesktop = isWeb && width >= 768;
   const { data: wallets } = useWallets();
   const [tillNumber, setTillNumber] = useState(prefill || "");
   const [amount, setAmount] = useState("");
   const [selectedCrypto, setSelectedCrypto] = useState<CurrencyCode>("USDT");
   const [quote, setQuote] = useState<Quote | null>(null);
   const [loading, setLoading] = useState(false);
-  const [tillFocused, setTillFocused] = useState(false);
-  const [amountFocused, setAmountFocused] = useState(false);
+  const [focusedField, setFocusedField] = useState<string | null>(null);
 
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
@@ -44,10 +46,11 @@ export default function PayTillScreen() {
   const balance = selectedWallet ? parseFloat(selectedWallet.balance) : 0;
 
   const toast = useToast();
+  const { t } = useLocale();
 
   const handleGetQuote = async () => {
     if (!tillNumber || !amount) {
-      toast.warning("Missing Fields", "Please fill in all fields");
+      toast.warning(t("payment.missingFields"), t("payment.fillAllFields"));
       return;
     }
     setLoading(true);
@@ -83,6 +86,14 @@ export default function PayTillScreen() {
     });
   };
 
+  const inputBorderColor = (field: string) =>
+    focusedField === field ? colors.primary[400] + "60" : tc.dark.border;
+
+  const inputFocusGlow = (field: string) =>
+    focusedField === field && isWeb
+      ? ({ boxShadow: `0 0 0 3px ${colors.primary[500]}15` } as any)
+      : {};
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
       <KeyboardAvoidingView
@@ -98,7 +109,7 @@ export default function PayTillScreen() {
               : undefined
           }
         >
-          {/* Top-level back button (outside card) */}
+          {/* Top-level back button */}
           <Pressable
             onPress={() => {
               if (router.canGoBack()) router.back();
@@ -111,7 +122,7 @@ export default function PayTillScreen() {
               paddingVertical: 8,
               paddingHorizontal: 12,
               borderRadius: 12,
-              backgroundColor: hovered
+              backgroundColor: isWeb && hovered
                 ? tc.glass.highlight
                 : pressed
                   ? tc.dark.elevated
@@ -119,17 +130,15 @@ export default function PayTillScreen() {
               alignSelf: "flex-start",
               marginBottom: 12,
               marginLeft: isDesktop ? 0 : 16,
-              opacity: pressed ? 0.9 : 1,
-              ...(Platform.OS === "web"
-                ? ({ cursor: "pointer", transition: "all 0.15s ease" } as any)
-                : {}),
+              opacity: pressed ? 0.85 : 1,
+              ...(isWeb ? { cursor: "pointer", transition: "all 0.15s ease" } as any : {}),
             })}
             accessibilityRole="button"
             accessibilityLabel="Go back"
           >
             <Ionicons name="arrow-back" size={20} color={tc.textSecondary} />
-            <Text style={{ color: tc.textSecondary, fontSize: 15, fontWeight: "500" }}>
-              Back
+            <Text style={{ color: tc.textSecondary, fontSize: 15, fontFamily: "DMSans_500Medium" }}>
+              {t("common.back")}
             </Text>
           </Pressable>
 
@@ -139,12 +148,13 @@ export default function PayTillScreen() {
               isDesktop
                 ? {
                     width: "100%",
-                    maxWidth: 560,
+                    maxWidth: 600,
                     backgroundColor: tc.dark.card,
                     borderRadius: 20,
-                    padding: 32,
+                    padding: 36,
                     borderWidth: 1,
                     borderColor: tc.dark.border,
+                    ...ts.md,
                   }
                 : { flex: 1 }
             }
@@ -155,45 +165,47 @@ export default function PayTillScreen() {
                 flexDirection: "row",
                 alignItems: "center",
                 paddingHorizontal: isDesktop ? 0 : 16,
-                paddingVertical: 14,
-                marginBottom: isDesktop ? 12 : 0,
+                paddingVertical: 12,
+                marginBottom: isDesktop ? 16 : 4,
               }}
             >
               <Pressable
                 onPress={() => router.replace("/(tabs)/pay" as any)}
                 hitSlop={12}
+                accessibilityRole="button"
+                accessibilityLabel="Go back"
+                testID="back-button"
                 style={({ pressed, hovered }: any) => ({
                   width: 42,
                   height: 42,
                   borderRadius: 14,
-                  backgroundColor: hovered ? tc.dark.elevated : tc.dark.card,
+                  backgroundColor: isWeb && hovered ? tc.dark.elevated : tc.dark.card,
+                  borderColor: isWeb && hovered ? tc.glass.borderStrong : tc.glass.border,
                   alignItems: "center",
                   justifyContent: "center",
                   borderWidth: 1,
-                  borderColor: tc.glass.border,
-                  opacity: pressed ? 0.8 : 1,
-                  ...(Platform.OS === 'web' ? { cursor: 'pointer', transition: 'all 0.15s ease' } as any : {}),
+                  opacity: pressed ? 0.85 : 1,
+                  ...(isWeb ? { cursor: "pointer", transition: "all 0.15s ease" } as any : {}),
                 })}
-                accessibilityRole="button"
-                accessibilityLabel="Go back"
-                testID="back-button"
               >
                 <Ionicons name="arrow-back" size={20} color={tc.textPrimary} />
               </Pressable>
+
               <Text
                 style={{
                   color: tc.textPrimary,
-                  fontSize: isDesktop ? 22 : 18,
-                  fontWeight: "600",
+                  fontSize: isDesktop ? 24 : 20,
+                  fontFamily: "DMSans_700Bold",
                   marginLeft: 14,
                   flex: 1,
+                  letterSpacing: -0.3,
                 }}
                 maxFontSizeMultiplier={1.3}
               >
-                Buy Goods
+                {t("payment.payTill")}
               </Text>
 
-              {/* Step indicator pills — Step 1 of 2 */}
+              {/* Step indicator pills */}
               <View style={{ flexDirection: "row", gap: 6 }}>
                 <View
                   style={{
@@ -221,39 +233,27 @@ export default function PayTillScreen() {
               }}
             >
               {/* Till Number */}
-              <Text
-                style={{
-                  color: tc.textSecondary,
-                  fontSize: 14,
-                  fontWeight: "500",
-                  marginBottom: 8,
-                }}
-              >
-                Till Number
-              </Text>
+              <SectionHeader title={t("payment.tillNumber")} icon="storefront-outline" iconColor={colors.primary[400]} />
               <TextInput
                 value={tillNumber}
                 onChangeText={setTillNumber}
                 placeholder="e.g. 5678901"
                 placeholderTextColor={tc.dark.muted}
                 keyboardType="number-pad"
-                onFocus={() => setTillFocused(true)}
-                onBlur={() => setTillFocused(false)}
+                onFocus={() => setFocusedField("till")}
+                onBlur={() => setFocusedField(null)}
                 style={{
                   backgroundColor: tc.dark.card,
                   color: tc.textPrimary,
                   fontSize: 16,
                   borderRadius: 16,
                   borderWidth: 1,
-                  borderColor: tillFocused
-                    ? tc.primary[500]
-                    : tc.dark.border,
+                  borderColor: inputBorderColor("till"),
                   paddingHorizontal: 16,
                   paddingVertical: 14,
-                  marginBottom: 16,
-                  ...(Platform.OS === 'web' ? { outlineStyle: 'none' } as any : {}),
-                  ...(Platform.OS === 'web' ? { transition: 'border-color 0.2s ease, box-shadow 0.2s ease' } as any : {}),
-                  ...(tillFocused && Platform.OS === 'web' ? { boxShadow: '0 0 0 3px rgba(16, 185, 129, 0.15)' } as any : {}),
+                  marginBottom: 20,
+                  ...(isWeb ? { outlineStyle: "none", transition: "border-color 0.15s ease, box-shadow 0.15s ease" } as any : {}),
+                  ...inputFocusGlow("till"),
                 }}
                 accessibilityLabel="Till Number"
                 testID="till-number-input"
@@ -261,16 +261,7 @@ export default function PayTillScreen() {
               />
 
               {/* Amount */}
-              <Text
-                style={{
-                  color: tc.textSecondary,
-                  fontSize: 14,
-                  fontWeight: "500",
-                  marginBottom: 8,
-                }}
-              >
-                Amount (KES)
-              </Text>
+              <SectionHeader title={t("payment.amountKes")} icon="cash-outline" iconColor={colors.primary[400]} />
               <View
                 style={{
                   flexDirection: "row",
@@ -278,19 +269,17 @@ export default function PayTillScreen() {
                   backgroundColor: tc.dark.card,
                   borderRadius: 16,
                   borderWidth: 1,
-                  borderColor: amountFocused
-                    ? tc.primary[500]
-                    : tc.dark.border,
+                  borderColor: inputBorderColor("amount"),
                   paddingHorizontal: 16,
-                  ...(Platform.OS === 'web' ? { transition: 'border-color 0.2s ease, box-shadow 0.2s ease' } as any : {}),
-                  ...(amountFocused && Platform.OS === 'web' ? { boxShadow: '0 0 0 3px rgba(16, 185, 129, 0.15)' } as any : {}),
+                  ...(isWeb ? { transition: "border-color 0.15s ease, box-shadow 0.15s ease" } as any : {}),
+                  ...inputFocusGlow("amount"),
                 }}
               >
                 <Text
                   style={{
                     color: tc.textSecondary,
                     fontSize: 18,
-                    fontWeight: "700",
+                    fontFamily: "DMSans_700Bold",
                     marginRight: 4,
                   }}
                 >
@@ -302,38 +291,30 @@ export default function PayTillScreen() {
                   placeholder="0"
                   placeholderTextColor={tc.dark.muted}
                   keyboardType="numeric"
-                  onFocus={() => setAmountFocused(true)}
-                  onBlur={() => setAmountFocused(false)}
+                  onFocus={() => setFocusedField("amount")}
+                  onBlur={() => setFocusedField(null)}
                   style={{
                     flex: 1,
                     color: tc.textPrimary,
                     fontSize: 24,
-                    fontWeight: "700",
+                    fontFamily: "DMSans_700Bold",
                     paddingVertical: 12,
-                    ...(Platform.OS === 'web' ? { outlineStyle: 'none' } as any : {}),
+                    ...(isWeb ? { outlineStyle: "none" } as any : {}),
                   }}
                 />
               </View>
 
               {/* Crypto Selector */}
-              <Text
-                style={{
-                  color: tc.textSecondary,
-                  fontSize: 14,
-                  fontWeight: "500",
-                  marginTop: 20,
-                  marginBottom: 8,
-                }}
-              >
-                Pay with
-              </Text>
+              <View style={{ marginTop: 24 }}>
+                <SectionHeader title={t("payment.payWith")} icon="wallet-outline" iconColor={colors.primary[400]} />
+              </View>
               <View style={{ flexDirection: "row", gap: 10 }}>
                 {CRYPTO_OPTIONS.map((crypto) => {
                   const info = CURRENCIES[crypto];
                   const isSelected = selectedCrypto === crypto;
                   const wallet = wallets?.find((w) => w.currency === crypto);
                   const bal = wallet ? parseFloat(wallet.balance) : 0;
-                  const brandColor = colors.crypto[crypto] ?? tc.primary[500];
+                  const brandColor = colors.crypto[crypto] ?? colors.primary[500];
 
                   return (
                     <Pressable
@@ -342,19 +323,27 @@ export default function PayTillScreen() {
                         setSelectedCrypto(crypto);
                         setQuote(null);
                       }}
-                      style={{
+                      style={({ pressed, hovered }: any) => ({
                         flex: 1,
                         borderRadius: 16,
                         padding: 12,
                         borderWidth: 1,
                         borderColor: isSelected
                           ? colors.primary[500]
-                          : tc.dark.border,
+                          : isWeb && hovered
+                            ? tc.glass.borderStrong
+                            : tc.dark.border,
                         backgroundColor: isSelected
-                          ? "rgba(16, 185, 129, 0.1)"
-                          : tc.dark.card,
-                        ...(Platform.OS === 'web' ? { cursor: 'pointer', transition: 'all 0.15s ease' } as any : {}),
-                      }}
+                          ? colors.primary[500] + "1A"
+                          : isWeb && hovered
+                            ? tc.dark.elevated
+                            : tc.dark.card,
+                        opacity: pressed ? 0.85 : 1,
+                        ...(isWeb ? { cursor: "pointer", transition: "all 0.15s ease" } as any : {}),
+                      })}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Pay with ${crypto}`}
+                      accessibilityState={{ selected: isSelected }}
                     >
                       <View
                         style={{
@@ -368,9 +357,7 @@ export default function PayTillScreen() {
                             width: 26,
                             height: 26,
                             borderRadius: 13,
-                            backgroundColor: isSelected
-                              ? brandColor
-                              : tc.dark.border,
+                            backgroundColor: isSelected ? brandColor : tc.dark.border,
                             alignItems: "center",
                             justifyContent: "center",
                             marginRight: 6,
@@ -380,7 +367,7 @@ export default function PayTillScreen() {
                             style={{
                               color: isSelected ? "#fff" : tc.textSecondary,
                               fontSize: 13,
-                              fontWeight: "700",
+                              fontFamily: "DMSans_700Bold",
                             }}
                           >
                             {info.iconSymbol}
@@ -389,10 +376,8 @@ export default function PayTillScreen() {
                         <Text
                           style={{
                             fontSize: 14,
-                            fontWeight: "600",
-                            color: isSelected
-                              ? colors.primary[400]
-                              : tc.textPrimary,
+                            fontFamily: "DMSans_600SemiBold",
+                            color: isSelected ? colors.primary[400] : tc.textPrimary,
                           }}
                         >
                           {info.symbol}
@@ -400,7 +385,7 @@ export default function PayTillScreen() {
                       </View>
                       <Text
                         style={{
-                          color: tc.textMuted,
+                          color: tc.dark.muted,
                           fontSize: 12,
                           marginTop: 2,
                         }}
@@ -419,31 +404,24 @@ export default function PayTillScreen() {
                     backgroundColor: tc.dark.card,
                     borderRadius: 16,
                     borderWidth: 1,
-                    borderColor: "rgba(16, 185, 129, 0.3)",
+                    borderColor: colors.primary[500] + "4D",
                     padding: 16,
-                    marginTop: 20,
+                    marginTop: 24,
                   }}
                 >
                   <View
                     style={{
                       flexDirection: "row",
                       justifyContent: "space-between",
-                      marginBottom: 8,
+                      marginBottom: 10,
                     }}
                   >
-                    <Text
-                      style={{
-                        color: tc.textMuted,
-                        fontSize: 14,
-                      }}
-                    >
-                      Rate
-                    </Text>
+                    <Text style={{ color: tc.dark.muted, fontSize: 14 }}>{t("payment.rate")}</Text>
                     <Text
                       style={{
                         color: tc.textPrimary,
                         fontSize: 14,
-                        fontWeight: "500",
+                        fontFamily: "DMSans_500Medium",
                       }}
                     >
                       1 {selectedCrypto} = KSh{" "}
@@ -454,44 +432,36 @@ export default function PayTillScreen() {
                     style={{
                       flexDirection: "row",
                       justifyContent: "space-between",
-                      marginBottom: 8,
+                      marginBottom: 10,
                     }}
                   >
-                    <Text
-                      style={{
-                        color: tc.textMuted,
-                        fontSize: 14,
-                      }}
-                    >
-                      Fee
-                    </Text>
+                    <Text style={{ color: tc.dark.muted, fontSize: 14 }}>{t("payment.fee")}</Text>
                     <Text
                       style={{
                         color: tc.textPrimary,
                         fontSize: 14,
-                        fontWeight: "500",
+                        fontFamily: "DMSans_500Medium",
                       }}
                     >
                       KSh {quote.fee_kes}
                     </Text>
                   </View>
-                  {/* Excise Duty (VASP Act 2025) */}
                   {quote.excise_duty_kes && parseFloat(quote.excise_duty_kes) > 0 && (
                     <View
                       style={{
                         flexDirection: "row",
                         justifyContent: "space-between",
-                        marginBottom: 8,
+                        marginBottom: 10,
                       }}
                     >
-                      <Text style={{ color: tc.textMuted, fontSize: 14 }}>
-                        Excise Duty (10%)
+                      <Text style={{ color: tc.dark.muted, fontSize: 14 }}>
+                        {t("payment.exciseDuty")}
                       </Text>
                       <Text
                         style={{
                           color: tc.textPrimary,
                           fontSize: 14,
-                          fontWeight: "500",
+                          fontFamily: "DMSans_500Medium",
                         }}
                       >
                         KSh {quote.excise_duty_kes}
@@ -502,7 +472,7 @@ export default function PayTillScreen() {
                     style={{
                       height: 1,
                       backgroundColor: tc.dark.border,
-                      marginVertical: 8,
+                      marginVertical: 10,
                     }}
                   />
                   <View
@@ -515,16 +485,16 @@ export default function PayTillScreen() {
                       style={{
                         color: tc.textSecondary,
                         fontSize: 14,
-                        fontWeight: "500",
+                        fontFamily: "DMSans_600SemiBold",
                       }}
                     >
-                      Total
+                      {t("payment.total")}
                     </Text>
                     <Text
                       style={{
                         color: colors.primary[400],
                         fontSize: 16,
-                        fontWeight: "700",
+                        fontFamily: "DMSans_700Bold",
                       }}
                     >
                       {quote.crypto_amount} {selectedCrypto}
@@ -538,26 +508,26 @@ export default function PayTillScreen() {
                         marginTop: 8,
                       }}
                     >
-                      Insufficient {selectedCrypto} balance
+                      {t("payment.insufficientBalance", { currency: selectedCrypto })}
                     </Text>
                   )}
                   <Text
                     style={{
-                      color: tc.textMuted,
+                      color: tc.dark.muted,
                       fontSize: 12,
                       marginTop: 8,
                     }}
                   >
-                    Rate locked for 30 seconds
+                    {t("payment.rateLocked30")}
                   </Text>
                 </View>
               )}
 
               {/* Action Button */}
-              <View style={{ marginTop: 24, marginBottom: 32 }}>
+              <View style={{ marginTop: 28, marginBottom: 32 }}>
                 {!quote ? (
                   <Button
-                    title="Get Quote"
+                    title={t("payment.getQuote")}
                     onPress={handleGetQuote}
                     loading={loading}
                     disabled={!tillNumber || !amount}
@@ -565,7 +535,7 @@ export default function PayTillScreen() {
                   />
                 ) : (
                   <Button
-                    title="Confirm Payment"
+                    title={t("payment.confirmPayment")}
                     onPress={handleConfirm}
                     disabled={parseFloat(quote.crypto_amount) > balance}
                     size="lg"

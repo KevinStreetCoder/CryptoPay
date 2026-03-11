@@ -107,7 +107,7 @@ export function LoadingScreen() {
         style={{
           color: tc.textPrimary,
           fontSize: 28,
-          fontFamily: "Inter_700Bold",
+          fontFamily: "DMSans_700Bold",
           marginTop: 24,
           letterSpacing: -0.5,
         }}
@@ -119,7 +119,7 @@ export function LoadingScreen() {
         style={{
           color: tc.textSecondary,
           fontSize: 14,
-          fontFamily: "Inter_400Regular",
+          fontFamily: "DMSans_400Regular",
           marginTop: 8,
         }}
       >

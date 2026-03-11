@@ -417,13 +417,13 @@ const s = StyleSheet.create({
   },
   webStepLabel: {
     fontSize: 13,
-    fontWeight: "600",
+    fontFamily: "DMSans_600SemiBold",
     letterSpacing: 0.5,
     textTransform: "uppercase",
   },
   webSkipText: {
     fontSize: 14,
-    fontWeight: "600",
+    fontFamily: "DMSans_600SemiBold",
   },
   webSlide: {
     alignItems: "center",
@@ -431,7 +431,7 @@ const s = StyleSheet.create({
   },
   webTitle: {
     fontSize: 22,
-    fontWeight: "800",
+    fontFamily: "DMSans_700Bold",
     textAlign: "center",
     marginBottom: 12,
     letterSpacing: -0.3,
@@ -472,7 +472,7 @@ const s = StyleSheet.create({
   },
   webButtonText: {
     fontSize: 16,
-    fontWeight: "700",
+    fontFamily: "DMSans_700Bold",
     color: S.white,
   },
 
@@ -521,7 +521,7 @@ const s = StyleSheet.create({
   },
   mobileLogo: {
     fontSize: 18,
-    fontWeight: "700",
+    fontFamily: "DMSans_700Bold",
     letterSpacing: 0.3,
   },
   mobileSkipBtn: {
@@ -535,7 +535,7 @@ const s = StyleSheet.create({
   },
   mobileSkipText: {
     fontSize: 14,
-    fontWeight: "600",
+    fontFamily: "DMSans_600SemiBold",
   },
   mobileSlide: {
     flex: 1,
@@ -545,7 +545,7 @@ const s = StyleSheet.create({
   },
   mobileTitle: {
     fontSize: 26,
-    fontWeight: "800",
+    fontFamily: "DMSans_700Bold",
     textAlign: "center",
     marginBottom: 14,
     letterSpacing: -0.3,
@@ -583,7 +583,7 @@ const s = StyleSheet.create({
   },
   mobileNextText: {
     fontSize: 16,
-    fontWeight: "700",
+    fontFamily: "DMSans_700Bold",
     color: S.white,
   },
 });
