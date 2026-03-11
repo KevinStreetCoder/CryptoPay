@@ -439,6 +439,14 @@ What's real vs placeholder in the current codebase:
 | 11 | **PIN error pass-through for payments** | Frontend | 401 responses with business-logic `error` field (e.g., "Invalid PIN") now pass through the interceptor instead of triggering token refresh → session expiry. | `client.ts` |
 | 12 | **Profile avatar display** | Frontend | Added `resolveAvatarUrl()` helper to handle Django relative URLs. Avatar now displays on Profile page and Settings page header. | `profile.tsx`, `settings/index.tsx` |
 
+#### ✅ COMPLETED (March 11, 2026 Session 3 — Logo & Avatar Fix)
+
+| # | Task | Area | Details | Files |
+|---|------|------|---------|-------|
+| 1 | **Fix service logos showing letter fallbacks** | Frontend | `ServiceLogo` was using `source={{ uri: logos }}` which fails for `require()` results on web. Changed to `source={logos}` — React Native handles resolution internally on all platforms. Removed stale URL array/cascading fallback logic. Changed type from `string` to `any`. | `pay.tsx`, `logos.ts` |
+| 2 | **Fix sidebar avatar not displaying** | Frontend | `WebSidebar` was using `user.avatar_url` directly without resolving relative Django paths (e.g., `/media/avatars/xxx.jpg`). Added `resolveAvatarUrl()` helper (same as profile.tsx) to both collapsed and expanded avatar displays. | `WebSidebar.tsx` |
+| 3 | **Dev OTP security challenge bypass** | Backend | Added `if settings.DEBUG: security_challenge = False` in LoginView so new-device OTP is skipped during development (no SMS API configured). OTP code included in response when DEBUG for testing. | `views.py` |
+
 #### 🟡 HIGH PRIORITY — Remaining (Before Beta Launch)
 
 | # | Task | Area | Details | Files |

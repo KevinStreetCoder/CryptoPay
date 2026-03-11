@@ -11,8 +11,7 @@ import { useLocale } from "../../src/hooks/useLocale";
 
 const isWeb = Platform.OS === "web";
 
-/** Renders a company logo from local asset or CDN URL with fallback.
- *  Accepts: require() source (number on native, string on web), URL string array, or undefined. */
+/** Renders a company logo from a require() asset with letter fallback. */
 function ServiceLogo({
   logos,
   name,
@@ -27,34 +26,14 @@ function ServiceLogo({
   bg?: string;
 }) {
   const [failed, setFailed] = useState(false);
-  const [urlIndex, setUrlIndex] = useState(0);
 
-  // Local require() asset: number on native, string URI on web
-  if (!failed && (typeof logos === "number" || (typeof logos === "string" && !logos.startsWith("http")))) {
-    const source = typeof logos === "number" ? logos : { uri: logos };
+  // Render image if we have a valid asset (require() result — number on native, object/string on web)
+  if (logos && !failed) {
     return (
       <Image
-        source={source as any}
+        source={logos}
         style={{ width: size, height: size, borderRadius: 6 }}
         onError={() => setFailed(true)}
-        resizeMode="contain"
-      />
-    );
-  }
-
-  // URL string or URL array with cascading fallback
-  const urls = Array.isArray(logos) ? logos : typeof logos === "string" ? [logos] : [];
-  const currentUrl = urls[urlIndex];
-
-  if (currentUrl && !failed) {
-    return (
-      <Image
-        source={{ uri: currentUrl }}
-        style={{ width: size, height: size, borderRadius: 6 }}
-        onError={() => {
-          if (urlIndex < urls.length - 1) setUrlIndex((i) => i + 1);
-          else setFailed(true);
-        }}
         resizeMode="contain"
       />
     );
