@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Platform } from "react-native";
 import { storage } from "../utils/storage";
 import { authApi, User } from "../api/auth";
-import { setOnSessionExpired } from "../api/client";
+import { setOnSessionExpired, resetSessionExpired } from "../api/client";
 import { resetBalanceVisibility } from "./balance";
 
 let _user: User | null = null;
@@ -95,6 +95,7 @@ export function useAuth() {
     const { data } = await authApi.login({ phone, pin });
     await storage.setItemAsync("access_token", data.tokens.access);
     await storage.setItemAsync("refresh_token", data.tokens.refresh);
+    resetSessionExpired(); // Allow API requests again after re-login
     _user = data.user;
     notify();
     return data;
@@ -110,6 +111,7 @@ export function useAuth() {
       });
       await storage.setItemAsync("access_token", data.tokens.access);
       await storage.setItemAsync("refresh_token", data.tokens.refresh);
+      resetSessionExpired();
       _user = data.user;
       notify();
       return data;
@@ -121,6 +123,7 @@ export function useAuth() {
     const { data } = await authApi.googleLogin(idToken);
     await storage.setItemAsync("access_token", data.tokens.access);
     await storage.setItemAsync("refresh_token", data.tokens.refresh);
+    resetSessionExpired();
     _user = data.user;
     notify();
     return data;

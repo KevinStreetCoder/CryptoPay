@@ -22,7 +22,14 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const queryClient = new QueryClient({
   defaultOptions: {
-    queries: { retry: 2, staleTime: 30000 },
+    queries: {
+      retry: (failureCount, error) => {
+        // Don't retry if session expired — user needs to re-login
+        if (error && (error as any).name === "SessionExpiredError") return false;
+        return failureCount < 2;
+      },
+      staleTime: 30000,
+    },
   },
 });
 
