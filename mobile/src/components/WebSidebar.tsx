@@ -5,6 +5,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../stores/auth";
 import { colors, getThemeColors, getThemeShadows } from "../constants/theme";
 import { useThemeMode } from "../stores/theme";
+import { config } from "../constants/config";
+
+function resolveAvatarUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  const base = config.apiUrl.replace(/\/api\/v1\/?$/, "");
+  return `${base}${url.startsWith("/") ? "" : "/"}${url}`;
+}
 
 const SIDEBAR_EXPANDED = 260;
 const SIDEBAR_COLLAPSED = 68;
@@ -469,9 +477,9 @@ export function WebSidebar() {
         {collapsed ? (
           /* Collapsed: just the avatar */
           <View style={{ alignItems: "center", marginBottom: 10 }}>
-            {user?.avatar_url ? (
+            {resolveAvatarUrl(user?.avatar_url) ? (
               <Image
-                source={{ uri: user.avatar_url }}
+                source={{ uri: resolveAvatarUrl(user?.avatar_url)! }}
                 style={{
                   width: 42,
                   height: 42,
@@ -522,9 +530,9 @@ export function WebSidebar() {
               ...(Platform.OS === "web" ? { cursor: "pointer", transition: "background-color 0.15s ease" } as any : {}),
             })}
           >
-            {user?.avatar_url ? (
+            {resolveAvatarUrl(user?.avatar_url) ? (
               <Image
-                source={{ uri: user.avatar_url }}
+                source={{ uri: resolveAvatarUrl(user?.avatar_url)! }}
                 style={{
                   width: 38,
                   height: 38,

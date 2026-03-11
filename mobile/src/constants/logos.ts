@@ -1,5 +1,4 @@
 // Centralized logo assets for crypto currencies and service providers
-// Local assets for reliable offline display
 
 export const CRYPTO_LOGOS: Record<string, string> = {
   USDT: "https://assets.coingecko.com/coins/images/325/small/Tether.png",
@@ -8,7 +7,8 @@ export const CRYPTO_LOGOS: Record<string, string> = {
   SOL: "https://assets.coingecko.com/coins/images/4128/small/solana.png",
 };
 
-// Local logo assets – require() returns a number in React Native
+// Local logo assets — require() returns an asset module (number on native, object on web)
+// Pass directly to <Image source={...} /> — React Native handles resolution internally
 export const SERVICE_LOGOS: Record<string, any> = {
   "KPLC Prepaid": require("../../assets/logos/services/kplc.png"),
   "KPLC Postpaid": require("../../assets/logos/services/kplc.png"),

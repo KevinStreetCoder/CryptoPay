@@ -301,6 +301,10 @@ class LoginView(APIView):
             security_challenge = False
             challenge_reasons = []
 
+        # In DEBUG mode, skip security challenges (no SMS provider configured)
+        if settings.DEBUG:
+            security_challenge = False
+
         if security_challenge:
             if not otp:
                 # Send OTP and require verification
@@ -311,15 +315,15 @@ class LoginView(APIView):
                     details={"reasons": challenge_reasons, "ip": client_ip, "device_id": device_id},
                     ip_address=client_ip,
                 )
-                return Response(
-                    {
-                        "error": "Security verification required",
-                        "otp_required": True,
-                        "security_challenge": True,
-                        "message": "New device or location detected. Enter the OTP sent to your phone.",
-                    },
-                    status=status.HTTP_403_FORBIDDEN,
-                )
+                response_data = {
+                    "error": "Security verification required",
+                    "otp_required": True,
+                    "security_challenge": True,
+                    "message": "New device or location detected. Enter the OTP sent to your phone.",
+                }
+                if settings.DEBUG and hasattr(self, "_last_challenge_otp"):
+                    response_data["dev_otp"] = self._last_challenge_otp
+                return Response(response_data, status=status.HTTP_403_FORBIDDEN)
             # Verify the OTP for security challenge
             stored_otp = cache.get(f"otp:{phone}")
             if not stored_otp or stored_otp != otp:
