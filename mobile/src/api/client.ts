@@ -38,13 +38,18 @@ export const api = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
+// Auth endpoints that should work even after session expiry
+const AUTH_ENDPOINTS = ["/auth/login/", "/auth/register/", "/auth/otp/", "/auth/google/", "/auth/token/refresh/"];
+
 api.interceptors.request.use(async (cfg) => {
-  // If session already expired, reject immediately — don't even make the request
-  if (_sessionExpired) {
+  const isAuthEndpoint = AUTH_ENDPOINTS.some((ep) => cfg.url?.includes(ep));
+
+  // If session already expired, reject immediately — but allow auth endpoints through
+  if (_sessionExpired && !isAuthEndpoint) {
     return Promise.reject(new SessionExpiredError());
   }
   const token = await storage.getItemAsync("access_token");
-  if (token) {
+  if (token && !isAuthEndpoint) {
     cfg.headers.Authorization = `Bearer ${token}`;
   }
   return cfg;
@@ -53,13 +58,27 @@ api.interceptors.request.use(async (cfg) => {
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    // Already handled — don't re-process
+    const originalRequest = error.config;
+    const isAuthEndpoint = AUTH_ENDPOINTS.some((ep) => originalRequest?.url?.includes(ep));
+
+    // Auth endpoints (login, register, etc.) — always pass errors through as-is
+    if (isAuthEndpoint) {
+      return Promise.reject(error);
+    }
+
+    // Already handled — don't re-process (but only for non-auth endpoints)
     if (error instanceof SessionExpiredError || _sessionExpired) {
       return Promise.reject(new SessionExpiredError());
     }
 
-    const originalRequest = error.config;
     if (error.response?.status === 401 && !originalRequest._retry) {
+      // If the 401 carries a business-logic error (e.g. "Invalid PIN"),
+      // pass it through instead of treating it as token expiry.
+      const body = error.response?.data;
+      if (body?.error && typeof body.error === "string") {
+        return Promise.reject(error);
+      }
+
       originalRequest._retry = true;
       try {
         const refresh = await storage.getItemAsync("refresh_token");

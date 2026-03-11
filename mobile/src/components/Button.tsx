@@ -255,7 +255,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   text: {
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: "DMSans_600SemiBold",
     letterSpacing: 0.2,
   },
 });

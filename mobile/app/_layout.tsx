@@ -3,6 +3,7 @@ import { View } from "react-native";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
+import { useFonts, DMSans_400Regular, DMSans_500Medium, DMSans_600SemiBold, DMSans_700Bold } from "@expo-google-fonts/dm-sans";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useAuth } from "../src/stores/auth";
@@ -16,6 +17,7 @@ import { storage } from "../src/utils/storage";
 import { initTheme, useThemeMode } from "../src/stores/theme";
 import { getThemeColors } from "../src/constants/theme";
 import { initPrivacy } from "../src/utils/privacy";
+import { LanguageProvider } from "../src/contexts/LanguageContext";
 import { OnboardingModal, ONBOARDING_COMPLETED_KEY } from "./onboarding";
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -135,13 +137,26 @@ function RootNavigator() {
 }
 
 export default function RootLayout() {
+  const [fontsLoaded] = useFonts({
+    DMSans_400Regular,
+    DMSans_500Medium,
+    DMSans_600SemiBold,
+    DMSans_700Bold,
+  });
+
+  if (!fontsLoaded) {
+    return null;
+  }
+
   return (
     <ErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <QueryClientProvider client={queryClient}>
-          <ToastProvider>
-            <RootNavigator />
-          </ToastProvider>
+          <LanguageProvider>
+            <ToastProvider>
+              <RootNavigator />
+            </ToastProvider>
+          </LanguageProvider>
         </QueryClientProvider>
       </GestureHandlerRootView>
     </ErrorBoundary>

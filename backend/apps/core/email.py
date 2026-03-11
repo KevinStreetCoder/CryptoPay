@@ -77,6 +77,52 @@ def send_kyc_status_email(user, document_type, status, rejection_reason=None):
     logger.info(f"Queued KYC status email for {user.email} — {document_type}: {status}")
 
 
+def send_transaction_notifications(user, transaction):
+    """Send all notifications for a completed transaction: email receipt, SMS, PDF, push.
+
+    This is the single entry point for transaction notifications.
+    Call this when a transaction is completed successfully.
+    """
+    # Email receipt
+    send_transaction_receipt(user, transaction)
+
+    # SMS notification
+    if user.phone:
+        from apps.core.tasks import send_transaction_sms_task
+
+        send_transaction_sms_task.delay(
+            phone=user.phone,
+            tx_type=transaction.type,
+            amount=str(transaction.dest_amount),
+            currency=transaction.dest_currency,
+            reference=str(transaction.id)[:8].upper(),
+        )
+        logger.info(f"Queued transaction SMS for {user.phone}")
+
+    # PDF receipt generation
+    from apps.core.tasks import generate_pdf_receipt_task
+
+    generate_pdf_receipt_task.delay(transaction_id=str(transaction.id))
+    logger.info(f"Queued PDF receipt for transaction {transaction.id}")
+
+    # Push notification
+    from apps.core.tasks import send_push_task
+
+    type_labels = {
+        "PAYBILL_PAYMENT": "Paybill payment",
+        "TILL_PAYMENT": "Till payment",
+        "SEND_MPESA": "M-Pesa transfer",
+        "BUY": "Crypto purchase",
+    }
+    label = type_labels.get(transaction.type, "Transaction")
+    send_push_task.delay(
+        user_id=str(user.id),
+        title="Payment Successful",
+        body=f"{label} of {transaction.dest_currency} {transaction.dest_amount} completed. Ref: {str(transaction.id)[:8].upper()}",
+        data={"transaction_id": str(transaction.id), "type": "transaction_complete"},
+    )
+
+
 def send_security_alert(user, event_type, ip_address, device_info):
     """Send security alert email.
 

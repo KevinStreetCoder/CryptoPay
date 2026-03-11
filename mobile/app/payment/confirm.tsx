@@ -13,6 +13,7 @@ import { useScreenSecurity } from "../../src/hooks/useScreenSecurity";
 import { CURRENCIES, CurrencyCode, colors } from "../../src/constants/theme";
 import { getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
+import { useLocale } from "../../src/hooks/useLocale";
 
 function PulsingDot() {
   const pulse = useRef(new Animated.Value(0.4)).current;
@@ -111,7 +112,7 @@ function QuoteCountdown({ onExpired }: { onExpired: () => void }) {
         style={{
           color: isCritical ? colors.error : isUrgent ? colors.warning : colors.primary[400],
           fontSize: 13,
-          fontFamily: "Inter_600SemiBold",
+          fontFamily: "DMSans_600SemiBold",
         }}
       >
         Rate locked — {display}
@@ -151,6 +152,7 @@ export default function ConfirmPaymentScreen() {
   const tc = getThemeColors(isDark);
   const ts = getThemeShadows(isDark);
 
+  const { t } = useLocale();
   const [backHovered, setBackHovered] = useState(false);
 
   const params = useLocalSearchParams<{
@@ -196,8 +198,9 @@ export default function ConfirmPaymentScreen() {
     const idempotencyKey = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
     try {
+      let txResponse: any;
       if (params.type === "paybill") {
-        await paymentsApi.payBill({
+        txResponse = await paymentsApi.payBill({
           paybill: params.paybill_number!,
           account: params.account_number!,
           pin,
@@ -205,14 +208,14 @@ export default function ConfirmPaymentScreen() {
           quote_id: params.quote_id,
         });
       } else if (params.type === "till") {
-        await paymentsApi.payTill({
+        txResponse = await paymentsApi.payTill({
           till: params.till_number!,
           pin,
           idempotency_key: idempotencyKey,
           quote_id: params.quote_id,
         });
       } else if (params.type === "send") {
-        await paymentsApi.sendMpesa({
+        txResponse = await paymentsApi.sendMpesa({
           phone: params.phone!,
           amount_kes: params.amount_kes,
           crypto_currency: params.crypto_currency,
@@ -221,6 +224,8 @@ export default function ConfirmPaymentScreen() {
           quote_id: params.quote_id,
         });
       }
+
+      const transactionId = txResponse?.data?.id || "";
 
       if (Platform.OS !== "web") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -232,6 +237,7 @@ export default function ConfirmPaymentScreen() {
           crypto_amount: params.crypto_amount,
           crypto_currency: params.crypto_currency,
           recipient: params.paybill_number || params.till_number || params.phone || "",
+          transaction_id: transactionId,
         },
       });
     } catch (err: unknown) {
@@ -249,7 +255,7 @@ export default function ConfirmPaymentScreen() {
   const isPaybill = params.type === "paybill";
   const isSend = params.type === "send";
   const amountKES = parseFloat(params.amount_kes);
-  const recipientLabel = isPaybill ? "Paybill" : isSend ? "Phone Number" : "Till Number";
+  const recipientLabel = isPaybill ? t("payment.paybillNumber") : isSend ? t("payment.phoneNumber") : t("payment.tillNumber");
   const recipientValue = isPaybill
     ? params.paybill_number
     : isSend
@@ -265,7 +271,7 @@ export default function ConfirmPaymentScreen() {
     : isSend
       ? "#F59E0B"
       : tc.accent;
-  const typeLabel = isPaybill ? "Pay Bill" : isSend ? "Send to M-Pesa" : "Buy Goods";
+  const typeLabel = isPaybill ? t("payment.payBill") : isSend ? t("payment.sendToMpesa") : t("payment.payTill");
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
@@ -306,13 +312,13 @@ export default function ConfirmPaymentScreen() {
           style={{
             color: tc.textPrimary,
             fontSize: 18,
-            fontFamily: "Inter_600SemiBold",
+            fontFamily: "DMSans_600SemiBold",
             marginLeft: 14,
             flex: 1,
           }}
           maxFontSizeMultiplier={1.3}
         >
-          {step === "review" ? "Confirm Payment" : "Enter PIN"}
+          {step === "review" ? t("payment.confirmPayment") : t("payment.enterYourPin")}
         </Text>
 
         {/* Step indicator pills — step 2 of 2, both filled */}
@@ -401,7 +407,7 @@ export default function ConfirmPaymentScreen() {
                 style={{
                   color: tc.textMuted,
                   fontSize: 12,
-                  fontFamily: "Inter_500Medium",
+                  fontFamily: "DMSans_500Medium",
                   marginBottom: 10,
                   textTransform: "uppercase",
                   letterSpacing: 1.2,
@@ -415,7 +421,7 @@ export default function ConfirmPaymentScreen() {
                 style={{
                   color: tc.textPrimary,
                   fontSize: 38,
-                  fontFamily: "Inter_700Bold",
+                  fontFamily: "DMSans_700Bold",
                   letterSpacing: -1,
                 }}
                 maxFontSizeMultiplier={1.2}
@@ -449,7 +455,7 @@ export default function ConfirmPaymentScreen() {
                   style={{
                     color: tc.textMuted,
                     fontSize: 14,
-                    fontFamily: "Inter_400Regular",
+                    fontFamily: "DMSans_400Regular",
                   }}
                   maxFontSizeMultiplier={1.3}
                 >
@@ -459,7 +465,7 @@ export default function ConfirmPaymentScreen() {
                   style={{
                     color: tc.textPrimary,
                     fontSize: 14,
-                    fontFamily: "Inter_600SemiBold",
+                    fontFamily: "DMSans_600SemiBold",
                   }}
                   maxFontSizeMultiplier={1.3}
                 >
@@ -479,17 +485,17 @@ export default function ConfirmPaymentScreen() {
                     style={{
                       color: tc.textMuted,
                       fontSize: 14,
-                      fontFamily: "Inter_400Regular",
+                      fontFamily: "DMSans_400Regular",
                     }}
                     maxFontSizeMultiplier={1.3}
                   >
-                    Account
+                    {t("payment.account")}
                   </Text>
                   <Text
                     style={{
                       color: tc.textPrimary,
                       fontSize: 14,
-                      fontFamily: "Inter_600SemiBold",
+                      fontFamily: "DMSans_600SemiBold",
                     }}
                     maxFontSizeMultiplier={1.3}
                   >
@@ -519,11 +525,11 @@ export default function ConfirmPaymentScreen() {
                   style={{
                     color: tc.textMuted,
                     fontSize: 14,
-                    fontFamily: "Inter_400Regular",
+                    fontFamily: "DMSans_400Regular",
                   }}
                   maxFontSizeMultiplier={1.3}
                 >
-                  Paying with
+                  {t("payment.payingWith")}
                 </Text>
                 <View
                   style={{
@@ -540,7 +546,7 @@ export default function ConfirmPaymentScreen() {
                     style={{
                       color: tc.primary[400],
                       fontSize: 14,
-                      fontFamily: "Inter_600SemiBold",
+                      fontFamily: "DMSans_600SemiBold",
                     }}
                     maxFontSizeMultiplier={1.3}
                   >
@@ -561,17 +567,17 @@ export default function ConfirmPaymentScreen() {
                   style={{
                     color: tc.textMuted,
                     fontSize: 14,
-                    fontFamily: "Inter_400Regular",
+                    fontFamily: "DMSans_400Regular",
                   }}
                   maxFontSizeMultiplier={1.3}
                 >
-                  Rate
+                  {t("payment.rate")}
                 </Text>
                 <Text
                   style={{
                     color: tc.textSecondary,
                     fontSize: 14,
-                    fontFamily: "Inter_500Medium",
+                    fontFamily: "DMSans_500Medium",
                   }}
                   maxFontSizeMultiplier={1.3}
                 >
@@ -592,17 +598,17 @@ export default function ConfirmPaymentScreen() {
                   style={{
                     color: tc.textMuted,
                     fontSize: 14,
-                    fontFamily: "Inter_400Regular",
+                    fontFamily: "DMSans_400Regular",
                   }}
                   maxFontSizeMultiplier={1.3}
                 >
-                  Fee
+                  {t("payment.fee")}
                 </Text>
                 <Text
                   style={{
                     color: tc.textSecondary,
                     fontSize: 14,
-                    fontFamily: "Inter_500Medium",
+                    fontFamily: "DMSans_500Medium",
                   }}
                   maxFontSizeMultiplier={1.3}
                 >
@@ -623,17 +629,17 @@ export default function ConfirmPaymentScreen() {
                     style={{
                       color: tc.textMuted,
                       fontSize: 14,
-                      fontFamily: "Inter_400Regular",
+                      fontFamily: "DMSans_400Regular",
                     }}
                     maxFontSizeMultiplier={1.3}
                   >
-                    Excise Duty (10%)
+                    {t("payment.exciseDuty")}
                   </Text>
                   <Text
                     style={{
                       color: tc.textSecondary,
                       fontSize: 14,
-                      fontFamily: "Inter_500Medium",
+                      fontFamily: "DMSans_500Medium",
                     }}
                     maxFontSizeMultiplier={1.3}
                   >
@@ -648,7 +654,7 @@ export default function ConfirmPaymentScreen() {
           <View style={{ marginTop: 24, marginBottom: isDesktop ? 8 : 32 }}>
             {quoteExpired ? (
               <Button
-                title="Get New Quote"
+                title={t("payment.getNewQuote")}
                 onPress={() => { if (router.canGoBack()) router.back(); else router.replace("/(tabs)" as any); }}
                 size="lg"
                 variant="outline"
@@ -656,7 +662,7 @@ export default function ConfirmPaymentScreen() {
               />
             ) : (
               <Button
-                title="Pay Now"
+                title={t("payment.payNow")}
                 onPress={handleConfirm}
                 size="lg"
                 testID="pay-now-button"
@@ -682,10 +688,10 @@ export default function ConfirmPaymentScreen() {
               style={{
                 color: tc.textMuted,
                 fontSize: 12,
-                fontFamily: "Inter_400Regular",
+                fontFamily: "DMSans_400Regular",
               }}
             >
-              Secured by end-to-end encryption
+              {t("payment.securedBy")}
             </Text>
           </View>
 
@@ -736,26 +742,26 @@ export default function ConfirmPaymentScreen() {
               style={{
                 color: tc.textPrimary,
                 fontSize: 22,
-                fontFamily: "Inter_700Bold",
+                fontFamily: "DMSans_700Bold",
                 textAlign: "center",
                 marginBottom: 8,
               }}
               maxFontSizeMultiplier={1.3}
             >
-              Enter your PIN
+              {t("payment.enterYourPin")}
             </Text>
             <Text
               style={{
                 color: tc.textMuted,
                 fontSize: 14,
-                fontFamily: "Inter_400Regular",
+                fontFamily: "DMSans_400Regular",
                 textAlign: "center",
                 marginBottom: 8,
                 lineHeight: 20,
               }}
               maxFontSizeMultiplier={1.3}
             >
-              Confirm payment of
+              {t("payment.confirmPaymentOf")}
             </Text>
 
             {/* Amount badge - glass card pill */}
@@ -778,7 +784,7 @@ export default function ConfirmPaymentScreen() {
                 style={{
                   color: tc.textPrimary,
                   fontSize: 17,
-                  fontFamily: "Inter_700Bold",
+                  fontFamily: "DMSans_700Bold",
                 }}
               >
                 KSh {amountKES.toLocaleString()}
@@ -788,7 +794,7 @@ export default function ConfirmPaymentScreen() {
                 style={{
                   color: tc.textSecondary,
                   fontSize: 15,
-                  fontFamily: "Inter_500Medium",
+                  fontFamily: "DMSans_500Medium",
                 }}
               >
                 {recipientValue}
@@ -802,24 +808,24 @@ export default function ConfirmPaymentScreen() {
                   style={{
                     color: tc.error,
                     fontSize: 16,
-                    fontFamily: "Inter_600SemiBold",
+                    fontFamily: "DMSans_600SemiBold",
                     textAlign: "center",
                   }}
                 >
-                  Quote expired
+                  {t("payment.quoteExpired")}
                 </Text>
                 <Text
                   style={{
                     color: tc.textMuted,
                     fontSize: 14,
-                    fontFamily: "Inter_400Regular",
+                    fontFamily: "DMSans_400Regular",
                     textAlign: "center",
                   }}
                 >
-                  The exchange rate has changed. Please go back and get a new quote.
+                  {t("payment.quoteExpiredMessage")}
                 </Text>
                 <Button
-                  title="Get New Quote"
+                  title={t("payment.getNewQuote")}
                   onPress={() => { if (router.canGoBack()) router.back(); else router.replace("/(tabs)" as any); }}
                   size="lg"
                   variant="outline"
@@ -845,10 +851,10 @@ export default function ConfirmPaymentScreen() {
                   style={{
                     color: tc.primary[400],
                     fontSize: 14,
-                    fontFamily: "Inter_500Medium",
+                    fontFamily: "DMSans_500Medium",
                   }}
                 >
-                  Processing payment...
+                  {t("payment.processingPayment")}
                 </Text>
               </View>
             )}
@@ -869,10 +875,10 @@ export default function ConfirmPaymentScreen() {
                 style={{
                   color: tc.textMuted,
                   fontSize: 12,
-                  fontFamily: "Inter_400Regular",
+                  fontFamily: "DMSans_400Regular",
                 }}
               >
-                Your PIN is never stored or shared
+                {t("payment.pinNeverStored")}
               </Text>
             </View>
           </View>

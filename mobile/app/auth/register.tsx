@@ -10,6 +10,7 @@ import {
   ScrollView,
   ActivityIndicator,
   useWindowDimensions,
+  Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -23,36 +24,25 @@ import { normalizeError } from "../../src/utils/apiErrors";
 import { useGoogleAuth } from "../../src/hooks/useGoogleAuth";
 import { getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
+import { BRAND_LOGOS } from "../../src/constants/logos";
 
 type Step = "phone" | "otp" | "name" | "pin";
 
 const STEPS: Step[] = ["phone", "otp", "name", "pin"];
 const STEP_LABELS = ["Phone", "Verify", "Name", "PIN"];
 
-function KeBadge({ tc }: { tc: ReturnType<typeof getThemeColors> }) {
+function KenyaFlag() {
   return (
-    <View
+    <Image
+      source={{ uri: BRAND_LOGOS.kenyaFlag }}
       style={{
-        width: 28,
-        height: 20,
-        borderRadius: 4,
-        backgroundColor: tc.primary[500],
-        alignItems: "center",
-        justifyContent: "center",
+        width: 24,
+        height: 16,
+        borderRadius: 2,
         marginRight: 8,
       }}
-    >
-      <Text
-        style={{
-          color: "#FFFFFF",
-          fontSize: 10,
-          fontFamily: "Inter_700Bold",
-          letterSpacing: 0.5,
-        }}
-      >
-        KE
-      </Text>
-    </View>
+      accessibilityLabel="Kenya flag"
+    />
   );
 }
 
@@ -118,7 +108,7 @@ function BrandPanel({ tc }: { tc: ReturnType<typeof getThemeColors> }) {
           style={{
             color: tc.textPrimary,
             fontSize: 36,
-            fontFamily: "Inter_700Bold",
+            fontFamily: "DMSans_700Bold",
             letterSpacing: -1,
             marginBottom: 12,
           }}
@@ -129,7 +119,7 @@ function BrandPanel({ tc }: { tc: ReturnType<typeof getThemeColors> }) {
           style={{
             color: tc.textSecondary,
             fontSize: 18,
-            fontFamily: "Inter_400Regular",
+            fontFamily: "DMSans_400Regular",
             textAlign: "center",
             lineHeight: 26,
             maxWidth: 320,
@@ -165,7 +155,7 @@ function BrandPanel({ tc }: { tc: ReturnType<typeof getThemeColors> }) {
               style={{
                 color: tc.textSecondary,
                 fontSize: 15,
-                fontFamily: "Inter_500Medium",
+                fontFamily: "DMSans_500Medium",
               }}
             >
               {item.text}
@@ -378,7 +368,7 @@ export default function RegisterScreen() {
                     style={{
                       color: isCurrent ? tc.primary[300] : tc.textMuted,
                       fontSize: 14,
-                      fontFamily: "Inter_600SemiBold",
+                      fontFamily: "DMSans_600SemiBold",
                     }}
                     maxFontSizeMultiplier={1.3}
                   >
@@ -394,7 +384,7 @@ export default function RegisterScreen() {
                     ? tc.textSecondary
                     : tc.textMuted,
                   fontSize: 10,
-                  fontFamily: isCurrent ? "Inter_600SemiBold" : "Inter_400Regular",
+                  fontFamily: isCurrent ? "DMSans_600SemiBold" : "DMSans_400Regular",
                   marginTop: 4,
                 }}
                 maxFontSizeMultiplier={1.3}
@@ -456,14 +446,15 @@ export default function RegisterScreen() {
 
         {/* Desktop: step title */}
         {isDesktop && (
-          <View style={{ marginBottom: 24 }}>
+          <View style={{ marginBottom: 24, alignItems: "center" }}>
             <Text
               style={{
                 color: tc.textPrimary,
                 fontSize: 24,
-                fontFamily: "Inter_700Bold",
+                fontFamily: "DMSans_700Bold",
                 letterSpacing: -0.3,
-                marginBottom: 6,
+                marginBottom: 8,
+                textAlign: "center",
               }}
             >
               {step === "phone" && "Create your account"}
@@ -474,9 +465,11 @@ export default function RegisterScreen() {
             <Text
               style={{
                 color: tc.textMuted,
-                fontSize: 14,
-                fontFamily: "Inter_400Regular",
-                lineHeight: 20,
+                fontSize: 13,
+                fontFamily: "DMSans_400Regular",
+                lineHeight: 19,
+                textAlign: "center",
+                maxWidth: 300,
               }}
             >
               {step === "phone" &&
@@ -494,14 +487,15 @@ export default function RegisterScreen() {
           {step === "phone" && (
             <View>
               {!isDesktop && (
-                <>
+                <View style={{ alignItems: "center", marginBottom: 24 }}>
                   <Text
                     style={{
                       color: tc.textPrimary,
                       fontSize: 22,
-                      fontFamily: "Inter_700Bold",
-                      marginBottom: 6,
+                      fontFamily: "DMSans_700Bold",
+                      marginBottom: 8,
                       letterSpacing: -0.3,
+                      textAlign: "center",
                     }}
                     maxFontSizeMultiplier={1.3}
                   >
@@ -510,16 +504,17 @@ export default function RegisterScreen() {
                   <Text
                     style={{
                       color: tc.textMuted,
-                      fontSize: 14,
-                      fontFamily: "Inter_400Regular",
-                      marginBottom: 28,
-                      lineHeight: 20,
+                      fontSize: 13,
+                      fontFamily: "DMSans_400Regular",
+                      lineHeight: 19,
+                      textAlign: "center",
+                      maxWidth: 280,
                     }}
                     maxFontSizeMultiplier={1.3}
                   >
                     We'll send a verification code to confirm your number
                   </Text>
-                </>
+                </View>
               )}
 
               <View
@@ -540,12 +535,12 @@ export default function RegisterScreen() {
                     : {}),
                 }}
               >
-                <KeBadge tc={tc} />
+                <KenyaFlag />
                 <Text
                   style={{
                     color: tc.textSecondary,
                     fontSize: 16,
-                    fontFamily: "Inter_500Medium",
+                    fontFamily: "DMSans_500Medium",
                     marginRight: 10,
                   }}
                 >
@@ -574,7 +569,7 @@ export default function RegisterScreen() {
                     flex: 1,
                     color: tc.textPrimary,
                     fontSize: 16,
-                    fontFamily: "Inter_400Regular",
+                    fontFamily: "DMSans_400Regular",
                     paddingVertical: 16,
                     ...(isWeb ? ({ outlineStyle: "none" } as any) : {}),
                   }}
@@ -588,10 +583,10 @@ export default function RegisterScreen() {
               <Pressable
                 onPress={handleSendOTP}
                 disabled={!isPhoneValid || loading}
-                style={({ pressed }) => ({
+                style={({ pressed, hovered }: any) => ({
                   backgroundColor:
                     isPhoneValid && !loading
-                      ? tc.primary[500]
+                      ? hovered ? tc.primary[400] : tc.primary[500]
                       : "rgba(16, 185, 129, 0.3)",
                   borderRadius: 18,
                   paddingVertical: 16,
@@ -601,9 +596,10 @@ export default function RegisterScreen() {
                   minHeight: 56,
                   opacity: !isPhoneValid ? 0.6 : pressed ? 0.9 : 1,
                   transform: [{ scale: pressed ? 0.98 : 1 }],
+                  ...(isWeb ? { cursor: isPhoneValid ? "pointer" : "default", transition: "all 0.2s ease" } as any : {}),
                   ...(isPhoneValid && !loading
                     ? isWeb
-                      ? ({ boxShadow: "0 4px 16px rgba(16, 185, 129, 0.3)" } as any)
+                      ? ({ boxShadow: hovered ? "0 6px 20px rgba(16, 185, 129, 0.35)" : "0 4px 16px rgba(16, 185, 129, 0.25)" } as any)
                       : { elevation: 8 }
                     : {}),
                 })}
@@ -619,7 +615,7 @@ export default function RegisterScreen() {
                   style={{
                     color: "#FFFFFF",
                     fontSize: 17,
-                    fontFamily: "Inter_600SemiBold",
+                    fontFamily: "DMSans_600SemiBold",
                     letterSpacing: 0.3,
                   }}
                   maxFontSizeMultiplier={1.3}
@@ -642,7 +638,7 @@ export default function RegisterScreen() {
                   style={{
                     color: tc.textMuted,
                     fontSize: 12,
-                    fontFamily: "Inter_500Medium",
+                    fontFamily: "DMSans_500Medium",
                     paddingHorizontal: 14,
                   }}
                 >
@@ -658,20 +654,21 @@ export default function RegisterScreen() {
                   promptAsync();
                 }}
                 disabled={!googleReady || googleLoading}
-                style={({ pressed }) => ({
+                style={({ pressed, hovered }: any) => ({
                   flexDirection: "row",
                   alignItems: "center",
                   justifyContent: "center",
-                  backgroundColor: tc.dark.elevated,
+                  backgroundColor: isWeb && hovered ? "rgba(255,255,255,0.06)" : tc.dark.elevated,
                   borderRadius: 18,
                   paddingVertical: 14,
                   marginTop: 16,
                   minHeight: 56,
                   borderWidth: 1,
-                  borderColor: "rgba(255, 255, 255, 0.08)",
+                  borderColor: isWeb && hovered ? "rgba(255,255,255,0.14)" : "rgba(255, 255, 255, 0.08)",
                   opacity: googleLoading ? 0.7 : pressed ? 0.9 : 1,
                   transform: [{ scale: pressed ? 0.98 : 1 }],
-                  gap: 10,
+                  gap: 12,
+                  ...(isWeb ? { cursor: "pointer", transition: "all 0.2s ease" } as any : {}),
                 })}
                 accessibilityRole="button"
                 accessibilityLabel="Sign up with Google"
@@ -681,17 +678,21 @@ export default function RegisterScreen() {
                 {googleLoading ? (
                   <ActivityIndicator size="small" color={tc.textSecondary} />
                 ) : (
-                  <Text style={{ fontSize: 18 }}>G</Text>
+                  <Image
+                    source={{ uri: BRAND_LOGOS.google }}
+                    style={{ width: 20, height: 20 }}
+                    accessibilityLabel="Google"
+                  />
                 )}
                 <Text
                   style={{
                     color: tc.textPrimary,
                     fontSize: 15,
-                    fontFamily: "Inter_600SemiBold",
+                    fontFamily: "DMSans_600SemiBold",
                   }}
                   maxFontSizeMultiplier={1.3}
                 >
-                  {googleLoading ? "Signing up..." : "Continue with Google"}
+                  {googleLoading ? "Signing up..." : "Sign up with Google"}
                 </Text>
               </Pressable>
 
@@ -700,7 +701,7 @@ export default function RegisterScreen() {
                   style={{
                     color: tc.textMuted,
                     fontSize: 14,
-                    fontFamily: "Inter_400Regular",
+                    fontFamily: "DMSans_400Regular",
                   }}
                   maxFontSizeMultiplier={1.3}
                 >
@@ -708,7 +709,7 @@ export default function RegisterScreen() {
                   <Text
                     style={{
                       color: tc.primary[300],
-                      fontFamily: "Inter_600SemiBold",
+                      fontFamily: "DMSans_600SemiBold",
                     }}
                     onPress={() => router.push("/auth/login")}
                     accessibilityRole="link"
@@ -750,7 +751,7 @@ export default function RegisterScreen() {
                     style={{
                       color: tc.textPrimary,
                       fontSize: 22,
-                      fontFamily: "Inter_700Bold",
+                      fontFamily: "DMSans_700Bold",
                       marginBottom: 6,
                       textAlign: "center",
                       letterSpacing: -0.3,
@@ -763,7 +764,7 @@ export default function RegisterScreen() {
                     style={{
                       color: tc.textMuted,
                       fontSize: 14,
-                      fontFamily: "Inter_400Regular",
+                      fontFamily: "DMSans_400Regular",
                       marginBottom: 28,
                       textAlign: "center",
                       lineHeight: 20,
@@ -774,7 +775,7 @@ export default function RegisterScreen() {
                     <Text
                       style={{
                         color: tc.textSecondary,
-                        fontFamily: "Inter_600SemiBold",
+                        fontFamily: "DMSans_600SemiBold",
                       }}
                     >
                       +254 {phone}
@@ -825,7 +826,7 @@ export default function RegisterScreen() {
                           : tc.dark.elevated,
                         color: tc.textPrimary,
                         fontSize: 22,
-                        fontFamily: "Inter_700Bold",
+                        fontFamily: "DMSans_700Bold",
                         textAlign: "center",
                         ...(Platform.OS === 'web' ? { transition: 'border-color 0.2s ease, box-shadow 0.2s ease' } as any : {}),
                         ...((isFilled || isActive) && Platform.OS === 'web' ? { boxShadow: '0 0 0 3px rgba(16, 185, 129, 0.15)' } as any : {}),
@@ -860,7 +861,7 @@ export default function RegisterScreen() {
                     style={{
                       color: tc.primary[300],
                       fontSize: 13,
-                      fontFamily: "Inter_500Medium",
+                      fontFamily: "DMSans_500Medium",
                     }}
                     maxFontSizeMultiplier={1.3}
                   >
@@ -897,7 +898,7 @@ export default function RegisterScreen() {
                   style={{
                     color: "#FFFFFF",
                     fontSize: 17,
-                    fontFamily: "Inter_600SemiBold",
+                    fontFamily: "DMSans_600SemiBold",
                     letterSpacing: 0.3,
                   }}
                   maxFontSizeMultiplier={1.3}
@@ -920,7 +921,7 @@ export default function RegisterScreen() {
                     style={{
                       color: tc.primary[300],
                       fontSize: 14,
-                      fontFamily: "Inter_500Medium",
+                      fontFamily: "DMSans_500Medium",
                     }}
                     maxFontSizeMultiplier={1.3}
                   >
@@ -948,7 +949,7 @@ export default function RegisterScreen() {
                     style={{
                       color: tc.textMuted,
                       fontSize: 13,
-                      fontFamily: "Inter_400Regular",
+                      fontFamily: "DMSans_400Regular",
                     }}
                     maxFontSizeMultiplier={1.3}
                   >
@@ -988,7 +989,7 @@ export default function RegisterScreen() {
                     style={{
                       color: tc.textPrimary,
                       fontSize: 22,
-                      fontFamily: "Inter_700Bold",
+                      fontFamily: "DMSans_700Bold",
                       marginBottom: 6,
                       textAlign: "center",
                       letterSpacing: -0.3,
@@ -1001,7 +1002,7 @@ export default function RegisterScreen() {
                     style={{
                       color: tc.textMuted,
                       fontSize: 14,
-                      fontFamily: "Inter_400Regular",
+                      fontFamily: "DMSans_400Regular",
                       marginBottom: 28,
                       textAlign: "center",
                       lineHeight: 20,
@@ -1051,7 +1052,7 @@ export default function RegisterScreen() {
                     flex: 1,
                     color: tc.textPrimary,
                     fontSize: 16,
-                    fontFamily: "Inter_400Regular",
+                    fontFamily: "DMSans_400Regular",
                     paddingVertical: 16,
                     ...(isWeb ? ({ outlineStyle: "none" } as any) : {}),
                   }}
@@ -1066,7 +1067,7 @@ export default function RegisterScreen() {
                 style={{
                   color: tc.textMuted,
                   fontSize: 12,
-                  fontFamily: "Inter_400Regular",
+                  fontFamily: "DMSans_400Regular",
                   marginTop: 10,
                   paddingHorizontal: 4,
                 }}
@@ -1099,7 +1100,7 @@ export default function RegisterScreen() {
                   style={{
                     color: "#FFFFFF",
                     fontSize: 17,
-                    fontFamily: "Inter_600SemiBold",
+                    fontFamily: "DMSans_600SemiBold",
                     letterSpacing: 0.3,
                   }}
                   maxFontSizeMultiplier={1.3}
@@ -1139,7 +1140,7 @@ export default function RegisterScreen() {
                     style={{
                       color: tc.textPrimary,
                       fontSize: 22,
-                      fontFamily: "Inter_700Bold",
+                      fontFamily: "DMSans_700Bold",
                       marginBottom: 6,
                       textAlign: "center",
                       letterSpacing: -0.3,
@@ -1152,7 +1153,7 @@ export default function RegisterScreen() {
                     style={{
                       color: tc.textMuted,
                       fontSize: 14,
-                      fontFamily: "Inter_400Regular",
+                      fontFamily: "DMSans_400Regular",
                       marginBottom: 28,
                       textAlign: "center",
                       lineHeight: 20,
@@ -1176,7 +1177,7 @@ export default function RegisterScreen() {
                   style={{
                     color: tc.primary[300],
                     fontSize: 14,
-                    fontFamily: "Inter_500Medium",
+                    fontFamily: "DMSans_500Medium",
                     textAlign: "center",
                     marginTop: 16,
                   }}
@@ -1213,7 +1214,7 @@ export default function RegisterScreen() {
                     style={{
                       color: tc.primary[300],
                       fontSize: 13,
-                      fontFamily: "Inter_600SemiBold",
+                      fontFamily: "DMSans_600SemiBold",
                     }}
                     maxFontSizeMultiplier={1.3}
                   >
@@ -1224,7 +1225,7 @@ export default function RegisterScreen() {
                   style={{
                     color: tc.textSecondary,
                     fontSize: 12,
-                    fontFamily: "Inter_400Regular",
+                    fontFamily: "DMSans_400Regular",
                     lineHeight: 18,
                   }}
                   maxFontSizeMultiplier={1.3}
@@ -1254,7 +1255,7 @@ export default function RegisterScreen() {
           style={{
             color: tc.textMuted,
             fontSize: 12,
-            fontFamily: "Inter_400Regular",
+            fontFamily: "DMSans_400Regular",
           }}
           maxFontSizeMultiplier={1.3}
         >

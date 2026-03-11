@@ -168,13 +168,13 @@ const styles = StyleSheet.create({
   text: {
     color: "#FFFFFF",
     fontSize: 14,
-    fontFamily: "Inter_700Bold",
+    fontFamily: "DMSans_700Bold",
     letterSpacing: 0.2,
   },
   subtext: {
     color: "rgba(255,255,255,0.8)",
     fontSize: 12,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "DMSans_400Regular",
   },
   dismiss: {
     position: "absolute",

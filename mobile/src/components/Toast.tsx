@@ -154,7 +154,7 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
             style={{
               color: "#FFFFFF",
               fontSize: 14,
-              fontFamily: "Inter_600SemiBold",
+              fontFamily: "DMSans_600SemiBold",
             }}
             maxFontSizeMultiplier={1.3}
           >
@@ -165,7 +165,7 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
               style={{
                 color: "#94A3B8",
                 fontSize: 12,
-                fontFamily: "Inter_400Regular",
+                fontFamily: "DMSans_400Regular",
                 marginTop: 2,
               }}
               maxFontSizeMultiplier={1.3}

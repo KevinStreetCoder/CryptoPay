@@ -13,27 +13,30 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Button } from "../../src/components/Button";
+import { CryptoLogo } from "../../src/components/CryptoLogo";
 import { useToast } from "../../src/components/Toast";
 import { useWallets } from "../../src/hooks/useWallets";
 import { ratesApi, Quote } from "../../src/api/rates";
 import { normalizeError } from "../../src/utils/apiErrors";
-import { getThemeColors, getThemeShadows, CURRENCIES, CurrencyCode, colors } from "../../src/constants/theme";
+import { colors, getThemeColors, getThemeShadows, CURRENCIES, CurrencyCode } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
+import { SectionHeader } from "../../src/components/SectionHeader";
+import { useLocale } from "../../src/hooks/useLocale";
 
 const CRYPTO_OPTIONS: CurrencyCode[] = ["USDT", "BTC", "ETH"];
 
 export default function SendMpesaScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
-  const isDesktop = Platform.OS === "web" && width >= 768;
+  const isWeb = Platform.OS === "web";
+  const isDesktop = isWeb && width >= 768;
   const { data: wallets } = useWallets();
   const [phone, setPhone] = useState("");
   const [amount, setAmount] = useState("");
   const [selectedCrypto, setSelectedCrypto] = useState<CurrencyCode>("USDT");
   const [quote, setQuote] = useState<Quote | null>(null);
   const [loading, setLoading] = useState(false);
-  const [phoneFocused, setPhoneFocused] = useState(false);
-  const [amountFocused, setAmountFocused] = useState(false);
+  const [focusedField, setFocusedField] = useState<string | null>(null);
 
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
@@ -43,14 +46,15 @@ export default function SendMpesaScreen() {
   const balance = selectedWallet ? parseFloat(selectedWallet.balance) : 0;
 
   const toast = useToast();
+  const { t } = useLocale();
 
   const handleGetQuote = async () => {
     if (!phone || !amount) {
-      toast.warning("Missing Fields", "Please fill in all fields");
+      toast.warning(t("payment.missingFields"), t("payment.fillAllFields"));
       return;
     }
     if (phone.length < 9) {
-      toast.warning("Invalid Phone", "Please enter a valid phone number");
+      toast.warning(t("payment.invalidPhone"), t("payment.enterValidPhone"));
       return;
     }
     setLoading(true);
@@ -93,6 +97,14 @@ export default function SendMpesaScreen() {
     });
   };
 
+  const inputBorderColor = (field: string) =>
+    focusedField === field ? colors.primary[400] + "60" : tc.dark.border;
+
+  const inputFocusGlow = (field: string) =>
+    focusedField === field && isWeb
+      ? ({ boxShadow: `0 0 0 3px ${colors.primary[500]}15` } as any)
+      : {};
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
       <KeyboardAvoidingView
@@ -108,7 +120,7 @@ export default function SendMpesaScreen() {
               : undefined
           }
         >
-          {/* Top-level back button (outside card) */}
+          {/* Top-level back button */}
           <Pressable
             onPress={() => {
               if (router.canGoBack()) router.back();
@@ -121,7 +133,7 @@ export default function SendMpesaScreen() {
               paddingVertical: 8,
               paddingHorizontal: 12,
               borderRadius: 12,
-              backgroundColor: hovered
+              backgroundColor: isWeb && hovered
                 ? tc.glass.highlight
                 : pressed
                   ? tc.dark.elevated
@@ -129,17 +141,15 @@ export default function SendMpesaScreen() {
               alignSelf: "flex-start",
               marginBottom: 12,
               marginLeft: isDesktop ? 0 : 16,
-              opacity: pressed ? 0.9 : 1,
-              ...(Platform.OS === "web"
-                ? ({ cursor: "pointer", transition: "all 0.15s ease" } as any)
-                : {}),
+              opacity: pressed ? 0.85 : 1,
+              ...(isWeb ? { cursor: "pointer", transition: "all 0.15s ease" } as any : {}),
             })}
             accessibilityRole="button"
             accessibilityLabel="Go back"
           >
             <Ionicons name="arrow-back" size={20} color={tc.textSecondary} />
-            <Text style={{ color: tc.textSecondary, fontSize: 15, fontWeight: "500" }}>
-              Back
+            <Text style={{ color: tc.textSecondary, fontSize: 15, fontFamily: "DMSans_500Medium" }}>
+              {t("common.back")}
             </Text>
           </Pressable>
 
@@ -149,12 +159,13 @@ export default function SendMpesaScreen() {
               isDesktop
                 ? {
                     width: "100%",
-                    maxWidth: 560,
+                    maxWidth: 600,
                     backgroundColor: tc.dark.card,
                     borderRadius: 20,
                     padding: 36,
                     borderWidth: 1,
                     borderColor: tc.dark.border,
+                    ...ts.md,
                   }
                 : { flex: 1 }
             }
@@ -166,40 +177,42 @@ export default function SendMpesaScreen() {
                 alignItems: "center",
                 paddingHorizontal: isDesktop ? 0 : 16,
                 paddingVertical: 12,
-                marginBottom: isDesktop ? 12 : 0,
+                marginBottom: isDesktop ? 16 : 4,
               }}
             >
               <Pressable
                 onPress={() => router.replace("/(tabs)/pay" as any)}
                 hitSlop={12}
+                accessibilityRole="button"
+                accessibilityLabel="Go back"
                 style={({ pressed, hovered }: any) => ({
                   width: 42,
                   height: 42,
                   borderRadius: 14,
-                  backgroundColor: hovered ? tc.dark.elevated : tc.dark.card,
+                  backgroundColor: isWeb && hovered ? tc.dark.elevated : tc.dark.card,
+                  borderColor: isWeb && hovered ? tc.glass.borderStrong : tc.glass.border,
                   alignItems: "center",
                   justifyContent: "center",
                   borderWidth: 1,
-                  borderColor: tc.glass.border,
-                  opacity: pressed ? 0.8 : 1,
-                  ...(Platform.OS === 'web' ? { cursor: 'pointer', transition: 'all 0.15s ease' } as any : {}),
+                  opacity: pressed ? 0.85 : 1,
+                  ...(isWeb ? { cursor: "pointer", transition: "all 0.15s ease" } as any : {}),
                 })}
-                accessibilityRole="button"
-                accessibilityLabel="Go back"
               >
                 <Ionicons name="arrow-back" size={20} color={tc.textPrimary} />
               </Pressable>
+
               <Text
                 style={{
                   color: tc.textPrimary,
-                  fontSize: isDesktop ? 22 : 18,
-                  fontFamily: "Inter_600SemiBold",
+                  fontSize: isDesktop ? 24 : 20,
+                  fontFamily: "DMSans_700Bold",
                   marginLeft: 14,
                   flex: 1,
+                  letterSpacing: -0.3,
                 }}
                 maxFontSizeMultiplier={1.3}
               >
-                Send to M-Pesa
+                {t("payment.sendToMpesa")}
               </Text>
 
               {/* Step indicator pills */}
@@ -209,7 +222,7 @@ export default function SendMpesaScreen() {
                     width: 24,
                     height: 4,
                     borderRadius: 2,
-                    backgroundColor: tc.primary[500],
+                    backgroundColor: colors.primary[500],
                   }}
                 />
                 <View
@@ -229,410 +242,351 @@ export default function SendMpesaScreen() {
                 marginTop: isDesktop ? 0 : 8,
               }}
             >
-            {/* Phone Number */}
-            <Text
-              style={{
-                color: tc.textSecondary,
-                fontSize: 14,
-                fontFamily: "Inter_500Medium",
-                marginBottom: 8,
-              }}
-              maxFontSizeMultiplier={1.3}
-            >
-              Phone Number
-            </Text>
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                backgroundColor: tc.dark.card,
-                borderRadius: 16,
-                borderWidth: 1,
-                borderColor: phoneFocused
-                  ? tc.primary[500]
-                  : tc.dark.border,
-                paddingHorizontal: 16,
-                ...(Platform.OS === 'web' ? { transition: 'border-color 0.2s ease, box-shadow 0.2s ease' } as any : {}),
-                ...(phoneFocused && Platform.OS === 'web' ? { boxShadow: '0 0 0 3px rgba(16, 185, 129, 0.15)' } as any : {}),
-              }}
-            >
-              <Text
+              {/* Phone Number */}
+              <SectionHeader title={t("payment.phoneNumber")} icon="call-outline" iconColor={colors.primary[400]} />
+              <View
                 style={{
-                  color: tc.textSecondary,
-                  fontSize: 16,
-                  fontFamily: "Inter_600SemiBold",
-                  marginRight: 4,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  backgroundColor: tc.dark.card,
+                  borderRadius: 16,
+                  borderWidth: 1,
+                  borderColor: inputBorderColor("phone"),
+                  paddingHorizontal: 16,
+                  marginBottom: 20,
+                  ...(isWeb ? { transition: "border-color 0.15s ease, box-shadow 0.15s ease" } as any : {}),
+                  ...inputFocusGlow("phone"),
                 }}
               >
-                +254
-              </Text>
-              <TextInput
-                value={phone}
-                onChangeText={(text) => {
-                  setPhone(text.replace(/[^0-9]/g, ""));
-                  setQuote(null);
-                }}
-                placeholder="7XXXXXXXX"
-                placeholderTextColor={tc.dark.muted}
-                keyboardType="phone-pad"
-                maxLength={10}
-                style={{
-                  flex: 1,
-                  color: tc.textPrimary,
-                  fontSize: 16,
-                  fontFamily: "Inter_400Regular",
-                  paddingVertical: 14,
-                  ...(Platform.OS === 'web' ? { outlineStyle: 'none' } as any : {}),
-                }}
-                onFocus={() => setPhoneFocused(true)}
-                onBlur={() => setPhoneFocused(false)}
-                accessibilityLabel="Phone Number"
-                testID="phone-number-input"
-                maxFontSizeMultiplier={1.3}
-              />
-            </View>
+                <Text
+                  style={{
+                    color: tc.textSecondary,
+                    fontSize: 16,
+                    fontFamily: "DMSans_600SemiBold",
+                    marginRight: 4,
+                  }}
+                >
+                  +254
+                </Text>
+                <TextInput
+                  value={phone}
+                  onChangeText={(text) => {
+                    setPhone(text.replace(/[^0-9]/g, ""));
+                    setQuote(null);
+                  }}
+                  placeholder="7XXXXXXXX"
+                  placeholderTextColor={tc.dark.muted}
+                  keyboardType="phone-pad"
+                  maxLength={10}
+                  onFocus={() => setFocusedField("phone")}
+                  onBlur={() => setFocusedField(null)}
+                  style={{
+                    flex: 1,
+                    color: tc.textPrimary,
+                    fontSize: 16,
+                    paddingVertical: 14,
+                    ...(isWeb ? { outlineStyle: "none" } as any : {}),
+                  }}
+                  accessibilityLabel="Phone Number"
+                  testID="phone-number-input"
+                  maxFontSizeMultiplier={1.3}
+                />
+              </View>
 
-            {/* Amount */}
-            <Text
-              style={{
-                color: tc.textSecondary,
-                fontSize: 14,
-                fontFamily: "Inter_500Medium",
-                marginTop: 20,
-                marginBottom: 8,
-              }}
-              maxFontSizeMultiplier={1.3}
-            >
-              Amount (KES)
-            </Text>
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                backgroundColor: tc.dark.card,
-                borderRadius: 16,
-                borderWidth: 1,
-                borderColor: amountFocused
-                  ? tc.primary[500]
-                  : tc.dark.border,
-                paddingHorizontal: 16,
-                ...(Platform.OS === 'web' ? { transition: 'border-color 0.2s ease, box-shadow 0.2s ease' } as any : {}),
-                ...(amountFocused && Platform.OS === 'web' ? { boxShadow: '0 0 0 3px rgba(16, 185, 129, 0.15)' } as any : {}),
-              }}
-            >
-              <Text
+              {/* Amount */}
+              <SectionHeader title={t("payment.amountKes")} icon="cash-outline" iconColor={colors.primary[400]} />
+              <View
                 style={{
-                  color: tc.textSecondary,
-                  fontSize: 18,
-                  fontFamily: "Inter_700Bold",
-                  marginRight: 4,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  backgroundColor: tc.dark.card,
+                  borderRadius: 16,
+                  borderWidth: 1,
+                  borderColor: inputBorderColor("amount"),
+                  paddingHorizontal: 16,
+                  ...(isWeb ? { transition: "border-color 0.15s ease, box-shadow 0.15s ease" } as any : {}),
+                  ...inputFocusGlow("amount"),
                 }}
               >
-                KSh
-              </Text>
-              <TextInput
-                value={amount}
-                onChangeText={(text) => {
-                  setAmount(text);
-                  setQuote(null);
-                }}
-                placeholder="0"
-                placeholderTextColor={tc.dark.muted}
-                keyboardType="numeric"
-                style={{
-                  flex: 1,
-                  color: tc.textPrimary,
-                  fontSize: 24,
-                  fontFamily: "Inter_700Bold",
-                  paddingVertical: 12,
-                  ...(Platform.OS === 'web' ? { outlineStyle: 'none' } as any : {}),
-                }}
-                onFocus={() => setAmountFocused(true)}
-                onBlur={() => setAmountFocused(false)}
-                accessibilityLabel="Amount in KES"
-                testID="amount-input"
-                maxFontSizeMultiplier={1.3}
-              />
-            </View>
+                <Text
+                  style={{
+                    color: tc.textSecondary,
+                    fontSize: 18,
+                    fontFamily: "DMSans_700Bold",
+                    marginRight: 4,
+                  }}
+                >
+                  KSh
+                </Text>
+                <TextInput
+                  value={amount}
+                  onChangeText={(text) => {
+                    setAmount(text);
+                    setQuote(null);
+                  }}
+                  placeholder="0"
+                  placeholderTextColor={tc.dark.muted}
+                  keyboardType="numeric"
+                  onFocus={() => setFocusedField("amount")}
+                  onBlur={() => setFocusedField(null)}
+                  style={{
+                    flex: 1,
+                    color: tc.textPrimary,
+                    fontSize: 24,
+                    fontFamily: "DMSans_700Bold",
+                    paddingVertical: 12,
+                    ...(isWeb ? { outlineStyle: "none" } as any : {}),
+                  }}
+                  accessibilityLabel="Amount in KES"
+                  testID="amount-input"
+                  maxFontSizeMultiplier={1.3}
+                />
+              </View>
 
-            {/* Crypto Selector */}
-            <Text
-              style={{
-                color: tc.textSecondary,
-                fontSize: 14,
-                fontFamily: "Inter_500Medium",
-                marginTop: 20,
-                marginBottom: 8,
-              }}
-              maxFontSizeMultiplier={1.3}
-            >
-              Pay with
-            </Text>
-            <View style={{ flexDirection: "row", gap: 8 }}>
-              {CRYPTO_OPTIONS.map((crypto) => {
-                const info = CURRENCIES[crypto];
-                const isSelected = selectedCrypto === crypto;
-                const wallet = wallets?.find((w) => w.currency === crypto);
-                const bal = wallet ? parseFloat(wallet.balance) : 0;
-                const brandColor = colors.crypto[crypto] ?? tc.primary[500];
+              {/* Crypto Selector */}
+              <View style={{ marginTop: 24 }}>
+                <SectionHeader title={t("payment.payWith")} icon="wallet-outline" iconColor={colors.primary[400]} />
+              </View>
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                {CRYPTO_OPTIONS.map((crypto) => {
+                  const info = CURRENCIES[crypto];
+                  const isSelected = selectedCrypto === crypto;
+                  const wallet = wallets?.find((w) => w.currency === crypto);
+                  const bal = wallet ? parseFloat(wallet.balance) : 0;
+                  const brandColor = colors.crypto[crypto] ?? colors.primary[500];
 
-                return (
-                  <Pressable
-                    key={crypto}
-                    onPress={() => {
-                      setSelectedCrypto(crypto);
-                      setQuote(null);
-                    }}
-                    style={{
-                      flex: 1,
-                      borderRadius: 16,
-                      padding: 12,
-                      borderWidth: 1,
-                      borderColor: isSelected
-                        ? tc.primary[500]
-                        : tc.dark.border,
-                      backgroundColor: isSelected
-                        ? tc.primary[500] + "1A"
-                        : tc.dark.card,
-                      ...(Platform.OS === 'web' ? { cursor: 'pointer', transition: 'all 0.15s ease' } as any : {}),
-                    }}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Pay with ${crypto}`}
-                    accessibilityState={{ selected: isSelected }}
-                  >
-                    <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 4 }}>
+                  return (
+                    <Pressable
+                      key={crypto}
+                      onPress={() => {
+                        setSelectedCrypto(crypto);
+                        setQuote(null);
+                      }}
+                      style={({ pressed, hovered }: any) => ({
+                        flex: 1,
+                        borderRadius: 16,
+                        padding: 12,
+                        borderWidth: 1,
+                        borderColor: isSelected
+                          ? colors.primary[500]
+                          : isWeb && hovered
+                            ? tc.glass.borderStrong
+                            : tc.dark.border,
+                        backgroundColor: isSelected
+                          ? colors.primary[500] + "1A"
+                          : isWeb && hovered
+                            ? tc.dark.elevated
+                            : tc.dark.card,
+                        opacity: pressed ? 0.85 : 1,
+                        ...(isWeb ? { cursor: "pointer", transition: "all 0.15s ease" } as any : {}),
+                      })}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Pay with ${crypto}`}
+                      accessibilityState={{ selected: isSelected }}
+                    >
                       <View
                         style={{
-                          width: 26,
-                          height: 26,
-                          borderRadius: 13,
-                          backgroundColor: isSelected ? brandColor : tc.dark.border,
+                          flexDirection: "row",
                           alignItems: "center",
-                          justifyContent: "center",
-                          marginRight: 6,
+                          marginBottom: 4,
                         }}
                       >
+                        <View style={{ marginRight: 6 }}>
+                          <CryptoLogo currency={crypto} size={22} />
+                        </View>
                         <Text
                           style={{
-                            color: isSelected ? "#fff" : tc.textSecondary,
-                            fontSize: 13,
-                            fontWeight: "700",
+                            fontSize: 14,
+                            fontFamily: "DMSans_600SemiBold",
+                            color: isSelected ? colors.primary[400] : tc.textPrimary,
                           }}
+                          maxFontSizeMultiplier={1.3}
                         >
-                          {info.iconSymbol}
+                          {info.symbol}
                         </Text>
                       </View>
                       <Text
                         style={{
-                          fontSize: 14,
-                          fontFamily: "Inter_600SemiBold",
-                          color: isSelected ? tc.primary[400] : tc.textPrimary,
+                          color: tc.dark.muted,
+                          fontSize: 12,
+                          marginTop: 2,
                         }}
                         maxFontSizeMultiplier={1.3}
                       >
-                        {info.symbol}
+                        {bal.toFixed(info.decimals > 4 ? 4 : info.decimals)}
                       </Text>
-                    </View>
-                    <Text
-                      style={{
-                        color: tc.textMuted,
-                        fontSize: 12,
-                        fontFamily: "Inter_400Regular",
-                        marginTop: 2,
-                      }}
-                      maxFontSizeMultiplier={1.3}
-                    >
-                      {bal.toFixed(info.decimals > 4 ? 4 : info.decimals)}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
 
-            {/* Quote Display */}
-            {quote && (
-              <View
-                style={{
-                  backgroundColor: tc.dark.card,
-                  borderRadius: 16,
-                  borderWidth: 1,
-                  borderColor: tc.primary[500] + "4D",
-                  padding: 16,
-                  marginTop: 20,
-                }}
-              >
+              {/* Quote Display */}
+              {quote && (
                 <View
                   style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                    marginBottom: 8,
+                    backgroundColor: tc.dark.card,
+                    borderRadius: 16,
+                    borderWidth: 1,
+                    borderColor: colors.primary[500] + "4D",
+                    padding: 16,
+                    marginTop: 24,
                   }}
                 >
-                  <Text
-                    style={{
-                      color: tc.textMuted,
-                      fontSize: 14,
-                      fontFamily: "Inter_400Regular",
-                    }}
-                    maxFontSizeMultiplier={1.3}
-                  >
-                    Rate
-                  </Text>
-                  <Text
-                    style={{
-                      color: tc.textPrimary,
-                      fontSize: 14,
-                      fontFamily: "Inter_500Medium",
-                    }}
-                    maxFontSizeMultiplier={1.3}
-                  >
-                    1 {selectedCrypto} = KSh{" "}
-                    {parseFloat(quote.exchange_rate).toLocaleString()}
-                  </Text>
-                </View>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                    marginBottom: 8,
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: tc.textMuted,
-                      fontSize: 14,
-                      fontFamily: "Inter_400Regular",
-                    }}
-                    maxFontSizeMultiplier={1.3}
-                  >
-                    Fee
-                  </Text>
-                  <Text
-                    style={{
-                      color: tc.textPrimary,
-                      fontSize: 14,
-                      fontFamily: "Inter_500Medium",
-                    }}
-                    maxFontSizeMultiplier={1.3}
-                  >
-                    KSh {quote.fee_kes}
-                  </Text>
-                </View>
-
-                {/* Excise Duty */}
-                {quote.excise_duty_kes && parseFloat(quote.excise_duty_kes) > 0 && (
                   <View
                     style={{
                       flexDirection: "row",
                       justifyContent: "space-between",
-                      marginBottom: 8,
+                      marginBottom: 10,
                     }}
                   >
                     <Text
-                      style={{
-                        color: tc.textMuted,
-                        fontSize: 14,
-                        fontFamily: "Inter_400Regular",
-                      }}
+                      style={{ color: tc.dark.muted, fontSize: 14 }}
                       maxFontSizeMultiplier={1.3}
                     >
-                      Excise Duty (10%)
+                      {t("payment.rate")}
                     </Text>
                     <Text
                       style={{
                         color: tc.textPrimary,
                         fontSize: 14,
-                        fontFamily: "Inter_500Medium",
+                        fontFamily: "DMSans_500Medium",
                       }}
                       maxFontSizeMultiplier={1.3}
                     >
-                      KSh {parseFloat(quote.excise_duty_kes).toLocaleString()}
+                      1 {selectedCrypto} = KSh{" "}
+                      {parseFloat(quote.exchange_rate).toLocaleString()}
                     </Text>
                   </View>
-                )}
-
-                <View
-                  style={{
-                    height: 1,
-                    backgroundColor: tc.dark.border,
-                    marginVertical: 8,
-                  }}
-                />
-                <View
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                  }}
-                >
-                  <Text
+                  <View
                     style={{
-                      color: tc.textSecondary,
-                      fontSize: 14,
-                      fontFamily: "Inter_500Medium",
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      marginBottom: 10,
                     }}
-                    maxFontSizeMultiplier={1.3}
                   >
-                    Total
-                  </Text>
-                  <Text
+                    <Text
+                      style={{ color: tc.dark.muted, fontSize: 14 }}
+                      maxFontSizeMultiplier={1.3}
+                    >
+                      {t("payment.fee")}
+                    </Text>
+                    <Text
+                      style={{
+                        color: tc.textPrimary,
+                        fontSize: 14,
+                        fontFamily: "DMSans_500Medium",
+                      }}
+                      maxFontSizeMultiplier={1.3}
+                    >
+                      KSh {quote.fee_kes}
+                    </Text>
+                  </View>
+                  {quote.excise_duty_kes && parseFloat(quote.excise_duty_kes) > 0 && (
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        justifyContent: "space-between",
+                        marginBottom: 10,
+                      }}
+                    >
+                      <Text
+                        style={{ color: tc.dark.muted, fontSize: 14 }}
+                        maxFontSizeMultiplier={1.3}
+                      >
+                        {t("payment.exciseDuty")}
+                      </Text>
+                      <Text
+                        style={{
+                          color: tc.textPrimary,
+                          fontSize: 14,
+                          fontFamily: "DMSans_500Medium",
+                        }}
+                        maxFontSizeMultiplier={1.3}
+                      >
+                        KSh {parseFloat(quote.excise_duty_kes).toLocaleString()}
+                      </Text>
+                    </View>
+                  )}
+                  <View
                     style={{
-                      color: tc.primary[400],
-                      fontSize: 16,
-                      fontFamily: "Inter_700Bold",
+                      height: 1,
+                      backgroundColor: tc.dark.border,
+                      marginVertical: 10,
                     }}
-                    maxFontSizeMultiplier={1.3}
+                  />
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                    }}
                   >
-                    {quote.crypto_amount} {selectedCrypto}
-                  </Text>
-                </View>
-                {parseFloat(quote.crypto_amount) > balance && (
+                    <Text
+                      style={{
+                        color: tc.textSecondary,
+                        fontSize: 14,
+                        fontFamily: "DMSans_600SemiBold",
+                      }}
+                      maxFontSizeMultiplier={1.3}
+                    >
+                      {t("payment.total")}
+                    </Text>
+                    <Text
+                      style={{
+                        color: colors.primary[400],
+                        fontSize: 16,
+                        fontFamily: "DMSans_700Bold",
+                      }}
+                      maxFontSizeMultiplier={1.3}
+                    >
+                      {quote.crypto_amount} {selectedCrypto}
+                    </Text>
+                  </View>
+                  {parseFloat(quote.crypto_amount) > balance && (
+                    <Text
+                      style={{
+                        color: tc.error,
+                        fontSize: 12,
+                        marginTop: 8,
+                      }}
+                      maxFontSizeMultiplier={1.3}
+                    >
+                      {t("payment.insufficientBalance", { currency: selectedCrypto })}
+                    </Text>
+                  )}
                   <Text
                     style={{
-                      color: tc.error,
+                      color: tc.dark.muted,
                       fontSize: 12,
-                      fontFamily: "Inter_400Regular",
                       marginTop: 8,
                     }}
                     maxFontSizeMultiplier={1.3}
                   >
-                    Insufficient {selectedCrypto} balance
+                    {t("payment.rateLocked30")}
                   </Text>
-                )}
-                <Text
-                  style={{
-                    color: tc.textMuted,
-                    fontSize: 12,
-                    fontFamily: "Inter_400Regular",
-                    marginTop: 8,
-                  }}
-                  maxFontSizeMultiplier={1.3}
-                >
-                  Rate locked for 30 seconds
-                </Text>
-              </View>
-            )}
-
-            {/* Action Button */}
-            <View style={{ marginTop: 24, marginBottom: 32 }}>
-              {!quote ? (
-                <Button
-                  title="Get Quote"
-                  onPress={handleGetQuote}
-                  loading={loading}
-                  disabled={!phone || !amount}
-                  size="lg"
-                  testID="get-quote-button"
-                />
-              ) : (
-                <Button
-                  title="Confirm Payment"
-                  onPress={handleConfirm}
-                  disabled={parseFloat(quote.crypto_amount) > balance}
-                  size="lg"
-                  testID="confirm-payment-button"
-                />
+                </View>
               )}
-            </View>
+
+              {/* Action Button */}
+              <View style={{ marginTop: 28, marginBottom: 32 }}>
+                {!quote ? (
+                  <Button
+                    title={t("payment.getQuote")}
+                    onPress={handleGetQuote}
+                    loading={loading}
+                    disabled={!phone || !amount}
+                    size="lg"
+                    testID="get-quote-button"
+                  />
+                ) : (
+                  <Button
+                    title={t("payment.confirmPayment")}
+                    onPress={handleConfirm}
+                    disabled={parseFloat(quote.crypto_amount) > balance}
+                    size="lg"
+                    testID="confirm-payment-button"
+                  />
+                )}
+              </View>
             </View>
           </View>
         </ScrollView>

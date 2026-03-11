@@ -252,6 +252,9 @@ AT_API_KEY = env("AT_API_KEY", default="")
 AT_USERNAME = env("AT_USERNAME", default="sandbox")
 AT_SENDER_ID = env("AT_SENDER_ID", default="CryptoPay")
 
+# --- Frontend URL (for email verification links) ---
+FRONTEND_URL = env("FRONTEND_URL", default="http://localhost:8081")
+
 # --- Price Feed APIs ---
 COINGECKO_API_KEY = env("COINGECKO_API_KEY", default="")
 CRYPTOCOMPARE_API_KEY = env("CRYPTOCOMPARE_API_KEY", default="")  # Fallback provider
@@ -277,10 +280,13 @@ ETH_NETWORK = env("ETH_NETWORK", default="sepolia")  # mainnet or sepolia (testn
 BTC_NETWORK = env("BTC_NETWORK", default="test3")  # main or test3 (testnet)
 BLOCKCYPHER_API_TOKEN = env("BLOCKCYPHER_API_TOKEN", default="")  # Free: 200 req/hr, with token: 2000 req/hr
 
-# HD Wallet master seed (hex-encoded 64 bytes from BIP-39 mnemonic)
-# CRITICAL: In production, generate from a secure mnemonic and store in KMS/HSM
-# Generate with: python -c "from mnemonic import Mnemonic; m=Mnemonic('english'); print(m.generate(256))"
-# Then derive seed: python -c "from mnemonic import Mnemonic; m=Mnemonic('english'); print(m.to_seed('your mnemonic words').hex())"
+# HD Wallet Configuration
+# CRITICAL: In production, set one of these. Generate with: python manage.py generate_wallet_seed
+#
+# Option 1 (preferred): BIP-39 mnemonic phrase (24 words, human-readable backup)
+WALLET_MNEMONIC = env("WALLET_MNEMONIC", default="")
+#
+# Option 2: Hex-encoded seed (64 bytes / 128 hex chars, for KMS/HSM storage)
 WALLET_MASTER_SEED = env("WALLET_MASTER_SEED", default="")
 
 REQUIRED_CONFIRMATIONS = {

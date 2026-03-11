@@ -30,6 +30,9 @@ import { useThemeMode } from "../../src/stores/theme";
 import { getTxKesAmount, getTxRecipient } from "../../src/api/payments";
 import { usePhonePrivacy } from "../../src/utils/privacy";
 import { useBalanceVisibility } from "../../src/stores/balance";
+import { SectionHeader } from "../../src/components/SectionHeader";
+import { CryptoLogo } from "../../src/components/CryptoLogo";
+import { useLocale } from "../../src/hooks/useLocale";
 const SUPPORTED_CRYPTOS: CurrencyCode[] = ["USDT", "BTC", "ETH", "SOL"];
 
 function useRates() {
@@ -136,6 +139,7 @@ function AnimatedAssetCard({
 
 export default function WalletScreen() {
   const router = useRouter();
+  const { t } = useLocale();
   const { width } = useWindowDimensions();
   const isWeb = Platform.OS === "web";
   const isDesktop = isWeb && width >= 900;
@@ -338,7 +342,7 @@ export default function WalletScreen() {
                 style={{
                   color: isActive ? cColor : tc.textMuted,
                   fontSize: 13,
-                  fontFamily: isActive ? "Inter_700Bold" : "Inter_500Medium",
+                  fontFamily: isActive ? "DMSans_700Bold" : "DMSans_500Medium",
                 }}
               >
                 {c}
@@ -434,7 +438,7 @@ export default function WalletScreen() {
             style={{
               color: "#FFFFFF",
               fontSize: 24,
-              fontFamily: "Inter_700Bold",
+              fontFamily: "DMSans_700Bold",
               textAlign: "center",
               marginBottom: 6,
             }}
@@ -445,7 +449,7 @@ export default function WalletScreen() {
             style={{
               color: tc.textMuted,
               fontSize: 14,
-              fontFamily: "Inter_400Regular",
+              fontFamily: "DMSans_400Regular",
               textAlign: "center",
               marginBottom: 20,
             }}
@@ -493,7 +497,7 @@ export default function WalletScreen() {
               style={{
                 color: tc.textMuted,
                 fontSize: 11,
-                fontFamily: "Inter_600SemiBold",
+                fontFamily: "DMSans_600SemiBold",
                 textTransform: "uppercase",
                 letterSpacing: 1,
                 textAlign: "center",
@@ -558,10 +562,10 @@ export default function WalletScreen() {
               style={{
                 color: "#FFFFFF",
                 fontSize: 15,
-                fontFamily: "Inter_600SemiBold",
+                fontFamily: "DMSans_600SemiBold",
               }}
             >
-              {copiedId === "desktop-deposit" ? "Copied!" : "Copy Address"}
+              {copiedId === "desktop-deposit" ? t("wallet.copied") : t("wallet.copyAddress")}
             </Text>
           </Pressable>
 
@@ -584,7 +588,7 @@ export default function WalletScreen() {
               style={{
                 color: colors.warning,
                 fontSize: 12,
-                fontFamily: "Inter_400Regular",
+                fontFamily: "DMSans_400Regular",
                 flex: 1,
                 lineHeight: 18,
               }}
@@ -669,7 +673,7 @@ export default function WalletScreen() {
             style={{
               color: "#FFFFFF",
               fontSize: 22,
-              fontFamily: "Inter_700Bold",
+              fontFamily: "DMSans_700Bold",
               textAlign: "center",
               marginBottom: 6,
             }}
@@ -680,7 +684,7 @@ export default function WalletScreen() {
             style={{
               color: tc.textMuted,
               fontSize: 14,
-              fontFamily: "Inter_400Regular",
+              fontFamily: "DMSans_400Regular",
               textAlign: "center",
               marginBottom: 16,
             }}
@@ -726,7 +730,7 @@ export default function WalletScreen() {
               style={{
                 color: tc.textMuted,
                 fontSize: 11,
-                fontFamily: "Inter_600SemiBold",
+                fontFamily: "DMSans_600SemiBold",
                 textTransform: "uppercase",
                 letterSpacing: 1,
                 textAlign: "center",
@@ -791,10 +795,10 @@ export default function WalletScreen() {
               style={{
                 color: "#FFFFFF",
                 fontSize: 16,
-                fontFamily: "Inter_600SemiBold",
+                fontFamily: "DMSans_600SemiBold",
               }}
             >
-              {copiedId === "mobile-deposit" ? "Copied!" : "Copy Address"}
+              {copiedId === "mobile-deposit" ? t("wallet.copied") : t("wallet.copyAddress")}
             </Text>
           </Pressable>
 
@@ -817,7 +821,7 @@ export default function WalletScreen() {
               style={{
                 color: colors.warning,
                 fontSize: 12,
-                fontFamily: "Inter_400Regular",
+                fontFamily: "DMSans_400Regular",
                 flex: 1,
                 lineHeight: 18,
               }}
@@ -845,7 +849,7 @@ export default function WalletScreen() {
               style={{
                 color: "#FFFFFF",
                 fontSize: 16,
-                fontFamily: "Inter_600SemiBold",
+                fontFamily: "DMSans_600SemiBold",
               }}
             >
               Done
@@ -927,23 +931,18 @@ export default function WalletScreen() {
                   borderColor: currencyColor + "33",
                 }}
               >
-                <Text
-                  style={{
-                    fontSize: isDesktop ? 24 : 22,
-                    fontFamily: "Inter_700Bold",
-                    color: currencyColor,
-                    lineHeight: isDesktop ? 28 : 26,
-                  }}
-                >
-                  {info?.iconSymbol || "?"}
-                </Text>
+                <CryptoLogo
+                  currency={w.currency}
+                  size={isDesktop ? 32 : 28}
+                  fallbackColor={currencyColor}
+                />
               </View>
               <View>
                 <Text
                   style={{
                     color: "#FFFFFF",
                     fontSize: isDesktop ? 16 : 15,
-                    fontFamily: "Inter_600SemiBold",
+                    fontFamily: "DMSans_600SemiBold",
                     marginBottom: 2,
                   }}
                 >
@@ -953,7 +952,7 @@ export default function WalletScreen() {
                   style={{
                     color: tc.textMuted,
                     fontSize: 12,
-                    fontFamily: "Inter_500Medium",
+                    fontFamily: "DMSans_500Medium",
                   }}
                 >
                   {info?.symbol || w.currency}
@@ -966,7 +965,7 @@ export default function WalletScreen() {
                 style={{
                   color: "#FFFFFF",
                   fontSize: isDesktop ? 18 : 16,
-                  fontFamily: "Inter_700Bold",
+                  fontFamily: "DMSans_700Bold",
                   marginBottom: 2,
                 }}
               >
@@ -977,7 +976,7 @@ export default function WalletScreen() {
                   style={{
                     color: tc.textSecondary,
                     fontSize: 13,
-                    fontFamily: "Inter_500Medium",
+                    fontFamily: "DMSans_500Medium",
                   }}
                 >
                   {balanceHidden
@@ -1005,7 +1004,7 @@ export default function WalletScreen() {
                     style={{
                       color: colors.warning,
                       fontSize: 11,
-                      fontFamily: "Inter_500Medium",
+                      fontFamily: "DMSans_500Medium",
                     }}
                   >
                     {formatCrypto(locked, info?.decimals ?? 4)} locked
@@ -1042,7 +1041,7 @@ export default function WalletScreen() {
                 style={{
                   color: tc.textMuted,
                   fontSize: 12,
-                  fontFamily: "Inter_400Regular",
+                  fontFamily: "DMSans_400Regular",
                   marginLeft: 8,
                   flex: 1,
                 }}
@@ -1072,10 +1071,10 @@ export default function WalletScreen() {
                   style={{
                     color: copiedId === w.id ? colors.success : colors.primary[400],
                     fontSize: 11,
-                    fontFamily: "Inter_500Medium",
+                    fontFamily: "DMSans_500Medium",
                   }}
                 >
-                  {copiedId === w.id ? "Copied" : "Copy"}
+                  {copiedId === w.id ? t("wallet.copied") : t("wallet.copyAddress")}
                 </Text>
               </View>
             </Pressable>
@@ -1107,7 +1106,7 @@ export default function WalletScreen() {
                 style={{
                   color: colors.primary[400],
                   fontSize: 13,
-                  fontFamily: "Inter_500Medium",
+                  fontFamily: "DMSans_500Medium",
                 }}
               >
                 {generatingAddress === w.id ? "Generating address..." : "Generate Deposit Address"}
@@ -1172,7 +1171,7 @@ export default function WalletScreen() {
             style={{
               color: tc.textPrimary,
               fontSize: 14,
-              fontFamily: "Inter_600SemiBold",
+              fontFamily: "DMSans_600SemiBold",
             }}
           >
             {config.label}
@@ -1185,7 +1184,7 @@ export default function WalletScreen() {
             style={{
               color: tc.textSecondary,
               fontSize: 13,
-              fontFamily: "Inter_400Regular",
+              fontFamily: "DMSans_400Regular",
             }}
             numberOfLines={1}
           >
@@ -1199,7 +1198,7 @@ export default function WalletScreen() {
             style={{
               color: "#FFFFFF",
               fontSize: 14,
-              fontFamily: "Inter_700Bold",
+              fontFamily: "DMSans_700Bold",
             }}
           >
             {balanceHidden
@@ -1233,7 +1232,7 @@ export default function WalletScreen() {
               style={{
                 color: statusConfig.color,
                 fontSize: 12,
-                fontFamily: "Inter_500Medium",
+                fontFamily: "DMSans_500Medium",
                 textTransform: "capitalize",
               }}
             >
@@ -1248,7 +1247,7 @@ export default function WalletScreen() {
             style={{
               color: tc.textMuted,
               fontSize: 13,
-              fontFamily: "Inter_400Regular",
+              fontFamily: "DMSans_400Regular",
             }}
           >
             {dateStr}
@@ -1257,7 +1256,7 @@ export default function WalletScreen() {
             style={{
               color: tc.dark.muted,
               fontSize: 11,
-              fontFamily: "Inter_400Regular",
+              fontFamily: "DMSans_400Regular",
               marginTop: 1,
             }}
           >
@@ -1327,7 +1326,7 @@ export default function WalletScreen() {
                       style={{
                         color: tc.textMuted,
                         fontSize: 12,
-                        fontFamily: "Inter_600SemiBold",
+                        fontFamily: "DMSans_600SemiBold",
                         textTransform: "uppercase",
                         letterSpacing: 1.2,
                       }}
@@ -1340,7 +1339,7 @@ export default function WalletScreen() {
                     style={{
                       color: "#FFFFFF",
                       fontSize: 40,
-                      fontFamily: "Inter_700Bold",
+                      fontFamily: "DMSans_700Bold",
                       letterSpacing: -1,
                       marginBottom: 4,
                     }}
@@ -1357,7 +1356,7 @@ export default function WalletScreen() {
                       style={{
                         color: tc.textMuted,
                         fontSize: 13,
-                        fontFamily: "Inter_400Regular",
+                        fontFamily: "DMSans_400Regular",
                         marginBottom: 4,
                       }}
                     >
@@ -1381,7 +1380,7 @@ export default function WalletScreen() {
                         style={{
                           color: colors.success,
                           fontSize: 12,
-                          fontFamily: "Inter_600SemiBold",
+                          fontFamily: "DMSans_600SemiBold",
                         }}
                       >
                         {cryptoWallets.length} asset{cryptoWallets.length !== 1 ? "s" : ""}
@@ -1442,10 +1441,10 @@ export default function WalletScreen() {
                       style={{
                         color: "#FFFFFF",
                         fontSize: 14,
-                        fontFamily: "Inter_600SemiBold",
+                        fontFamily: "DMSans_600SemiBold",
                       }}
                     >
-                      {generatingAddress ? "Generating..." : "Receive"}
+                      {generatingAddress ? t("wallet.generating") : t("wallet.receive")}
                     </Text>
                   </Pressable>
 
@@ -1491,7 +1490,7 @@ export default function WalletScreen() {
                       style={{
                         color: "#FFFFFF",
                         fontSize: 14,
-                        fontFamily: "Inter_600SemiBold",
+                        fontFamily: "DMSans_600SemiBold",
                       }}
                     >
                       Send
@@ -1509,6 +1508,12 @@ export default function WalletScreen() {
                 marginBottom: 16,
               }}
             >
+              <SectionHeader
+                title={t("wallet.cryptoAssets")}
+                icon="layers-outline"
+                iconColor={colors.primary[400]}
+                count={cryptoWallets.length}
+              />
               {/* Assets Grid - 2 cols default, 3 cols on large desktop */}
               {walletsLoading ? (
                 <View style={{ flexDirection: "row", gap: 16, flexWrap: "wrap" }}>
@@ -1549,7 +1554,7 @@ export default function WalletScreen() {
                     style={{
                       color: "#FFFFFF",
                       fontSize: 18,
-                      fontFamily: "Inter_600SemiBold",
+                      fontFamily: "DMSans_600SemiBold",
                       marginBottom: 8,
                     }}
                   >
@@ -1559,7 +1564,7 @@ export default function WalletScreen() {
                     style={{
                       color: tc.textMuted,
                       fontSize: 14,
-                      fontFamily: "Inter_400Regular",
+                      fontFamily: "DMSans_400Regular",
                       textAlign: "center",
                       lineHeight: 22,
                       maxWidth: 260,
@@ -1600,24 +1605,13 @@ export default function WalletScreen() {
 
             {/* ── Transaction History ── */}
             <View style={{ paddingHorizontal: hPad, marginBottom: 32 }}>
-              {/* Section header */}
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  marginBottom: 12,
-                }}
-              >
-                <Text
-                  style={{
-                    color: tc.textSecondary,
-                    fontSize: 14,
-                    fontFamily: "Inter_500Medium",
-                  }}
-                >
-                  Recent Activity
-                </Text>
-              </View>
+              <SectionHeader
+                title={t("wallet.recentActivity")}
+                uppercase={false}
+                icon="time-outline"
+                iconColor={tc.textSecondary}
+                count={transactions.length}
+              />
 
               {txLoading ? (
                 <TransactionSkeleton />
@@ -1658,7 +1652,7 @@ export default function WalletScreen() {
                         style={{
                           color: tc.textSecondary,
                           fontSize: 15,
-                          fontFamily: "Inter_500Medium",
+                          fontFamily: "DMSans_500Medium",
                           marginBottom: 4,
                         }}
                       >
@@ -1668,7 +1662,7 @@ export default function WalletScreen() {
                         style={{
                           color: tc.textMuted,
                           fontSize: 13,
-                          fontFamily: "Inter_400Regular",
+                          fontFamily: "DMSans_400Regular",
                           textAlign: "center",
                         }}
                       >
@@ -1695,7 +1689,7 @@ export default function WalletScreen() {
                             minWidth: 140,
                             color: tc.textMuted,
                             fontSize: 11,
-                            fontFamily: "Inter_600SemiBold",
+                            fontFamily: "DMSans_600SemiBold",
                             textTransform: "uppercase",
                             letterSpacing: 0.8,
                           }}
@@ -1708,7 +1702,7 @@ export default function WalletScreen() {
                             minWidth: 100,
                             color: tc.textMuted,
                             fontSize: 11,
-                            fontFamily: "Inter_600SemiBold",
+                            fontFamily: "DMSans_600SemiBold",
                             textTransform: "uppercase",
                             letterSpacing: 0.8,
                           }}
@@ -1721,7 +1715,7 @@ export default function WalletScreen() {
                             minWidth: 120,
                             color: tc.textMuted,
                             fontSize: 11,
-                            fontFamily: "Inter_600SemiBold",
+                            fontFamily: "DMSans_600SemiBold",
                             textTransform: "uppercase",
                             letterSpacing: 0.8,
                             textAlign: "right",
@@ -1735,7 +1729,7 @@ export default function WalletScreen() {
                             minWidth: 100,
                             color: tc.textMuted,
                             fontSize: 11,
-                            fontFamily: "Inter_600SemiBold",
+                            fontFamily: "DMSans_600SemiBold",
                             textTransform: "uppercase",
                             letterSpacing: 0.8,
                             textAlign: "center",
@@ -1749,7 +1743,7 @@ export default function WalletScreen() {
                             minWidth: 110,
                             color: tc.textMuted,
                             fontSize: 11,
-                            fontFamily: "Inter_600SemiBold",
+                            fontFamily: "DMSans_600SemiBold",
                             textTransform: "uppercase",
                             letterSpacing: 0.8,
                             textAlign: "right",
@@ -1817,7 +1811,7 @@ export default function WalletScreen() {
               style={{
                 color: tc.textMuted,
                 fontSize: 12,
-                fontFamily: "Inter_600SemiBold",
+                fontFamily: "DMSans_600SemiBold",
                 textTransform: "uppercase",
                 letterSpacing: 1.2,
               }}
@@ -1830,7 +1824,7 @@ export default function WalletScreen() {
             style={{
               color: "#FFFFFF",
               fontSize: 38,
-              fontFamily: "Inter_700Bold",
+              fontFamily: "DMSans_700Bold",
               letterSpacing: -1,
               marginBottom: 4,
             }}
@@ -1847,7 +1841,7 @@ export default function WalletScreen() {
               style={{
                 color: tc.textMuted,
                 fontSize: 13,
-                fontFamily: "Inter_400Regular",
+                fontFamily: "DMSans_400Regular",
                 marginBottom: 8,
               }}
             >
@@ -1898,10 +1892,10 @@ export default function WalletScreen() {
                 style={{
                   color: "#FFFFFF",
                   fontSize: 15,
-                  fontFamily: "Inter_600SemiBold",
+                  fontFamily: "DMSans_600SemiBold",
                 }}
               >
-                {generatingAddress ? "Generating..." : "Receive"}
+                {generatingAddress ? t("wallet.generating") : t("wallet.receive")}
               </Text>
             </Pressable>
 
@@ -1938,7 +1932,7 @@ export default function WalletScreen() {
                 style={{
                   color: "#FFFFFF",
                   fontSize: 15,
-                  fontFamily: "Inter_600SemiBold",
+                  fontFamily: "DMSans_600SemiBold",
                 }}
               >
                 Send
@@ -1947,36 +1941,14 @@ export default function WalletScreen() {
           </View>
         </View>
 
-        {/* Assets Section Label */}
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "space-between",
-            paddingHorizontal: hPad + 4,
-            marginBottom: 12,
-          }}
-        >
-          <Text
-            style={{
-              color: tc.textSecondary,
-              fontSize: 12,
-              fontFamily: "Inter_600SemiBold",
-              textTransform: "uppercase",
-              letterSpacing: 1.2,
-            }}
-          >
-            Assets
-          </Text>
-          <Text
-            style={{
-              color: tc.textMuted,
-              fontSize: 12,
-              fontFamily: "Inter_400Regular",
-            }}
-          >
-            {cryptoWallets.length} {cryptoWallets.length === 1 ? "coin" : "coins"}
-          </Text>
+        {/* Assets Section */}
+        <View style={{ paddingHorizontal: hPad }}>
+          <SectionHeader
+            title={t("wallet.assets")}
+            icon="layers-outline"
+            iconColor={colors.primary[400]}
+            count={cryptoWallets.length}
+          />
         </View>
 
         {/* Crypto Wallets */}
@@ -2015,7 +1987,7 @@ export default function WalletScreen() {
               style={{
                 color: "#FFFFFF",
                 fontSize: 18,
-                fontFamily: "Inter_600SemiBold",
+                fontFamily: "DMSans_600SemiBold",
                 marginBottom: 8,
               }}
             >
@@ -2025,7 +1997,7 @@ export default function WalletScreen() {
               style={{
                 color: tc.textMuted,
                 fontSize: 14,
-                fontFamily: "Inter_400Regular",
+                fontFamily: "DMSans_400Regular",
                 textAlign: "center",
                 lineHeight: 22,
                 maxWidth: 260,
@@ -2042,26 +2014,14 @@ export default function WalletScreen() {
 
         {/* Transaction History */}
         <View style={{ marginTop: 20 }}>
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "space-between",
-              paddingHorizontal: hPad + 4,
-              marginBottom: 12,
-            }}
-          >
-            <Text
-              style={{
-                color: tc.textSecondary,
-                fontSize: 12,
-                fontFamily: "Inter_600SemiBold",
-                textTransform: "uppercase",
-                letterSpacing: 1.2,
-              }}
-            >
-              Recent Activity
-            </Text>
+          <View style={{ paddingHorizontal: hPad }}>
+            <SectionHeader
+              title={t("wallet.recentActivity")}
+              uppercase={false}
+              icon="time-outline"
+              iconColor={tc.textSecondary}
+              count={transactions.length}
+            />
           </View>
 
           {txLoading ? (
@@ -2098,7 +2058,7 @@ export default function WalletScreen() {
                     style={{
                       color: tc.textSecondary,
                       fontSize: 15,
-                      fontFamily: "Inter_500Medium",
+                      fontFamily: "DMSans_500Medium",
                       marginBottom: 4,
                     }}
                   >
@@ -2108,7 +2068,7 @@ export default function WalletScreen() {
                     style={{
                       color: tc.textMuted,
                       fontSize: 13,
-                      fontFamily: "Inter_400Regular",
+                      fontFamily: "DMSans_400Regular",
                     }}
                   >
                     Your activity will appear here

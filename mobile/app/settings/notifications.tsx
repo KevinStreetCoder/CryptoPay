@@ -14,6 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { storage } from "../../src/utils/storage";
 import { colors, getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
+import { useLocale } from "../../src/hooks/useLocale";
 
 const STORAGE_KEY = "notification_prefs";
 
@@ -35,35 +36,35 @@ const DEFAULT_PREFS: NotificationPrefs = {
 
 interface NotificationOption {
   key: keyof NotificationPrefs;
-  label: string;
-  description: string;
+  labelKey: string;
+  descKey: string;
   icon: string;
   iconColor: string;
   iconBg: string;
 }
 
 interface NotificationSection {
-  title: string;
+  titleKey: string;
   options: NotificationOption[];
 }
 
 function buildSections(tc: ReturnType<typeof getThemeColors>): NotificationSection[] {
   return [
     {
-      title: "TRANSACTIONS",
+      titleKey: "notifications.transactions",
       options: [
         {
           key: "transaction_alerts",
-          label: "Transaction Alerts",
-          description: "Get notified when payments are sent or received",
+          labelKey: "notifications.transactionAlerts",
+          descKey: "notifications.transactionAlertsDesc",
           icon: "swap-horizontal-outline",
           iconColor: colors.primary[500],
           iconBg: colors.primary[500] + "20",
         },
         {
           key: "deposit_confirmations",
-          label: "Deposit Confirmations",
-          description: "Alerts when blockchain deposits are credited to your wallet",
+          labelKey: "notifications.depositConfirmations",
+          descKey: "notifications.depositConfirmationsDesc",
           icon: "arrow-down-circle-outline",
           iconColor: colors.info,
           iconBg: colors.info + "20",
@@ -71,12 +72,12 @@ function buildSections(tc: ReturnType<typeof getThemeColors>): NotificationSecti
       ],
     },
     {
-      title: "SECURITY",
+      titleKey: "notifications.security",
       options: [
         {
           key: "security_alerts",
-          label: "Security Alerts",
-          description: "New device logins, PIN changes, and suspicious activity",
+          labelKey: "notifications.securityAlerts",
+          descKey: "notifications.securityAlertsDesc",
           icon: "shield-outline",
           iconColor: colors.error,
           iconBg: colors.error + "20",
@@ -84,20 +85,20 @@ function buildSections(tc: ReturnType<typeof getThemeColors>): NotificationSecti
       ],
     },
     {
-      title: "MARKET & UPDATES",
+      titleKey: "notifications.marketUpdates",
       options: [
         {
           key: "price_alerts",
-          label: "Price Alerts",
-          description: "Significant cryptocurrency price changes and market movements",
+          labelKey: "notifications.priceAlerts",
+          descKey: "notifications.priceAlertsDesc",
           icon: "trending-up-outline",
           iconColor: colors.accent,
           iconBg: colors.accent + "20",
         },
         {
           key: "promotional",
-          label: "Promotional",
-          description: "New features, announcements, and special offers",
+          labelKey: "notifications.promotional",
+          descKey: "notifications.promotionalDesc",
           icon: "megaphone-outline",
           iconColor: tc.textSecondary,
           iconBg: tc.dark.elevated,
@@ -109,6 +110,7 @@ function buildSections(tc: ReturnType<typeof getThemeColors>): NotificationSecti
 
 export default function NotificationsScreen() {
   const router = useRouter();
+  const { t } = useLocale();
   const { width } = useWindowDimensions();
   const [prefs, setPrefs] = useState<NotificationPrefs>(DEFAULT_PREFS);
   const [loaded, setLoaded] = useState(false);
@@ -160,10 +162,7 @@ export default function NotificationsScreen() {
       showsVerticalScrollIndicator={false}
       contentContainerStyle={{
         paddingBottom: 40,
-        paddingHorizontal: isDesktop ? 0 : 16,
-        maxWidth: isDesktop ? 560 : undefined,
-        alignSelf: isDesktop ? "center" : undefined,
-        width: isDesktop ? "100%" : undefined,
+        paddingHorizontal: isDesktop ? 48 : 16,
       }}
     >
       {/* Screen title (mobile only, desktop has it in the card) */}
@@ -173,41 +172,42 @@ export default function NotificationsScreen() {
             style={{
               color: tc.textPrimary,
               fontSize: 24,
-              fontFamily: "Inter_700Bold",
+              fontFamily: "DMSans_700Bold",
               letterSpacing: -0.3,
             }}
           >
-            Notifications
+            {t("notifications.notifications")}
           </Text>
           <Text
             style={{
               color: tc.textMuted,
               fontSize: 14,
-              fontFamily: "Inter_400Regular",
+              fontFamily: "DMSans_400Regular",
               marginTop: 4,
               lineHeight: 20,
             }}
           >
-            Choose which notifications you want to receive
+            {t("notifications.chooseNotifications")}
           </Text>
         </View>
       )}
 
+      <View style={isDesktop ? { flexDirection: "row", flexWrap: "wrap", gap: 16 } : {}}>
       {sections.map((section) => (
-        <View key={section.title} style={{ marginTop: 20 }}>
+        <View key={section.titleKey} style={{ marginTop: 20, ...(isDesktop ? { width: "48%", minWidth: 300, flexGrow: 1 } : {}) }}>
           {/* Section header */}
           <Text
             style={{
               color: tc.textMuted,
               fontSize: 11,
-              fontFamily: "Inter_600SemiBold",
+              fontFamily: "DMSans_600SemiBold",
               textTransform: "uppercase",
               letterSpacing: 1,
               paddingLeft: 4,
               marginBottom: 8,
             }}
           >
-            {section.title}
+            {t(section.titleKey)}
           </Text>
 
           {/* Section card */}
@@ -264,22 +264,22 @@ export default function NotificationsScreen() {
                     <Text
                       style={{
                         fontSize: 15,
-                        fontFamily: "Inter_500Medium",
+                        fontFamily: "DMSans_500Medium",
                         color: tc.textPrimary,
                         marginBottom: 2,
                       }}
                     >
-                      {option.label}
+                      {t(option.labelKey)}
                     </Text>
                     <Text
                       style={{
                         color: tc.textMuted,
                         fontSize: 12,
-                        fontFamily: "Inter_400Regular",
+                        fontFamily: "DMSans_400Regular",
                         lineHeight: 17,
                       }}
                     >
-                      {option.description}
+                      {t(option.descKey)}
                     </Text>
                   </View>
 
@@ -294,7 +294,7 @@ export default function NotificationsScreen() {
                     thumbColor={
                       prefs[option.key] ? colors.primary[400] : tc.textMuted
                     }
-                    accessibilityLabel={`${option.label}. ${option.description}`}
+                    accessibilityLabel={`${t(option.labelKey)}. ${t(option.descKey)}`}
                     accessibilityRole="switch"
                     accessibilityState={{ checked: prefs[option.key] }}
                   />
@@ -304,6 +304,7 @@ export default function NotificationsScreen() {
           </View>
         </View>
       ))}
+      </View>
 
       {/* Info footer */}
       <View
@@ -325,13 +326,12 @@ export default function NotificationsScreen() {
           style={{
             color: tc.textMuted,
             fontSize: 12,
-            fontFamily: "Inter_400Regular",
+            fontFamily: "DMSans_400Regular",
             lineHeight: 18,
             flex: 1,
           }}
         >
-          Security alerts are recommended to stay enabled for account safety. You
-          can also manage push notification permissions in your device settings.
+          {t("notifications.securityRecommendation")}
         </Text>
       </View>
     </ScrollView>
@@ -377,10 +377,10 @@ export default function NotificationsScreen() {
               style={{
                 color: tc.textSecondary,
                 fontSize: 15,
-                fontFamily: "Inter_500Medium",
+                fontFamily: "DMSans_500Medium",
               }}
             >
-              Back
+              {t("common.back")}
             </Text>
           </Pressable>
         </View>
@@ -388,31 +388,30 @@ export default function NotificationsScreen() {
         {/* Title */}
         <View
           style={{
-            paddingHorizontal: 24,
+            paddingHorizontal: 48,
             paddingTop: 16,
             paddingBottom: 8,
-            alignItems: "center",
           }}
         >
           <Text
             style={{
               color: tc.textPrimary,
               fontSize: 28,
-              fontFamily: "Inter_700Bold",
+              fontFamily: "DMSans_700Bold",
               letterSpacing: -0.5,
             }}
           >
-            Notifications
+            {t("notifications.notifications")}
           </Text>
           <Text
             style={{
               color: tc.textMuted,
               fontSize: 15,
-              fontFamily: "Inter_400Regular",
+              fontFamily: "DMSans_400Regular",
               marginTop: 6,
             }}
           >
-            Choose which notifications you want to receive
+            {t("notifications.chooseNotifications")}
           </Text>
         </View>
 
@@ -456,10 +455,10 @@ export default function NotificationsScreen() {
             style={{
               color: tc.textSecondary,
               fontSize: 15,
-              fontFamily: "Inter_500Medium",
+              fontFamily: "DMSans_500Medium",
             }}
           >
-            Back
+            {t("common.back")}
           </Text>
         </Pressable>
       </View>

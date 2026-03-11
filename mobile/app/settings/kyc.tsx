@@ -16,50 +16,52 @@ import { authApi, KYCDocument } from "../../src/api/auth";
 import { useToast } from "../../src/components/Toast";
 import { colors, getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
+import { useLocale } from "../../src/hooks/useLocale";
 
 const DOCUMENT_TYPES = [
   {
     type: "national_id",
-    label: "National ID",
-    description: "Front and back of your Kenyan National ID",
+    labelKey: "kyc.nationalId",
+    descKey: "kyc.nationalIdDesc",
     icon: "card-outline",
     tier: 1,
   },
   {
     type: "selfie",
-    label: "Selfie",
-    description: "A clear photo of your face for identity verification",
+    labelKey: "kyc.selfie",
+    descKey: "kyc.selfieDesc",
     icon: "camera-outline",
     tier: 1,
   },
   {
     type: "kra_pin",
-    label: "KRA PIN Certificate",
-    description: "Your Kenya Revenue Authority PIN certificate",
+    labelKey: "kyc.kraPinCert",
+    descKey: "kyc.kraPinDesc",
     icon: "document-text-outline",
     tier: 2,
   },
   {
     type: "proof_of_address",
-    label: "Proof of Address",
-    description: "Utility bill or bank statement (last 3 months)",
+    labelKey: "kyc.proofOfAddress",
+    descKey: "kyc.proofOfAddressDesc",
     icon: "home-outline",
     tier: 2,
   },
   {
     type: "passport",
-    label: "Passport",
-    description: "Bio-data page of your passport (alternative to National ID)",
+    labelKey: "kyc.passport",
+    descKey: "kyc.passportDesc",
     icon: "globe-outline",
     tier: 1,
   },
 ];
 
 function StatusBadge({ status }: { status: string }) {
-  const map: Record<string, { color: string; label: string }> = {
-    pending: { color: colors.warning, label: "Pending Review" },
-    approved: { color: colors.success, label: "Approved" },
-    rejected: { color: colors.error, label: "Rejected" },
+  const { t } = useLocale();
+  const map: Record<string, { color: string; labelKey: string }> = {
+    pending: { color: colors.warning, labelKey: "kyc.pendingReview" },
+    approved: { color: colors.success, labelKey: "kyc.approved" },
+    rejected: { color: colors.error, labelKey: "kyc.rejected" },
   };
   const s = map[status] || map.pending;
   return (
@@ -75,8 +77,8 @@ function StatusBadge({ status }: { status: string }) {
       }}
     >
       <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: s.color }} />
-      <Text style={{ color: s.color, fontSize: 11, fontFamily: "Inter_600SemiBold" }}>
-        {s.label}
+      <Text style={{ color: s.color, fontSize: 11, fontFamily: "DMSans_600SemiBold" }}>
+        {t(s.labelKey)}
       </Text>
     </View>
   );
@@ -85,6 +87,7 @@ function StatusBadge({ status }: { status: string }) {
 export default function KYCScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { t } = useLocale();
   const toast = useToast();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === "web" && width >= 768;
@@ -129,17 +132,17 @@ export default function KYCScreen() {
         file_url: placeholderUrl,
       });
 
-      toast.success("Uploaded", "Document submitted for review");
+      toast.success(t("kyc.uploaded"), t("kyc.documentSubmitted"));
       await loadDocuments();
     } catch (err: any) {
-      const msg = err?.response?.data?.error || "Upload failed. Please try again.";
+      const msg = err?.response?.data?.error || t("kyc.uploadFailed");
       toast.error("Error", msg);
     } finally {
       setUploading(null);
     }
   };
 
-  const hPad = isDesktop ? 28 : 16;
+  const hPad = isDesktop ? 48 : 16;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
@@ -178,11 +181,11 @@ export default function KYCScreen() {
           style={{
             color: tc.textPrimary,
             fontSize: isDesktop ? 28 : 24,
-            fontFamily: "Inter_700Bold",
+            fontFamily: "DMSans_700Bold",
             letterSpacing: -0.5,
           }}
         >
-          Verify Identity
+          {t("kyc.verifyIdentity")}
         </Text>
       </View>
 
@@ -191,7 +194,6 @@ export default function KYCScreen() {
         contentContainerStyle={{
           paddingHorizontal: hPad,
           paddingBottom: 32,
-          maxWidth: isDesktop ? 640 : undefined,
         }}
       >
         {/* Current Tier Card */}
@@ -209,13 +211,13 @@ export default function KYCScreen() {
             style={{
               color: tc.textMuted,
               fontSize: 11,
-              fontFamily: "Inter_600SemiBold",
+              fontFamily: "DMSans_600SemiBold",
               textTransform: "uppercase",
               letterSpacing: 0.8,
               marginBottom: 8,
             }}
           >
-            CURRENT VERIFICATION LEVEL
+            {t("kyc.currentVerificationLevel")}
           </Text>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
             <View
@@ -230,26 +232,27 @@ export default function KYCScreen() {
               style={{
                 color: tc.textPrimary,
                 fontSize: 18,
-                fontFamily: "Inter_700Bold",
+                fontFamily: "DMSans_700Bold",
               }}
             >
-              Tier {user?.kyc_tier ?? 0}
+              {t("kyc.tier")} {user?.kyc_tier ?? 0}
             </Text>
           </View>
           <Text
             style={{
               color: tc.textSecondary,
               fontSize: 13,
-              fontFamily: "Inter_400Regular",
+              fontFamily: "DMSans_400Regular",
               marginTop: 8,
               lineHeight: 18,
             }}
           >
-            Upload documents below to upgrade your verification tier and increase transaction limits.
+            {t("kyc.uploadDocumentsDesc")}
           </Text>
         </View>
 
         {/* Document Cards */}
+        <View style={isDesktop ? { flexDirection: "row", flexWrap: "wrap", gap: 12 } : {}}>
         {DOCUMENT_TYPES.map((doc) => {
           const existing = getDocStatus(doc.type);
           const isUploading = uploading === doc.type;
@@ -264,6 +267,7 @@ export default function KYCScreen() {
                 borderRadius: 18,
                 padding: 18,
                 marginBottom: 12,
+                ...(isDesktop ? { width: "48%", minWidth: 320, flexGrow: 1 } : {}),
                 borderWidth: 1,
                 borderColor: isApproved
                   ? colors.success + "30"
@@ -297,10 +301,10 @@ export default function KYCScreen() {
                       style={{
                         color: tc.textPrimary,
                         fontSize: 15,
-                        fontFamily: "Inter_600SemiBold",
+                        fontFamily: "DMSans_600SemiBold",
                       }}
                     >
-                      {doc.label}
+                      {t(doc.labelKey)}
                     </Text>
                     <View
                       style={{
@@ -314,10 +318,10 @@ export default function KYCScreen() {
                         style={{
                           color: tc.textMuted,
                           fontSize: 10,
-                          fontFamily: "Inter_600SemiBold",
+                          fontFamily: "DMSans_600SemiBold",
                         }}
                       >
-                        TIER {doc.tier}
+                        {t("kyc.tier").toUpperCase()} {doc.tier}
                       </Text>
                     </View>
                   </View>
@@ -325,12 +329,12 @@ export default function KYCScreen() {
                     style={{
                       color: tc.textMuted,
                       fontSize: 12,
-                      fontFamily: "Inter_400Regular",
+                      fontFamily: "DMSans_400Regular",
                       lineHeight: 17,
                       marginBottom: 10,
                     }}
                   >
-                    {doc.description}
+                    {t(doc.descKey)}
                   </Text>
 
                   {existing ? (
@@ -341,7 +345,7 @@ export default function KYCScreen() {
                           style={{
                             color: colors.error,
                             fontSize: 11,
-                            fontFamily: "Inter_400Regular",
+                            fontFamily: "DMSans_400Regular",
                             flex: 1,
                           }}
                           numberOfLines={1}
@@ -368,10 +372,11 @@ export default function KYCScreen() {
                           ? colors.primary[600]
                           : colors.primary[500],
                         marginTop: 8,
+                        maxWidth: isDesktop ? 240 : undefined,
                         opacity: isUploading ? 0.7 : 1,
                       })}
                       accessibilityRole="button"
-                      accessibilityLabel={`Upload ${doc.label}`}
+                      accessibilityLabel={`${t("kyc.upload")} ${t(doc.labelKey)}`}
                     >
                       {isUploading ? (
                         <ActivityIndicator size="small" color="#fff" />
@@ -382,10 +387,10 @@ export default function KYCScreen() {
                         style={{
                           color: "#fff",
                           fontSize: 13,
-                          fontFamily: "Inter_600SemiBold",
+                          fontFamily: "DMSans_600SemiBold",
                         }}
                       >
-                        {existing?.status === "rejected" ? "Re-upload" : "Upload"}
+                        {existing?.status === "rejected" ? t("kyc.reUpload") : t("kyc.upload")}
                       </Text>
                     </Pressable>
                   )}
@@ -394,6 +399,7 @@ export default function KYCScreen() {
             </View>
           );
         })}
+        </View>
 
         {/* Info */}
         <View
@@ -414,12 +420,12 @@ export default function KYCScreen() {
             style={{
               color: tc.textSecondary,
               fontSize: 12,
-              fontFamily: "Inter_400Regular",
+              fontFamily: "DMSans_400Regular",
               lineHeight: 18,
               flex: 1,
             }}
           >
-            Documents are reviewed within 24 hours. Your tier is automatically upgraded once all required documents are approved.
+            {t("kyc.documentsReviewedInfo")}
           </Text>
         </View>
       </ScrollView>

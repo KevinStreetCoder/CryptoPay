@@ -38,6 +38,11 @@ class RegisterSerializer(serializers.Serializer):
 class LoginSerializer(serializers.Serializer):
     phone = serializers.CharField(max_length=15)
     pin = serializers.CharField(max_length=6, write_only=True)
+    otp = serializers.CharField(max_length=6, required=False, write_only=True)
+    totp_code = serializers.CharField(max_length=10, required=False, write_only=True)
+    device_id = serializers.CharField(max_length=255, required=False, default="")
+    device_name = serializers.CharField(max_length=255, required=False, default="")
+    platform = serializers.CharField(max_length=50, required=False, default="")
 
     def validate_phone(self, value):
         value = value.strip().replace(" ", "")
@@ -88,7 +93,7 @@ class DeviceModelSerializer(serializers.ModelSerializer):
         model = Device
         fields = (
             "id", "device_id", "device_name", "platform",
-            "os_version", "is_trusted", "last_seen", "created_at",
+            "os_version", "ip_address", "is_trusted", "last_seen", "created_at",
         )
         read_only_fields = fields
 
@@ -133,7 +138,11 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ("id", "phone", "email", "full_name", "avatar_url", "kyc_tier", "kyc_status", "created_at")
+        fields = (
+            "id", "phone", "email", "full_name", "avatar_url",
+            "kyc_tier", "kyc_status", "email_verified", "totp_enabled",
+            "created_at",
+        )
         read_only_fields = fields
 
     def get_avatar_url(self, obj):
@@ -156,3 +165,24 @@ class ProfileUpdateSerializer(serializers.Serializer):
         if User.objects.filter(email=value).exclude(id=user.id).exists():
             raise serializers.ValidationError("Email already in use")
         return value
+
+
+class EmailVerifySerializer(serializers.Serializer):
+    """Verify email with token or 6-char code."""
+    token = serializers.CharField(max_length=64)
+
+
+class SetupTOTPSerializer(serializers.Serializer):
+    """Verify initial TOTP code during setup."""
+    code = serializers.CharField(max_length=10)
+
+
+class VerifyTOTPSerializer(serializers.Serializer):
+    """Verify TOTP code for login."""
+    code = serializers.CharField(max_length=10)
+
+
+class RecoveryEmailSerializer(serializers.Serializer):
+    """Set recovery email and/or phone."""
+    recovery_email = serializers.EmailField(required=False)
+    recovery_phone = serializers.CharField(max_length=15, required=False, default="")

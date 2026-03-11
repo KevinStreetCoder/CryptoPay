@@ -59,7 +59,7 @@ function ErrorFallbackUI({ error, onRetry }: { error: Error | null; onRetry: () 
         style={{
           color: tc.textPrimary,
           fontSize: 22,
-          fontFamily: "Inter_700Bold",
+          fontFamily: "DMSans_700Bold",
           marginBottom: 8,
           marginTop: 16,
           textAlign: "center",
@@ -73,7 +73,7 @@ function ErrorFallbackUI({ error, onRetry }: { error: Error | null; onRetry: () 
         style={{
           color: tc.textSecondary,
           fontSize: 15,
-          fontFamily: "Inter_400Regular",
+          fontFamily: "DMSans_400Regular",
           textAlign: "center",
           marginBottom: 32,
           lineHeight: 22,
@@ -111,7 +111,7 @@ function ErrorFallbackUI({ error, onRetry }: { error: Error | null; onRetry: () 
               style={{
                 color: tc.error,
                 fontSize: 11,
-                fontFamily: "Inter_600SemiBold",
+                fontFamily: "DMSans_600SemiBold",
                 letterSpacing: 0.5,
                 textTransform: "uppercase",
               }}
@@ -123,7 +123,7 @@ function ErrorFallbackUI({ error, onRetry }: { error: Error | null; onRetry: () 
             style={{
               color: "#F87171",
               fontSize: 13,
-              fontFamily: "Inter_400Regular",
+              fontFamily: "DMSans_400Regular",
               lineHeight: 18,
             }}
             numberOfLines={6}
@@ -164,7 +164,7 @@ function ErrorFallbackUI({ error, onRetry }: { error: Error | null; onRetry: () 
           style={{
             color: "#FFFFFF",
             fontSize: 16,
-            fontFamily: "Inter_600SemiBold",
+            fontFamily: "DMSans_600SemiBold",
             letterSpacing: 0.3,
           }}
         >

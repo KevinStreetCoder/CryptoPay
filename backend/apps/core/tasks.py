@@ -146,6 +146,71 @@ def send_security_alert_task(
 @shared_task(
     bind=True,
     max_retries=3,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=300,
+)
+def send_transaction_sms_task(self, phone, tx_type, amount, currency, reference):
+    """Send SMS notification for completed transactions via Africa's Talking."""
+    from django.conf import settings as _settings
+
+    # Format transaction type for display
+    type_labels = {
+        "PAYBILL_PAYMENT": "Paybill payment",
+        "TILL_PAYMENT": "Till payment",
+        "SEND_MPESA": "M-Pesa transfer",
+        "BUY": "Crypto purchase",
+        "DEPOSIT": "Deposit",
+    }
+    label = type_labels.get(tx_type, tx_type.replace("_", " ").title())
+
+    message = (
+        f"CryptoPay: {label} of {currency} {amount} completed successfully. "
+        f"Ref: {reference}. Thank you for using CryptoPay."
+    )
+
+    if _settings.AT_API_KEY:
+        try:
+            import africastalking
+
+            africastalking.initialize(_settings.AT_USERNAME, _settings.AT_API_KEY)
+            sms = africastalking.SMS
+            sms.send(message, [phone], sender_id=_settings.AT_SENDER_ID)
+            logger.info(f"Transaction SMS sent to {phone}: ref {reference}")
+        except Exception as exc:
+            logger.error(f"Transaction SMS failed for {phone}: {exc}")
+            raise
+    else:
+        logger.info(f"[DEV] Transaction SMS to {phone}: {message}")
+
+
+@shared_task(
+    bind=True,
+    max_retries=3,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=300,
+)
+def generate_pdf_receipt_task(self, transaction_id):
+    """Generate a branded PDF receipt for a completed transaction."""
+    from apps.payments.models import Transaction
+
+    try:
+        tx = Transaction.objects.select_related("user").get(id=transaction_id)
+    except Transaction.DoesNotExist:
+        logger.error(f"Transaction {transaction_id} not found for PDF generation")
+        return None
+
+    from apps.core.pdf_receipt import generate_receipt_pdf
+
+    pdf_path = generate_receipt_pdf(tx)
+    logger.info(f"PDF receipt generated for transaction {transaction_id}: {pdf_path}")
+    return pdf_path
+
+
+@shared_task(
+    bind=True,
+    max_retries=3,
     default_retry_delay=5,
     autoretry_for=(Exception,),
     retry_backoff=True,

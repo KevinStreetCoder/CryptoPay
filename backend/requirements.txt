@@ -44,6 +44,13 @@ pycoingecko==3.2.0
 # SMS
 africastalking==1.2.7
 
+# 2FA / TOTP
+pyotp==2.9.0
+qrcode==8.0
+
+# PDF Generation
+weasyprint==62.3
+
 # Production
 gunicorn==23.0.0
 whitenoise==6.8.2

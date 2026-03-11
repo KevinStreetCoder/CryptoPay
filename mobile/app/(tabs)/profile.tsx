@@ -22,14 +22,27 @@ import { usePhonePrivacy, maskPhone } from "../../src/utils/privacy";
 import { useLocale } from "../../src/hooks/useLocale";
 import { colors, getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
+import { SectionHeader } from "../../src/components/SectionHeader";
 import { authApi } from "../../src/api/auth";
+import { config } from "../../src/constants/config";
+
+const isWeb = Platform.OS === "web";
+
+/** Resolve avatar URL — handles relative paths from Django */
+function resolveAvatarUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  // Relative path from Django (e.g., /media/avatars/xxx.jpg)
+  const base = config.apiUrl.replace(/\/api\/v1\/?$/, "");
+  return `${base}${url.startsWith("/") ? "" : "/"}${url}`;
+}
 
 function getKycTiers(tc: ReturnType<typeof getThemeColors>) {
   return [
-    { tier: 0, label: "Phone Only", limit: "KSh 5,000/day", color: tc.dark.muted },
-    { tier: 1, label: "ID Verified", limit: "KSh 50,000/day", color: colors.warning },
-    { tier: 2, label: "KRA PIN", limit: "KSh 250,000/day", color: colors.info },
-    { tier: 3, label: "Enhanced DD", limit: "KSh 1,000,000/day", color: colors.success },
+    { tier: 0, labelKey: "kyc.phoneOnly", limit: "KSh 5,000/day", color: tc.dark.muted },
+    { tier: 1, labelKey: "kyc.idVerified", limit: "KSh 50,000/day", color: colors.warning },
+    { tier: 2, labelKey: "kyc.kraPin", limit: "KSh 250,000/day", color: colors.info },
+    { tier: 3, labelKey: "kyc.enhancedDd", limit: "KSh 1,000,000/day", color: colors.success },
   ];
 }
 
@@ -42,10 +55,11 @@ interface MenuItemProps {
   iconBg?: string;
   iconColor?: string;
   tc: ReturnType<typeof getThemeColors>;
+  ts: ReturnType<typeof getThemeShadows>;
   trailing?: React.ReactNode;
 }
 
-function MenuItem({ icon, label, subtitle, onPress, danger, iconBg, iconColor, tc, trailing }: MenuItemProps) {
+function MenuItem({ icon, label, subtitle, onPress, danger, iconBg, iconColor, tc, ts, trailing }: MenuItemProps) {
   const itemIconBg = danger
     ? colors.error + "15"
     : iconBg || tc.dark.elevated + "80";
@@ -54,23 +68,28 @@ function MenuItem({ icon, label, subtitle, onPress, danger, iconBg, iconColor, t
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => ({
+      style={({ pressed, hovered }: any) => ({
         flexDirection: "row",
         alignItems: "center",
-        paddingHorizontal: 16,
-        paddingVertical: 14,
-        backgroundColor: pressed ? tc.dark.elevated + "40" : "transparent",
-        minHeight: 60,
-        transform: [{ scale: pressed ? 0.98 : 1 }],
+        paddingHorizontal: 18,
+        paddingVertical: 15,
+        backgroundColor: pressed
+          ? tc.dark.elevated + "60"
+          : isWeb && hovered
+            ? tc.dark.elevated + "30"
+            : "transparent",
+        minHeight: 62,
+        transform: [{ scale: pressed ? 0.985 : 1 }],
         opacity: pressed ? 0.9 : 1,
+        ...(isWeb ? { cursor: "pointer", transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)" } as any : {}),
       })}
       accessibilityRole="button"
       accessibilityLabel={`${label}${subtitle ? `. ${subtitle}` : ""}`}
     >
       <View
         style={{
-          width: 42,
-          height: 42,
+          width: 44,
+          height: 44,
           borderRadius: 14,
           backgroundColor: itemIconBg,
           alignItems: "center",
@@ -84,9 +103,9 @@ function MenuItem({ icon, label, subtitle, onPress, danger, iconBg, iconColor, t
         <Text
           style={{
             fontSize: 15,
-            fontFamily: "Inter_500Medium",
+            fontFamily: "DMSans_500Medium",
             color: danger ? colors.error : tc.textPrimary,
-            marginBottom: subtitle ? 2 : 0,
+            marginBottom: subtitle ? 3 : 0,
           }}
         >
           {label}
@@ -96,7 +115,7 @@ function MenuItem({ icon, label, subtitle, onPress, danger, iconBg, iconColor, t
             style={{
               color: tc.textMuted,
               fontSize: 12,
-              fontFamily: "Inter_400Regular",
+              fontFamily: "DMSans_400Regular",
             }}
           >
             {subtitle}
@@ -119,20 +138,20 @@ function getInitials(name: string | undefined): string {
 }
 
 function ThemeToggleSwitch({ isDark, onToggle, tc }: { isDark: boolean; onToggle: () => void; tc: ReturnType<typeof getThemeColors> }) {
-  const isWeb = Platform.OS === "web";
-
   if (isWeb) {
     return (
       <Pressable
         onPress={onToggle}
-        style={{
-          width: 48,
-          height: 28,
-          borderRadius: 14,
+        style={({ hovered }: any) => ({
+          width: 52,
+          height: 30,
+          borderRadius: 15,
           backgroundColor: isDark ? colors.primary[500] + "60" : tc.dark.elevated,
           justifyContent: "center",
-          paddingHorizontal: 2,
-        }}
+          paddingHorizontal: 3,
+          ...(isWeb ? { cursor: "pointer", transition: "all 0.25s ease" } as any : {}),
+          ...(isWeb && hovered ? { opacity: 0.85 } : {}),
+        })}
         accessibilityRole="switch"
         accessibilityLabel={isDark ? "Switch to light mode" : "Switch to dark mode"}
       >
@@ -143,8 +162,13 @@ function ThemeToggleSwitch({ isDark, onToggle, tc }: { isDark: boolean; onToggle
             borderRadius: 12,
             backgroundColor: isDark ? colors.primary[400] : tc.textMuted,
             alignSelf: isDark ? "flex-end" : "flex-start",
+            alignItems: "center",
+            justifyContent: "center",
+            ...(isWeb ? { transition: "all 0.25s ease" } as any : {}),
           }}
-        />
+        >
+          <Ionicons name={isDark ? "moon" : "sunny"} size={13} color="#fff" />
+        </View>
       </Pressable>
     );
   }
@@ -159,6 +183,91 @@ function ThemeToggleSwitch({ isDark, onToggle, tc }: { isDark: boolean; onToggle
   );
 }
 
+/** Info row used inside the profile header card */
+function ProfileInfoChip({
+  icon,
+  label,
+  value,
+  tc,
+  onPress,
+}: {
+  icon: string;
+  label: string;
+  value: string;
+  tc: ReturnType<typeof getThemeColors>;
+  onPress?: () => void;
+}) {
+  const content = (
+    <View
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: tc.dark.bg,
+        borderRadius: 14,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        borderWidth: 1,
+        borderColor: tc.glass.border,
+        gap: 10,
+      }}
+    >
+      <View
+        style={{
+          width: 34,
+          height: 34,
+          borderRadius: 10,
+          backgroundColor: colors.primary[500] + "12",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <Ionicons name={icon as any} size={16} color={colors.primary[400]} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text
+          style={{
+            color: tc.textMuted,
+            fontSize: 11,
+            fontFamily: "DMSans_500Medium",
+            textTransform: "uppercase",
+            letterSpacing: 0.6,
+            marginBottom: 2,
+          }}
+        >
+          {label}
+        </Text>
+        <Text
+          style={{
+            color: tc.textPrimary,
+            fontSize: 14,
+            fontFamily: "DMSans_500Medium",
+          }}
+        >
+          {value}
+        </Text>
+      </View>
+      {onPress && <Ionicons name="chevron-forward" size={14} color={tc.dark.muted} />}
+    </View>
+  );
+
+  if (onPress) {
+    return (
+      <Pressable
+        onPress={onPress}
+        style={({ hovered }: any) => ({
+          ...(isWeb ? { cursor: "pointer", transition: "all 0.2s ease" } as any : {}),
+          ...(isWeb && hovered ? { opacity: 0.85 } : {}),
+        })}
+        accessibilityRole="button"
+      >
+        {content}
+      </Pressable>
+    );
+  }
+
+  return content;
+}
+
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, logout } = useAuth();
@@ -168,12 +277,11 @@ export default function ProfileScreen() {
   const ts = getThemeShadows(isDark);
   const { formatPhone, phoneVisible, toggle: togglePhoneVisibility } = usePhonePrivacy();
 
-  const isWeb = Platform.OS === "web";
   const isDesktop = isWeb && width >= 900;
   const isLargeDesktop = isWeb && width >= 1200;
 
   const KYC_TIERS = getKycTiers(tc);
-  const currentTier = KYC_TIERS.find((t) => t.tier === (user?.kyc_tier ?? 0));
+  const currentTier = KYC_TIERS.find((tier) => tier.tier === (user?.kyc_tier ?? 0));
   const tierProgress = ((user?.kyc_tier ?? 0) + 1) / KYC_TIERS.length;
 
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -183,7 +291,7 @@ export default function ProfileScreen() {
   const biometric = useBiometricAuth();
   const { locale, setLocale, t } = useLocale();
 
-  const [avatarUri, setAvatarUri] = useState<string | null>(user?.avatar_url || null);
+  const [avatarUri, setAvatarUri] = useState<string | null>(resolveAvatarUrl(user?.avatar_url));
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const handlePickAvatar = async () => {
@@ -200,7 +308,6 @@ export default function ProfileScreen() {
         try {
           const formData = new FormData();
           if (Platform.OS === "web") {
-            // Web: fetch the blob from the data URI and append as File
             const response = await fetch(asset.uri);
             const blob = await response.blob();
             const file = new File([blob], "avatar.jpg", {
@@ -208,7 +315,6 @@ export default function ProfileScreen() {
             });
             formData.append("avatar", file);
           } else {
-            // Native: use the { uri, type, name } pattern
             formData.append("avatar", {
               uri: asset.uri,
               type: asset.mimeType || "image/jpeg",
@@ -216,7 +322,7 @@ export default function ProfileScreen() {
             } as any);
           }
           const { data } = await authApi.updateProfile(formData);
-          setAvatarUri(data.avatar_url);
+          setAvatarUri(resolveAvatarUrl(data.avatar_url));
           toast.success("Updated", "Profile photo updated");
         } catch (err: any) {
           const msg = err?.response?.data?.detail || err?.response?.data?.avatar?.[0] || "Could not upload photo";
@@ -230,7 +336,6 @@ export default function ProfileScreen() {
     }
   };
 
-  // Load biometric preference
   useEffect(() => {
     isBiometricEnabled().then(setBiometricOn);
   }, []);
@@ -241,25 +346,22 @@ export default function ProfileScreen() {
 
   const handleBiometricToggle = async (value: boolean) => {
     if (isWeb) {
-      toast.info("Not Available", "Biometric login is only available on mobile devices");
+      toast.info(t("profile.notAvailable"), t("profile.biometricMobileOnly"));
       return;
     }
 
     if (!biometric.isAvailable) {
       toast.warning(
-        "Not Available",
-        biometric.isEnrolled
-          ? "Biometric hardware not found on this device"
-          : "No biometric data enrolled. Set up fingerprint or Face ID in device settings."
+        t("profile.notAvailable"),
+        t("profile.biometricNotAvailable")
       );
       return;
     }
 
     if (value) {
-      // Verify biometric before enabling
       const success = await biometric.authenticate("Verify to enable biometric login");
       if (!success) {
-        toast.error("Failed", "Biometric verification failed");
+        toast.error(t("profile.failed"), t("profile.biometricFailed"));
         return;
       }
     }
@@ -267,10 +369,10 @@ export default function ProfileScreen() {
     await setBiometricEnabled(value);
     setBiometricOn(value);
     toast.success(
-      value ? "Enabled" : "Disabled",
+      value ? t("profile.enabled") : t("profile.disabled"),
       value
-        ? `${biometric.biometricType === "face" ? "Face ID" : "Fingerprint"} login enabled`
-        : "Biometric login disabled"
+        ? `${biometric.biometricType === "face" ? t("profile.faceId") : t("profile.fingerprint")} ${t("profile.biometricEnabled")}`
+        : t("profile.biometricDisabled")
     );
   };
 
@@ -298,8 +400,8 @@ export default function ProfileScreen() {
     await setLocale(lang);
     setShowLanguagePicker(false);
     toast.success(
-      lang === "en" ? "Language Changed" : "Lugha Imebadilishwa",
-      lang === "en" ? "App language set to English" : "Lugha ya programu imewekwa Kiswahili"
+      t("profile.languageChanged"),
+      lang === "en" ? t("profile.langSetEnglish") : t("profile.langSetSwahili")
     );
   };
 
@@ -307,10 +409,10 @@ export default function ProfileScreen() {
     if (Platform.OS === "web") {
       setShowLogoutConfirm(true);
     } else {
-      Alert.alert("Logout", "Are you sure you want to log out?", [
-        { text: "Cancel", style: "cancel" },
+      Alert.alert(t("profile.logout"), t("profile.logoutConfirm"), [
+        { text: t("common.cancel"), style: "cancel" },
         {
-          text: "Logout",
+          text: t("profile.logout"),
           style: "destructive",
           onPress: async () => {
             await logout();
@@ -327,968 +429,813 @@ export default function ProfileScreen() {
     router.replace("/auth/login");
   };
 
-  // Responsive padding
   const hPad = isLargeDesktop ? 48 : isDesktop ? 32 : 16;
-
   const dividerColor = isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.06)";
+
+  // Shared card style
+  const cardStyle = {
+    backgroundColor: tc.dark.card,
+    borderRadius: 20,
+    overflow: "hidden" as const,
+    borderWidth: 1,
+    borderColor: tc.glass.border,
+    ...ts.sm,
+  };
+
+  // ── Avatar component (shared between layouts) ──
+  const renderAvatar = (size: number) => (
+    <Pressable
+      onPress={handlePickAvatar}
+      style={({ hovered }: any) => ({
+        position: "relative" as const,
+        ...(isWeb ? { cursor: "pointer", transition: "transform 0.2s ease" } as any : {}),
+        transform: [{ scale: isWeb && hovered ? 1.03 : 1 }],
+      })}
+      accessibilityRole="button"
+      accessibilityLabel="Change profile photo"
+    >
+      {avatarUri ? (
+        <Image
+          source={{ uri: avatarUri }}
+          style={{
+            width: size,
+            height: size,
+            borderRadius: size * 0.32,
+            borderWidth: 3,
+            borderColor: colors.primary[500] + "40",
+          }}
+        />
+      ) : (
+        <View
+          style={{
+            width: size,
+            height: size,
+            borderRadius: size * 0.32,
+            backgroundColor: colors.primary[500] + "18",
+            alignItems: "center",
+            justifyContent: "center",
+            borderWidth: 3,
+            borderColor: colors.primary[500] + "30",
+            ...ts.glow(colors.primary[500], 0.15),
+          }}
+        >
+          <Text
+            style={{
+              color: colors.primary[400],
+              fontSize: size * 0.32,
+              fontFamily: "DMSans_700Bold",
+            }}
+          >
+            {getInitials(user?.full_name)}
+          </Text>
+        </View>
+      )}
+      {/* Camera badge */}
+      <View
+        style={{
+          position: "absolute",
+          bottom: -2,
+          right: -2,
+          width: size > 80 ? 34 : 28,
+          height: size > 80 ? 34 : 28,
+          borderRadius: size > 80 ? 17 : 14,
+          backgroundColor: colors.primary[500],
+          alignItems: "center",
+          justifyContent: "center",
+          borderWidth: 3,
+          borderColor: tc.dark.card,
+          ...ts.sm,
+        }}
+      >
+        <Ionicons
+          name={uploadingAvatar ? "sync" : "camera"}
+          size={size > 80 ? 16 : 14}
+          color="#fff"
+        />
+      </View>
+    </Pressable>
+  );
+
+  // ── KYC Status card (shared between layouts) ──
+  const renderKycStatus = () => (
+    <View
+      style={{
+        backgroundColor: tc.dark.bg,
+        borderRadius: 16,
+        padding: isDesktop ? 20 : 16,
+        borderWidth: 1,
+        borderColor: tc.glass.border,
+      }}
+    >
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 14,
+        }}
+      >
+        <View>
+          <Text
+            style={{
+              color: tc.textMuted,
+              fontSize: 11,
+              fontFamily: "DMSans_500Medium",
+              textTransform: "uppercase",
+              letterSpacing: 0.8,
+              marginBottom: 6,
+            }}
+          >
+            {t("profile.verificationLevel")}
+          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <View
+              style={{
+                width: 10,
+                height: 10,
+                borderRadius: 5,
+                backgroundColor: currentTier?.color,
+                ...ts.glow(currentTier?.color || tc.dark.muted, 0.4),
+              }}
+            />
+            <Text
+              style={{
+                fontSize: 15,
+                fontFamily: "DMSans_600SemiBold",
+                color: currentTier?.color,
+              }}
+            >
+              {t("kyc.tier")} {currentTier?.tier}: {currentTier ? t(currentTier.labelKey) : ""}
+            </Text>
+          </View>
+        </View>
+        <View
+          style={{
+            backgroundColor: tc.dark.elevated,
+            borderRadius: 12,
+            paddingHorizontal: 12,
+            paddingVertical: 6,
+            borderWidth: 1,
+            borderColor: tc.glass.border,
+          }}
+        >
+          <Text
+            style={{
+              color: tc.textSecondary,
+              fontSize: 12,
+              fontFamily: "DMSans_600SemiBold",
+            }}
+          >
+            {currentTier?.limit}
+          </Text>
+        </View>
+      </View>
+
+      {/* Progress bar */}
+      <View
+        style={{
+          height: 6,
+          backgroundColor: tc.dark.elevated,
+          borderRadius: 3,
+          overflow: "hidden",
+        }}
+      >
+        <View
+          style={{
+            height: "100%",
+            width: `${tierProgress * 100}%`,
+            backgroundColor: currentTier?.color || tc.dark.muted,
+            borderRadius: 3,
+            ...(isWeb ? { transition: "width 0.6s ease" } as any : {}),
+          }}
+        />
+      </View>
+
+      {/* Tier dots */}
+      <View
+        style={{
+          flexDirection: "row",
+          justifyContent: "space-between",
+          marginTop: 10,
+        }}
+      >
+        {KYC_TIERS.map((t) => (
+          <View key={t.tier} style={{ alignItems: "center" }}>
+            <View
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: 4,
+                backgroundColor:
+                  (user?.kyc_tier ?? 0) >= t.tier
+                    ? t.color
+                    : tc.dark.elevated,
+                ...(isWeb ? { transition: "background-color 0.3s ease" } as any : {}),
+              }}
+            />
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+
+  // ── Edit Profile / Verify Identity action buttons ──
+  const renderActionButtons = () => (
+    <View style={{ flexDirection: isDesktop ? "column" : "row", gap: 10, marginTop: isDesktop ? 0 : 20 }}>
+      <Pressable
+        onPress={handleVerifyIdentity}
+        style={({ pressed, hovered }: any) => ({
+          flex: 1,
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 8,
+          paddingVertical: 14,
+          borderRadius: 14,
+          backgroundColor: pressed
+            ? colors.primary[600]
+            : isWeb && hovered
+              ? colors.primary[500]
+              : colors.primary[500] + "E6",
+          ...ts.glow(colors.primary[500], pressed ? 0.1 : isWeb && hovered ? 0.4 : 0.25),
+          ...(isWeb ? { cursor: "pointer", transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)" } as any : {}),
+          transform: [{ scale: pressed ? 0.97 : 1 }],
+        })}
+        accessibilityRole="button"
+        accessibilityLabel="Verify Identity"
+      >
+        <Ionicons name="shield-checkmark" size={18} color="#fff" />
+        <Text
+          style={{
+            color: "#FFFFFF",
+            fontSize: 14,
+            fontFamily: "DMSans_600SemiBold",
+          }}
+        >
+          Verify Identity
+        </Text>
+      </Pressable>
+      <Pressable
+        onPress={() => router.push("/settings" as any)}
+        style={({ pressed, hovered }: any) => ({
+          flex: 1,
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 8,
+          paddingVertical: 14,
+          borderRadius: 14,
+          backgroundColor: pressed
+            ? tc.dark.elevated + "80"
+            : isWeb && hovered
+              ? tc.dark.elevated + "60"
+              : tc.dark.elevated + "40",
+          borderWidth: 1,
+          borderColor: tc.glass.borderStrong,
+          ...(isWeb ? { cursor: "pointer", transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)" } as any : {}),
+          transform: [{ scale: pressed ? 0.97 : 1 }],
+        })}
+        accessibilityRole="button"
+        accessibilityLabel="Edit Profile"
+      >
+        <Ionicons name="create-outline" size={18} color={tc.textPrimary} />
+        <Text
+          style={{
+            color: tc.textPrimary,
+            fontSize: 14,
+            fontFamily: "DMSans_600SemiBold",
+          }}
+        >
+          Edit Profile
+        </Text>
+      </Pressable>
+    </View>
+  );
+
+  // ── Security settings section ──
+  const renderSecuritySection = () => (
+    <>
+      <SectionHeader title={t("profile.security")} icon="shield-checkmark-outline" iconColor={colors.primary[400]} />
+      <View style={{ ...cardStyle, marginBottom: 24 }}>
+        <MenuItem
+          icon="shield-checkmark-outline"
+          label={t("profile.verifyIdentity")}
+          subtitle={currentTier ? `${t(currentTier.labelKey)} - ${currentTier.limit}` : undefined}
+          onPress={handleVerifyIdentity}
+          iconBg={colors.primary[500] + "20"}
+          iconColor={colors.primary[400]}
+          tc={tc}
+          ts={ts}
+        />
+        <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 76 }} />
+        <MenuItem
+          icon="lock-closed-outline"
+          label={t("profile.changePin")}
+          subtitle={t("profile.updatePin")}
+          onPress={() => router.push("/settings/change-pin")}
+          iconBg={colors.info + "20"}
+          iconColor={colors.info}
+          tc={tc}
+          ts={ts}
+        />
+        <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 76 }} />
+        <View style={{ flexDirection: "row", alignItems: "center", paddingRight: 18 }}>
+          <View style={{ flex: 1 }}>
+            <MenuItem
+              icon="finger-print-outline"
+              label={t("profile.biometricLogin")}
+              subtitle={
+                biometric.isAvailable
+                  ? `${biometric.biometricType === "face" ? t("profile.faceId") : t("profile.fingerprint")} ${biometricOn ? t("profile.enabled") : t("profile.disabled")}`
+                  : t("profile.biometricNotAvailable")
+              }
+              onPress={() => handleBiometricToggle(!biometricOn)}
+              iconBg={colors.accent + "20"}
+              iconColor={colors.accent}
+              tc={tc}
+              ts={ts}
+              trailing={<View />}
+            />
+          </View>
+          {isWeb ? (
+            <Pressable
+              onPress={() => handleBiometricToggle(!biometricOn)}
+              style={({ hovered }: any) => ({
+                width: 52,
+                height: 30,
+                borderRadius: 15,
+                backgroundColor: biometricOn ? colors.primary[500] + "60" : tc.dark.elevated,
+                justifyContent: "center",
+                paddingHorizontal: 3,
+                ...(isWeb ? { cursor: "pointer", transition: "all 0.25s ease" } as any : {}),
+                ...(isWeb && hovered ? { opacity: 0.85 } : {}),
+              })}
+              accessibilityRole="switch"
+            >
+              <View
+                style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: 12,
+                  backgroundColor: biometricOn ? colors.primary[400] : tc.textMuted,
+                  alignSelf: biometricOn ? "flex-end" : "flex-start",
+                  ...(isWeb ? { transition: "all 0.25s ease" } as any : {}),
+                }}
+              />
+            </Pressable>
+          ) : (
+            <Switch
+              value={biometricOn}
+              onValueChange={handleBiometricToggle}
+              trackColor={{ false: tc.dark.elevated, true: colors.primary[500] + "60" }}
+              thumbColor={biometricOn ? colors.primary[400] : tc.textMuted}
+              disabled={!biometric.isAvailable}
+            />
+          )}
+        </View>
+      </View>
+    </>
+  );
+
+  // ── Preferences section ──
+  const renderPreferencesSection = () => (
+    <>
+      <SectionHeader title={t("settings.preferences")} icon="options-outline" iconColor={colors.info} />
+      <View style={{ ...cardStyle, marginBottom: 24 }}>
+        {/* Dark Mode Toggle */}
+        <View style={{ flexDirection: "row", alignItems: "center", paddingRight: 18 }}>
+          <View style={{ flex: 1 }}>
+            <MenuItem
+              icon={isDark ? "moon-outline" : "sunny-outline"}
+              label={isDark ? t("profile.darkMode") : t("profile.lightMode")}
+              subtitle={isDark ? t("profile.darkThemeActive") : t("profile.lightThemeActive")}
+              onPress={toggleTheme}
+              iconBg={isDark ? "rgba(99,102,241,0.15)" : "rgba(251,191,36,0.15)"}
+              iconColor={isDark ? "#818CF8" : "#F59E0B"}
+              tc={tc}
+              ts={ts}
+              trailing={<View />}
+            />
+          </View>
+          <ThemeToggleSwitch isDark={isDark} onToggle={toggleTheme} tc={tc} />
+        </View>
+        <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 76 }} />
+        <MenuItem
+          icon="notifications-outline"
+          label={t("settings.notifications")}
+          subtitle={t("profile.manageNotifications")}
+          onPress={() => router.push("/settings/notifications" as any)}
+          iconBg={colors.primary[500] + "20"}
+          iconColor={colors.primary[400]}
+          tc={tc}
+          ts={ts}
+        />
+        <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 76 }} />
+        <View style={{ flexDirection: "row", alignItems: "center", paddingRight: 18 }}>
+          <View style={{ flex: 1 }}>
+            <MenuItem
+              icon={phoneVisible ? "eye-outline" : "eye-off-outline"}
+              label={t("profile.showPhoneNumber")}
+              subtitle={phoneVisible ? t("profile.phoneVisible") : t("profile.phoneHidden")}
+              onPress={togglePhoneVisibility}
+              iconBg={colors.info + "20"}
+              iconColor={colors.info}
+              tc={tc}
+              ts={ts}
+              trailing={<View />}
+            />
+          </View>
+          {isWeb ? (
+            <Pressable
+              onPress={togglePhoneVisibility}
+              style={({ hovered }: any) => ({
+                width: 52,
+                height: 30,
+                borderRadius: 15,
+                backgroundColor: phoneVisible ? colors.primary[500] + "60" : tc.dark.elevated,
+                justifyContent: "center",
+                paddingHorizontal: 3,
+                ...(isWeb ? { cursor: "pointer", transition: "all 0.25s ease" } as any : {}),
+                ...(isWeb && hovered ? { opacity: 0.85 } : {}),
+              })}
+              accessibilityRole="switch"
+            >
+              <View
+                style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: 12,
+                  backgroundColor: phoneVisible ? colors.primary[400] : tc.textMuted,
+                  alignSelf: phoneVisible ? "flex-end" : "flex-start",
+                  ...(isWeb ? { transition: "all 0.25s ease" } as any : {}),
+                }}
+              />
+            </Pressable>
+          ) : (
+            <Switch
+              value={phoneVisible}
+              onValueChange={togglePhoneVisibility}
+              trackColor={{ false: tc.dark.elevated, true: colors.primary[500] + "60" }}
+              thumbColor={phoneVisible ? colors.primary[500] : tc.dark.muted}
+            />
+          )}
+        </View>
+        <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 76 }} />
+        <MenuItem
+          icon="language-outline"
+          label={t("profile.language")}
+          subtitle={locale === "en" ? t("profile.english") : t("profile.swahili")}
+          onPress={() => setShowLanguagePicker(true)}
+          iconBg={colors.warning + "20"}
+          iconColor={colors.warning}
+          tc={tc}
+          ts={ts}
+        />
+      </View>
+    </>
+  );
+
+  // ── Support section ──
+  const renderSupportSection = () => (
+    <>
+      <SectionHeader title={t("profile.support")} icon="help-buoy-outline" iconColor={colors.warning} />
+      <View style={{ ...cardStyle, marginBottom: 24 }}>
+        <MenuItem
+          icon="help-circle-outline"
+          label={t("profile.helpSupport")}
+          subtitle={t("profile.getHelpEmail")}
+          onPress={handleHelpSupport}
+          iconBg={colors.warning + "20"}
+          iconColor={colors.warning}
+          tc={tc}
+          ts={ts}
+        />
+        <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 76 }} />
+        <MenuItem
+          icon="document-text-outline"
+          label={t("profile.termsOfService")}
+          subtitle={t("profile.readTerms")}
+          onPress={handleTermsOfService}
+          tc={tc}
+          ts={ts}
+        />
+        <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 76 }} />
+        <MenuItem
+          icon="shield-outline"
+          label={t("profile.privacyPolicy")}
+          subtitle={t("profile.protectData")}
+          onPress={handlePrivacyPolicy}
+          tc={tc}
+          ts={ts}
+        />
+      </View>
+    </>
+  );
+
+  // ── Logout button ──
+  const renderLogoutButton = () => (
+    <Pressable
+      onPress={handleLogout}
+      style={({ pressed, hovered }: any) => ({
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 10,
+        paddingVertical: 16,
+        borderRadius: 16,
+        backgroundColor: pressed
+          ? colors.error + "25"
+          : isWeb && hovered
+            ? colors.error + "18"
+            : colors.error + "10",
+        borderWidth: 1,
+        borderColor: pressed
+          ? colors.error + "50"
+          : isWeb && hovered
+            ? colors.error + "40"
+            : colors.error + "20",
+        marginBottom: 16,
+        maxWidth: isDesktop ? 360 : undefined,
+        ...(isWeb ? { cursor: "pointer", transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)" } as any : {}),
+        transform: [{ scale: pressed ? 0.98 : 1 }],
+      })}
+      accessibilityRole="button"
+      accessibilityLabel={t("profile.logout")}
+    >
+      <Ionicons name="log-out-outline" size={20} color={colors.error} />
+      <Text
+        style={{
+          color: colors.error,
+          fontSize: 15,
+          fontFamily: "DMSans_600SemiBold",
+        }}
+      >
+        {t("profile.logout")}
+      </Text>
+    </Pressable>
+  );
+
+  // ── Version footer ──
+  const renderVersion = () => (
+    <Text
+      style={{
+        color: tc.textMuted,
+        fontSize: 12,
+        fontFamily: "DMSans_400Regular",
+        textAlign: "center",
+        marginTop: 4,
+        marginBottom: 28,
+        opacity: 0.5,
+      }}
+      maxFontSizeMultiplier={1.3}
+      accessibilityLabel={t("profile.version")}
+    >
+      {t("profile.version")}
+    </Text>
+  );
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
-          paddingBottom: 32,
+          paddingBottom: 40,
+          ...(isDesktop
+            ? { paddingHorizontal: 48 }
+            : {}),
         }}
       >
-        {/* Header - hidden on desktop since sidebar already shows it */}
+        {/* Page title - mobile only */}
         {!isDesktop && (
           <View style={{ paddingHorizontal: hPad + 4, paddingTop: 8, paddingBottom: 6 }}>
             <Text
               style={{
                 color: tc.textPrimary,
                 fontSize: 28,
-                fontFamily: "Inter_700Bold",
+                fontFamily: "DMSans_700Bold",
                 letterSpacing: -0.5,
               }}
             >
-              Profile
+              {t("profile.profile")}
             </Text>
           </View>
         )}
 
-        {/* Desktop: two-column layout for user card + security */}
-        {isDesktop ? (
-          <View
-            style={{
-              flexDirection: "row",
-              width: "100%",
-              paddingHorizontal: hPad,
-              gap: 28,
-              marginTop: 12,
-              marginBottom: 20,
-            }}
-          >
-            {/* Left column: User Card */}
-            <View style={{ flex: 1 }}>
-              <View
-                style={{
-                  backgroundColor: tc.dark.card,
-                  borderRadius: 24,
-                  padding: 28,
-                  borderWidth: 1,
-                  borderColor: tc.glass.border,
-                  marginBottom: 20,
-                }}
-              >
-                {/* Avatar + Info */}
-                <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 24 }}>
-                  <Pressable onPress={handlePickAvatar} style={{ position: "relative", marginRight: 20 }}>
-                    {avatarUri ? (
-                      <Image
-                        source={{ uri: avatarUri }}
-                        style={{
-                          width: 72,
-                          height: 72,
-                          borderRadius: 24,
-                          borderWidth: 2,
-                          borderColor: tc.primary[500] + "40",
-                        }}
-                      />
-                    ) : (
-                      <View
-                        style={{
-                          width: 72,
-                          height: 72,
-                          borderRadius: 24,
-                          backgroundColor: tc.primary[500] + "20",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          borderWidth: 2,
-                          borderColor: tc.primary[500] + "30",
-                        }}
-                      >
-                        <Text style={{ color: tc.primary[400], fontSize: 24, fontWeight: "700" }}>
-                          {getInitials(user?.full_name)}
-                        </Text>
-                      </View>
-                    )}
-                    {/* Camera overlay */}
-                    <View
-                      style={{
-                        position: "absolute",
-                        bottom: -2,
-                        right: -2,
-                        width: 28,
-                        height: 28,
-                        borderRadius: 14,
-                        backgroundColor: tc.primary[500],
-                        alignItems: "center",
-                        justifyContent: "center",
-                        borderWidth: 2,
-                        borderColor: tc.dark.bg,
-                      }}
-                    >
-                      <Ionicons name={uploadingAvatar ? "sync" : "camera"} size={14} color="#fff" />
-                    </View>
-                  </Pressable>
-                  <View style={{ flex: 1 }}>
-                    <Text
-                      style={{
-                        color: tc.textPrimary,
-                        fontSize: 22,
-                        fontWeight: "700",
-                        marginBottom: 6,
-                      }}
-                    >
-                      {user?.full_name || "User"}
-                    </Text>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                      <Ionicons name="call-outline" size={14} color={tc.textSecondary} />
-                      <Text
-                        style={{
-                          color: tc.textSecondary,
-                          fontSize: 14,
-                          fontFamily: "Inter_400Regular",
-                        }}
-                      >
-                        {formatPhone(user?.phone)}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-
-                {/* KYC Status */}
-                <View
-                  style={{
-                    backgroundColor: tc.dark.bg,
-                    borderRadius: 18,
-                    padding: 18,
-                    borderWidth: 1,
-                    borderColor: tc.glass.border,
-                  }}
-                >
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      marginBottom: 14,
-                    }}
-                  >
-                    <View>
-                      <Text
-                        style={{
-                          color: tc.textMuted,
-                          fontSize: 11,
-                          fontFamily: "Inter_500Medium",
-                          textTransform: "uppercase",
-                          letterSpacing: 0.8,
-                          marginBottom: 6,
-                        }}
-                      >
-                        VERIFICATION LEVEL
-                      </Text>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                        <View
-                          style={{
-                            width: 8,
-                            height: 8,
-                            borderRadius: 4,
-                            backgroundColor: currentTier?.color,
-                          }}
-                        />
-                        <Text
-                          style={{
-                            fontSize: 15,
-                            fontFamily: "Inter_600SemiBold",
-                            color: currentTier?.color,
-                          }}
-                        >
-                          Tier {currentTier?.tier}: {currentTier?.label}
-                        </Text>
-                      </View>
-                    </View>
-                    <View
-                      style={{
-                        backgroundColor: tc.dark.elevated,
-                        borderRadius: 12,
-                        paddingHorizontal: 12,
-                        paddingVertical: 6,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          color: tc.textSecondary,
-                          fontSize: 12,
-                          fontFamily: "Inter_600SemiBold",
-                        }}
-                      >
-                        {currentTier?.limit}
-                      </Text>
-                    </View>
-                  </View>
-
-                  {/* Progress bar */}
-                  <View
-                    style={{
-                      height: 6,
-                      backgroundColor: tc.dark.elevated,
-                      borderRadius: 3,
-                      overflow: "hidden",
-                    }}
-                  >
-                    <View
-                      style={{
-                        height: "100%",
-                        width: `${tierProgress * 100}%`,
-                        backgroundColor: currentTier?.color || tc.dark.muted,
-                        borderRadius: 3,
-                      }}
-                    />
-                  </View>
-
-                  {/* Tier dots */}
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      justifyContent: "space-between",
-                      marginTop: 10,
-                    }}
-                  >
-                    {KYC_TIERS.map((t) => (
-                      <View key={t.tier} style={{ alignItems: "center" }}>
-                        <View
-                          style={{
-                            width: 8,
-                            height: 8,
-                            borderRadius: 4,
-                            backgroundColor:
-                              (user?.kyc_tier ?? 0) >= t.tier
-                                ? t.color
-                                : tc.dark.elevated,
-                          }}
-                        />
-                      </View>
-                    ))}
-                  </View>
-                </View>
-              </View>
-
-              {/* Logout on desktop - bottom of left column */}
-              <View
-                style={{
-                  backgroundColor: tc.dark.card,
-                  borderRadius: 20,
-                  overflow: "hidden",
-                  borderWidth: 1,
-                  borderColor: colors.error + "15",
-                }}
-              >
-                <MenuItem
-                  icon="log-out-outline"
-                  label="Logout"
-                  onPress={handleLogout}
-                  danger
-                  tc={tc}
-                />
-              </View>
-            </View>
-
-            {/* Right column: Security + Preferences + Support */}
-            <View style={{ flex: 1 }}>
-              {/* Security Section */}
-              <View style={{ marginBottom: 4 }}>
+        {/* ── Profile Header Card ── */}
+        <View
+          style={{
+            backgroundColor: tc.dark.card,
+            borderRadius: 24,
+            marginHorizontal: hPad,
+            padding: isDesktop ? 32 : 24,
+            marginTop: isDesktop ? 12 : 8,
+            marginBottom: 24,
+            borderWidth: 1,
+            borderColor: tc.glass.border,
+            ...ts.md,
+          }}
+        >
+          {isDesktop ? (
+            /* Desktop: horizontal layout — avatar+name | info chips & KYC | actions */
+            <View style={{ flexDirection: "row", gap: 32 }}>
+              {/* Left: Avatar + Name + Phone */}
+              <View style={{ alignItems: "center", minWidth: 180 }}>
+                {renderAvatar(96)}
                 <Text
                   style={{
-                    color: tc.textMuted,
-                    fontSize: 11,
-                    fontFamily: "Inter_600SemiBold",
-                    textTransform: "uppercase",
-                    letterSpacing: 1,
-                    paddingLeft: 4,
+                    color: tc.textPrimary,
+                    fontSize: 22,
+                    fontFamily: "DMSans_700Bold",
+                    letterSpacing: -0.3,
+                    marginTop: 16,
                     marginBottom: 8,
+                    textAlign: "center",
                   }}
                 >
-                  SECURITY
+                  {user?.full_name || "User"}
                 </Text>
-              </View>
-              <View
-                style={{
-                  backgroundColor: tc.dark.card,
-                  borderRadius: 20,
-                  marginBottom: 20,
-                  overflow: "hidden",
-                  borderWidth: 1,
-                  borderColor: tc.glass.border,
-                }}
-              >
-                <MenuItem
-                  icon="shield-checkmark-outline"
-                  label="Verify Identity"
-                  onPress={handleVerifyIdentity}
-                  iconBg={colors.primary[500] + "20"}
-                  iconColor={colors.primary[400]}
-                  tc={tc}
-                />
-                <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 72 }} />
-                <MenuItem
-                  icon="lock-closed-outline"
-                  label="Change PIN"
-                  onPress={() => router.push("/settings/change-pin")}
-                  iconBg={colors.info + "20"}
-                  iconColor={colors.info}
-                  tc={tc}
-                />
-                <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 72 }} />
-                <View style={{ flexDirection: "row", alignItems: "center", paddingRight: 16 }}>
-                  <View style={{ flex: 1 }}>
-                    <MenuItem
-                      icon="finger-print-outline"
-                      label="Biometric Login"
-                      subtitle={
-                        biometric.isAvailable
-                          ? `${biometric.biometricType === "face" ? "Face ID" : "Fingerprint"} ${biometricOn ? "enabled" : "disabled"}`
-                          : "Not available on this device"
-                      }
-                      onPress={() => handleBiometricToggle(!biometricOn)}
-                      iconBg={colors.accent + "20"}
-                      iconColor={colors.accent}
-                      tc={tc}
-                      trailing={<View />}
-                    />
-                  </View>
-                  {isWeb ? (
-                    <Pressable
-                      onPress={() => handleBiometricToggle(!biometricOn)}
-                      style={{
-                        width: 48,
-                        height: 28,
-                        borderRadius: 14,
-                        backgroundColor: biometricOn ? colors.primary[500] + "60" : tc.dark.elevated,
-                        justifyContent: "center",
-                        paddingHorizontal: 2,
-                      }}
-                      accessibilityRole="switch"
-                    >
-                      <View
-                        style={{
-                          width: 24,
-                          height: 24,
-                          borderRadius: 12,
-                          backgroundColor: biometricOn ? colors.primary[400] : tc.textMuted,
-                          alignSelf: biometricOn ? "flex-end" : "flex-start",
-                        }}
-                      />
-                    </Pressable>
-                  ) : (
-                    <Switch
-                      value={biometricOn}
-                      onValueChange={handleBiometricToggle}
-                      trackColor={{ false: tc.dark.elevated, true: colors.primary[500] + "60" }}
-                      thumbColor={biometricOn ? colors.primary[400] : tc.textMuted}
-                      disabled={!biometric.isAvailable}
-                    />
-                  )}
-                </View>
-              </View>
-
-              {/* Preferences Section */}
-              <View style={{ marginBottom: 4 }}>
-                <Text
-                  style={{
-                    color: tc.textMuted,
-                    fontSize: 11,
-                    fontFamily: "Inter_600SemiBold",
-                    textTransform: "uppercase",
-                    letterSpacing: 1,
-                    paddingLeft: 4,
-                    marginBottom: 8,
-                  }}
-                >
-                  PREFERENCES
-                </Text>
-              </View>
-              <View
-                style={{
-                  backgroundColor: tc.dark.card,
-                  borderRadius: 20,
-                  marginBottom: 20,
-                  overflow: "hidden",
-                  borderWidth: 1,
-                  borderColor: tc.glass.border,
-                }}
-              >
-                {/* Dark Mode Toggle */}
-                <View style={{ flexDirection: "row", alignItems: "center", paddingRight: 16 }}>
-                  <View style={{ flex: 1 }}>
-                    <MenuItem
-                      icon={isDark ? "moon-outline" : "sunny-outline"}
-                      label={isDark ? "Dark Mode" : "Light Mode"}
-                      onPress={toggleTheme}
-                      iconBg={isDark ? "rgba(99,102,241,0.15)" : "rgba(251,191,36,0.15)"}
-                      iconColor={isDark ? "#818CF8" : "#F59E0B"}
-                      tc={tc}
-                      trailing={<View />}
-                    />
-                  </View>
-                  <ThemeToggleSwitch isDark={isDark} onToggle={toggleTheme} tc={tc} />
-                </View>
-                <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 72 }} />
-                <MenuItem
-                  icon="notifications-outline"
-                  label="Notifications"
-                  onPress={() => router.push("/settings/notifications" as any)}
-                  iconBg={colors.primary[500] + "20"}
-                  iconColor={colors.primary[400]}
-                  tc={tc}
-                />
-                <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 72 }} />
-                <MenuItem
-                  icon={phoneVisible ? "eye-outline" : "eye-off-outline"}
-                  label="Show Phone Number"
-                  onPress={togglePhoneVisibility}
-                  iconBg={colors.info + "20"}
-                  iconColor={colors.info}
-                  tc={tc}
-                  trailing={
-                    <Switch
-                      value={phoneVisible}
-                      onValueChange={togglePhoneVisibility}
-                      trackColor={{ false: tc.dark.elevated, true: colors.primary[500] + "60" }}
-                      thumbColor={phoneVisible ? colors.primary[500] : tc.dark.muted}
-                    />
-                  }
-                />
-                <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 72 }} />
-                <MenuItem
-                  icon="language-outline"
-                  label={t("profile.language")}
-                  subtitle={locale === "en" ? t("profile.english") : t("profile.swahili")}
-                  onPress={() => setShowLanguagePicker(true)}
-                  iconBg={colors.warning + "20"}
-                  iconColor={colors.warning}
-                  tc={tc}
-                />
-              </View>
-
-              {/* Support Section */}
-              <View style={{ marginBottom: 4 }}>
-                <Text
-                  style={{
-                    color: tc.textMuted,
-                    fontSize: 11,
-                    fontFamily: "Inter_600SemiBold",
-                    textTransform: "uppercase",
-                    letterSpacing: 1,
-                    paddingLeft: 4,
-                    marginBottom: 8,
-                  }}
-                >
-                  SUPPORT
-                </Text>
-              </View>
-              <View
-                style={{
-                  backgroundColor: tc.dark.card,
-                  borderRadius: 20,
-                  marginBottom: 20,
-                  overflow: "hidden",
-                  borderWidth: 1,
-                  borderColor: tc.glass.border,
-                }}
-              >
-                <MenuItem
-                  icon="help-circle-outline"
-                  label="Help & Support"
-                  onPress={handleHelpSupport}
-                  tc={tc}
-                />
-                <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 72 }} />
-                <MenuItem
-                  icon="document-text-outline"
-                  label="Terms of Service"
-                  onPress={handleTermsOfService}
-                  tc={tc}
-                />
-                <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 72 }} />
-                <MenuItem
-                  icon="shield-outline"
-                  label="Privacy Policy"
-                  onPress={handlePrivacyPolicy}
-                  tc={tc}
-                />
-              </View>
-
-              {/* Version */}
-              <Text
-                style={{
-                  color: tc.textMuted,
-                  fontSize: 12,
-                  fontFamily: "Inter_400Regular",
-                  textAlign: "center",
-                  marginTop: 4,
-                  opacity: 0.6,
-                }}
-                maxFontSizeMultiplier={1.3}
-                accessibilityLabel="CryptoPay version 1.0.0"
-              >
-                CryptoPay v1.0.0
-              </Text>
-            </View>
-          </View>
-        ) : (
-          /* Mobile layout */
-          <>
-            {/* User Card */}
-            <View
-              style={{
-                backgroundColor: tc.dark.card,
-                borderRadius: 24,
-                marginHorizontal: hPad,
-                padding: 24,
-                marginTop: 8,
-                marginBottom: 16,
-                borderWidth: 1,
-                borderColor: tc.glass.border,
-              }}
-            >
-              {/* Avatar + Info */}
-              <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 20 }}>
-                <Pressable onPress={handlePickAvatar} style={{ position: "relative", marginRight: 16 }}>
-                  {avatarUri ? (
-                    <Image
-                      source={{ uri: avatarUri }}
-                      style={{
-                        width: 72,
-                        height: 72,
-                        borderRadius: 24,
-                        borderWidth: 2,
-                        borderColor: tc.primary[500] + "40",
-                      }}
-                    />
-                  ) : (
-                    <View
-                      style={{
-                        width: 72,
-                        height: 72,
-                        borderRadius: 24,
-                        backgroundColor: tc.primary[500] + "20",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        borderWidth: 2,
-                        borderColor: tc.primary[500] + "30",
-                      }}
-                    >
-                      <Text style={{ color: tc.primary[400], fontSize: 24, fontWeight: "700" }}>
-                        {getInitials(user?.full_name)}
-                      </Text>
-                    </View>
-                  )}
-                  {/* Camera overlay */}
-                  <View
-                    style={{
-                      position: "absolute",
-                      bottom: -2,
-                      right: -2,
-                      width: 28,
-                      height: 28,
-                      borderRadius: 14,
-                      backgroundColor: tc.primary[500],
-                      alignItems: "center",
-                      justifyContent: "center",
-                      borderWidth: 2,
-                      borderColor: tc.dark.bg,
-                    }}
-                  >
-                    <Ionicons name={uploadingAvatar ? "sync" : "camera"} size={14} color="#fff" />
-                  </View>
-                </Pressable>
-                <View style={{ flex: 1 }}>
-                  <Text
-                    style={{
-                      color: tc.textPrimary,
-                      fontSize: 22,
-                      fontWeight: "700",
-                      marginBottom: 6,
-                    }}
-                  >
-                    {user?.full_name || "User"}
-                  </Text>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                    <Ionicons name="call-outline" size={13} color={tc.textSecondary} />
-                    <Text
-                      style={{
-                        color: tc.textSecondary,
-                        fontSize: 14,
-                        fontFamily: "Inter_400Regular",
-                      }}
-                    >
-                      {formatPhone(user?.phone)}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-
-              {/* KYC Status */}
-              <View
-                style={{
-                  backgroundColor: tc.dark.bg,
-                  borderRadius: 18,
-                  padding: 16,
-                  borderWidth: 1,
-                  borderColor: tc.glass.border,
-                }}
-              >
                 <View
                   style={{
                     flexDirection: "row",
                     alignItems: "center",
-                    justifyContent: "space-between",
-                    marginBottom: 12,
+                    gap: 6,
+                    backgroundColor: tc.dark.bg,
+                    paddingHorizontal: 12,
+                    paddingVertical: 6,
+                    borderRadius: 20,
+                    borderWidth: 1,
+                    borderColor: tc.glass.border,
                   }}
                 >
-                  <View>
-                    <Text
-                      style={{
-                        color: tc.textMuted,
-                        fontSize: 11,
-                        fontFamily: "Inter_500Medium",
-                        textTransform: "uppercase",
-                        letterSpacing: 0.8,
-                        marginBottom: 6,
-                      }}
-                    >
-                      VERIFICATION LEVEL
-                    </Text>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                      <View
-                        style={{
-                          width: 8,
-                          height: 8,
-                          borderRadius: 4,
-                          backgroundColor: currentTier?.color,
-                        }}
-                      />
-                      <Text
-                        style={{
-                          fontSize: 15,
-                          fontFamily: "Inter_600SemiBold",
-                          color: currentTier?.color,
-                        }}
-                      >
-                        Tier {currentTier?.tier}: {currentTier?.label}
-                      </Text>
-                    </View>
+                  <Ionicons name="call-outline" size={13} color={tc.textSecondary} />
+                  <Text style={{ color: tc.textSecondary, fontSize: 13, fontFamily: "DMSans_400Regular" }}>
+                    {formatPhone(user?.phone)}
+                  </Text>
+                  <Pressable
+                    onPress={togglePhoneVisibility}
+                    style={({ hovered }: any) => ({
+                      marginLeft: 4, padding: 2, borderRadius: 4,
+                      ...(isWeb ? { cursor: "pointer", transition: "opacity 0.15s ease" } as any : {}),
+                      opacity: isWeb && hovered ? 0.7 : 1,
+                    })}
+                    accessibilityRole="button"
+                    accessibilityLabel={phoneVisible ? "Hide phone number" : "Show phone number"}
+                  >
+                    <Ionicons name={phoneVisible ? "eye-outline" : "eye-off-outline"} size={14} color={tc.textMuted} />
+                  </Pressable>
+                </View>
+                {/* Action buttons under avatar on desktop */}
+                <View style={{ flexDirection: "row", gap: 10, marginTop: 20, width: "100%" }}>
+                  {renderActionButtons()}
+                </View>
+              </View>
+
+              {/* Vertical divider */}
+              <View style={{ width: 1, backgroundColor: tc.glass.border, marginVertical: 4 }} />
+
+              {/* Right: Info chips + KYC status (fills remaining space) */}
+              <View style={{ flex: 1, justifyContent: "center" }}>
+                {/* Info chips row */}
+                <View style={{ flexDirection: "row", gap: 12, marginBottom: 20 }}>
+                  <View style={{ flex: 1 }}>
+                    <ProfileInfoChip
+                      icon="mail-outline"
+                      label={t("help.email")}
+                      value={user?.email || t("common.notSet")}
+                      tc={tc}
+                    />
                   </View>
-                  <View
+                  <View style={{ flex: 1 }}>
+                    <ProfileInfoChip
+                      icon="shield-checkmark-outline"
+                      label={t("kyc.currentLevel")}
+                      value={currentTier ? `${t("kyc.tier")} ${currentTier.tier}: ${t(currentTier.labelKey)}` : t("common.unverified")}
+                      tc={tc}
+                      onPress={handleVerifyIdentity}
+                    />
+                  </View>
+                </View>
+
+                {/* KYC progress */}
+                {renderKycStatus()}
+              </View>
+            </View>
+          ) : (
+            /* Mobile: vertical stacked layout */
+            <>
+              {/* Avatar row */}
+              <View style={{ alignItems: "center", marginBottom: 24, gap: 16 }}>
+                {renderAvatar(88)}
+                <View style={{ alignItems: "center" }}>
+                  <Text
                     style={{
-                      backgroundColor: tc.dark.elevated,
-                      borderRadius: 12,
-                      paddingHorizontal: 12,
-                      paddingVertical: 6,
+                      color: tc.textPrimary,
+                      fontSize: 24,
+                      fontFamily: "DMSans_700Bold",
+                      letterSpacing: -0.3,
+                      marginBottom: 6,
+                      textAlign: "center",
                     }}
                   >
-                    <Text
-                      style={{
-                        color: tc.textSecondary,
-                        fontSize: 12,
-                        fontFamily: "Inter_600SemiBold",
-                      }}
-                    >
-                      {currentTier?.limit}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Progress bar */}
-                <View
-                  style={{
-                    height: 6,
-                    backgroundColor: tc.dark.elevated,
-                    borderRadius: 3,
-                    overflow: "hidden",
-                  }}
-                >
+                    {user?.full_name || "User"}
+                  </Text>
                   <View
                     style={{
-                      height: "100%",
-                      width: `${tierProgress * 100}%`,
-                      backgroundColor: currentTier?.color || tc.dark.muted,
-                      borderRadius: 3,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 6,
+                      backgroundColor: tc.dark.bg,
+                      paddingHorizontal: 12,
+                      paddingVertical: 6,
+                      borderRadius: 20,
+                      borderWidth: 1,
+                      borderColor: tc.glass.border,
                     }}
-                  />
-                </View>
-
-                {/* Tier dots */}
-                <View
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                    marginTop: 10,
-                  }}
-                >
-                  {KYC_TIERS.map((t) => (
-                    <View key={t.tier} style={{ alignItems: "center" }}>
-                      <View
-                        style={{
-                          width: 8,
-                          height: 8,
-                          borderRadius: 4,
-                          backgroundColor:
-                            (user?.kyc_tier ?? 0) >= t.tier
-                              ? t.color
-                              : tc.dark.elevated,
-                        }}
-                      />
-                    </View>
-                  ))}
+                  >
+                    <Ionicons name="call-outline" size={13} color={tc.textSecondary} />
+                    <Text style={{ color: tc.textSecondary, fontSize: 14, fontFamily: "DMSans_400Regular" }}>
+                      {formatPhone(user?.phone)}
+                    </Text>
+                    <Pressable
+                      onPress={togglePhoneVisibility}
+                      style={({ hovered }: any) => ({
+                        marginLeft: 4, padding: 2, borderRadius: 4,
+                        ...(isWeb ? { cursor: "pointer", transition: "opacity 0.15s ease" } as any : {}),
+                        opacity: isWeb && hovered ? 0.7 : 1,
+                      })}
+                      accessibilityRole="button"
+                      accessibilityLabel={phoneVisible ? "Hide phone number" : "Show phone number"}
+                    >
+                      <Ionicons name={phoneVisible ? "eye-outline" : "eye-off-outline"} size={14} color={tc.textMuted} />
+                    </Pressable>
+                  </View>
                 </View>
               </View>
-            </View>
 
-            {/* Security Section */}
-            <View style={{ paddingHorizontal: hPad, marginBottom: 4 }}>
-              <Text
-                style={{
-                  color: tc.textMuted,
-                  fontSize: 11,
-                  fontFamily: "Inter_600SemiBold",
-                  textTransform: "uppercase",
-                  letterSpacing: 1,
-                  paddingLeft: 4,
-                  marginBottom: 8,
-                }}
-              >
-                SECURITY
-              </Text>
-            </View>
-            <View
-              style={{
-                backgroundColor: tc.dark.card,
-                borderRadius: 20,
-                marginHorizontal: hPad,
-                marginBottom: 20,
-                overflow: "hidden",
-                borderWidth: 1,
-                borderColor: tc.glass.border,
-              }}
-            >
-              <MenuItem
-                icon="shield-checkmark-outline"
-                label="Verify Identity"
-                onPress={handleVerifyIdentity}
-                iconBg={colors.primary[500] + "20"}
-                iconColor={colors.primary[400]}
-                tc={tc}
-              />
-              <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 72 }} />
-              <MenuItem
-                icon="lock-closed-outline"
-                label="Change PIN"
-                onPress={() => router.push("/settings/change-pin")}
-                iconBg={colors.info + "20"}
-                iconColor={colors.info}
-                tc={tc}
-              />
-              <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 72 }} />
-              <View style={{ flexDirection: "row", alignItems: "center", paddingRight: 16 }}>
-                <View style={{ flex: 1 }}>
-                  <MenuItem
-                    icon="finger-print-outline"
-                    label="Biometric Login"
-                    subtitle={
-                      biometric.isAvailable
-                        ? `${biometric.biometricType === "face" ? "Face ID" : "Fingerprint"} ${biometricOn ? "enabled" : "disabled"}`
-                        : "Not available on this device"
-                    }
-                    onPress={() => handleBiometricToggle(!biometricOn)}
-                    iconBg={colors.accent + "20"}
-                    iconColor={colors.accent}
-                    tc={tc}
-                    trailing={<View />}
-                  />
-                </View>
-                <Switch
-                  value={biometricOn}
-                  onValueChange={handleBiometricToggle}
-                  trackColor={{ false: tc.dark.elevated, true: colors.primary[500] + "60" }}
-                  thumbColor={biometricOn ? colors.primary[400] : tc.textMuted}
-                  disabled={!biometric.isAvailable}
+              {/* Info chips */}
+              <View style={{ gap: 10, marginBottom: 4 }}>
+                <ProfileInfoChip
+                  icon="mail-outline"
+                  label={t("help.email")}
+                  value={user?.email || t("common.notSet")}
+                  tc={tc}
+                />
+                <ProfileInfoChip
+                  icon="shield-checkmark-outline"
+                  label={t("kyc.currentLevel")}
+                  value={currentTier ? `${t("kyc.tier")} ${currentTier.tier}: ${t(currentTier.labelKey)}` : t("common.unverified")}
+                  tc={tc}
+                  onPress={handleVerifyIdentity}
                 />
               </View>
-            </View>
 
-            {/* Preferences Section */}
-            <View style={{ paddingHorizontal: hPad, marginBottom: 4 }}>
-              <Text
-                style={{
-                  color: tc.textMuted,
-                  fontSize: 11,
-                  fontFamily: "Inter_600SemiBold",
-                  textTransform: "uppercase",
-                  letterSpacing: 1,
-                  paddingLeft: 4,
-                  marginBottom: 8,
-                }}
-              >
-                PREFERENCES
-              </Text>
-            </View>
-            <View
-              style={{
-                backgroundColor: tc.dark.card,
-                borderRadius: 20,
-                marginHorizontal: hPad,
-                marginBottom: 20,
-                overflow: "hidden",
-                borderWidth: 1,
-                borderColor: tc.glass.border,
-              }}
-            >
-              {/* Dark Mode Toggle */}
-              <View style={{ flexDirection: "row", alignItems: "center", paddingRight: 16 }}>
-                <View style={{ flex: 1 }}>
-                  <MenuItem
-                    icon={isDark ? "moon-outline" : "sunny-outline"}
-                    label={isDark ? "Dark Mode" : "Light Mode"}
-                    onPress={toggleTheme}
-                    iconBg={isDark ? "rgba(99,102,241,0.15)" : "rgba(251,191,36,0.15)"}
-                    iconColor={isDark ? "#818CF8" : "#F59E0B"}
-                    tc={tc}
-                    trailing={<View />}
-                  />
-                </View>
-                <ThemeToggleSwitch isDark={isDark} onToggle={toggleTheme} tc={tc} />
+              {/* KYC progress */}
+              <View style={{ marginTop: 16 }}>
+                {renderKycStatus()}
               </View>
-              <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 72 }} />
-              <MenuItem
-                icon="notifications-outline"
-                label="Notifications"
-                onPress={() => router.push("/settings/notifications" as any)}
-                iconBg={colors.primary[500] + "20"}
-                iconColor={colors.primary[400]}
-                tc={tc}
-              />
-              <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 72 }} />
-              <MenuItem
-                icon={phoneVisible ? "eye-outline" : "eye-off-outline"}
-                label="Show Phone Number"
-                onPress={togglePhoneVisibility}
-                iconBg={colors.info + "20"}
-                iconColor={colors.info}
-                tc={tc}
-                trailing={
-                  <Switch
-                    value={phoneVisible}
-                    onValueChange={togglePhoneVisibility}
-                    trackColor={{ false: tc.dark.elevated, true: colors.primary[500] + "60" }}
-                    thumbColor={phoneVisible ? colors.primary[500] : tc.dark.muted}
-                  />
-                }
-              />
-              <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 72 }} />
-              <MenuItem
-                icon="language-outline"
-                label={t("profile.language")}
-                subtitle={locale === "en" ? t("profile.english") : t("profile.swahili")}
-                onPress={() => setShowLanguagePicker(true)}
-                iconBg={colors.warning + "20"}
-                iconColor={colors.warning}
-                tc={tc}
-              />
-            </View>
 
-            {/* Support Section */}
-            <View style={{ paddingHorizontal: hPad, marginBottom: 4 }}>
-              <Text
-                style={{
-                  color: tc.textMuted,
-                  fontSize: 11,
-                  fontFamily: "Inter_600SemiBold",
-                  textTransform: "uppercase",
-                  letterSpacing: 1,
-                  paddingLeft: 4,
-                  marginBottom: 8,
-                }}
-              >
-                SUPPORT
-              </Text>
-            </View>
-            <View
-              style={{
-                backgroundColor: tc.dark.card,
-                borderRadius: 20,
-                marginHorizontal: hPad,
-                marginBottom: 20,
-                overflow: "hidden",
-                borderWidth: 1,
-                borderColor: tc.glass.border,
-              }}
-            >
-              <MenuItem
-                icon="help-circle-outline"
-                label="Help & Support"
-                onPress={handleHelpSupport}
-                tc={tc}
-              />
-              <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 72 }} />
-              <MenuItem
-                icon="document-text-outline"
-                label="Terms of Service"
-                onPress={handleTermsOfService}
-                tc={tc}
-              />
-              <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 72 }} />
-              <MenuItem
-                icon="shield-outline"
-                label="Privacy Policy"
-                onPress={handlePrivacyPolicy}
-                tc={tc}
-              />
-            </View>
+              {/* Action buttons */}
+              {renderActionButtons()}
+            </>
+          )}
+        </View>
 
-            {/* Logout */}
-            <View
-              style={{
-                backgroundColor: tc.dark.card,
-                borderRadius: 20,
-                marginHorizontal: hPad,
-                marginBottom: 16,
-                overflow: "hidden",
-                borderWidth: 1,
-                borderColor: colors.error + "15",
-              }}
-            >
-              <MenuItem
-                icon="log-out-outline"
-                label="Logout"
-                onPress={handleLogout}
-                danger
-                tc={tc}
-              />
+        {/* ── Settings sections ── */}
+        {isDesktop ? (
+          /* Desktop: 2-column grid for settings */
+          <View
+            style={{
+              flexDirection: "row",
+              paddingHorizontal: hPad,
+              gap: 24,
+              marginBottom: 8,
+            }}
+          >
+            {/* Left column */}
+            <View style={{ flex: 1 }}>
+              {renderSecuritySection()}
+              {renderSupportSection()}
             </View>
-
-            {/* Version */}
-            <Text
-              style={{
-                color: tc.textMuted,
-                fontSize: 12,
-                fontFamily: "Inter_400Regular",
-                textAlign: "center",
-                marginTop: 4,
-                marginBottom: 28,
-                opacity: 0.6,
-              }}
-              maxFontSizeMultiplier={1.3}
-              accessibilityLabel="CryptoPay version 1.0.0"
-            >
-              CryptoPay v1.0.0
-            </Text>
-          </>
+            {/* Right column */}
+            <View style={{ flex: 1 }}>
+              {renderPreferencesSection()}
+              {renderLogoutButton()}
+              {renderVersion()}
+            </View>
+          </View>
+        ) : (
+          /* Mobile: single column */
+          <View style={{ paddingHorizontal: hPad }}>
+            {renderSecuritySection()}
+            {renderPreferencesSection()}
+            {renderSupportSection()}
+            {renderLogoutButton()}
+            {renderVersion()}
+          </View>
         )}
       </ScrollView>
 
-      {/* Web logout confirmation overlay */}
+      {/* ── Web logout confirmation overlay ── */}
       {showLogoutConfirm && (
         <View
           style={{
@@ -1307,92 +1254,103 @@ export default function ProfileScreen() {
             style={{
               backgroundColor: tc.dark.card,
               borderRadius: 24,
-              padding: 28,
-              maxWidth: 340,
+              padding: 32,
+              maxWidth: 380,
               width: "90%",
               borderWidth: 1,
               borderColor: tc.glass.border,
               alignItems: "center",
+              ...ts.lg,
             }}
           >
             <View
               style={{
-                width: 56,
-                height: 56,
-                borderRadius: 18,
+                width: 64,
+                height: 64,
+                borderRadius: 20,
                 backgroundColor: colors.error + "15",
                 alignItems: "center",
                 justifyContent: "center",
-                marginBottom: 16,
+                marginBottom: 20,
+                ...ts.glow(colors.error, 0.2),
               }}
             >
-              <Ionicons name="log-out-outline" size={28} color={colors.error} />
+              <Ionicons name="log-out-outline" size={32} color={colors.error} />
             </View>
             <Text
               style={{
                 color: tc.textPrimary,
-                fontSize: 18,
-                fontFamily: "Inter_700Bold",
+                fontSize: 20,
+                fontFamily: "DMSans_700Bold",
                 marginBottom: 8,
               }}
             >
-              Logout
+              {t("profile.logout")}
             </Text>
             <Text
               style={{
                 color: tc.textMuted,
                 fontSize: 14,
-                fontFamily: "Inter_400Regular",
+                fontFamily: "DMSans_400Regular",
                 textAlign: "center",
-                marginBottom: 24,
+                marginBottom: 28,
                 lineHeight: 20,
               }}
             >
-              Are you sure you want to log out?
+              {t("profile.logoutConfirm")}
             </Text>
             <View style={{ flexDirection: "row", gap: 12, width: "100%" }}>
               <Pressable
                 onPress={() => setShowLogoutConfirm(false)}
-                style={({ pressed }) => ({
+                style={({ pressed, hovered }: any) => ({
                   flex: 1,
-                  paddingVertical: 14,
+                  paddingVertical: 15,
                   borderRadius: 14,
-                  backgroundColor: tc.dark.elevated,
+                  backgroundColor: pressed
+                    ? tc.dark.elevated + "80"
+                    : isWeb && hovered
+                      ? tc.dark.elevated + "60"
+                      : tc.dark.elevated,
                   alignItems: "center",
                   borderWidth: 1,
                   borderColor: tc.glass.border,
-                  opacity: pressed ? 0.9 : 1,
+                  ...(isWeb ? { cursor: "pointer", transition: "all 0.2s ease" } as any : {}),
                 })}
               >
                 <Text
                   style={{
                     color: tc.textPrimary,
                     fontSize: 15,
-                    fontFamily: "Inter_600SemiBold",
+                    fontFamily: "DMSans_600SemiBold",
                   }}
                 >
-                  Cancel
+                  {t("common.cancel")}
                 </Text>
               </Pressable>
               <Pressable
                 onPress={confirmLogout}
-                style={({ pressed }) => ({
+                style={({ pressed, hovered }: any) => ({
                   flex: 1,
-                  paddingVertical: 14,
+                  paddingVertical: 15,
                   borderRadius: 14,
-                  backgroundColor: colors.error,
+                  backgroundColor: pressed
+                    ? "#DC2626"
+                    : isWeb && hovered
+                      ? "#E53E3E"
+                      : colors.error,
                   alignItems: "center",
-                  opacity: pressed ? 0.9 : 1,
+                  ...ts.glow(colors.error, 0.25),
+                  ...(isWeb ? { cursor: "pointer", transition: "all 0.2s ease" } as any : {}),
                 })}
               >
                 <Text
                   style={{
                     color: "#FFFFFF",
                     fontSize: 15,
-                    fontFamily: "Inter_600SemiBold",
+                    fontFamily: "DMSans_600SemiBold",
                   }}
                 >
-                  Logout
+                  {t("profile.logout")}
                 </Text>
               </Pressable>
             </View>
@@ -1400,7 +1358,7 @@ export default function ProfileScreen() {
         </View>
       )}
 
-      {/* Language Picker Modal */}
+      {/* ── Language Picker Modal ── */}
       {showLanguagePicker && (
         <View
           style={{
@@ -1420,28 +1378,40 @@ export default function ProfileScreen() {
               backgroundColor: tc.dark.card,
               borderRadius: 24,
               padding: 28,
-              maxWidth: 340,
+              maxWidth: 380,
               width: "90%",
               borderWidth: 1,
               borderColor: tc.glass.border,
+              ...ts.lg,
             }}
           >
             <Text
               style={{
                 color: tc.textPrimary,
-                fontSize: 18,
-                fontFamily: "Inter_700Bold",
-                marginBottom: 20,
+                fontSize: 20,
+                fontFamily: "DMSans_700Bold",
+                marginBottom: 6,
                 textAlign: "center",
               }}
             >
               {t("profile.selectLanguage")}
             </Text>
+            <Text
+              style={{
+                color: tc.textMuted,
+                fontSize: 13,
+                fontFamily: "DMSans_400Regular",
+                marginBottom: 20,
+                textAlign: "center",
+              }}
+            >
+              Choose your preferred language
+            </Text>
 
             {/* English Option */}
             <Pressable
               onPress={() => handleSelectLanguage("en")}
-              style={({ pressed }) => ({
+              style={({ pressed, hovered }: any) => ({
                 flexDirection: "row",
                 alignItems: "center",
                 paddingVertical: 14,
@@ -1451,12 +1421,15 @@ export default function ProfileScreen() {
                   locale === "en"
                     ? colors.primary[500] + "20"
                     : pressed
-                      ? tc.dark.elevated + "40"
-                      : "transparent",
+                      ? tc.dark.elevated + "60"
+                      : isWeb && hovered
+                        ? tc.dark.elevated + "30"
+                        : "transparent",
                 borderWidth: 1,
                 borderColor:
                   locale === "en" ? colors.primary[400] + "40" : tc.glass.border,
                 marginBottom: 10,
+                ...(isWeb ? { cursor: "pointer", transition: "all 0.2s ease" } as any : {}),
               })}
               accessibilityRole="button"
               accessibilityLabel="English"
@@ -1467,7 +1440,7 @@ export default function ProfileScreen() {
                   style={{
                     color: tc.textPrimary,
                     fontSize: 15,
-                    fontFamily: "Inter_600SemiBold",
+                    fontFamily: "DMSans_600SemiBold",
                   }}
                 >
                   English
@@ -1476,7 +1449,7 @@ export default function ProfileScreen() {
                   style={{
                     color: tc.textMuted,
                     fontSize: 12,
-                    fontFamily: "Inter_400Regular",
+                    fontFamily: "DMSans_400Regular",
                   }}
                 >
                   English
@@ -1490,7 +1463,7 @@ export default function ProfileScreen() {
             {/* Swahili Option */}
             <Pressable
               onPress={() => handleSelectLanguage("sw")}
-              style={({ pressed }) => ({
+              style={({ pressed, hovered }: any) => ({
                 flexDirection: "row",
                 alignItems: "center",
                 paddingVertical: 14,
@@ -1500,12 +1473,15 @@ export default function ProfileScreen() {
                   locale === "sw"
                     ? colors.primary[500] + "20"
                     : pressed
-                      ? tc.dark.elevated + "40"
-                      : "transparent",
+                      ? tc.dark.elevated + "60"
+                      : isWeb && hovered
+                        ? tc.dark.elevated + "30"
+                        : "transparent",
                 borderWidth: 1,
                 borderColor:
                   locale === "sw" ? colors.primary[400] + "40" : tc.glass.border,
                 marginBottom: 20,
+                ...(isWeb ? { cursor: "pointer", transition: "all 0.2s ease" } as any : {}),
               })}
               accessibilityRole="button"
               accessibilityLabel="Kiswahili"
@@ -1516,7 +1492,7 @@ export default function ProfileScreen() {
                   style={{
                     color: tc.textPrimary,
                     fontSize: 15,
-                    fontFamily: "Inter_600SemiBold",
+                    fontFamily: "DMSans_600SemiBold",
                   }}
                 >
                   Kiswahili
@@ -1525,7 +1501,7 @@ export default function ProfileScreen() {
                   style={{
                     color: tc.textMuted,
                     fontSize: 12,
-                    fontFamily: "Inter_400Regular",
+                    fontFamily: "DMSans_400Regular",
                   }}
                 >
                   Swahili
@@ -1539,21 +1515,25 @@ export default function ProfileScreen() {
             {/* Cancel Button */}
             <Pressable
               onPress={() => setShowLanguagePicker(false)}
-              style={({ pressed }) => ({
-                paddingVertical: 14,
+              style={({ pressed, hovered }: any) => ({
+                paddingVertical: 15,
                 borderRadius: 14,
-                backgroundColor: tc.dark.elevated,
+                backgroundColor: pressed
+                  ? tc.dark.elevated + "80"
+                  : isWeb && hovered
+                    ? tc.dark.elevated + "60"
+                    : tc.dark.elevated,
                 alignItems: "center",
                 borderWidth: 1,
                 borderColor: tc.glass.border,
-                opacity: pressed ? 0.9 : 1,
+                ...(isWeb ? { cursor: "pointer", transition: "all 0.2s ease" } as any : {}),
               })}
             >
               <Text
                 style={{
                   color: tc.textPrimary,
                   fontSize: 15,
-                  fontFamily: "Inter_600SemiBold",
+                  fontFamily: "DMSans_600SemiBold",
                 }}
               >
                 {t("common.cancel")}

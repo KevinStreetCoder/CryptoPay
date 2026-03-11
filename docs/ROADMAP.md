@@ -16,7 +16,7 @@ CryptoPay is a Kenyan fintech platform enabling direct cryptocurrency-to-M-Pesa 
 |-------|--------|---------|
 | Phase 1: MVP | COMPLETE | Full crypto-to-Paybill/Till payment flow, Django 5 backend, React Native + Expo frontend, 66 passing tests |
 | Phase 2: Full Product | COMPLETE | Push notifications, buy crypto (STK Push), Smile Identity KYC, email notifications, CI/CD, i18n (EN/SW), onboarding |
-| Phase 3: Infrastructure | IN PROGRESS | Nginx reverse proxy, Docker Compose production config, DB backups, rate limiting, responsive desktop layouts |
+| Phase 3: Infrastructure | IN PROGRESS | Nginx reverse proxy, Docker Compose production config, DB backups, rate limiting, responsive desktop layouts, enhanced security (OTP challenge, TOTP, email verification, recovery), transaction notifications (email+SMS+PDF receipts) |
 
 ### What Is Built
 

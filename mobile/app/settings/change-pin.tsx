@@ -144,7 +144,7 @@ export default function ChangePinScreen() {
                 style={{
                   color: tc.textPrimary,
                   fontSize: 28,
-                  fontFamily: "Inter_700Bold",
+                  fontFamily: "DMSans_700Bold",
                   letterSpacing: -0.5,
                   marginBottom: 8,
                 }}
@@ -155,7 +155,7 @@ export default function ChangePinScreen() {
                 style={{
                   color: tc.textMuted,
                   fontSize: 15,
-                  fontFamily: "Inter_400Regular",
+                  fontFamily: "DMSans_400Regular",
                   lineHeight: 22,
                 }}
               >
@@ -191,7 +191,7 @@ export default function ChangePinScreen() {
                   style={{
                     color: tc.textPrimary,
                     fontSize: 21,
-                    fontFamily: "Inter_600SemiBold",
+                    fontFamily: "DMSans_600SemiBold",
                     marginBottom: 6,
                     textAlign: "center",
                   }}
@@ -203,7 +203,7 @@ export default function ChangePinScreen() {
                   style={{
                     color: tc.textMuted,
                     fontSize: 14,
-                    fontFamily: "Inter_400Regular",
+                    fontFamily: "DMSans_400Regular",
                     textAlign: "center",
                     lineHeight: 20,
                   }}
@@ -266,7 +266,7 @@ export default function ChangePinScreen() {
                   style={{
                     color: colors.primary[400],
                     fontSize: 14,
-                    fontFamily: "Inter_500Medium",
+                    fontFamily: "DMSans_500Medium",
                   }}
                   maxFontSizeMultiplier={1.3}
                 >
@@ -308,7 +308,7 @@ export default function ChangePinScreen() {
                 style={{
                   color: tc.textMuted,
                   fontSize: 14,
-                  fontFamily: "Inter_500Medium",
+                  fontFamily: "DMSans_500Medium",
                 }}
                 maxFontSizeMultiplier={1.3}
               >
@@ -334,7 +334,7 @@ export default function ChangePinScreen() {
           style={{
             color: tc.textMuted,
             fontSize: 12,
-            fontFamily: "Inter_400Regular",
+            fontFamily: "DMSans_400Regular",
           }}
           maxFontSizeMultiplier={1.3}
         >
@@ -391,7 +391,7 @@ export default function ChangePinScreen() {
               style={{
                 color: tc.textSecondary,
                 fontSize: 15,
-                fontFamily: "Inter_500Medium",
+                fontFamily: "DMSans_500Medium",
               }}
             >
               Back
@@ -444,7 +444,7 @@ export default function ChangePinScreen() {
             style={{
               color: tc.textSecondary,
               fontSize: 15,
-              fontFamily: "Inter_500Medium",
+              fontFamily: "DMSans_500Medium",
             }}
           >
             Back

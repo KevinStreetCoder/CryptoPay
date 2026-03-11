@@ -70,7 +70,7 @@ export default function LanguageScreen() {
           })}
         >
           <Ionicons name="arrow-back" size={22} color={tc.textSecondary} />
-          <Text style={{ color: tc.textSecondary, fontSize: 16, fontWeight: "500" }}>
+          <Text style={{ color: tc.textSecondary, fontSize: 16, fontFamily: "DMSans_500Medium" }}>
             Language
           </Text>
         </Pressable>
@@ -112,7 +112,7 @@ export default function LanguageScreen() {
                       style={{
                         color: tc.textPrimary,
                         fontSize: 15,
-                        fontWeight: "600",
+                        fontFamily: "DMSans_600SemiBold",
                       }}
                     >
                       {lang.label}

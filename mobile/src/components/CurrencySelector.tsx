@@ -30,7 +30,7 @@ export function CurrencySelector({
           style={{
             color: tc.textSecondary,
             fontSize: 14,
-            fontFamily: "Inter_500Medium",
+            fontFamily: "DMSans_500Medium",
             marginBottom: 10,
           }}
         >
@@ -97,7 +97,7 @@ export function CurrencySelector({
                   style={{
                     color: isSelected ? colors.primary[400] : tc.textPrimary,
                     fontSize: 14,
-                    fontFamily: "Inter_600SemiBold",
+                    fontFamily: "DMSans_600SemiBold",
                   }}
                 >
                   {info.symbol}
@@ -106,7 +106,7 @@ export function CurrencySelector({
                   style={{
                     color: tc.textMuted,
                     fontSize: 11,
-                    fontFamily: "Inter_400Regular",
+                    fontFamily: "DMSans_400Regular",
                     marginTop: 1,
                   }}
                   numberOfLines={1}
