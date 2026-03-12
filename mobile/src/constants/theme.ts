@@ -105,12 +105,12 @@ export const borderRadius = {
 } as const;
 
 export const CURRENCIES = {
-  USDC: { name: "USD Coin", symbol: "USDC", iconSymbol: "$", icon: "logo-usd", decimals: 2 },
-  USDT: { name: "Tether", symbol: "USDT", iconSymbol: "$", icon: "logo-usd", decimals: 2 },
-  BTC: { name: "Bitcoin", symbol: "BTC", iconSymbol: "\u20BF", icon: "logo-bitcoin", decimals: 8 },
-  SOL: { name: "Solana", symbol: "SOL", iconSymbol: "S", icon: "sunny-outline", decimals: 4 },
-  ETH: { name: "Ethereum", symbol: "ETH", iconSymbol: "\u039E", icon: "diamond-outline", decimals: 6 },
-  KES: { name: "Kenyan Shilling", symbol: "KES", iconSymbol: "K", icon: "cash-outline", decimals: 2 },
+  USDC: { name: "USD Coin", symbol: "USDC", decimals: 2 },
+  USDT: { name: "Tether", symbol: "USDT", decimals: 2 },
+  BTC: { name: "Bitcoin", symbol: "BTC", decimals: 8 },
+  SOL: { name: "Solana", symbol: "SOL", decimals: 4 },
+  ETH: { name: "Ethereum", symbol: "ETH", decimals: 6 },
+  KES: { name: "Kenyan Shilling", symbol: "KES", decimals: 2 },
 } as const;
 
 export type CurrencyCode = keyof typeof CURRENCIES;

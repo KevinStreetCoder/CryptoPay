@@ -74,16 +74,20 @@ def _hash160(data: bytes) -> bytes:
 
 
 def _keccak256(data: bytes) -> bytes:
-    """Keccak-256 hash for Ethereum address derivation."""
-    from hashlib import sha3_256
-    # Python's sha3_256 is NIST SHA-3, not Keccak. Use pysha3 or manual.
-    # For Ethereum we need raw Keccak-256. web3 provides this.
+    """Keccak-256 hash for Ethereum/Tron address derivation.
+
+    IMPORTANT: Python's hashlib.sha3_256 is NIST SHA-3, NOT Keccak-256.
+    They differ in padding and produce different hashes. web3 is required.
+    """
     try:
         from web3 import Web3
         return Web3.keccak(data)
     except ImportError:
-        # Fallback: use SHA3-256 (close enough for address format, not consensus-safe)
-        return sha3_256(data).digest()
+        raise ImportError(
+            "web3 is required for Keccak-256 hashing (Ethereum/Tron address derivation). "
+            "Install with: pip install web3. "
+            "DO NOT use hashlib.sha3_256 as a fallback — it is NIST SHA-3, not Keccak-256."
+        )
 
 
 def _serialize_public_key(private_key_bytes: bytes, chain: str) -> bytes:
@@ -98,16 +102,16 @@ def _serialize_public_key(private_key_bytes: bytes, chain: str) -> bytes:
             private_key = Ed25519PrivateKey.from_private_bytes(private_key_bytes[:32])
             pub_bytes = private_key.public_key().public_bytes_raw()
             return pub_bytes
-        except Exception:
-            # Fallback: hash-based derivation
-            return hashlib.sha256(private_key_bytes).digest()
+        except ImportError:
+            raise ImportError(
+                "cryptography library is required for Ed25519 key derivation (Solana). "
+                "Install with: pip install cryptography"
+            )
     else:
         # secp256k1 for BTC, ETH, Tron, Polygon
         try:
             from cryptography.hazmat.primitives.asymmetric.ec import (
                 SECP256K1,
-                EllipticCurvePrivateNumbers,
-                EllipticCurvePublicNumbers,
                 derive_private_key,
             )
             from cryptography.hazmat.backends import default_backend
@@ -126,10 +130,16 @@ def _serialize_public_key(private_key_bytes: bytes, chain: str) -> bytes:
             prefix = b"\x02" if pub_numbers.y % 2 == 0 else b"\x03"
             return prefix + pub_numbers.x.to_bytes(32, "big")
 
+        except ImportError:
+            raise ImportError(
+                "cryptography library is required for secp256k1 key derivation "
+                "(BTC/ETH/Tron). Install with: pip install cryptography"
+            )
         except Exception as e:
-            logger.error(f"secp256k1 derivation failed: {e}")
-            # Deterministic fallback using double-hash
-            return b"\x02" + hashlib.sha256(private_key_bytes).digest()
+            raise RuntimeError(
+                f"secp256k1 key derivation failed: {e}. "
+                f"This is a critical error — deposit addresses cannot be generated safely."
+            )
 
 
 def _bip32_derive_key(master_key: bytes, master_chain_code: bytes, path: list[int]) -> tuple[bytes, bytes]:
@@ -146,12 +156,25 @@ def _bip32_derive_key(master_key: bytes, master_chain_code: bytes, path: list[in
             # Hardened child: HMAC-SHA512(Key = chain_code, Data = 0x00 || key || index)
             data = b"\x00" + key + struct.pack(">I", index)
         else:
-            # Normal child: use compressed public key
-            # For simplicity in deposit address generation, use hardened only
-            data = b"\x00" + key + struct.pack(">I", index)
+            # Normal child: HMAC-SHA512(Key = chain_code, Data = ser_P(key) || index)
+            # Uses the compressed public key of the parent, not the private key.
+            # This is critical for BIP-32 security — normal derivation with private
+            # key data would break the security model.
+            pub_key = _serialize_public_key(key, "ethereum")  # secp256k1 compressed pubkey
+            data = pub_key + struct.pack(">I", index)
 
         h = _hmac_sha512(chain_code, data)
-        key = h[:32]
+        child_key_bytes = h[:32]
+
+        # For normal derivation, add parent and child key modulo curve order
+        if index < 0x80000000:
+            order = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
+            parent_int = int.from_bytes(key, "big")
+            child_int = int.from_bytes(child_key_bytes, "big")
+            key = ((parent_int + child_int) % order).to_bytes(32, "big")
+        else:
+            key = child_key_bytes
+
         chain_code = h[32:]
 
     return key, chain_code

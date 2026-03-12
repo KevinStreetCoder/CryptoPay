@@ -3,6 +3,9 @@ Safaricom Daraja API client.
 
 Handles OAuth, STK Push, B2C, B2B, Transaction Status, and Reversal.
 All endpoints are async (callback-driven) — we initiate and receive results via webhook.
+
+Callback security: Uses per-transaction HMAC tokens in callback URLs.
+See apps.mpesa.middleware for token generation and verification.
 """
 
 import base64
@@ -14,6 +17,8 @@ import requests
 from cryptography.hazmat.primitives.asymmetric import padding as asym_padding
 from cryptography.x509 import load_pem_x509_certificate
 from django.conf import settings
+
+from .middleware import build_callback_url
 
 logger = logging.getLogger(__name__)
 
@@ -77,12 +82,15 @@ class MpesaClient:
         password = base64.b64encode(raw.encode()).decode()
         return password, timestamp
 
-    def stk_push(self, phone: str, amount: int, account_ref: str, description: str = "") -> dict:
+    def stk_push(self, phone: str, amount: int, account_ref: str, description: str = "", transaction_id: str = "") -> dict:
         """
         Initiate an STK Push (Lipa Na M-Pesa Online).
         Used for: User buying crypto with M-Pesa.
         """
         password, timestamp = self._generate_password()
+
+        # Build secure callback URL with per-transaction HMAC token
+        callback_url = build_callback_url("stk", transaction_id or account_ref)
 
         payload = {
             "BusinessShortCode": self.shortcode,
@@ -93,7 +101,7 @@ class MpesaClient:
             "PartyA": phone,
             "PartyB": self.shortcode,
             "PhoneNumber": phone,
-            "CallBackURL": f"{self.callback_base}/api/v1/mpesa/callback/stk/",
+            "CallBackURL": callback_url,
             "AccountReference": account_ref,
             "TransactionDesc": description or "CryptoPay deposit",
         }
@@ -131,11 +139,12 @@ class MpesaClient:
         )
         return response.json()
 
-    def b2c_payment(self, phone: str, amount: int, remarks: str = "") -> dict:
+    def b2c_payment(self, phone: str, amount: int, remarks: str = "", transaction_id: str = "") -> dict:
         """
         B2C payment (send money to user's M-Pesa).
         Used for: User selling crypto, receiving KES.
         """
+        tx_ref = transaction_id or f"b2c-{phone}"
         payload = {
             "InitiatorName": settings.MPESA_INITIATOR_NAME,
             "SecurityCredential": self._get_security_credential(),
@@ -145,7 +154,7 @@ class MpesaClient:
             "PartyB": phone,
             "Remarks": remarks or "CryptoPay payout",
             "QueueTimeOutURL": f"{self.callback_base}/api/v1/mpesa/callback/b2c/timeout/",
-            "ResultURL": f"{self.callback_base}/api/v1/mpesa/callback/b2c/",
+            "ResultURL": build_callback_url("b2c", tx_ref),
             "Occasion": "",
         }
 
@@ -162,11 +171,12 @@ class MpesaClient:
 
         return data
 
-    def b2b_payment(self, paybill: str, account: str, amount: int, remarks: str = "") -> dict:
+    def b2b_payment(self, paybill: str, account: str, amount: int, remarks: str = "", transaction_id: str = "") -> dict:
         """
         B2B payment (pay a Paybill from our shortcode).
         Used for: The core crypto-to-Paybill flow.
         """
+        tx_ref = transaction_id or f"b2b-{paybill}-{account}"
         payload = {
             "Initiator": settings.MPESA_INITIATOR_NAME,
             "SecurityCredential": self._get_security_credential(),
@@ -179,7 +189,7 @@ class MpesaClient:
             "AccountReference": account,
             "Remarks": remarks or "CryptoPay bill payment",
             "QueueTimeOutURL": f"{self.callback_base}/api/v1/mpesa/callback/b2b/timeout/",
-            "ResultURL": f"{self.callback_base}/api/v1/mpesa/callback/b2b/",
+            "ResultURL": build_callback_url("b2b", tx_ref),
         }
 
         response = requests.post(
@@ -195,8 +205,9 @@ class MpesaClient:
 
         return data
 
-    def buy_goods(self, till: str, amount: int, remarks: str = "") -> dict:
+    def buy_goods(self, till: str, amount: int, remarks: str = "", transaction_id: str = "") -> dict:
         """B2B BuyGoods — pay a Till number."""
+        tx_ref = transaction_id or f"till-{till}"
         payload = {
             "Initiator": settings.MPESA_INITIATOR_NAME,
             "SecurityCredential": self._get_security_credential(),
@@ -208,7 +219,7 @@ class MpesaClient:
             "PartyB": till,
             "Remarks": remarks or "CryptoPay till payment",
             "QueueTimeOutURL": f"{self.callback_base}/api/v1/mpesa/callback/b2b/timeout/",
-            "ResultURL": f"{self.callback_base}/api/v1/mpesa/callback/b2b/",
+            "ResultURL": build_callback_url("b2b", tx_ref),
         }
 
         response = requests.post(

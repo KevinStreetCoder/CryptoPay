@@ -1,10 +1,13 @@
-import { View, Text, Pressable } from "react-native";
+import { View, Text, Pressable, Animated, Platform } from "react-native";
+import { useRef, useCallback } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { Transaction, getTxKesAmount, getTxRecipient } from "../api/payments";
 import { colors, getThemeColors } from "../constants/theme";
 import { useThemeMode } from "../stores/theme";
 import { usePhonePrivacy } from "../utils/privacy";
+
+const useNative = Platform.OS !== "web";
 
 const TYPE_CONFIG: Record<
   string,
@@ -66,6 +69,14 @@ export function TransactionItem({ transaction, onPress }: TransactionItemProps) 
     }
   };
 
+  const scale = useRef(new Animated.Value(1)).current;
+  const handlePressIn = useCallback(() => {
+    Animated.spring(scale, { toValue: 0.97, friction: 8, useNativeDriver: useNative }).start();
+  }, []);
+  const handlePressOut = useCallback(() => {
+    Animated.spring(scale, { toValue: 1, friction: 6, useNativeDriver: useNative }).start();
+  }, []);
+
   const config = TYPE_CONFIG[transaction.type] || {
     icon: "ellipsis-horizontal",
     label: transaction.type,
@@ -107,9 +118,11 @@ export function TransactionItem({ transaction, onPress }: TransactionItemProps) 
     : rawRecipient;
 
   return (
-    <View>
+    <Animated.View style={{ transform: [{ scale }] }}>
       <Pressable
         onPress={handlePress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
         style={({ pressed }) => [
           {
             flexDirection: "row" as const,
@@ -219,6 +232,6 @@ export function TransactionItem({ transaction, onPress }: TransactionItemProps) 
           marginLeft: 72,
         }}
       />
-    </View>
+    </Animated.View>
   );
 }

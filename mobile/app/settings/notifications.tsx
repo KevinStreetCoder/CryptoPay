@@ -192,9 +192,9 @@ export default function NotificationsScreen() {
         </View>
       )}
 
-      <View style={isDesktop ? { flexDirection: "row", flexWrap: "wrap", gap: 16 } : {}}>
+      <View style={isDesktop ? { flexDirection: "row", flexWrap: "wrap", gap: 16, width: "100%" } : {}}>
       {sections.map((section) => (
-        <View key={section.titleKey} style={{ marginTop: 20, ...(isDesktop ? { width: "48%", minWidth: 300, flexGrow: 1 } : {}) }}>
+        <View key={section.titleKey} style={{ marginTop: 20, ...(isDesktop ? { flex: 1, minWidth: 300 } : {}) }}>
           {/* Section header */}
           <Text
             style={{

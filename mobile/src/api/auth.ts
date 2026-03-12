@@ -96,8 +96,10 @@ export const authApi = {
   // KYC
   getKYCDocuments: () => api.get<KYCDocument[]>("/auth/kyc/documents/"),
 
-  uploadKYCDocument: (data: { document_type: string; file_url: string }) =>
-    api.post<KYCDocument>("/auth/kyc/documents/", data),
+  uploadKYCDocument: (data: FormData) =>
+    api.post<KYCDocument>("/auth/kyc/documents/", data, {
+      headers: { "Content-Type": undefined as any },
+    }),
 
   // Push notifications
   registerPushToken: (token: string, platform: "ios" | "android") =>

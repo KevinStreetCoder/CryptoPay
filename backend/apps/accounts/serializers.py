@@ -125,7 +125,28 @@ class KYCUploadSerializer(serializers.Serializer):
         ("kra_pin", "KRA PIN"),
         ("proof_of_address", "Proof of Address"),
     ])
-    file_url = serializers.URLField(max_length=500)
+    # Accept either a direct file upload or a pre-signed URL
+    file = serializers.FileField(required=False)
+    file_url = serializers.URLField(max_length=500, required=False)
+
+    def validate_file(self, value):
+        if value:
+            max_size = 10 * 1024 * 1024  # 10 MB
+            if value.size > max_size:
+                raise serializers.ValidationError("File must be under 10MB")
+            allowed = ("image/jpeg", "image/png", "image/webp", "application/pdf")
+            if value.content_type not in allowed:
+                raise serializers.ValidationError(
+                    "Allowed formats: JPEG, PNG, WebP, PDF"
+                )
+        return value
+
+    def validate(self, data):
+        if not data.get("file") and not data.get("file_url"):
+            raise serializers.ValidationError(
+                "Either 'file' or 'file_url' is required."
+            )
+        return data
 
 
 class PushTokenSerializer(serializers.Serializer):

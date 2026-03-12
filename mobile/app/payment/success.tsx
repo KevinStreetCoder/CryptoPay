@@ -3,7 +3,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useRef, useState } from "react";
-import { Animated } from "react-native";
+import { Animated, Easing } from "react-native";
 import * as Haptics from "expo-haptics";
 import { Button } from "../../src/components/Button";
 import { useToast } from "../../src/components/Toast";
@@ -13,20 +13,82 @@ import { useThemeMode } from "../../src/stores/theme";
 const isWeb = Platform.OS === "web";
 const useNative = Platform.OS !== "web";
 
+/* ═══════════════════════════════════════════════════════════════════════════════
+   Animated Success Checkmark — ring expand + check draw + particle burst
+   ═══════════════════════════════════════════════════════════════════════════════ */
 function AnimatedCheckmark() {
-  const scale = useRef(new Animated.Value(0)).current;
+  const ringScale = useRef(new Animated.Value(0)).current;
+  const checkScale = useRef(new Animated.Value(0)).current;
+  const checkRotate = useRef(new Animated.Value(-0.15)).current;
+  const glowOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.spring(scale, {
+    // 1. Ring expands
+    Animated.spring(ringScale, {
       toValue: 1,
-      friction: 5,
-      tension: 80,
+      friction: 6,
+      tension: 60,
       useNativeDriver: useNative,
     }).start();
+
+    // 2. Checkmark bounces in (delayed)
+    Animated.sequence([
+      Animated.delay(250),
+      Animated.parallel([
+        Animated.spring(checkScale, {
+          toValue: 1,
+          friction: 4,
+          tension: 100,
+          useNativeDriver: useNative,
+        }),
+        Animated.timing(checkRotate, {
+          toValue: 0,
+          duration: 300,
+          easing: Easing.out(Easing.back(1.5)),
+          useNativeDriver: useNative,
+        }),
+      ]),
+    ]).start();
+
+    // 3. Glow pulse
+    Animated.sequence([
+      Animated.delay(400),
+      Animated.timing(glowOpacity, {
+        toValue: 1,
+        duration: 400,
+        useNativeDriver: useNative,
+      }),
+      Animated.timing(glowOpacity, {
+        toValue: 0.4,
+        duration: 800,
+        useNativeDriver: useNative,
+      }),
+    ]).start();
   }, []);
 
+  const checkRotateInterpolated = checkRotate.interpolate({
+    inputRange: [-0.15, 0],
+    outputRange: ["-15deg", "0deg"],
+  });
+
   return (
-    <View style={{ alignItems: "center", justifyContent: "center", marginBottom: 32 }}>
+    <View style={{ alignItems: "center", justifyContent: "center", marginBottom: 32, height: 120 }}>
+      {/* Glow ring */}
+      <Animated.View
+        style={{
+          position: "absolute",
+          width: 110,
+          height: 110,
+          borderRadius: 55,
+          backgroundColor: colors.success + "0C",
+          borderWidth: 1,
+          borderColor: colors.success + "15",
+          opacity: glowOpacity,
+          transform: [{ scale: ringScale }],
+        }}
+      />
+
+      {/* Main circle */}
       <Animated.View
         style={{
           width: 88,
@@ -37,15 +99,27 @@ function AnimatedCheckmark() {
           justifyContent: "center",
           borderWidth: 2,
           borderColor: colors.success + "35",
-          transform: [{ scale }],
+          transform: [{ scale: ringScale }],
         }}
       >
-        <Ionicons name="checkmark" size={44} color={colors.success} />
+        <Animated.View
+          style={{
+            transform: [
+              { scale: checkScale },
+              { rotate: checkRotateInterpolated },
+            ],
+          }}
+        >
+          <Ionicons name="checkmark" size={44} color={colors.success} />
+        </Animated.View>
       </Animated.View>
     </View>
   );
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════════
+   Detail Row
+   ═══════════════════════════════════════════════════════════════════════════════ */
 function DetailRow({
   label,
   value,
@@ -79,6 +153,9 @@ function DetailRow({
   );
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════════
+   Main Screen
+   ═══════════════════════════════════════════════════════════════════════════════ */
 export default function PaymentSuccessScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{
@@ -87,6 +164,8 @@ export default function PaymentSuccessScreen() {
     crypto_currency: string;
     recipient: string;
     transaction_id: string;
+    status?: string; // "failed" for failure state
+    error_message?: string;
   }>();
 
   const { isDark } = useThemeMode();
@@ -97,10 +176,35 @@ export default function PaymentSuccessScreen() {
   const { width } = useWindowDimensions();
   const isDesktop = isWeb && width >= 768;
 
+  // Staggered fade-in for content sections
+  const cardFade = useRef(new Animated.Value(0)).current;
+  const cardSlide = useRef(new Animated.Value(30)).current;
+  const buttonsFade = useRef(new Animated.Value(0)).current;
+
+  const isFailed = params.status === "failed";
+
   useEffect(() => {
     if (!isWeb) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Haptics.notificationAsync(
+        isFailed
+          ? Haptics.NotificationFeedbackType.Error
+          : Haptics.NotificationFeedbackType.Success
+      );
     }
+
+    // Stagger animations
+    Animated.sequence([
+      Animated.delay(400),
+      Animated.parallel([
+        Animated.timing(cardFade, { toValue: 1, duration: 500, useNativeDriver: useNative }),
+        Animated.spring(cardSlide, { toValue: 0, tension: 80, friction: 12, useNativeDriver: useNative }),
+      ]),
+    ]).start();
+
+    Animated.sequence([
+      Animated.delay(700),
+      Animated.timing(buttonsFade, { toValue: 1, duration: 400, useNativeDriver: useNative }),
+    ]).start();
   }, []);
 
   const toast = useToast();
@@ -138,7 +242,7 @@ export default function PaymentSuccessScreen() {
   };
 
   const handleShare = async () => {
-    const receiptText = `CryptoPay Payment Receipt\n\nAmount: KSh ${amountKES.toLocaleString()}\nCrypto: ${params.crypto_amount} ${params.crypto_currency}\nSent To: ${params.recipient}\nStatus: Processing\n\nPowered by CryptoPay`;
+    const receiptText = `CryptoPay Payment Receipt\n\nAmount: KSh ${amountKES.toLocaleString()}\nCrypto: ${params.crypto_amount} ${params.crypto_currency}\nSent To: ${params.recipient}\nStatus: ${isFailed ? "Failed" : "Processing"}\n\nPowered by CryptoPay`;
 
     if (isWeb) {
       if (navigator.clipboard) {
@@ -165,7 +269,7 @@ export default function PaymentSuccessScreen() {
           width: isDesktop ? "100%" : undefined,
         }}
       >
-        <AnimatedCheckmark />
+        {isFailed ? <AnimatedFailure /> : <AnimatedCheckmark />}
 
         <Text
           style={{
@@ -176,7 +280,7 @@ export default function PaymentSuccessScreen() {
             letterSpacing: -0.5,
           }}
         >
-          Payment Sent!
+          {isFailed ? "Payment Failed" : "Payment Sent!"}
         </Text>
         <Text
           style={{
@@ -188,138 +292,172 @@ export default function PaymentSuccessScreen() {
             lineHeight: 22,
           }}
         >
-          Your payment is being processed via M-Pesa
+          {isFailed
+            ? params.error_message || "Something went wrong. Your funds are safe."
+            : "Your payment is being processed via M-Pesa"}
         </Text>
 
-        {/* Receipt Card */}
-        <View
+        {/* Receipt Card — animated */}
+        <Animated.View
           style={{
-            backgroundColor: tc.dark.card,
-            borderRadius: 24,
             width: "100%",
-            overflow: "hidden",
-            borderWidth: 1,
-            borderColor: tc.glass.border,
-            ...ts.sm,
+            opacity: cardFade,
+            transform: [{ translateY: cardSlide }],
           }}
         >
           <View
             style={{
-              backgroundColor: colors.primary[500] + "0C",
-              paddingVertical: 22,
-              paddingHorizontal: 24,
-              alignItems: "center",
-              borderBottomWidth: 1,
-              borderBottomColor: tc.glass.border,
+              backgroundColor: tc.dark.card,
+              borderRadius: 24,
+              width: "100%",
+              overflow: "hidden",
+              borderWidth: 1,
+              borderColor: isFailed ? colors.error + "30" : tc.glass.border,
+              ...(isWeb ? { boxShadow: "0 8px 32px rgba(0,0,0,0.25)" } as any : {}),
             }}
           >
-            <Text
+            <View
               style={{
-                color: tc.textMuted,
-                fontSize: 11,
-                fontFamily: "DMSans_500Medium",
-                textTransform: "uppercase",
-                letterSpacing: 1.2,
-                marginBottom: 8,
+                backgroundColor: isFailed ? colors.error + "0C" : colors.primary[500] + "0C",
+                paddingVertical: 22,
+                paddingHorizontal: 24,
+                alignItems: "center",
+                borderBottomWidth: 1,
+                borderBottomColor: tc.glass.border,
               }}
             >
-              Amount Paid
-            </Text>
-            <Text
-              style={{
-                color: tc.textPrimary,
-                fontSize: 34,
-                fontFamily: "DMSans_700Bold",
-                letterSpacing: -0.5,
-              }}
-            >
-              KSh {amountKES.toLocaleString()}
-            </Text>
-          </View>
+              <Text
+                style={{
+                  color: tc.textMuted,
+                  fontSize: 11,
+                  fontFamily: "DMSans_500Medium",
+                  textTransform: "uppercase",
+                  letterSpacing: 1.2,
+                  marginBottom: 8,
+                }}
+              >
+                {isFailed ? "Amount" : "Amount Paid"}
+              </Text>
+              <Text
+                style={{
+                  color: tc.textPrimary,
+                  fontSize: 34,
+                  fontFamily: "DMSans_700Bold",
+                  letterSpacing: -0.5,
+                }}
+              >
+                KSh {amountKES.toLocaleString()}
+              </Text>
+            </View>
 
-          <View style={{ paddingHorizontal: 24 }}>
-            <DetailRow label="Crypto Used" value={`${params.crypto_amount} ${params.crypto_currency}`} icon="wallet-outline" tc={tc} />
-            <View style={{ height: 1, backgroundColor: tc.glass.border }} />
-            <DetailRow label="Sent To" value={params.recipient || "—"} icon="person-outline" tc={tc} />
-            <View style={{ height: 1, backgroundColor: tc.glass.border }} />
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 14 }}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                <Ionicons name="checkmark-circle-outline" size={16} color={tc.textMuted} />
-                <Text style={{ color: tc.textMuted, fontSize: 14, fontFamily: "DMSans_400Regular" }}>Status</Text>
-              </View>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: colors.success + "15", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 5 }}>
-                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: colors.success }} />
-                <Text style={{ color: colors.success, fontSize: 13, fontFamily: "DMSans_600SemiBold" }}>Processing</Text>
+            <View style={{ paddingHorizontal: 24 }}>
+              <DetailRow label="Crypto Used" value={`${params.crypto_amount} ${params.crypto_currency}`} icon="wallet-outline" tc={tc} />
+              <View style={{ height: 1, backgroundColor: tc.glass.border }} />
+              <DetailRow label="Sent To" value={params.recipient || "\u2014"} icon="person-outline" tc={tc} />
+              <View style={{ height: 1, backgroundColor: tc.glass.border }} />
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 14 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <Ionicons name={isFailed ? "close-circle-outline" : "checkmark-circle-outline"} size={16} color={tc.textMuted} />
+                  <Text style={{ color: tc.textMuted, fontSize: 14, fontFamily: "DMSans_400Regular" }}>Status</Text>
+                </View>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 6,
+                    backgroundColor: isFailed ? colors.error + "15" : colors.success + "15",
+                    borderRadius: 10,
+                    paddingHorizontal: 12,
+                    paddingVertical: 5,
+                  }}
+                >
+                  <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: isFailed ? colors.error : colors.success }} />
+                  <Text
+                    style={{
+                      color: isFailed ? colors.error : colors.success,
+                      fontSize: 13,
+                      fontFamily: "DMSans_600SemiBold",
+                    }}
+                  >
+                    {isFailed ? "Failed" : "Processing"}
+                  </Text>
+                </View>
               </View>
             </View>
           </View>
-        </View>
+        </Animated.View>
 
-        {/* Action Buttons */}
-        <View style={{ flexDirection: "row", gap: 12, marginTop: 20, width: "100%" }}>
-          <Pressable
-            onPress={handleDownloadReceipt}
-            disabled={downloadingReceipt}
-            style={({ pressed, hovered }: any) => ({
-              flex: 1,
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 6,
-              paddingVertical: 14,
-              borderRadius: 14,
-              backgroundColor: isWeb && hovered ? tc.dark.elevated : tc.dark.card,
-              borderWidth: 1,
-              borderColor: isWeb && hovered ? tc.glass.borderStrong : tc.glass.border,
-              opacity: downloadingReceipt ? 0.6 : pressed ? 0.85 : 1,
-              ...(isWeb ? { cursor: "pointer", transition: "all 0.15s ease" } as any : {}),
-            })}
+        {/* Action Buttons — animated */}
+        {!isFailed && (
+          <Animated.View style={{ flexDirection: "row", gap: 12, marginTop: 20, width: "100%", opacity: buttonsFade }}>
+            <Pressable
+              onPress={handleDownloadReceipt}
+              disabled={downloadingReceipt}
+              style={({ pressed, hovered }: any) => ({
+                flex: 1,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
+                paddingVertical: 14,
+                borderRadius: 14,
+                backgroundColor: isWeb && hovered ? tc.dark.elevated : tc.dark.card,
+                borderWidth: 1,
+                borderColor: isWeb && hovered ? tc.glass.borderStrong : tc.glass.border,
+                opacity: downloadingReceipt ? 0.6 : pressed ? 0.85 : 1,
+                ...(isWeb ? { cursor: "pointer", transition: "all 0.15s ease" } as any : {}),
+              })}
+            >
+              <Ionicons name="download-outline" size={18} color={colors.primary[400]} />
+              <Text style={{ color: colors.primary[400], fontSize: 14, fontFamily: "DMSans_600SemiBold" }}>
+                {downloadingReceipt ? "Downloading..." : "PDF Receipt"}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={handleShare}
+              style={({ pressed, hovered }: any) => ({
+                flex: 1,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
+                paddingVertical: 14,
+                borderRadius: 14,
+                backgroundColor: isWeb && hovered ? tc.dark.elevated : tc.dark.card,
+                borderWidth: 1,
+                borderColor: isWeb && hovered ? tc.glass.borderStrong : tc.glass.border,
+                opacity: pressed ? 0.85 : 1,
+                ...(isWeb ? { cursor: "pointer", transition: "all 0.15s ease" } as any : {}),
+              })}
+            >
+              <Ionicons name="share-outline" size={18} color={colors.primary[400]} />
+              <Text style={{ color: colors.primary[400], fontSize: 14, fontFamily: "DMSans_600SemiBold" }}>Share</Text>
+            </Pressable>
+          </Animated.View>
+        )}
+
+        <Animated.View style={{ opacity: buttonsFade, width: "100%", marginTop: isFailed ? 20 : 8 }}>
+          <Text
+            style={{
+              color: tc.textMuted,
+              fontSize: 12,
+              fontFamily: "DMSans_400Regular",
+              textAlign: "center",
+              marginTop: isFailed ? 0 : 6,
+              lineHeight: 18,
+              opacity: 0.8,
+              marginBottom: 12,
+            }}
           >
-            <Ionicons name="download-outline" size={18} color={colors.primary[400]} />
-            <Text style={{ color: colors.primary[400], fontSize: 14, fontFamily: "DMSans_600SemiBold" }}>
-              {downloadingReceipt ? "Downloading..." : "PDF Receipt"}
-            </Text>
-          </Pressable>
-
-          <Pressable
-            onPress={handleShare}
-            style={({ pressed, hovered }: any) => ({
-              flex: 1,
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 6,
-              paddingVertical: 14,
-              borderRadius: 14,
-              backgroundColor: isWeb && hovered ? tc.dark.elevated : tc.dark.card,
-              borderWidth: 1,
-              borderColor: isWeb && hovered ? tc.glass.borderStrong : tc.glass.border,
-              opacity: pressed ? 0.85 : 1,
-              ...(isWeb ? { cursor: "pointer", transition: "all 0.15s ease" } as any : {}),
-            })}
-          >
-            <Ionicons name="share-outline" size={18} color={colors.primary[400]} />
-            <Text style={{ color: colors.primary[400], fontSize: 14, fontFamily: "DMSans_600SemiBold" }}>Share</Text>
-          </Pressable>
-        </View>
-
-        <Text
-          style={{
-            color: tc.textMuted,
-            fontSize: 12,
-            fontFamily: "DMSans_400Regular",
-            textAlign: "center",
-            marginTop: 14,
-            lineHeight: 18,
-            opacity: 0.8,
-          }}
-        >
-          You'll receive an M-Pesa confirmation SMS and email receipt shortly.{"\n"}
-          Transaction details are in your history.
-        </Text>
+            {isFailed
+              ? "No funds have been deducted from your wallet.\nPlease try again or contact support."
+              : "You'll receive an M-Pesa confirmation SMS and email receipt shortly.\nTransaction details are in your history."}
+          </Text>
+        </Animated.View>
       </View>
 
-      <View
+      <Animated.View
         style={{
           paddingHorizontal: isDesktop ? 48 : 24,
           paddingBottom: 32,
@@ -327,11 +465,107 @@ export default function PaymentSuccessScreen() {
           maxWidth: isDesktop ? 560 : undefined,
           alignSelf: isDesktop ? "center" : undefined,
           width: isDesktop ? "100%" : undefined,
+          opacity: buttonsFade,
         }}
       >
-        <Button title="Done" onPress={() => router.replace("/(tabs)")} size="lg" />
-        <Button title="Make Another Payment" onPress={() => router.replace("/(tabs)/pay")} variant="secondary" size="lg" />
-      </View>
+        {isFailed ? (
+          <>
+            <Button
+              title="Try Again"
+              onPress={() => { if (router.canGoBack()) router.back(); else router.replace("/(tabs)/pay" as any); }}
+              size="lg"
+              icon={<Ionicons name="refresh-outline" size={20} color="#FFFFFF" />}
+            />
+            <Button
+              title="Go Home"
+              onPress={() => router.replace("/(tabs)")}
+              variant="secondary"
+              size="lg"
+              icon={<Ionicons name="home-outline" size={20} color={isDark ? "#FFFFFF" : "#0F172A"} />}
+            />
+          </>
+        ) : (
+          <>
+            <Button
+              title="Done"
+              onPress={() => router.replace("/(tabs)")}
+              size="lg"
+              icon={<Ionicons name="checkmark-done-outline" size={20} color="#FFFFFF" />}
+            />
+            <Button
+              title="Make Another Payment"
+              onPress={() => router.replace("/(tabs)/pay")}
+              variant="secondary"
+              size="lg"
+              icon={<Ionicons name="repeat-outline" size={20} color={isDark ? "#FFFFFF" : "#0F172A"} />}
+            />
+          </>
+        )}
+      </Animated.View>
     </SafeAreaView>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   Animated Failure — shake + X mark
+   ═══════════════════════════════════════════════════════════════════════════════ */
+function AnimatedFailure() {
+  const ringScale = useRef(new Animated.Value(0)).current;
+  const xScale = useRef(new Animated.Value(0)).current;
+  const shake = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    // Ring expands
+    Animated.spring(ringScale, {
+      toValue: 1,
+      friction: 6,
+      tension: 60,
+      useNativeDriver: useNative,
+    }).start();
+
+    // X mark appears + shake
+    Animated.sequence([
+      Animated.delay(250),
+      Animated.spring(xScale, {
+        toValue: 1,
+        friction: 4,
+        tension: 100,
+        useNativeDriver: useNative,
+      }),
+      // Shake sequence
+      Animated.sequence([
+        Animated.timing(shake, { toValue: 10, duration: 50, useNativeDriver: useNative }),
+        Animated.timing(shake, { toValue: -10, duration: 50, useNativeDriver: useNative }),
+        Animated.timing(shake, { toValue: 8, duration: 50, useNativeDriver: useNative }),
+        Animated.timing(shake, { toValue: -8, duration: 50, useNativeDriver: useNative }),
+        Animated.timing(shake, { toValue: 4, duration: 50, useNativeDriver: useNative }),
+        Animated.timing(shake, { toValue: 0, duration: 50, useNativeDriver: useNative }),
+      ]),
+    ]).start();
+  }, []);
+
+  return (
+    <View style={{ alignItems: "center", justifyContent: "center", marginBottom: 32, height: 120 }}>
+      <Animated.View
+        style={{
+          width: 88,
+          height: 88,
+          borderRadius: 44,
+          backgroundColor: colors.error + "18",
+          alignItems: "center",
+          justifyContent: "center",
+          borderWidth: 2,
+          borderColor: colors.error + "35",
+          transform: [
+            { scale: ringScale },
+            { translateX: shake },
+          ],
+        }}
+      >
+        <Animated.View style={{ transform: [{ scale: xScale }] }}>
+          <Ionicons name="close" size={44} color={colors.error} />
+        </Animated.View>
+      </Animated.View>
+    </View>
   );
 }

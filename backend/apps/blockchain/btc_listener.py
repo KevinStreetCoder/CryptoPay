@@ -20,6 +20,7 @@ from apps.wallets.models import Wallet
 from apps.wallets.services import WalletService
 
 from .models import BlockchainDeposit
+from .security import check_confirmation_monotonicity, is_dust_deposit, is_rbf_signaled, estimate_usd_value, get_required_confirmations
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +104,10 @@ def monitor_btc_deposits():
                 if total_received <= 0:
                     continue
 
+                # Security: reject dust deposits
+                if is_dust_deposit(total_received, "BTC"):
+                    continue
+
                 # Get sender address (first input)
                 from_addr = ""
                 inputs = tx.get("inputs", [])
@@ -112,9 +117,21 @@ def monitor_btc_deposits():
                 confirmations = tx.get("confirmations", 0)
                 block_height = tx.get("block_height", None)
 
+                # Security: RBF detection — unconfirmed RBF txs can be replaced
+                rbf_flagged = is_rbf_signaled(tx) if confirmations == 0 else False
+                if rbf_flagged:
+                    logger.warning(
+                        f"RBF-signaled unconfirmed BTC tx {tx_hash[:16]}... "
+                        f"— will not credit until confirmed"
+                    )
+
+                # Security: amount-based confirmation tier
+                usd_value = estimate_usd_value(total_received, "BTC")
+                dynamic_confirmations = get_required_confirmations("bitcoin", usd_value)
+
                 status = (
                     BlockchainDeposit.Status.CONFIRMED
-                    if confirmations >= required_confirmations
+                    if confirmations >= dynamic_confirmations
                     else BlockchainDeposit.Status.DETECTING
                 )
 
@@ -126,14 +143,14 @@ def monitor_btc_deposits():
                     amount=total_received,
                     currency="BTC",
                     confirmations=confirmations,
-                    required_confirmations=required_confirmations,
+                    required_confirmations=dynamic_confirmations,
                     status=status,
                     block_number=block_height or 0,
                 )
 
                 logger.info(
                     f"Detected BTC deposit: {total_received} BTC to {address[:10]}... "
-                    f"tx={tx_hash[:16]}... confirmations={confirmations}"
+                    f"tx={tx_hash[:16]}... ({confirmations}/{dynamic_confirmations} confs)"
                 )
 
         except requests.RequestException as e:
@@ -173,8 +190,14 @@ def update_btc_confirmations():
             tx_data = response.json()
             confirmations = tx_data.get("confirmations", 0)
 
+            # Security: confirmation monotonicity check (re-org detection)
+            if not check_confirmation_monotonicity(deposit, confirmations):
+                deposit.status = BlockchainDeposit.Status.CONFIRMING
+                deposit.save(update_fields=["status"])
+                continue
+
             deposit.confirmations = confirmations
-            if confirmations >= required:
+            if confirmations >= deposit.required_confirmations:
                 deposit.status = BlockchainDeposit.Status.CONFIRMED
             else:
                 deposit.status = BlockchainDeposit.Status.CONFIRMING

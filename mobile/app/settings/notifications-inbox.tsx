@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { paymentsApi, Transaction, getTxKesAmount, getTxRecipient } from "../../src/api/payments";
 import { colors, getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
 
@@ -20,7 +21,7 @@ type NotificationType = "transaction" | "deposit" | "security" | "system";
 type FilterTab = "all" | "transaction" | "security" | "system";
 
 interface Notification {
-  id: number;
+  id: string;
   type: NotificationType;
   title: string;
   body: string;
@@ -29,113 +30,60 @@ interface Notification {
   amount?: string;
 }
 
-/* ─── Mock data ─── */
-const now = new Date();
-const today = (h: number, m: number) => {
-  const d = new Date(now);
-  d.setHours(h, m, 0, 0);
-  return d;
-};
-const yesterday = (h: number, m: number) => {
-  const d = new Date(now);
-  d.setDate(d.getDate() - 1);
-  d.setHours(h, m, 0, 0);
-  return d;
-};
-const daysAgo = (days: number, h: number, m: number) => {
-  const d = new Date(now);
-  d.setDate(d.getDate() - days);
-  d.setHours(h, m, 0, 0);
-  return d;
-};
+/* ─── Convert real transactions to notification items ─── */
+function txToNotificationType(type: string): NotificationType {
+  if (type === "DEPOSIT") return "deposit";
+  if (type === "PAYBILL_PAYMENT" || type === "TILL_PAYMENT" || type === "SEND_MPESA" || type === "BUY" || type === "SELL")
+    return "transaction";
+  return "transaction";
+}
 
-const INITIAL_NOTIFICATIONS: Notification[] = [
-  {
-    id: 1,
-    type: "transaction",
-    title: "Payment Sent",
-    body: "KSh 5,000 sent to Safaricom Paybill 174379. Transaction confirmed on-chain.",
-    timestamp: today(14, 32),
-    read: false,
-    amount: "-0.038 USDT",
-  },
-  {
-    id: 2,
-    type: "deposit",
-    title: "Deposit Confirmed",
-    body: "0.05 BTC deposit has been credited to your wallet. 3 network confirmations received.",
-    timestamp: today(11, 15),
-    read: false,
-    amount: "+0.05 BTC",
-  },
-  {
-    id: 3,
-    type: "security",
-    title: "New Login Detected",
-    body: "New login from Chrome on Windows 11 in Nairobi, Kenya. If this wasn't you, secure your account immediately.",
-    timestamp: today(9, 3),
-    read: false,
-  },
-  {
-    id: 4,
-    type: "transaction",
-    title: "Till Payment Successful",
-    body: "KSh 1,250 paid to Java House Till 5274930. Enjoy your meal!",
-    timestamp: yesterday(18, 45),
-    read: true,
-    amount: "-0.0096 USDT",
-  },
-  {
-    id: 5,
-    type: "deposit",
-    title: "USDT Received",
-    body: "150.00 USDT received from external wallet 0x7a3d...f2e1.",
-    timestamp: yesterday(14, 20),
-    read: true,
-    amount: "+150.00 USDT",
-  },
-  {
-    id: 6,
-    type: "security",
-    title: "Two-Factor Authentication Enabled",
-    body: "2FA has been successfully enabled on your account. Your account is now more secure.",
-    timestamp: yesterday(10, 0),
-    read: true,
-  },
-  {
-    id: 7,
-    type: "system",
-    title: "Scheduled Maintenance",
-    body: "CryptoPay will undergo maintenance on March 15 from 2:00 AM - 4:00 AM EAT. Services may be briefly unavailable.",
-    timestamp: daysAgo(2, 16, 30),
-    read: true,
-  },
-  {
-    id: 8,
-    type: "transaction",
-    title: "M-Pesa Send Completed",
-    body: "KSh 10,000 sent to +254 712 *** 890 via M-Pesa. Recipient confirmed.",
-    timestamp: daysAgo(3, 9, 12),
-    read: true,
-    amount: "-0.077 USDT",
-  },
-  {
-    id: 9,
-    type: "system",
-    title: "New Feature: Crypto Charts",
-    body: "You can now view interactive price charts for all supported cryptocurrencies. Check it out in the Wallet tab!",
-    timestamp: daysAgo(4, 12, 0),
-    read: true,
-  },
-  {
-    id: 10,
-    type: "system",
-    title: "Welcome to CryptoPay!",
-    body: "Your account is ready. Start by depositing crypto to your wallet and paying with crypto across Kenya.",
-    timestamp: daysAgo(7, 8, 0),
-    read: true,
-  },
-];
+function txToNotificationTitle(tx: Transaction): string {
+  switch (tx.type) {
+    case "PAYBILL_PAYMENT": return tx.status === "completed" ? "Payment Sent" : tx.status === "failed" ? "Payment Failed" : "Payment Processing";
+    case "TILL_PAYMENT": return tx.status === "completed" ? "Till Payment Successful" : tx.status === "failed" ? "Till Payment Failed" : "Till Payment Processing";
+    case "SEND_MPESA": return tx.status === "completed" ? "M-Pesa Send Completed" : tx.status === "failed" ? "M-Pesa Send Failed" : "M-Pesa Send Processing";
+    case "DEPOSIT": return "Deposit Confirmed";
+    case "BUY": return "Crypto Purchased";
+    case "SELL": return "Crypto Sold";
+    default: return tx.type;
+  }
+}
+
+function txToNotificationBody(tx: Transaction): string {
+  const kes = getTxKesAmount(tx);
+  const recipient = getTxRecipient(tx);
+  const kesStr = `KSh ${kes.toLocaleString("en-KE")}`;
+
+  switch (tx.type) {
+    case "PAYBILL_PAYMENT": return `${kesStr} sent to Paybill ${recipient || ""}.`;
+    case "TILL_PAYMENT": return `${kesStr} paid to Till ${recipient || ""}.`;
+    case "SEND_MPESA": return `${kesStr} sent to ${recipient || "M-Pesa"}.`;
+    case "DEPOSIT": return `${tx.source_currency} deposit credited to your wallet.`;
+    case "BUY": return `Purchased crypto via M-Pesa STK Push for ${kesStr}.`;
+    default: return `Transaction ${tx.status}.`;
+  }
+}
+
+function txToNotificationAmount(tx: Transaction): string | undefined {
+  if (!tx.source_currency || tx.source_currency === "KES") return undefined;
+  const amount = parseFloat(tx.source_amount || "0");
+  if (amount === 0) return undefined;
+  const isIncoming = tx.type === "DEPOSIT";
+  return `${isIncoming ? "+" : "-"}${amount.toFixed(amount < 1 ? 4 : 2)} ${tx.source_currency}`;
+}
+
+function transactionsToNotifications(transactions: Transaction[]): Notification[] {
+  return transactions.map((tx) => ({
+    id: tx.id,
+    type: txToNotificationType(tx.type),
+    title: txToNotificationTitle(tx),
+    body: txToNotificationBody(tx),
+    timestamp: new Date(tx.created_at),
+    read: tx.status === "completed" || tx.status === "failed",
+    amount: txToNotificationAmount(tx),
+  }));
+}
 
 /* ─── Filter tabs config ─── */
 const FILTER_TABS: { key: FilterTab; label: string }[] = [
@@ -228,14 +176,30 @@ export default function NotificationsInboxScreen() {
   const tc = getThemeColors(isDark);
   const ts = getThemeShadows(isDark);
 
-  const [notifications, setNotifications] = useState<Notification[]>(INITIAL_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [activeFilter, setActiveFilter] = useState<FilterTab>("all");
   const [refreshing, setRefreshing] = useState(false);
-  const [deletedIds, setDeletedIds] = useState<Set<number>>(new Set());
+  const [loading, setLoading] = useState(true);
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
+
+  const loadNotifications = useCallback(async () => {
+    try {
+      const { data } = await paymentsApi.history();
+      const txs = Array.isArray(data) ? data : data.results || [];
+      setNotifications(transactionsToNotifications(txs));
+    } catch {
+      // Keep existing notifications on error
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadNotifications();
+  }, [loadNotifications]);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
   const isDesktop = isWeb && width >= 900;
-  const maxW = isDesktop ? 1200 : undefined;
   const hPad = isDesktop ? 48 : 20;
 
   // Filter notifications
@@ -252,23 +216,21 @@ export default function NotificationsInboxScreen() {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   }, []);
 
-  const markRead = useCallback((id: number) => {
+  const markRead = useCallback((id: string) => {
     setNotifications((prev) =>
       prev.map((n) => (n.id === id ? { ...n, read: true } : n))
     );
   }, []);
 
-  const deleteNotification = useCallback((id: number) => {
+  const deleteNotification = useCallback((id: string) => {
     setDeletedIds((prev) => new Set(prev).add(id));
   }, []);
 
-  const onRefresh = useCallback(() => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    // Simulate network refresh
-    setTimeout(() => {
-      setRefreshing(false);
-    }, 1200);
-  }, []);
+    await loadNotifications();
+    setRefreshing(false);
+  }, [loadNotifications]);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
@@ -279,7 +241,7 @@ export default function NotificationsInboxScreen() {
           paddingTop: isWeb ? 16 : 8,
           paddingBottom: 0,
           ...(isDesktop
-            ? { maxWidth: maxW, width: "100%", alignSelf: "center" as const }
+            ? { width: "100%" }
             : {}),
         }}
       >
@@ -411,7 +373,7 @@ export default function NotificationsInboxScreen() {
           paddingTop: 8,
           paddingBottom: 40,
           ...(isDesktop
-            ? { maxWidth: maxW, width: "100%", alignSelf: "center" as const }
+            ? { width: "100%" }
             : {}),
         }}
       >
@@ -728,33 +690,26 @@ function AnimatedNotificationRow({
                   {formatTime(notification.timestamp)}
                 </Text>
 
-                {/* Desktop hover delete button */}
+                {/* Desktop hover delete button — uses View+onClick to avoid nested <button> */}
                 {isWeb && (
-                  <Pressable
-                    onPress={(e) => {
+                  <View
+                    // @ts-ignore — web-only onClick
+                    onClick={(e: any) => {
                       e.stopPropagation();
                       onDelete();
                     }}
-                    accessibilityRole="button"
                     accessibilityLabel="Delete notification"
-                    style={({ pressed, hovered }: any) => ({
+                    style={{
                       width: 28,
                       height: 28,
                       borderRadius: 8,
                       alignItems: "center" as const,
                       justifyContent: "center" as const,
-                      backgroundColor: hovered ? "rgba(239, 68, 68, 0.12)" : "transparent",
-                      opacity: hovered ? 1 : 0,
-                      ...(isWeb
-                        ? ({
-                            cursor: "pointer",
-                            transition: "all 0.15s ease",
-                          } as any)
-                        : {}),
-                    })}
+                      cursor: "pointer",
+                    } as any}
                   >
                     <Ionicons name="trash-outline" size={15} color={colors.error} />
-                  </Pressable>
+                  </View>
                 )}
               </View>
             </View>

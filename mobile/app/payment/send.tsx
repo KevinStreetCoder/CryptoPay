@@ -23,7 +23,7 @@ import { useThemeMode } from "../../src/stores/theme";
 import { SectionHeader } from "../../src/components/SectionHeader";
 import { useLocale } from "../../src/hooks/useLocale";
 
-const CRYPTO_OPTIONS: CurrencyCode[] = ["USDT", "BTC", "ETH"];
+const CRYPTO_OPTIONS: CurrencyCode[] = ["USDT", "USDC", "BTC", "ETH", "SOL"];
 
 export default function SendMpesaScreen() {
   const router = useRouter();
@@ -575,6 +575,7 @@ export default function SendMpesaScreen() {
                     loading={loading}
                     disabled={!phone || !amount}
                     size="lg"
+                    icon={<Ionicons name="flash-outline" size={20} color="#FFFFFF" />}
                     testID="get-quote-button"
                   />
                 ) : (
@@ -583,6 +584,7 @@ export default function SendMpesaScreen() {
                     onPress={handleConfirm}
                     disabled={parseFloat(quote.crypto_amount) > balance}
                     size="lg"
+                    icon={<Ionicons name="arrow-forward-circle-outline" size={20} color="#FFFFFF" />}
                     testID="confirm-payment-button"
                   />
                 )}

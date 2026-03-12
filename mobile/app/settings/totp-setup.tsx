@@ -88,9 +88,7 @@ export default function TOTPSetupScreen() {
       <ScrollView
         contentContainerStyle={{
           padding: isDesktop ? 32 : 20,
-          maxWidth: 520,
-          width: "100%",
-          alignSelf: "center",
+          paddingHorizontal: isDesktop ? 48 : 20,
         }}
       >
         {/* Header */}

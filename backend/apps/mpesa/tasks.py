@@ -3,13 +3,15 @@ M-Pesa Celery tasks: float balance monitoring and STK Push status polling.
 """
 
 import logging
+from decimal import Decimal
 
 from celery import shared_task
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
-# Float balance thresholds (KES)
+# Float balance thresholds (KES) — used by check_float_balance
+# Circuit breaker thresholds are in apps.payments.circuit_breaker
 FLOAT_LOW_THRESHOLD = 300_000
 FLOAT_CRITICAL_THRESHOLD = 100_000
 
@@ -18,7 +20,8 @@ FLOAT_CRITICAL_THRESHOLD = 100_000
 def check_float_balance():
     """
     Check M-Pesa float balance via Daraja Account Balance API.
-    Results arrive async via callback. This task initiates the query.
+    Results arrive async via callback — see process_balance_callback().
+    Also updates the circuit breaker with the latest float level.
     """
     from .client import MpesaClient, MpesaError
 
@@ -35,6 +38,80 @@ def check_float_balance():
         logger.error(f"Float balance check failed: {e}")
     except Exception as e:
         logger.error(f"Float balance check error: {e}")
+
+
+@shared_task(name="apps.mpesa.tasks.process_balance_result")
+def process_balance_result(balance_kes: str):
+    """
+    Process a float balance result (from M-Pesa callback or manual check).
+    Updates the payment circuit breaker state based on current float.
+
+    Args:
+        balance_kes: String representation of the KES balance.
+    """
+    from apps.payments.circuit_breaker import PaymentCircuitBreaker
+
+    try:
+        balance = Decimal(balance_kes)
+    except Exception:
+        logger.error(f"Invalid balance value: {balance_kes}")
+        return
+
+    new_state = PaymentCircuitBreaker.update_from_float(balance)
+
+    if new_state == PaymentCircuitBreaker.OPEN:
+        # Send emergency alerts
+        _send_float_alert(
+            level="EMERGENCY",
+            balance=balance,
+            message=f"ALL PAYMENTS PAUSED — KES float at {balance:,.0f}",
+        )
+    elif new_state == PaymentCircuitBreaker.HALF_OPEN:
+        _send_float_alert(
+            level="CRITICAL",
+            balance=balance,
+            message=f"Large payments paused — KES float at {balance:,.0f}",
+        )
+
+    logger.info(
+        f"Float balance processed: KES {balance:,.0f} — "
+        f"circuit breaker state: {new_state}"
+    )
+    return new_state
+
+
+def _send_float_alert(level: str, balance: Decimal, message: str):
+    """Send alert to operations team about low float."""
+    # Push notification to admin devices
+    try:
+        from apps.core.push import send_admin_alert
+
+        send_admin_alert(
+            title=f"[{level}] Float Alert",
+            body=message,
+        )
+    except Exception as e:
+        logger.error(f"Failed to send float push alert: {e}")
+
+    # Email alert
+    try:
+        from django.core.mail import mail_admins
+
+        mail_admins(
+            subject=f"[CryptoPay {level}] Float Balance Alert",
+            message=(
+                f"Float Level: {level}\n"
+                f"Balance: KES {balance:,.0f}\n"
+                f"Message: {message}\n\n"
+                f"Action required: Top up M-Pesa float immediately.\n"
+                f"Admin panel: {settings.MPESA_CALLBACK_BASE_URL}/admin/"
+            ),
+            fail_silently=True,
+        )
+    except Exception as e:
+        logger.error(f"Failed to send float email alert: {e}")
+
+    logger.warning(f"Float alert [{level}]: {message}")
 
 
 @shared_task(name="apps.mpesa.tasks.poll_stk_status")

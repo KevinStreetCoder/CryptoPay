@@ -39,6 +39,11 @@ class Wallet(models.Model):
                 check=models.Q(locked_balance__gte=0),
                 name="wallet_locked_balance_non_negative",
             ),
+            models.UniqueConstraint(
+                fields=["deposit_address"],
+                name="wallet_deposit_address_unique",
+                condition=models.Q(deposit_address__gt=""),
+            ),
         ]
 
     def __str__(self):

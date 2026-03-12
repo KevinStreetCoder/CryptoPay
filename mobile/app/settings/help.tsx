@@ -31,63 +31,24 @@ interface FAQItem {
 
 type CategoryKey = "all" | "deposits" | "payments" | "security" | "general";
 
-const CATEGORIES: { key: CategoryKey; label: string; icon: keyof typeof Ionicons.glyphMap; color: string }[] = [
-  { key: "all", label: "All", icon: "grid-outline", color: colors.primary[400] },
-  { key: "deposits", label: "Deposits", icon: "download-outline", color: "#60A5FA" },
-  { key: "payments", label: "Payments", icon: "card-outline", color: colors.success },
-  { key: "security", label: "Security", icon: "shield-outline", color: colors.warning },
-  { key: "general", label: "General", icon: "information-circle-outline", color: "#A78BFA" },
+const CATEGORIES: { key: CategoryKey; labelKey: string; icon: keyof typeof Ionicons.glyphMap; color: string }[] = [
+  { key: "all", labelKey: "help.all", icon: "grid-outline", color: colors.primary[400] },
+  { key: "deposits", labelKey: "help.deposits", icon: "download-outline", color: "#60A5FA" },
+  { key: "payments", labelKey: "help.payments", icon: "card-outline", color: colors.success },
+  { key: "security", labelKey: "help.security", icon: "shield-outline", color: colors.warning },
+  { key: "general", labelKey: "help.general", icon: "information-circle-outline", color: "#A78BFA" },
 ];
 
-const FAQ_DATA: FAQItem[] = [
-  {
-    question: "How do I deposit crypto?",
-    answer:
-      "Go to the Wallet tab, tap Receive on the currency you want to deposit, and copy the wallet address shown. Send crypto from any external wallet or exchange to that address. Your balance will update once the network confirms the transaction.",
-    category: "deposits",
-  },
-  {
-    question: "How long do deposits take?",
-    answer:
-      "Deposit times depend on the blockchain network:\n\n\u2022 Tron (USDT-TRC20): ~19 confirmations, typically 1\u20132 minutes\n\u2022 Ethereum (ETH/USDT-ERC20): ~12 confirmations, typically 2\u20133 minutes\n\u2022 Bitcoin (BTC): ~3 confirmations, typically 30 minutes\n\u2022 Solana (SOL): ~32 confirmations, typically 15 seconds",
-    category: "deposits",
-  },
-  {
-    question: "How do I pay a bill?",
-    answer:
-      "Go to the Pay tab, enter the Paybill or Till number for the merchant, enter the amount you wish to pay, and confirm the transaction with your PIN. You\u2019ll receive a confirmation once the payment is processed.",
-    category: "payments",
-  },
-  {
-    question: "What fees are charged?",
-    answer:
-      "CryptoPay charges a 1.5% spread on crypto-to-KES conversions plus a flat fee of KSh 10 per transaction. There are no hidden fees\u2014what you see on the confirmation screen is what you pay.",
-    category: "payments",
-  },
-  {
-    question: "How do I verify my identity?",
-    answer:
-      "Go to Settings > Identity Verification, then follow the prompts to upload a valid government-issued ID document (national ID, passport, or driving licence). Verification is typically completed within a few minutes.",
-    category: "security",
-  },
-  {
-    question: "Is my crypto safe?",
-    answer:
-      "Yes. CryptoPay secures your account with a transaction PIN, optional biometric authentication (fingerprint or Face ID), and encrypted local storage. Your private keys are never stored on our servers.",
-    category: "security",
-  },
-  {
-    question: "What currencies are supported?",
-    answer:
-      "CryptoPay currently supports:\n\n\u2022 USDT (Tether)\n\u2022 BTC (Bitcoin)\n\u2022 ETH (Ethereum)\n\u2022 SOL (Solana)\n\nMore currencies will be added in future updates.",
-    category: "general",
-  },
-  {
-    question: "How do I contact support?",
-    answer:
-      "You can reach our support team via email at support@cryptopay.co.ke. We typically respond within 24 hours on business days. You can also reach us on WhatsApp at +254700000000 or on Twitter/X @CryptoPayKE.",
-    category: "general",
-  },
+// FAQ keys map to i18n translations — no hardcoded content
+const FAQ_KEYS: { questionKey: string; answerKey: string; category: string }[] = [
+  { questionKey: "help.faqDepositHow", answerKey: "help.faqDepositHowAnswer", category: "deposits" },
+  { questionKey: "help.faqDepositTime", answerKey: "help.faqDepositTimeAnswer", category: "deposits" },
+  { questionKey: "help.faqPayBill", answerKey: "help.faqPayBillAnswer", category: "payments" },
+  { questionKey: "help.faqFees", answerKey: "help.faqFeesAnswer", category: "payments" },
+  { questionKey: "help.faqVerifyIdentity", answerKey: "help.faqVerifyIdentityAnswer", category: "security" },
+  { questionKey: "help.faqCryptoSafe", answerKey: "help.faqCryptoSafeAnswer", category: "security" },
+  { questionKey: "help.faqCurrencies", answerKey: "help.faqCurrenciesAnswer", category: "general" },
+  { questionKey: "help.faqContactSupport", answerKey: "help.faqContactSupportAnswer", category: "general" },
 ];
 
 // ── Accordion Item ────────────────────────────────────────────────────────────
@@ -177,7 +138,7 @@ function AccordionItem({
             style={{
               color: isExpanded ? tc.textPrimary : tc.textPrimary,
               fontSize: 15,
-              fontWeight: isExpanded ? "700" : "600",
+              fontFamily: isExpanded ? "DMSans_700Bold" : "DMSans_600SemiBold",
               flex: 1,
               paddingRight: 12,
             }}
@@ -226,11 +187,13 @@ function CategoryChip({
   isActive,
   onPress,
   tc,
+  t,
 }: {
   category: (typeof CATEGORIES)[number];
   isActive: boolean;
   onPress: () => void;
   tc: ReturnType<typeof getThemeColors>;
+  t: (key: string) => string;
 }) {
   return (
     <Pressable
@@ -259,7 +222,7 @@ function CategoryChip({
           : {}),
       })}
       accessibilityRole="button"
-      accessibilityLabel={`Filter by ${category.label}`}
+      accessibilityLabel={`Filter by ${t(category.labelKey)}`}
       accessibilityState={{ selected: isActive }}
     >
       <Ionicons
@@ -271,10 +234,10 @@ function CategoryChip({
         style={{
           color: isActive ? category.color : tc.textSecondary,
           fontSize: 13,
-          fontWeight: isActive ? "700" : "500",
+          fontFamily: isActive ? "DMSans_700Bold" : "DMSans_500Medium",
         }}
       >
-        {category.label}
+        {t(category.labelKey)}
       </Text>
     </Pressable>
   );
@@ -396,8 +359,17 @@ export default function HelpScreen() {
   const [activeCategory, setActiveCategory] = useState<CategoryKey>("all");
   const [searchFocused, setSearchFocused] = useState(false);
 
+  // Resolve FAQ items from i18n translations
+  const faqData: FAQItem[] = useMemo(() =>
+    FAQ_KEYS.map((k) => ({
+      question: t(k.questionKey),
+      answer: t(k.answerKey),
+      category: k.category,
+    })),
+  [t]);
+
   const filteredFAQ = useMemo(() => {
-    let items = FAQ_DATA;
+    let items = faqData;
 
     // Category filter
     if (activeCategory !== "all") {
@@ -415,7 +387,7 @@ export default function HelpScreen() {
     }
 
     return items;
-  }, [searchQuery, activeCategory]);
+  }, [searchQuery, activeCategory, faqData]);
 
   const handleToggle = useCallback((index: number) => {
     if (Platform.OS !== "web") {
@@ -608,6 +580,7 @@ export default function HelpScreen() {
               isActive={activeCategory === cat.key}
               onPress={() => handleCategoryChange(cat.key)}
               tc={tc}
+              t={t}
             />
           ))}
         </ScrollView>
@@ -683,7 +656,7 @@ export default function HelpScreen() {
                 </View>
               ) : (
                 filteredFAQ.map((item, index) => {
-                  const originalIndex = FAQ_DATA.indexOf(item);
+                  const originalIndex = faqData.indexOf(item);
                   return (
                     <View key={item.question}>
                       {index > 0 && (

@@ -703,6 +703,7 @@ class KYCDocumentListView(APIView):
     """List and upload KYC documents for identity verification."""
 
     permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
 
     def get(self, request):
         docs = KYCDocument.objects.filter(user=request.user).order_by("-created_at")
@@ -713,7 +714,21 @@ class KYCDocumentListView(APIView):
         serializer.is_valid(raise_exception=True)
 
         doc_type = serializer.validated_data["document_type"]
-        file_url = serializer.validated_data["file_url"]
+
+        # Handle direct file upload: save to media storage and generate URL
+        uploaded_file = serializer.validated_data.get("file")
+        if uploaded_file:
+            import os
+            from django.core.files.storage import default_storage
+
+            ext = os.path.splitext(uploaded_file.name)[1] or ".jpg"
+            path = f"kyc/{request.user.id}/{doc_type}_{request.user.id}{ext}"
+            saved_path = default_storage.save(path, uploaded_file)
+            file_url = request.build_absolute_uri(
+                default_storage.url(saved_path)
+            )
+        else:
+            file_url = serializer.validated_data["file_url"]
 
         # Check if a document of this type already exists and is pending/approved
         existing = KYCDocument.objects.filter(

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
 import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
+import { router } from "expo-router";
 import { authApi } from "../api/auth";
 
 // Configure how notifications are handled when the app is in the foreground
@@ -32,8 +33,11 @@ export function usePushNotifications() {
   const responseListener = useRef<Notifications.EventSubscription | null>(null);
 
   useEffect(() => {
-    // Only register for push on physical devices (not web or simulators without support)
     if (Platform.OS === "web") {
+      // Web: use the browser Notification API
+      requestWebNotificationPermission().then((granted) => {
+        if (granted) setExpoPushToken("web-notifications-enabled");
+      }).catch(() => {});
       return;
     }
 
@@ -131,11 +135,78 @@ async function registerForPushNotifications(): Promise<string | null> {
 }
 
 /**
+ * Request browser Web Notification permission.
+ * Returns true if permission was granted.
+ */
+async function requestWebNotificationPermission(): Promise<boolean> {
+  if (typeof window === "undefined" || !("Notification" in window)) {
+    return false;
+  }
+  if (Notification.permission === "granted") return true;
+  if (Notification.permission === "denied") return false;
+
+  const permission = await Notification.requestPermission();
+  return permission === "granted";
+}
+
+/**
+ * Show a native browser notification on web.
+ * Call from anywhere to trigger a web notification.
+ */
+export function showWebNotification(
+  title: string,
+  body: string,
+  data?: Record<string, unknown>
+) {
+  if (Platform.OS !== "web" || typeof window === "undefined" || !("Notification" in window)) return;
+  if (Notification.permission !== "granted") return;
+
+  const notification = new Notification(title, {
+    body,
+    icon: "/favicon.ico",
+    badge: "/favicon.ico",
+    tag: data?.transaction_id as string | undefined,
+  });
+
+  notification.onclick = () => {
+    window.focus();
+    if (data) handleNotificationResponse(data);
+    notification.close();
+  };
+}
+
+/**
  * Handle notification tap responses.
- * Route the user based on the notification data payload.
+ * Route the user to the relevant screen based on notification payload.
  */
 function handleNotificationResponse(data: Record<string, unknown>) {
-  // Navigation based on notification type can be handled here.
-  // For example: if data.type === "transaction", navigate to transaction details.
-  console.log("Notification tapped with data:", data);
+  const type = data.type as string | undefined;
+  const id = data.transaction_id as string | undefined;
+
+  switch (type) {
+    case "transaction":
+    case "payment_complete":
+    case "payment_failed":
+      if (id) {
+        router.push(`/payment/detail?id=${id}` as any);
+      } else {
+        router.push("/(tabs)/wallet" as any);
+      }
+      break;
+    case "deposit":
+      router.push("/(tabs)/wallet" as any);
+      break;
+    case "kyc_approved":
+    case "kyc_rejected":
+      router.push("/settings/kyc" as any);
+      break;
+    case "security":
+    case "device_login":
+      router.push("/settings/devices" as any);
+      break;
+    default:
+      // Fallback: navigate to home
+      router.push("/(tabs)" as any);
+      break;
+  }
 }

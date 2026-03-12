@@ -129,7 +129,14 @@ export function WebSidebar() {
     if (item.key === "pay") {
       return pathname.includes("/pay") || pathname.includes("/payment");
     }
-    return pathname.includes(item.key);
+    if (item.key === "profile") {
+      // Only match exact profile path, not /settings/edit-profile
+      return pathname === "/(tabs)/profile" || pathname === "/profile";
+    }
+    if (item.key === "wallet") {
+      return pathname === "/(tabs)/wallet" || pathname === "/wallet";
+    }
+    return pathname === `/(tabs)/${item.key}` || pathname === `/${item.key}`;
   };
 
   const isSecondaryActive = (item: (typeof SECONDARY_ITEMS)[0]) => {
