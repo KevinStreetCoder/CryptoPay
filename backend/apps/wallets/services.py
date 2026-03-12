@@ -94,7 +94,7 @@ class WalletService:
         from .models import Currency
 
         wallets = []
-        for currency in [Currency.USDT, Currency.BTC, Currency.ETH, Currency.KES]:
+        for currency in [Currency.USDC, Currency.USDT, Currency.BTC, Currency.SOL, Currency.ETH, Currency.KES]:
             wallet, _ = Wallet.objects.get_or_create(
                 user=user,
                 currency=currency,

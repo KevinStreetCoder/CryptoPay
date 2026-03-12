@@ -162,6 +162,14 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.blockchain.btc_listener.update_btc_confirmations",
         "schedule": 60.0,  # Every 60 seconds
     },
+    "monitor-sol-deposits": {
+        "task": "apps.blockchain.sol_listener.monitor_sol_deposits",
+        "schedule": 15.0,  # Every 15 seconds (Solana is fast)
+    },
+    "update-sol-confirmations": {
+        "task": "apps.blockchain.sol_listener.update_sol_confirmations",
+        "schedule": 10.0,  # Every 10 seconds
+    },
 }
 
 # --- DRF ---
@@ -279,6 +287,10 @@ ETH_NETWORK = env("ETH_NETWORK", default="sepolia")  # mainnet or sepolia (testn
 # --- Bitcoin ---
 BTC_NETWORK = env("BTC_NETWORK", default="test3")  # main or test3 (testnet)
 BLOCKCYPHER_API_TOKEN = env("BLOCKCYPHER_API_TOKEN", default="")  # Free: 200 req/hr, with token: 2000 req/hr
+
+# --- Solana ---
+SOL_RPC_URL = env("SOL_RPC_URL", default="https://api.devnet.solana.com")  # Use mainnet-beta for production
+SOL_NETWORK = env("SOL_NETWORK", default="devnet")  # mainnet-beta or devnet
 
 # HD Wallet Configuration
 # CRITICAL: In production, set one of these. Generate with: python manage.py generate_wallet_seed

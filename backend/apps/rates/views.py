@@ -68,7 +68,7 @@ class RateHistoryView(APIView):
 
     permission_classes = [AllowAny]
 
-    VALID_CURRENCIES = {"USDT", "BTC", "ETH", "SOL"}
+    VALID_CURRENCIES = {"USDC", "USDT", "BTC", "ETH", "SOL"}
     PERIOD_DAYS = {
         "1d": 1,
         "7d": 7,

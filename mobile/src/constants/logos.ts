@@ -1,10 +1,11 @@
 // Centralized logo assets for crypto currencies and service providers
 
 export const CRYPTO_LOGOS: Record<string, string> = {
+  USDC: "https://assets.coingecko.com/coins/images/6319/small/usdc.png",
   USDT: "https://assets.coingecko.com/coins/images/325/small/Tether.png",
   BTC: "https://assets.coingecko.com/coins/images/1/small/bitcoin.png",
-  ETH: "https://assets.coingecko.com/coins/images/279/small/ethereum.png",
   SOL: "https://assets.coingecko.com/coins/images/4128/small/solana.png",
+  ETH: "https://assets.coingecko.com/coins/images/279/small/ethereum.png",
 };
 
 // Local logo assets — require() returns an asset module (number on native, object on web)

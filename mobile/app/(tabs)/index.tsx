@@ -545,10 +545,11 @@ function TransactionSummary({ transactions, tc, ts }: { transactions: Transactio
 
 /* ─── Crypto Price Charts Section (Desktop) ─── */
 const CHART_CURRENCIES: { symbol: string; name: string; color: string }[] = [
+  { symbol: "USDC", name: "USD Coin", color: colors.crypto.USDC },
   { symbol: "USDT", name: "Tether", color: colors.crypto.USDT },
   { symbol: "BTC", name: "Bitcoin", color: colors.crypto.BTC },
-  { symbol: "ETH", name: "Ethereum", color: colors.crypto.ETH },
   { symbol: "SOL", name: "Solana", color: colors.crypto.SOL },
+  { symbol: "ETH", name: "Ethereum", color: colors.crypto.ETH },
 ];
 
 function CryptoPriceChartsSection({

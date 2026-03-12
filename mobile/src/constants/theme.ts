@@ -45,10 +45,11 @@ export const colors = {
 
   // Crypto brand colors
   crypto: {
+    USDC: "#2775CA",
     USDT: "#26A17B",
     BTC: "#F7931A",
-    ETH: "#627EEA",
     SOL: "#9945FF",
+    ETH: "#627EEA",
     KES: "#10B981",
   } as Record<string, string>,
 } as const;
@@ -104,10 +105,11 @@ export const borderRadius = {
 } as const;
 
 export const CURRENCIES = {
+  USDC: { name: "USD Coin", symbol: "USDC", iconSymbol: "$", icon: "logo-usd", decimals: 2 },
   USDT: { name: "Tether", symbol: "USDT", iconSymbol: "$", icon: "logo-usd", decimals: 2 },
   BTC: { name: "Bitcoin", symbol: "BTC", iconSymbol: "\u20BF", icon: "logo-bitcoin", decimals: 8 },
-  ETH: { name: "Ethereum", symbol: "ETH", iconSymbol: "\u039E", icon: "diamond-outline", decimals: 6 },
   SOL: { name: "Solana", symbol: "SOL", iconSymbol: "S", icon: "sunny-outline", decimals: 4 },
+  ETH: { name: "Ethereum", symbol: "ETH", iconSymbol: "\u039E", icon: "diamond-outline", decimals: 6 },
   KES: { name: "Kenyan Shilling", symbol: "KES", iconSymbol: "K", icon: "cash-outline", decimals: 2 },
 } as const;
 
