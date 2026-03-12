@@ -658,6 +658,7 @@ export default function ConfirmPaymentScreen() {
                 onPress={() => { if (router.canGoBack()) router.back(); else router.replace("/(tabs)" as any); }}
                 size="lg"
                 variant="outline"
+                icon={<Ionicons name="refresh-outline" size={20} color={colors.primary[400]} />}
                 testID="new-quote-button"
               />
             ) : (
@@ -665,6 +666,7 @@ export default function ConfirmPaymentScreen() {
                 title={t("payment.payNow")}
                 onPress={handleConfirm}
                 size="lg"
+                icon={<Ionicons name="send-outline" size={20} color="#FFFFFF" />}
                 testID="pay-now-button"
                 style={{
                   ...ts.glow(tc.primary[500], 0.35),
@@ -829,6 +831,7 @@ export default function ConfirmPaymentScreen() {
                   onPress={() => { if (router.canGoBack()) router.back(); else router.replace("/(tabs)" as any); }}
                   size="lg"
                   variant="outline"
+                  icon={<Ionicons name="refresh-outline" size={20} color={colors.primary[400]} />}
                   style={{ marginTop: 8, width: "100%" }}
                 />
               </View>

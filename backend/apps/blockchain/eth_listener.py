@@ -19,6 +19,12 @@ from apps.wallets.models import Wallet
 from apps.wallets.services import WalletService
 
 from .models import BlockchainDeposit
+from .security import (
+    check_confirmation_monotonicity,
+    estimate_usd_value,
+    get_required_confirmations,
+    is_dust_deposit,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -62,12 +68,17 @@ def _eth_rpc_call(method: str, params: list) -> dict:
 
 
 def _get_current_block() -> int:
-    """Get the latest finalized block number."""
-    # Use "finalized" tag for post-Merge Ethereum (epoch-based finality)
+    """Get the latest finalized block number.
+
+    Post-Merge Ethereum: subtracts the required confirmation buffer
+    from the latest block to only scan blocks that have reached
+    sufficient finality depth.
+    """
     result = _eth_rpc_call("eth_blockNumber", [])
     current = int(result, 16)
     # Subtract safe confirmation buffer (2 epochs ≈ 64 blocks for finality)
-    finality_buffer = getattr(settings, "REQUIRED_CONFIRMATIONS", {}).get("ethereum", 12)
+    confirmations_dict = getattr(settings, "REQUIRED_CONFIRMATIONS", {})
+    finality_buffer = confirmations_dict.get("ethereum", 12) if isinstance(confirmations_dict, dict) else 12
     return current - finality_buffer
 
 
@@ -167,12 +178,20 @@ def monitor_eth_deposits():
                     if amount <= 0:
                         continue
 
+                    # Security: reject dust deposits
+                    if is_dust_deposit(amount, token_symbol):
+                        continue
+
                     block_num = int(log.get("blockNumber", "0x0"), 16)
                     confirmations = max(0, current_block - block_num)
 
+                    # Security: amount-based confirmation tier
+                    usd_value = estimate_usd_value(amount, token_symbol)
+                    dynamic_confirmations = get_required_confirmations("ethereum", usd_value)
+
                     status = (
                         BlockchainDeposit.Status.CONFIRMED
-                        if confirmations >= required_confirmations
+                        if confirmations >= dynamic_confirmations
                         else BlockchainDeposit.Status.DETECTING
                     )
 
@@ -184,14 +203,14 @@ def monitor_eth_deposits():
                         amount=amount,
                         currency=token_symbol,
                         confirmations=confirmations,
-                        required_confirmations=required_confirmations,
+                        required_confirmations=dynamic_confirmations,
                         status=status,
                         block_number=block_num,
                     )
 
                     logger.info(
                         f"Detected ETH {token_symbol} deposit: {amount} to {to_addr[:10]}... "
-                        f"tx={tx_hash[:16]}... confirmations={confirmations}"
+                        f"tx={tx_hash[:16]}... ({confirmations}/{dynamic_confirmations} confs)"
                     )
 
         except Exception as e:
@@ -225,9 +244,16 @@ def update_eth_confirmations():
     for deposit in pending:
         if deposit.block_number:
             confirmations = max(0, current_block - deposit.block_number)
+
+            # Security: confirmation monotonicity check (re-org detection)
+            if not check_confirmation_monotonicity(deposit, confirmations):
+                deposit.status = BlockchainDeposit.Status.CONFIRMING
+                deposit.save(update_fields=["status"])
+                continue
+
             deposit.confirmations = confirmations
 
-            if confirmations >= required:
+            if confirmations >= deposit.required_confirmations:
                 deposit.status = BlockchainDeposit.Status.CONFIRMED
             else:
                 deposit.status = BlockchainDeposit.Status.CONFIRMING

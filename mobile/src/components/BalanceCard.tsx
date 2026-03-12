@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Wallet } from "../api/wallets";
 import { CURRENCIES, CurrencyCode, colors, shadows, getThemeColors, getThemeShadows } from "../constants/theme";
 import { useThemeMode } from "../stores/theme";
+import { CryptoLogo } from "./CryptoLogo";
 
 interface BalanceCardProps {
   wallets: Wallet[];
@@ -95,12 +96,7 @@ export function BalanceCard({ wallets }: BalanceCardProps) {
               }
             >
               <View style={styles.cryptoPillHeader}>
-                <View
-                  style={[
-                    styles.cryptoDot,
-                    { backgroundColor: brandColor },
-                  ]}
-                />
+                <CryptoLogo currency={w.currency} size={16} />
                 <Text
                   style={styles.cryptoSymbol}
                   maxFontSizeMultiplier={1.3}

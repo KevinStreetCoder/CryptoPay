@@ -247,6 +247,13 @@ MPESA_INITIATOR_PASSWORD = env("MPESA_INITIATOR_PASSWORD", default="")
 MPESA_B2C_SHORTCODE = env("MPESA_B2C_SHORTCODE", default="")
 MPESA_CALLBACK_BASE_URL = env("MPESA_CALLBACK_BASE_URL", default="https://localhost")
 MPESA_CERT_PATH = env("MPESA_CERT_PATH", default=str(BASE_DIR / "certs" / "sandbox.pem"))
+
+# --- Float / Circuit Breaker Thresholds (KES) ---
+FLOAT_EMERGENCY_KES = env.int("FLOAT_EMERGENCY_KES", default=200_000)
+FLOAT_CRITICAL_KES = env.int("FLOAT_CRITICAL_KES", default=500_000)
+FLOAT_RESUME_KES = env.int("FLOAT_RESUME_KES", default=800_000)
+FLOAT_HEALTHY_KES = env.int("FLOAT_HEALTHY_KES", default=1_500_000)
+FLOAT_LARGE_PAYMENT_KES = env.int("FLOAT_LARGE_PAYMENT_KES", default=50_000)
 MPESA_ALLOWED_IPS = env.list("MPESA_ALLOWED_IPS", default=[
     "196.201.214.0/24",
     "196.201.213.0/24",
@@ -302,11 +309,45 @@ WALLET_MNEMONIC = env("WALLET_MNEMONIC", default="")
 WALLET_MASTER_SEED = env("WALLET_MASTER_SEED", default="")
 
 REQUIRED_CONFIRMATIONS = {
-    "tron": 19,         # ~1 min (3s blocks)
-    "ethereum": 64,     # 2 finalized epochs (~12.8 min post-Merge)
+    "tron": 19,         # ~1 min (3s blocks) — 1 solidified block = finality
+    "ethereum": 64,     # 2 finalized epochs (~12.8 min post-Merge, Casper FFG)
     "polygon": 128,     # ~5 min (2s blocks)
-    "bitcoin": 3,       # ~30 min (for <$10K; use 6 for large amounts)
-    "solana": 32,       # "finalized" commitment level
+    "bitcoin": 3,       # ~30 min (baseline; amount-based tiers override this)
+    "solana": 32,       # "finalized" commitment level (~13 seconds)
+}
+
+# Minimum deposit amounts per currency (dust attack prevention).
+# Deposits below these thresholds are rejected at detection time.
+MINIMUM_DEPOSIT_AMOUNTS = {
+    "BTC": "0.00005",     # ~$5 — filters dust attacks
+    "ETH": "0.002",       # ~$5
+    "USDT": "1.00",       # $1 minimum
+    "USDC": "1.00",       # $1 minimum
+    "SOL": "0.05",        # ~$5
+}
+
+# Amount-based confirmation tiers: (max_usd_value, required_confirmations)
+# Larger deposits require more confirmations to prevent double-spend attacks.
+# See apps/blockchain/security.py for detailed documentation.
+CONFIRMATION_TIERS = {
+    "bitcoin": [
+        (1_000, 2),
+        (10_000, 3),
+        (100_000, 6),
+        (float("inf"), 6),
+    ],
+    "ethereum": [
+        (1_000, 12),
+        (10_000, 32),
+        (100_000, 64),
+        (float("inf"), 64),
+    ],
+    "tron": [
+        (float("inf"), 19),  # Tron solidification is all-or-nothing
+    ],
+    "solana": [
+        (float("inf"), 32),  # Solana finalized commitment = deterministic finality
+    ],
 }
 
 # --- Logging ---

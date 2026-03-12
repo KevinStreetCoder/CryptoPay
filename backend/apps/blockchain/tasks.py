@@ -1,21 +1,40 @@
 """
 Celery tasks for blockchain deposit monitoring.
 
-MVP: Tron (TRC-20 USDT) deposit detection via TronGrid API.
+Production-grade multi-chain listener with security hardening:
+  - Dust attack prevention (minimum deposit thresholds)
+  - Amount-based confirmation tiers (more confs for larger deposits)
+  - Address format validation
+  - Re-org detection (block hash verification)
+  - Double-credit prevention (select_for_update locking)
+  - Deposit velocity anomaly detection
 """
 
 import logging
+import uuid
 from decimal import Decimal
 
 import requests
 from celery import shared_task
 from django.conf import settings
+from django.db import transaction as db_transaction
 from django.utils import timezone
 
 from apps.wallets.models import Wallet
 from apps.wallets.services import WalletService
 
 from .models import BlockchainDeposit
+from .security import (
+    check_confirmation_monotonicity,
+    check_deposit_velocity,
+    check_stablecoin_blacklist,
+    estimate_usd_value,
+    get_required_confirmations,
+    is_dust_deposit,
+    validate_address,
+    validate_deposit_address_ownership,
+    verify_block_hash,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -113,8 +132,25 @@ def monitor_tron_deposits():
                 if amount <= 0:
                     continue
 
+                # Security: reject dust deposits
+                if is_dust_deposit(amount, "USDT"):
+                    continue
+
+                # Security: validate address format
+                if not validate_address("tron", address):
+                    continue
+
+                # Security: check deposit velocity
+                if not check_deposit_velocity(address, "USDT"):
+                    logger.critical(f"Deposit velocity exceeded for {address[:10]}..., skipping new deposits")
+                    break
+
                 from_address = tx.get("from", "")
                 block_number = tx.get("block_timestamp")
+
+                # Security: amount-based confirmation tier
+                usd_value = estimate_usd_value(amount, "USDT")
+                dynamic_confirmations = get_required_confirmations("tron", usd_value)
 
                 # Create deposit record
                 BlockchainDeposit.objects.create(
@@ -125,14 +161,14 @@ def monitor_tron_deposits():
                     amount=amount,
                     currency="USDT",
                     confirmations=0,
-                    required_confirmations=required_confirmations,
+                    required_confirmations=dynamic_confirmations,
                     status=BlockchainDeposit.Status.DETECTING,
                     block_number=block_number,
                 )
 
                 logger.info(
                     f"Detected USDT deposit: {amount} USDT to {address[:10]}... "
-                    f"tx={tx_hash[:16]}..."
+                    f"tx={tx_hash[:16]}... (requires {dynamic_confirmations} confs)"
                 )
 
         except requests.RequestException as e:
@@ -182,6 +218,13 @@ def update_tron_confirmations():
     for deposit in pending:
         if deposit.block_number:
             confirmations = max(0, current_block - deposit.block_number + 1)
+
+            # Security: confirmation monotonicity check (re-org detection)
+            if not check_confirmation_monotonicity(deposit, confirmations):
+                deposit.status = BlockchainDeposit.Status.CONFIRMING
+                deposit.save(update_fields=["status"])
+                continue
+
             deposit.confirmations = confirmations
 
             if confirmations >= deposit.required_confirmations:
@@ -199,42 +242,25 @@ def process_pending_deposits():
     """
     Credit user wallet once required confirmations are reached.
     Processes CONFIRMED deposits that haven't been credited yet.
+
+    Security hardening:
+      - select_for_update() prevents double-crediting from concurrent workers
+      - Re-org detection via block hash verification (ETH)
+      - Address ownership validation before crediting
+      - Dust threshold re-check at credit time
+      - Atomic transaction wrapping per deposit
     """
-    confirmed = BlockchainDeposit.objects.filter(
-        status=BlockchainDeposit.Status.CONFIRMED,
+    confirmed_ids = list(
+        BlockchainDeposit.objects.filter(
+            status=BlockchainDeposit.Status.CONFIRMED,
+        ).values_list("id", flat=True)
     )
 
-    for deposit in confirmed:
-        # Find the wallet this deposit belongs to
-        wallet = Wallet.objects.filter(
-            deposit_address=deposit.to_address,
-            currency=deposit.currency,
-        ).first()
-
-        if not wallet:
-            logger.warning(f"No wallet found for deposit to {deposit.to_address}")
-            continue
-
+    for deposit_id in confirmed_ids:
         try:
-            import uuid
-
-            tx_id = uuid.uuid4()
-            WalletService.credit(
-                wallet.id,
-                deposit.amount,
-                tx_id,
-                f"Blockchain deposit: {deposit.chain} tx {deposit.tx_hash}",
-            )
-            deposit.status = BlockchainDeposit.Status.CREDITED
-            deposit.credited_at = timezone.now()
-            deposit.save(update_fields=["status", "credited_at"])
-
-            logger.info(
-                f"Credited {deposit.amount} {deposit.currency} to wallet {wallet.id} "
-                f"(user={wallet.user_id})"
-            )
+            _credit_single_deposit(deposit_id)
         except Exception as e:
-            logger.error(f"Failed to credit deposit {deposit.id}: {e}")
+            logger.error(f"Failed to credit deposit {deposit_id}: {e}")
 
     # Also process legacy detecting/confirming that have enough confirmations
     pending = BlockchainDeposit.objects.filter(
@@ -242,10 +268,89 @@ def process_pending_deposits():
     )
 
     for deposit in pending:
-        required = settings.REQUIRED_CONFIRMATIONS.get(deposit.chain, 19)
-        if deposit.confirmations >= required:
+        if deposit.confirmations >= deposit.required_confirmations:
             deposit.status = BlockchainDeposit.Status.CONFIRMED
             deposit.save(update_fields=["status"])
+
+
+@db_transaction.atomic
+def _credit_single_deposit(deposit_id: int):
+    """
+    Credit a single deposit atomically with full security checks.
+
+    Uses select_for_update() to lock the deposit row, preventing
+    concurrent workers from double-crediting the same deposit.
+    """
+    # Lock the deposit row to prevent concurrent crediting
+    deposit = (
+        BlockchainDeposit.objects
+        .select_for_update()
+        .filter(id=deposit_id, status=BlockchainDeposit.Status.CONFIRMED)
+        .first()
+    )
+
+    if not deposit:
+        return  # Already credited or status changed
+
+    # Security check 1: Re-org detection (ETH block hash verification)
+    if not verify_block_hash(deposit.chain, deposit):
+        logger.critical(
+            f"BLOCKING credit for deposit {deposit.id} due to re-org detection. "
+            f"Reverting to CONFIRMING for re-verification."
+        )
+        deposit.status = BlockchainDeposit.Status.CONFIRMING
+        deposit.save(update_fields=["status"])
+        return
+
+    # Security check 2: Verify destination address belongs to our system
+    if not validate_deposit_address_ownership(deposit.to_address, deposit.currency):
+        logger.critical(
+            f"BLOCKING credit for deposit {deposit.id}: "
+            f"address {deposit.to_address[:16]}... not found in our wallets"
+        )
+        return
+
+    # Security check 3: Re-check dust threshold at credit time
+    if is_dust_deposit(deposit.amount, deposit.currency):
+        logger.warning(
+            f"Dust deposit {deposit.id} reached CONFIRMED but below threshold. Skipping."
+        )
+        return
+
+    # Security check 4: Stablecoin blacklist/freeze check
+    if not check_stablecoin_blacklist(deposit.from_address, deposit.currency):
+        logger.critical(
+            f"BLOCKING credit for deposit {deposit.id}: "
+            f"sender {deposit.from_address[:16]}... is blacklisted ({deposit.currency})"
+        )
+        return
+
+    # Find the wallet
+    wallet = Wallet.objects.filter(
+        deposit_address=deposit.to_address,
+        currency=deposit.currency,
+    ).first()
+
+    if not wallet:
+        logger.warning(f"No wallet found for deposit to {deposit.to_address}")
+        return
+
+    # Credit the wallet (WalletService.credit uses its own select_for_update)
+    tx_id = uuid.uuid4()
+    WalletService.credit(
+        wallet.id,
+        deposit.amount,
+        tx_id,
+        f"Blockchain deposit: {deposit.chain} tx {deposit.tx_hash}",
+    )
+    deposit.status = BlockchainDeposit.Status.CREDITED
+    deposit.credited_at = timezone.now()
+    deposit.save(update_fields=["status", "credited_at"])
+
+    logger.info(
+        f"Credited {deposit.amount} {deposit.currency} to wallet {wallet.id} "
+        f"(user={wallet.user_id}, tx={deposit.tx_hash[:16]}...)"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -382,6 +487,14 @@ def _scan_eth_native_transfers(
 
                 amount = Decimal(value_wei) / Decimal("1000000000000000000")
 
+                # Security: reject dust deposits
+                if is_dust_deposit(amount, "ETH"):
+                    continue
+
+                # Security: amount-based confirmation tier
+                usd_value = estimate_usd_value(amount, "ETH")
+                dynamic_confirmations = get_required_confirmations("ethereum", usd_value)
+
                 BlockchainDeposit.objects.create(
                     chain="ethereum",
                     tx_hash=tx_hash,
@@ -390,7 +503,7 @@ def _scan_eth_native_transfers(
                     amount=amount,
                     currency="ETH",
                     confirmations=0,
-                    required_confirmations=required_confirmations,
+                    required_confirmations=dynamic_confirmations,
                     status=BlockchainDeposit.Status.DETECTING,
                     block_number=block_num,
                     block_hash=block.get("hash", ""),
@@ -398,7 +511,7 @@ def _scan_eth_native_transfers(
 
                 logger.info(
                     f"Detected ETH deposit: {amount} ETH to {to_addr[:12]}... "
-                    f"tx={tx_hash[:16]}..."
+                    f"tx={tx_hash[:16]}... (requires {dynamic_confirmations} confs)"
                 )
 
         except requests.RequestException as e:
@@ -464,7 +577,15 @@ def _scan_usdc_erc20_transfers(
             if amount <= 0:
                 continue
 
+            # Security: reject dust deposits
+            if is_dust_deposit(amount, "USDC"):
+                continue
+
             block_num = int(log.get("blockNumber", "0x0"), 16)
+
+            # Security: amount-based confirmation tier
+            usd_value = estimate_usd_value(amount, "USDC")
+            dynamic_confirmations = get_required_confirmations("ethereum", usd_value)
 
             BlockchainDeposit.objects.create(
                 chain="ethereum",
@@ -474,7 +595,7 @@ def _scan_usdc_erc20_transfers(
                 amount=amount,
                 currency="USDC",
                 confirmations=0,
-                required_confirmations=required_confirmations,
+                required_confirmations=dynamic_confirmations,
                 status=BlockchainDeposit.Status.DETECTING,
                 block_number=block_num,
                 block_hash=log.get("blockHash", ""),
@@ -482,7 +603,7 @@ def _scan_usdc_erc20_transfers(
 
             logger.info(
                 f"Detected USDC deposit: {amount} USDC to {to_address[:12]}... "
-                f"tx={tx_hash[:16]}..."
+                f"tx={tx_hash[:16]}... (requires {dynamic_confirmations} confs)"
             )
 
     except requests.RequestException as e:
@@ -518,6 +639,13 @@ def update_eth_confirmations():
     for deposit in pending:
         if deposit.block_number:
             confirmations = max(0, current_block - deposit.block_number + 1)
+
+            # Security: confirmation monotonicity check (re-org detection)
+            if not check_confirmation_monotonicity(deposit, confirmations):
+                deposit.status = BlockchainDeposit.Status.CONFIRMING
+                deposit.save(update_fields=["status"])
+                continue
+
             deposit.confirmations = confirmations
 
             if confirmations >= deposit.required_confirmations:
@@ -618,14 +746,27 @@ def monitor_btc_deposits():
                     continue
 
                 amount = Decimal(value_satoshis) / Decimal("100000000")
+
+                # Security: reject dust deposits
+                if is_dust_deposit(amount, "BTC"):
+                    continue
+
+                # Security: validate address format
+                if not validate_address("bitcoin", address):
+                    continue
+
                 block_height = txref.get("block_height", None)
                 confirmations = txref.get("confirmations", 0)
 
-                status = BlockchainDeposit.Status.DETECTING
-                if confirmations >= required_confirmations:
-                    status = BlockchainDeposit.Status.CONFIRMED
+                # Security: amount-based confirmation tier
+                usd_value = estimate_usd_value(amount, "BTC")
+                dynamic_confirmations = get_required_confirmations("bitcoin", usd_value)
+
+                deposit_status = BlockchainDeposit.Status.DETECTING
+                if confirmations >= dynamic_confirmations:
+                    deposit_status = BlockchainDeposit.Status.CONFIRMED
                 elif confirmations > 0:
-                    status = BlockchainDeposit.Status.CONFIRMING
+                    deposit_status = BlockchainDeposit.Status.CONFIRMING
 
                 BlockchainDeposit.objects.create(
                     chain="bitcoin",
@@ -635,14 +776,14 @@ def monitor_btc_deposits():
                     amount=amount,
                     currency="BTC",
                     confirmations=confirmations,
-                    required_confirmations=required_confirmations,
-                    status=status,
+                    required_confirmations=dynamic_confirmations,
+                    status=deposit_status,
                     block_number=block_height,
                 )
 
                 logger.info(
                     f"Detected BTC deposit: {amount} BTC to {address[:10]}... "
-                    f"tx={tx_hash[:16]}... ({confirmations} confs)"
+                    f"tx={tx_hash[:16]}... ({confirmations}/{dynamic_confirmations} confs)"
                 )
 
         except requests.RequestException as e:
@@ -687,6 +828,13 @@ def update_btc_confirmations():
     for deposit in pending:
         if deposit.block_number:
             confirmations = max(0, current_height - deposit.block_number + 1)
+
+            # Security: confirmation monotonicity check (re-org detection)
+            if not check_confirmation_monotonicity(deposit, confirmations):
+                deposit.status = BlockchainDeposit.Status.CONFIRMING
+                deposit.save(update_fields=["status"])
+                continue
+
             deposit.confirmations = confirmations
 
             if confirmations >= deposit.required_confirmations:
@@ -890,8 +1038,16 @@ def _detect_sol_native_transfer(
     # 1 SOL = 1,000,000,000 lamports
     amount = Decimal(diff_lamports) / Decimal("1000000000")
 
+    # Security: reject dust deposits
+    if is_dust_deposit(amount, "SOL"):
+        return
+
     # Determine sender (first signer, typically accounts[0])
     from_address = accounts[0] if accounts else ""
+
+    # Security: amount-based confirmation tier
+    usd_value = estimate_usd_value(amount, "SOL")
+    dynamic_confirmations = get_required_confirmations("solana", usd_value)
 
     BlockchainDeposit.objects.create(
         chain="solana",
@@ -901,14 +1057,14 @@ def _detect_sol_native_transfer(
         amount=amount,
         currency="SOL",
         confirmations=0,
-        required_confirmations=required_confirmations,
+        required_confirmations=dynamic_confirmations,
         status=BlockchainDeposit.Status.DETECTING,
         block_number=slot,
     )
 
     logger.info(
         f"Detected SOL deposit: {amount} SOL to {address[:10]}... "
-        f"tx={tx_sig[:16]}..."
+        f"tx={tx_sig[:16]}... (requires {dynamic_confirmations} confs)"
     )
 
 
@@ -955,12 +1111,20 @@ def _detect_usdc_spl_transfer(
         if diff <= 0:
             continue
 
+        # Security: reject dust deposits
+        if is_dust_deposit(diff, "USDC"):
+            continue
+
         # Already checked at caller level, but guard against duplicates
         # from multiple token balance entries
         if BlockchainDeposit.objects.filter(
             chain="solana", tx_hash=tx_sig, currency="USDC"
         ).exists():
             continue
+
+        # Security: amount-based confirmation tier
+        usd_value = estimate_usd_value(diff, "USDC")
+        dynamic_confirmations = get_required_confirmations("solana", usd_value)
 
         BlockchainDeposit.objects.create(
             chain="solana",
@@ -970,14 +1134,14 @@ def _detect_usdc_spl_transfer(
             amount=diff,
             currency="USDC",
             confirmations=0,
-            required_confirmations=required_confirmations,
+            required_confirmations=dynamic_confirmations,
             status=BlockchainDeposit.Status.DETECTING,
             block_number=slot,
         )
 
         logger.info(
             f"Detected USDC SPL deposit: {diff} USDC to {address[:10]}... "
-            f"tx={tx_sig[:16]}..."
+            f"tx={tx_sig[:16]}... (requires {dynamic_confirmations} confs)"
         )
         break  # One USDC deposit per transaction per address
 
@@ -1011,6 +1175,13 @@ def update_sol_confirmations():
     for deposit in pending:
         if deposit.block_number:
             confirmations = max(0, current_slot - deposit.block_number + 1)
+
+            # Security: confirmation monotonicity check (re-org detection)
+            if not check_confirmation_monotonicity(deposit, confirmations):
+                deposit.status = BlockchainDeposit.Status.CONFIRMING
+                deposit.save(update_fields=["status"])
+                continue
+
             deposit.confirmations = confirmations
 
             if confirmations >= deposit.required_confirmations:

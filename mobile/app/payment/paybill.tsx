@@ -20,9 +20,10 @@ import { normalizeError } from "../../src/utils/apiErrors";
 import { colors, getThemeColors, getThemeShadows, CURRENCIES, CurrencyCode } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
 import { SectionHeader } from "../../src/components/SectionHeader";
+import { CryptoLogo } from "../../src/components/CryptoLogo";
 import { useLocale } from "../../src/hooks/useLocale";
 
-const CRYPTO_OPTIONS: CurrencyCode[] = ["USDT", "BTC", "ETH"];
+const CRYPTO_OPTIONS: CurrencyCode[] = ["USDT", "USDC", "BTC", "ETH", "SOL"];
 
 export default function PayBillScreen() {
   const router = useRouter();
@@ -381,26 +382,8 @@ export default function PayBillScreen() {
                           marginBottom: 4,
                         }}
                       >
-                        <View
-                          style={{
-                            width: 26,
-                            height: 26,
-                            borderRadius: 13,
-                            backgroundColor: isSelected ? brandColor : tc.dark.border,
-                            alignItems: "center",
-                            justifyContent: "center",
-                            marginRight: 6,
-                          }}
-                        >
-                          <Text
-                            style={{
-                              color: isSelected ? "#fff" : tc.textSecondary,
-                              fontSize: 13,
-                              fontFamily: "DMSans_700Bold",
-                            }}
-                          >
-                            {info.iconSymbol}
-                          </Text>
+                        <View style={{ marginRight: 6 }}>
+                          <CryptoLogo currency={crypto} size={24} />
                         </View>
                         <Text
                           style={{
@@ -561,6 +544,7 @@ export default function PayBillScreen() {
                     loading={loading}
                     disabled={!paybillNumber || !accountNumber || !amount}
                     size="lg"
+                    icon={<Ionicons name="flash-outline" size={20} color="#FFFFFF" />}
                   />
                 ) : (
                   <Button
@@ -568,6 +552,7 @@ export default function PayBillScreen() {
                     onPress={handleConfirm}
                     disabled={parseFloat(quote.crypto_amount) > balance}
                     size="lg"
+                    icon={<Ionicons name="arrow-forward-circle-outline" size={20} color="#FFFFFF" />}
                   />
                 )}
               </View>

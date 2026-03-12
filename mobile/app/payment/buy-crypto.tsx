@@ -27,12 +27,14 @@ import { useAuth } from "../../src/stores/auth";
 import { colors, shadows, CURRENCIES, getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
 
-type CryptoOption = "USDT" | "BTC" | "ETH";
+type CryptoOption = "USDT" | "USDC" | "BTC" | "ETH" | "SOL";
 
-const CRYPTO_OPTIONS: { id: CryptoOption; name: string; icon: string; color: string }[] = [
-  { id: "USDT", name: "Tether", icon: "logo-usd", color: colors.crypto.USDT },
-  { id: "BTC", name: "Bitcoin", icon: "logo-bitcoin", color: colors.crypto.BTC },
-  { id: "ETH", name: "Ethereum", icon: "diamond-outline", color: colors.crypto.ETH },
+const CRYPTO_OPTIONS: { id: CryptoOption; name: string; color: string }[] = [
+  { id: "USDT", name: "Tether", color: colors.crypto.USDT },
+  { id: "USDC", name: "USD Coin", color: colors.crypto.USDC },
+  { id: "BTC", name: "Bitcoin", color: colors.crypto.BTC },
+  { id: "ETH", name: "Ethereum", color: colors.crypto.ETH },
+  { id: "SOL", name: "Solana", color: colors.crypto.SOL },
 ];
 
 function PulsingDot() {
@@ -631,6 +633,7 @@ export default function BuyCryptoScreen() {
               onPress={handleContinue}
               size="lg"
               disabled={!amountKES || parsedAmount < 10 || !phone || phone.length < 10 || !quote || quoteLoading}
+              icon={<Ionicons name="arrow-forward-circle-outline" size={20} color="#FFFFFF" />}
               testID="continue-button"
               style={{
                 ...ts.glow(tc.primary[500], 0.35),
@@ -1000,6 +1003,7 @@ export default function BuyCryptoScreen() {
               title="Buy Now"
               onPress={handleConfirmPayment}
               size="lg"
+              icon={<Ionicons name="card-outline" size={20} color="#FFFFFF" />}
               testID="buy-now-button"
               style={{
                 ...ts.glow(tc.primary[500], 0.35),

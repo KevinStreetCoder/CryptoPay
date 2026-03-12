@@ -1438,7 +1438,7 @@ export default function ProfileScreen() {
               accessibilityRole="button"
               accessibilityLabel="English"
             >
-              <Text style={{ fontSize: 22, marginRight: 12 }}>🇬🇧</Text>
+              <Image source={{ uri: "https://flagcdn.com/w80/gb.png" }} style={{ width: 28, height: 20, borderRadius: 3, marginRight: 12 }} />
               <View style={{ flex: 1 }}>
                 <Text
                   style={{
@@ -1490,7 +1490,7 @@ export default function ProfileScreen() {
               accessibilityRole="button"
               accessibilityLabel="Kiswahili"
             >
-              <Text style={{ fontSize: 22, marginRight: 12 }}>🇰🇪</Text>
+              <Image source={{ uri: "https://flagcdn.com/w80/ke.png" }} style={{ width: 28, height: 20, borderRadius: 3, marginRight: 12 }} />
               <View style={{ flex: 1 }}>
                 <Text
                   style={{

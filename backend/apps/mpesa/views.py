@@ -3,9 +3,13 @@ M-Pesa Daraja callback endpoints.
 
 These receive async results from Safaricom after STK Push, B2C, B2B operations.
 They must be publicly accessible HTTPS endpoints.
+
+Security: IP whitelist (middleware) + per-transaction HMAC tokens (URL path) +
+replay prevention (one-time token consumption via Redis).
 """
 
 import logging
+from decimal import Decimal
 
 from django.utils import timezone
 from rest_framework import status
@@ -15,9 +19,28 @@ from rest_framework.views import APIView
 
 from apps.payments.models import Transaction
 
+from .middleware import verify_callback_token
 from .models import MpesaCallback
 
 logger = logging.getLogger(__name__)
+
+
+def _verify_token_if_present(kwargs: dict) -> bool:
+    """
+    Verify the callback token from the URL path if present.
+
+    If no token in the URL (static path), allow through — IP whitelist
+    is the primary defense for static paths.
+    If token is present, verify and consume it (one-time use).
+    """
+    token = kwargs.get("token")
+    if not token:
+        return True  # Static callback path — IP whitelist handles security
+
+    is_valid, tx_id = verify_callback_token(token)
+    if not is_valid:
+        logger.warning(f"Invalid/expired callback token: {token[:16]}...")
+    return is_valid
 
 
 class STKCallbackView(APIView):
@@ -26,7 +49,14 @@ class STKCallbackView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
 
-    def post(self, request):
+    def post(self, request, token=None):
+        # Verify token if present in URL
+        if token and not _verify_token_if_present({"token": token}):
+            return Response(
+                {"ResultCode": 1, "ResultDesc": "Invalid token"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         payload = request.data
         logger.info(f"STK callback received: {payload}")
 
@@ -93,7 +123,13 @@ class B2BCallbackView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
 
-    def post(self, request):
+    def post(self, request, token=None):
+        if token and not _verify_token_if_present({"token": token}):
+            return Response(
+                {"ResultCode": 1, "ResultDesc": "Invalid token"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         payload = request.data
         logger.info(f"B2B callback received: {payload}")
 
@@ -151,7 +187,13 @@ class B2CCallbackView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
 
-    def post(self, request):
+    def post(self, request, token=None):
+        if token and not _verify_token_if_present({"token": token}):
+            return Response(
+                {"ResultCode": 1, "ResultDesc": "Invalid token"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         payload = request.data
         logger.info(f"B2C callback received: {payload}")
 
@@ -191,13 +233,79 @@ class B2CCallbackView(APIView):
         return Response({"ResultCode": 0, "ResultDesc": "Accepted"}, status=status.HTTP_200_OK)
 
 
+class BalanceCallbackView(APIView):
+    """
+    Handle M-Pesa Account Balance API callback.
+
+    Parses the balance from the M-Pesa response and updates the payment
+    circuit breaker state. The balance result contains a multi-line string
+    like: "Working Account|KES|2000000.00|2000000.00|0.00|0.00"
+    """
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request, token=None):
+        logger.info(f"Balance callback received: {request.data}")
+
+        MpesaCallback.objects.create(
+            result_code=0,
+            result_desc="Balance callback",
+            raw_payload=request.data,
+        )
+
+        try:
+            result = request.data.get("Result", {})
+            result_code = result.get("ResultCode", -1)
+
+            if result_code != 0:
+                logger.error(f"Balance query failed: {result.get('ResultDesc', 'Unknown')}")
+                return Response({"ResultCode": 0, "ResultDesc": "Accepted"})
+
+            # Parse balance from ResultParameters
+            params = result.get("ResultParameters", {}).get("ResultParameter", [])
+            balance_str = None
+            for param in params:
+                if param.get("Key") == "AccountBalance":
+                    balance_str = param.get("Value", "")
+                    break
+
+            if balance_str:
+                # Format: "Working Account|KES|available|actual|reserved|uncleared"
+                # Can have multiple accounts separated by "&"
+                total_available = Decimal("0")
+                for account in balance_str.split("&"):
+                    parts = account.split("|")
+                    if len(parts) >= 3 and parts[1].strip() == "KES":
+                        try:
+                            total_available += Decimal(parts[2].strip())
+                        except Exception:
+                            pass
+
+                if total_available > 0:
+                    # Feed into circuit breaker via async task
+                    from .tasks import process_balance_result
+
+                    process_balance_result.delay(str(total_available))
+                    logger.info(f"M-Pesa float balance: KES {total_available:,.0f}")
+                else:
+                    logger.warning(f"Could not parse balance from: {balance_str}")
+            else:
+                logger.warning("No AccountBalance parameter in balance callback")
+
+        except Exception as e:
+            logger.error(f"Error processing balance callback: {e}")
+
+        return Response({"ResultCode": 0, "ResultDesc": "Accepted"}, status=status.HTTP_200_OK)
+
+
 class TimeoutCallbackView(APIView):
     """Generic timeout handler for any M-Pesa queue timeout."""
 
     permission_classes = [AllowAny]
     authentication_classes = []
 
-    def post(self, request):
+    def post(self, request, token=None):
         logger.warning(f"M-Pesa timeout callback: {request.data}")
         MpesaCallback.objects.create(
             result_code=-1,

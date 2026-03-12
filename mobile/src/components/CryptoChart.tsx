@@ -302,8 +302,8 @@ function Tooltip({
         borderColor: color + "44",
         ...ts.md,
         zIndex: 10,
+        pointerEvents: "none" as any,
       }}
-      pointerEvents="none"
     >
       <Text
         style={{
@@ -366,7 +366,10 @@ export function CryptoChart({
 
   const isWeb = Platform.OS === "web";
   const PADDING_H = 0;
-  const PADDING_V = 8;
+  const PADDING_V = 6;
+  // Extra inset so the line + glow never clips at top/bottom
+  const DATA_INSET_TOP = 10;
+  const DATA_INSET_BOTTOM = 4;
 
   const onLayout = useCallback((e: LayoutChangeEvent) => {
     setContainerWidth(e.nativeEvent.layout.width);
@@ -411,9 +414,10 @@ export function CryptoChart({
     const mx = Math.max(...rates);
     const range = mx - mn || 1;
 
+    const drawableHeight = chartHeight - DATA_INSET_TOP - DATA_INSET_BOTTOM;
     const pts = chartData.map((d, i) => ({
       x: PADDING_H + (i / (chartData.length - 1)) * chartWidth,
-      y: PADDING_V + chartHeight - ((d.rate - mn) / range) * chartHeight,
+      y: PADDING_V + DATA_INSET_TOP + drawableHeight - ((d.rate - mn) / range) * drawableHeight,
     }));
 
     return { points: pts, minRate: mn, maxRate: mx };
@@ -519,8 +523,9 @@ export function CryptoChart({
   );
 
   // Grid lines at 25%, 50%, 75%
+  const drawableH = chartHeight - DATA_INSET_TOP - DATA_INSET_BOTTOM;
   const gridLines = [0.25, 0.5, 0.75].map((pct) => ({
-    y: PADDING_V + chartHeight - pct * chartHeight,
+    y: PADDING_V + DATA_INSET_TOP + drawableH - pct * drawableH,
     label:
       minRate > 0
         ? formatPrice(minRate + pct * (maxRate - minRate))
@@ -656,7 +661,8 @@ export function CryptoChart({
           >
             <Defs>
               <SvgLinearGradient id={`grad-${currency}`} x1="0" y1="0" x2="0" y2="1">
-                <Stop offset="0%" stopColor={color} stopOpacity={0.3} />
+                <Stop offset="0%" stopColor={color} stopOpacity={0.45} />
+                <Stop offset="60%" stopColor={color} stopOpacity={0.12} />
                 <Stop offset="100%" stopColor={color} stopOpacity={0.0} />
               </SvgLinearGradient>
             </Defs>
@@ -679,12 +685,22 @@ export function CryptoChart({
             {/* Gradient fill area */}
             <Path d={areaPath} fill={`url(#grad-${currency})`} />
 
-            {/* Line */}
+            {/* Line — glow layer for visibility */}
             <Path
               d={linePath}
               fill="none"
               stroke={color}
-              strokeWidth={2}
+              strokeWidth={6}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              opacity={0.2}
+            />
+            {/* Line — main */}
+            <Path
+              d={linePath}
+              fill="none"
+              stroke={color}
+              strokeWidth={2.5}
               strokeLinecap="round"
               strokeLinejoin="round"
             />
@@ -791,16 +807,27 @@ export function SparklineChart({
         <Svg width={w} height={propHeight} viewBox={`0 0 ${w} ${propHeight}`}>
           <Defs>
             <SvgLinearGradient id={`spark-${color}`} x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0%" stopColor={color} stopOpacity={0.2} />
+              <Stop offset="0%" stopColor={color} stopOpacity={0.35} />
+              <Stop offset="60%" stopColor={color} stopOpacity={0.08} />
               <Stop offset="100%" stopColor={color} stopOpacity={0.0} />
             </SvgLinearGradient>
           </Defs>
           <Path d={areaPath} fill={`url(#spark-${color})`} />
+          {/* Glow for visibility */}
           <Path
             d={linePath}
             fill="none"
             stroke={color}
-            strokeWidth={1.5}
+            strokeWidth={4}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            opacity={0.15}
+          />
+          <Path
+            d={linePath}
+            fill="none"
+            stroke={color}
+            strokeWidth={2}
             strokeLinecap="round"
             strokeLinejoin="round"
           />

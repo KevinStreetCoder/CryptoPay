@@ -161,6 +161,8 @@ export function Button({
         {
           transform: [{ scale: scaleAnim }],
           opacity: disabled ? 0.5 : 1,
+          borderRadius: sizeConfig.borderRadius,
+          overflow: "hidden" as const,
         },
         variant === "primary" && !disabled ? glowShadow : null,
         webOuterStyle,
@@ -209,13 +211,13 @@ export function Button({
       >
         {/* Ripple flash overlay */}
         <Animated.View
-          pointerEvents="none"
           style={[
             StyleSheet.absoluteFill,
             {
               backgroundColor: "#FFFFFF",
               opacity: flashOpacity,
               borderRadius: sizeConfig.borderRadius,
+              pointerEvents: "none" as any,
             },
           ]}
         />

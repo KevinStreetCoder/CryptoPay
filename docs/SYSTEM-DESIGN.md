@@ -455,6 +455,30 @@ def rebalance():
 >
 > **Kotani Pay:** Kenya-based, received strategic investment from Tether (Oct 2025). Supports USDT/USDC off-ramp to M-Pesa via API. Also offers USSD-based access for feature phones.
 
+### Implementation Status (as of March 12, 2026)
+
+| Component | Status | Details |
+|-----------|--------|---------|
+| **Float balance monitoring** | ✅ Implemented | `check_float_balance` Celery task runs every 5min, checks M-Pesa Account Balance API |
+| **PlatformWallet model (FLOAT type)** | ✅ Implemented | System wallets seeded via `seed_system_wallets` management command |
+| **M-Pesa Account Balance API** | ✅ Implemented | Daraja integration in `mpesa/client.py`, called by float check task |
+| **Threshold alerts** | ⚠️ Partial | Low float warning logged, but no SMS/email alert to ops team yet |
+| **Auto-sell crypto (rebalancing)** | ❌ Not implemented | Requires exchange API integration (Yellow Card / Kotani Pay) |
+| **Yellow Card API integration** | ❌ Not implemented | KYB onboarding needed with `paymentsapi@yellowcard.io` |
+| **Kotani Pay API integration** | ❌ Not implemented | Alternative off-ramp provider |
+| **Emergency payment pause** | ✅ Implemented | 3-state circuit breaker (CLOSED/HALF_OPEN/OPEN) with Redis state, threshold-based auto-trigger, admin manual override, audit logging |
+| **Bank account top-up flow** | ❌ Not implemented | Manual process — no API integration for bank transfers |
+
+**What this means for transaction automation:**
+1. **Deposits** (crypto in): Fully automated. Blockchain listeners detect, confirm, and credit.
+2. **Payments** (crypto → M-Pesa): Fully automated via Payment Saga (Lock → Convert → B2B).
+3. **Conversion** (crypto → KES): Currently uses **internal pool** (pre-funded KES float). No exchange API yet.
+4. **Float replenishment**: Manual. When KES float runs low, operator must manually top up via bank transfer or sell crypto on an exchange.
+
+**To reach full automation, the remaining gap is:**
+- Exchange API integration (Yellow Card primary, Kotani Pay secondary) for automated crypto-to-KES conversion
+- This enables: auto-rebalancing when float drops below threshold, automated crypto sell orders, real-time settlement
+
 ### CRITICAL Security Rule
 
 **Never trust frontend transaction hashes.** CryptoPay MUST detect deposits itself via blockchain listener.
@@ -706,6 +730,116 @@ Layer 4 — M-Pesa:
   - Check Transaction Status before retry
   - Never retry without confirming previous attempt failed
 ```
+
+### Blockchain Deposit Security (Production Hardening)
+
+**Implementation:** `apps/blockchain/security.py` + hardened `tasks.py`
+
+#### 1. Dust Attack Prevention
+Minimum deposit thresholds reject tiny transactions at detection time:
+
+| Currency | Minimum | Rationale |
+|----------|---------|-----------|
+| BTC | 0.00005 BTC (~$5) | Filters UTXO dust |
+| ETH | 0.002 ETH (~$5) | Blocks gas-burning attacks |
+| USDT | $1.00 | Token dust filter |
+| USDC | $1.00 | Token dust filter |
+| SOL | 0.05 SOL (~$5) | Rent-exempt minimum |
+
+Configurable via `MINIMUM_DEPOSIT_AMOUNTS` in settings.
+
+#### 2. Amount-Based Confirmation Tiers
+Larger deposits require more confirmations to prevent double-spend attacks:
+
+| Chain | < $1K | < $10K | < $100K | >= $100K |
+|-------|-------|--------|---------|----------|
+| Bitcoin | 2 confs (~20 min) | 3 confs (~30 min) | 6 confs (~60 min) | 6 confs |
+| Ethereum | 12 confs (~2.4 min) | 32 confs (~6.4 min, 1 epoch) | 64 confs (~12.8 min, 2 epochs) | 64 confs |
+| Tron | 19 confs (solidified) | 19 | 19 | 19 |
+| Solana | 32 slots (finalized) | 32 | 32 | 32 |
+
+**Why fixed for Tron/Solana:** These chains have deterministic finality — once solidified/finalized, transactions cannot be reversed.
+
+#### 3. Re-org Detection
+For Ethereum deposits, the system verifies `block_hash` hasn't changed before crediting:
+- If block hash mismatch detected → deposit reverted to `CONFIRMING` status
+- Logged as CRITICAL alert for ops team investigation
+- **Fail closed:** if verification fails, deposit is NOT credited
+
+#### 4. Double-Credit Prevention
+```
+process_pending_deposits():
+  1. SELECT ... FOR UPDATE on deposit row (row-level lock)
+  2. Re-check status == CONFIRMED inside transaction
+  3. Verify block hash (re-org detection)
+  4. Validate address ownership (API response manipulation defense)
+  5. Re-check dust threshold
+  6. WalletService.credit() with its own SELECT FOR UPDATE
+  7. Mark deposit as CREDITED atomically
+```
+
+#### 5. Address Validation
+- Format validation per chain (regex patterns for Tron T-prefix, ETH 0x, BTC P2PKH/P2SH/Bech32, Solana Base58)
+- Ownership verification: deposit address must exist in our `wallets` table
+- Cross-chain confusion prevention
+
+#### 6. Deposit Velocity Monitoring
+- Configurable window (default: 20 deposits per 10 minutes per address)
+- Detects automated spam/dust attack patterns
+- Logged as CRITICAL alert, new deposits rejected until velocity normalizes
+
+#### 7. Confirmation Monotonicity (Re-org Detection)
+All 4 chain listeners (Tron, ETH, BTC, SOL) plus dedicated listeners (`eth_listener.py`, `btc_listener.py`, `sol_listener.py`) check that confirmation counts only increase. A decrease triggers:
+- CRITICAL log alert with deposit ID and tx hash
+- Deposit reverted to `CONFIRMING` for re-verification
+- Prevents crediting during blockchain reorganizations
+
+#### 8. Bitcoin RBF (Replace-By-Fee) Detection
+BIP 125 RBF detection for unconfirmed BTC transactions:
+- Checks input sequence numbers (`< 0xFFFFFFFE` = RBF signaled)
+- RBF-signaled unconfirmed txs logged as WARNING
+- Only matters for 0-conf; once 1+ confirmations, RBF is irrelevant
+- System never credits 0-conf BTC (minimum 2 confirmations), so RBF is defense-in-depth
+
+#### 9. Stablecoin Blacklist/Freeze Check (Production — On-Chain Verification)
+USDT (Tether) and USDC (Circle) have centralized freeze capabilities:
+- Tether: Frozen $3.3B+ across 7,268 addresses (as of 2025)
+- Circle: Frozen $109M across 372 addresses
+
+**Implementation:** Real on-chain contract calls via JSON-RPC/TronGrid:
+- **USDT on Ethereum:** `eth_call` to `0xdAC17F958D2ee523a2206206994597C13D831ec7` → `isBlackListed(address)` (selector: `0xe47d6060`)
+- **USDC on Ethereum:** `eth_call` to `0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48` → `isBlacklisted(address)` (selector: `0xfe575a87`)
+- **USDC on Polygon:** `eth_call` to `0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359` → `isBlacklisted(address)` (selector: `0xfe575a87`)
+- **USDT on Tron:** TronGrid `triggersmartcontract` to `TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t` → `isBlackListed(address)`
+
+**Fail-open design:** If the RPC call fails, deposits are NOT blocked (availability over strictness). A false negative is acceptable; a false positive would freeze user funds. RPC failures are logged as warnings for ops monitoring.
+
+**Future enhancement:** Integrate Chainalysis KYT or TRM Labs for OFAC/sanctions screening (see `docs/API-KEYS-AND-ACCOUNTS.md`).
+
+#### 10. M-Pesa Callback Security (Multi-Layer Defense)
+
+Safaricom Daraja API (v2 and v3, as of March 2026) does NOT sign callbacks. Anyone who discovers the callback URL can POST fake payment confirmations. Our defense:
+
+| Layer | Implementation | File |
+|-------|---------------|------|
+| **1. IP Whitelist** | Only accept from Safaricom's `196.201.212-214.0/24` ranges | `apps/mpesa/middleware.py` |
+| **2. Dynamic HMAC Tokens** | Per-transaction HMAC-SHA256 token embedded in callback URL path | `apps/mpesa/middleware.py` |
+| **3. Replay Prevention** | Each token stored in Redis, consumed (deleted) on first use, 2hr TTL | `apps/mpesa/middleware.py` |
+| **4. Schema Validation** | Reject payloads not matching expected Daraja format | `apps/mpesa/views.py` |
+| **5. Post-Callback Verification** | Cross-verify via Transaction Status API for high-value txs | `apps/payments/saga.py` |
+
+**Dynamic URL flow:**
+```
+1. initiate_payment() → generate_callback_token(tx_id, "b2b") → "a1b2c3d4..."
+2. CallbackURL sent to Safaricom: /api/v1/mpesa/callback/b2b/a1b2c3d4.../
+3. Callback arrives → verify_callback_token("a1b2c3d4...") → True + deletes from Redis
+4. Second callback with same token → False (replay blocked)
+```
+
+#### 11. Deposit Address Uniqueness
+- PostgreSQL `UniqueConstraint` on `deposit_address` (conditional: non-empty only)
+- Prevents two wallets from sharing a deposit address
+- Combined with BIP-44 deterministic derivation ensures address collision is impossible
 
 ---
 

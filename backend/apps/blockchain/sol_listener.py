@@ -20,6 +20,7 @@ from django.conf import settings
 from apps.wallets.models import Wallet
 
 from .models import BlockchainDeposit
+from .security import check_confirmation_monotonicity, is_dust_deposit, estimate_usd_value, get_required_confirmations
 
 logger = logging.getLogger(__name__)
 
@@ -229,8 +230,8 @@ def _check_sol_transfer(
 
     amount = Decimal(str(received_lamports)) / Decimal(10**SOL_DECIMALS)
 
-    # Minimum deposit threshold (dust filter)
-    if amount < Decimal("0.001"):
+    # Security: reject dust deposits
+    if is_dust_deposit(amount, "SOL"):
         return
 
     # Determine sender (first signer that's not us)
@@ -242,6 +243,10 @@ def _check_sol_transfer(
             from_addr = pubkey
             break
 
+    # Security: amount-based confirmation tier
+    usd_value = estimate_usd_value(amount, "SOL")
+    dynamic_confirmations = get_required_confirmations("solana", usd_value)
+
     BlockchainDeposit.objects.create(
         chain="solana",
         tx_hash=tx_sig,
@@ -250,14 +255,14 @@ def _check_sol_transfer(
         amount=amount,
         currency="SOL",
         confirmations=0,
-        required_confirmations=required_confirmations,
+        required_confirmations=dynamic_confirmations,
         status=BlockchainDeposit.Status.DETECTING,
         block_number=slot,
     )
 
     logger.info(
         f"Detected SOL deposit: {amount} SOL to {address[:10]}... "
-        f"tx={tx_sig[:16]}..."
+        f"tx={tx_sig[:16]}... (requires {dynamic_confirmations} confs)"
     )
 
 
@@ -309,29 +314,41 @@ def _check_spl_transfer(
         if received <= 0:
             continue
 
-        # Skip if already tracked (for this specific token transfer)
-        deposit_key = f"{tx_sig}:USDC"
+        # Security: reject dust deposits
+        if is_dust_deposit(received, "USDC"):
+            continue
+
+        # A single Solana tx can contain both SOL and USDC transfers.
+        # The DB has unique_together = ("chain", "tx_hash"), so we suffix
+        # with ":USDC:{accountIndex}" to ensure uniqueness per token
+        # transfer within the same transaction.
+        account_idx = post_bal.get("accountIndex", 0)
+        deposit_tx_hash = f"{tx_sig}:USDC:{account_idx}"
         if BlockchainDeposit.objects.filter(
-            chain="solana", tx_hash=deposit_key
+            chain="solana", tx_hash=deposit_tx_hash
         ).exists():
             continue
 
+        # Security: amount-based confirmation tier
+        usd_value = estimate_usd_value(received, "USDC")
+        dynamic_confirmations = get_required_confirmations("solana", usd_value)
+
         BlockchainDeposit.objects.create(
             chain="solana",
-            tx_hash=deposit_key,
+            tx_hash=deposit_tx_hash,
             from_address="",
             to_address=address,
             amount=received,
             currency="USDC",
             confirmations=0,
-            required_confirmations=required_confirmations,
+            required_confirmations=dynamic_confirmations,
             status=BlockchainDeposit.Status.DETECTING,
             block_number=slot,
         )
 
         logger.info(
             f"Detected USDC SPL deposit: {received} USDC to {address[:10]}... "
-            f"tx={tx_sig[:16]}..."
+            f"tx={tx_sig[:16]}... (requires {dynamic_confirmations} confs)"
         )
 
 
@@ -363,9 +380,16 @@ def update_sol_confirmations():
     for deposit in pending:
         if deposit.block_number:
             confirmations = max(0, current_slot - deposit.block_number)
+
+            # Security: confirmation monotonicity check (re-org detection)
+            if not check_confirmation_monotonicity(deposit, confirmations):
+                deposit.status = BlockchainDeposit.Status.CONFIRMING
+                deposit.save(update_fields=["status"])
+                continue
+
             deposit.confirmations = confirmations
 
-            if confirmations >= required:
+            if confirmations >= deposit.required_confirmations:
                 deposit.status = BlockchainDeposit.Status.CONFIRMED
             else:
                 deposit.status = BlockchainDeposit.Status.CONFIRMING

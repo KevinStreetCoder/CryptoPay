@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
 import { useAuth } from "../../src/stores/auth";
 import { authApi, KYCDocument } from "../../src/api/auth";
 import { useToast } from "../../src/components/Toast";
@@ -118,24 +119,72 @@ export default function KYCScreen() {
     return documents.find((d) => d.document_type === type);
   };
 
+  const pickImage = async (docType: string, useCamera: boolean) => {
+    const options: ImagePicker.ImagePickerOptions = {
+      mediaTypes: ["images"],
+      quality: 0.8,
+      allowsEditing: docType === "selfie",
+      aspect: docType === "selfie" ? [1, 1] : undefined,
+    };
+
+    let result: ImagePicker.ImagePickerResult;
+    if (useCamera) {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== "granted") {
+        toast.warning(t("kyc.cameraPermission"), t("kyc.cameraPermissionDesc"));
+        return null;
+      }
+      result = await ImagePicker.launchCameraAsync(options);
+    } else {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        toast.warning(t("kyc.galleryPermission"), t("kyc.galleryPermissionDesc"));
+        return null;
+      }
+      result = await ImagePicker.launchImageLibraryAsync(options);
+    }
+
+    if (result.canceled || !result.assets?.[0]) return null;
+    return result.assets[0];
+  };
+
   const handleUpload = async (docType: string) => {
-    // In production, this would open camera/file picker and upload to S3
-    // For now, simulate the upload flow
+    // For selfie, prefer camera; for documents, prefer gallery
+    const useCamera = docType === "selfie";
+    const asset = await pickImage(docType, useCamera);
+    if (!asset) return;
+
     setUploading(docType);
 
     try {
-      // Simulate file upload URL (in production: pick image → upload to S3 → get URL)
-      const placeholderUrl = `https://storage.cryptopay.co.ke/kyc/${user?.id}/${docType}_${Date.now()}.jpg`;
+      const formData = new FormData();
+      formData.append("document_type", docType);
 
-      await authApi.uploadKYCDocument({
-        document_type: docType,
-        file_url: placeholderUrl,
-      });
+      const uri = asset.uri;
+      const filename = uri.split("/").pop() || `${docType}.jpg`;
+      const ext = filename.split(".").pop()?.toLowerCase() || "jpg";
+      const mimeType = ext === "png" ? "image/png" : ext === "pdf" ? "application/pdf" : "image/jpeg";
+
+      if (Platform.OS === "web") {
+        // On web, fetch the blob from the object URL
+        const response = await fetch(uri);
+        const blob = await response.blob();
+        formData.append("file", blob, filename);
+      } else {
+        // On native, pass the URI directly (React Native handles it)
+        formData.append("file", {
+          uri,
+          name: filename,
+          type: mimeType,
+        } as any);
+      }
+
+      await authApi.uploadKYCDocument(formData);
 
       toast.success(t("kyc.uploaded"), t("kyc.documentSubmitted"));
       await loadDocuments();
-    } catch (err: any) {
-      const msg = err?.response?.data?.error || t("kyc.uploadFailed");
+    } catch (err: unknown) {
+      const msg = (err as any)?.response?.data?.error || t("kyc.uploadFailed");
       toast.error("Error", msg);
     } finally {
       setUploading(null);

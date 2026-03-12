@@ -11,4 +11,5 @@ urlpatterns = [
     path("buy-crypto/", views.BuyCryptoView.as_view(), name="buy-crypto"),
     path("history/", views.TransactionHistoryView.as_view(), name="history"),
     path("<uuid:transaction_id>/receipt/", views.TransactionReceiptView.as_view(), name="transaction-receipt"),
+    path("circuit-breaker/", views.CircuitBreakerStatusView.as_view(), name="circuit-breaker"),
 ]

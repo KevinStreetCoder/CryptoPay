@@ -1,6 +1,6 @@
 # CryptoPay — Development Progress
 
-**Last updated:** 2026-03-11
+**Last updated:** 2026-03-12
 
 > See also: [ROADMAP.md](./ROADMAP.md) for strategic vision, fundraising, and expansion plans.
 > See also: [SYSTEM-DESIGN.md](./SYSTEM-DESIGN.md) for technical architecture and liquidity engine design.
@@ -32,6 +32,7 @@
 | M-Pesa callback handlers | ✅ Done | STK, B2B, B2C, Timeout — all with audit logging |
 | M-Pesa IP whitelist middleware | ✅ Done | Safaricom IP ranges, configurable via settings |
 | Blockchain deposit tracking | ✅ Done | State machine: detecting → confirming → credited |
+| Blockchain security hardening | ✅ Done | Dust thresholds, amount-based confirmation tiers, re-org detection, double-credit prevention, address validation, velocity anomaly detection |
 | Transaction history API | ✅ Done | Paginated, filtered by type/status |
 | Health check endpoint | ✅ Done | DB, Redis, Celery status at `/health/` |
 | Admin dashboard | ✅ Done | Transaction admin with filters, CSV export, review actions |
@@ -40,7 +41,7 @@
 | Audit logging | ✅ Done | Immutable AuditLog, middleware for request context |
 | Production settings | ✅ Done | SSL, HSTS, WhiteNoise, Sentry, JSON logging, DB pooling |
 | Docker Compose | ✅ Done | PostgreSQL 16, Redis 7, web, celery, celery-beat, health checks |
-| Tests (66) | ✅ Done | Auth, wallets, saga, idempotency, daily limits, rates, address gen, deposits |
+| Tests (116) | ✅ Done | Auth, wallets, saga, idempotency, daily limits, rates, address gen, deposits, **security hardening (50 new)** |
 
 ### Frontend (React Native + Expo) — COMPLETE ✅
 
@@ -102,7 +103,7 @@
 | Primary color upgrade | ✅ Done | Vibrant emerald `#10B981` (500) with full 50-900 scale |
 | Shadow system | ✅ Done | `shadows.sm/md/lg/glow()` presets with platform-aware shadow/elevation |
 | Emoji removal | ✅ Done | Flag emoji `🇰🇪` replaced with styled "KE" text badge. Currency emoji `💵/◎` replaced with Unicode symbols |
-| Currency icon system | ✅ Done | `CURRENCIES[x].iconSymbol` (₿, Ξ, $, S, K) rendered in crypto-brand-colored circles |
+| Currency icon system | ✅ Done | CoinGecko CDN logos via `CryptoLogo` component. Legacy `iconSymbol`/`icon` fields removed from CURRENCIES. |
 | Tab bar glassmorphism | ✅ Done | Semi-transparent tab bar with pill-shaped active indicator |
 | Button glow shadows | ✅ Done | Primary buttons have `shadows.glow()` effect, spring-based press animation `scale(0.97)` |
 | Press micro-animations | ✅ Done | All interactive cards: `scale(0.98)`, `opacity(0.85)` on press via Animated spring |
@@ -124,7 +125,7 @@
 
 ## Professional UI Redesign Phase 2 — IMPLEMENTED ✅
 
-**Last updated:** 2026-03-11
+**Last updated:** 2026-03-12
 
 | Change | Status | Details |
 |--------|--------|---------|
@@ -319,7 +320,7 @@
 
 ## Phase 3 — Production Ready & Launch (In Progress)
 
-**Last updated:** 2026-03-11
+**Last updated:** 2026-03-12
 
 ### Production Infrastructure — IMPLEMENTED ✅
 
@@ -447,6 +448,56 @@ What's real vs placeholder in the current codebase:
 | 2 | **Fix sidebar avatar not displaying** | Frontend | `WebSidebar` was using `user.avatar_url` directly without resolving relative Django paths (e.g., `/media/avatars/xxx.jpg`). Added `resolveAvatarUrl()` helper (same as profile.tsx) to both collapsed and expanded avatar displays. | `WebSidebar.tsx` |
 | 3 | **Dev OTP security challenge bypass** | Backend | Added `if settings.DEBUG: security_challenge = False` in LoginView so new-device OTP is skipped during development (no SMS API configured). OTP code included in response when DEBUG for testing. | `views.py` |
 
+#### ✅ COMPLETED (March 12, 2026 Session — Production Polish & Security Hardening)
+
+| # | Task | Area | Details | Files |
+|---|------|------|---------|-------|
+| 1 | **Stablecoin blacklist on-chain verification** | Backend | Real eth_call / TronGrid queries to USDT/USDC blacklist contracts (isBlackListed/isBlacklisted). Fail-open design for availability. | `blockchain/security.py`, `blockchain/tasks.py` |
+| 2 | **M-Pesa callback HMAC tokens** | Backend | HMAC-SHA256 per-transaction callback tokens stored in Redis with 2hr TTL. Dynamic callback URLs with one-time token consumption. | `mpesa/middleware.py`, `mpesa/views.py`, `mpesa/urls.py`, `mpesa/client.py` |
+| 3 | **BTC RBF detection** | Backend | Integrated `is_rbf_signaled` check for unconfirmed Bitcoin transactions. | `blockchain/btc_listener.py` |
+| 4 | **SOL confirmation monotonicity** | Backend | Applied `check_confirmation_monotonicity` to Solana listener. Uses per-deposit required_confirmations. | `blockchain/sol_listener.py` |
+| 5 | **Deposit address uniqueness constraint** | Backend | PostgreSQL UNIQUE constraint on non-empty deposit_address. Migration applied. | `wallets/models.py`, migration |
+| 6 | **All 5 coins in payment screens** | Frontend | USDT, USDC, BTC, ETH, SOL available in Pay Bill, Pay Till, Send, Buy Crypto. Was only 3 before. | `paybill.tsx`, `till.tsx`, `send.tsx`, `buy-crypto.tsx` |
+| 7 | **CryptoLogo replacing letter icons** | Frontend | Replaced all text/letter-based crypto icons with CoinGecko CDN logos via CryptoLogo component. Cleaned dead `iconSymbol`/`icon` from CURRENCIES constant. | `CurrencySelector.tsx`, `BalanceCard.tsx`, `theme.ts`, `buy-crypto.tsx` |
+| 8 | **Press animations on interactive elements** | Frontend | Added spring scale animations to TransactionItem (0.97) and CurrencySelector pills (0.95). | `TransactionItem.tsx`, `CurrencySelector.tsx` |
+| 9 | **Chart visibility improvement** | Frontend | Added glow layer (wider stroke at low opacity) behind chart lines. Increased gradient fill opacity (0.3→0.45 with 3-stop gradient). Both main charts and sparklines. | `CryptoChart.tsx` |
+| 10 | **Real KYC file upload** | Full stack | Replaced placeholder URL with real `expo-image-picker` integration. Camera for selfie, gallery for documents. Multipart FormData upload to backend. Backend stores via `default_storage` (S3/local). 10MB limit, JPEG/PNG/WebP/PDF. | `kyc.tsx`, `auth.ts`, `views.py`, `serializers.py` |
+| 11 | **Push notification routing** | Frontend | Notification taps now navigate to relevant screens: transaction detail, wallet, KYC, devices, etc. Based on `type` field in notification payload. | `usePushNotifications.ts` |
+| 12 | **USDT default expanded chart** | Frontend | Dashboard now shows USDT as default expanded chart on both mobile and desktop. | `index.tsx` |
+
+#### ✅ COMPLETED (March 12, 2026 Session 2 — Layout, i18n, Docs)
+
+| # | Task | Area | Details | Files |
+|---|------|------|---------|-------|
+| 1 | **Settings full-width layout: language.tsx** | Frontend | Removed `maxWidth: 580, alignSelf: "center"` constraint. Now uses `paddingHorizontal: 48` on desktop for proper full-width layout. | `language.tsx` |
+| 2 | **Settings full-width layout: totp-setup.tsx** | Frontend | Removed `maxWidth: 520` from ScrollView. Now uses `paddingHorizontal: 48` on desktop. | `totp-setup.tsx` |
+| 3 | **Help FAQ i18n (remove hardcoded data)** | Frontend | Replaced hardcoded `FAQ_DATA` array with `FAQ_KEYS` that reference i18n translation keys. FAQ questions/answers now pulled from `en.ts`/`sw.ts` via `t()`. Category labels also i18n'd. | `help.tsx` |
+| 4 | **Font consistency fix: help.tsx** | Frontend | Replaced `fontWeight` with `fontFamily: "DMSans_*"` in AccordionItem and CategoryChip components. | `help.tsx` |
+| 5 | **Web notifications (browser API)** | Frontend | Added `registerWebNotifications()` for browser Notification API. `showWebNotification()` export for triggering web notifications. Notification tap routing to relevant screens. | `usePushNotifications.ts` |
+| 6 | **Notifications inbox: real API data** | Frontend | Removed 10 hardcoded mock notifications. Now fetches real transactions from `paymentsApi.history()` and converts to notification format. | `notifications-inbox.tsx` |
+| 7 | **Nested button HTML fix** | Frontend | Fixed `<button> cannot contain nested <button>` error in notifications inbox. Delete action uses `View+onClick` instead of nested `Pressable`. | `notifications-inbox.tsx` |
+| 8 | **Chart line overflow fix** | Frontend | Added `DATA_INSET_TOP` (10px) and `DATA_INSET_BOTTOM` (4px) to prevent chart line clipping at top of chart area. | `CryptoChart.tsx` |
+| 9 | **Backend .env configuration** | Backend | Added TronGrid API key, HD wallet master seed, Resend email config. | `backend/.env` |
+| 10 | **PROGRESS.md & SYSTEM-DESIGN.md update** | Docs | Added implementation status for liquidity engine, documented remaining business logic gaps. | `PROGRESS.md`, `SYSTEM-DESIGN.md` |
+
+#### ✅ COMPLETED (March 12, 2026 Session 3 — Circuit Breaker, Bug Fixes, UI Polish)
+
+| # | Task | Area | Details | Files |
+|---|------|------|---------|-------|
+| 1 | **Emergency payment pause (circuit breaker)** | Backend | Production 3-state circuit breaker: CLOSED → HALF_OPEN → OPEN. Auto-triggers from M-Pesa float balance callbacks. Hysteresis between CRITICAL/RESUME thresholds prevents flapping. Redis-backed with 24h TTL safety valve. Admin force pause/resume API. Audit trail on every transition. Push + email alerts to staff. | `circuit_breaker.py`, `views.py`, `urls.py`, `tasks.py`, `push.py`, `base.py` |
+| 2 | **Sidebar active state fix** | Frontend | Fixed both "Profile" and "Settings" showing active on `/settings/edit-profile`. Changed from substring match to exact path matching. | `WebSidebar.tsx` |
+| 3 | **Language page redesign** | Frontend | Replaced emoji flags with CDN flag images (flagcdn.com). Added desktop layout with side-by-side cards, spring animations, region info, speaker count. | `language.tsx` |
+| 4 | **`registerWebNotifications` crash fix** | Frontend | CRITICAL: Renamed function to `requestWebNotificationPermission` with `.catch()` safety. Was crashing entire app on web via ErrorBoundary. | `usePushNotifications.ts` |
+| 5 | **Nested button HTML fix (complete)** | Frontend | Removed `accessibilityRole="button"` from delete View that was still causing `<button>` nesting on web. | `notifications-inbox.tsx` |
+| 6 | **Button corner background leak fix** | Frontend | Added `borderRadius` + `overflow: "hidden"` to outer `Animated.View` in Button component. Glow shadow no longer bleeds through rounded corners. | `Button.tsx` |
+| 7 | **`pointerEvents` prop deprecation fix** | Frontend | Moved `pointerEvents` from prop to style object in Button and CryptoChart. | `Button.tsx`, `CryptoChart.tsx` |
+| 8 | **Profile language modal flag fix** | Frontend | Replaced emoji flags (🇬🇧/🇰🇪 rendering as "GB"/"KE" on web) with CDN flag images from flagcdn.com. | `profile.tsx` |
+| 9 | **Icons in all payment buttons** | Frontend | Added Ionicons to all 15 Button components: flash-outline (Get Quote), send-outline (Pay Now), arrow-forward-circle (Confirm), refresh-outline (New Quote), checkmark-done (Done), repeat (Another Payment), home (Go Home), card (Buy Now). | `paybill.tsx`, `till.tsx`, `send.tsx`, `confirm.tsx`, `success.tsx`, `buy-crypto.tsx` |
+| 10 | **Enhanced success/failure animations** | Frontend | Success: ring expand + checkmark bounce with rotation + glow pulse. New failure state: AnimatedFailure with ring + X mark + horizontal shake. Staggered card/button fade-in. `status=failed` param support. | `success.tsx` |
+| 11 | **App icon compression** | Frontend | Compressed icon.png from 393KB → 207KB (47% reduction) using sharp resize + PNG optimization. | `assets/icon.png` |
+| 12 | **M-Pesa Balance callback view** | Backend | New BalanceCallbackView parses M-Pesa Account Balance API response. Supports multi-account format with `&` separator. Feeds into circuit breaker via Celery task. | `mpesa/views.py`, `mpesa/urls.py` |
+| 13 | **Admin circuit breaker API** | Backend | GET (status) + POST (pause/resume) endpoint for admin. Staff-only. Returns full status dict with state, thresholds, last update. | `payments/views.py`, `payments/urls.py` |
+
 #### 🟡 HIGH PRIORITY — Remaining (Before Beta Launch)
 
 | # | Task | Area | Details | Files |
@@ -465,7 +516,7 @@ What's real vs placeholder in the current codebase:
 | 14 | **WalletConnect (Reown AppKit)** | Frontend | External wallet connection for paying from MetaMask/Trust/Phantom. Well-supported on Expo. | New: mobile components |
 | 15 | **Hot/warm/cold wallet split** | Backend | Tiered security: hot (2-5%, KMS), warm (multi-sig 2-of-3), cold (hardware, 3-of-5). | `backend/apps/blockchain/services.py` |
 | 16 | **App Store + Play Store submission** | Launch | EAS production builds, store listings, screenshots, privacy policy. Apple review ~24h, financial apps may take longer. | `mobile/eas.json`, `mobile/app.json` |
-| 17 | **Compress app assets** | Frontend | App icon is 385 KB (should be ~100 KB). Optimize all PNG assets. | `mobile/assets/` |
+| 17 | **~~Compress app assets~~** | Frontend | ✅ Done — icon.png compressed 393KB → 207KB. | `mobile/assets/` |
 | 18 | **Google OAuth production setup** | Frontend | Fill OAuth client IDs in app.json extra config. Currently empty. | `mobile/app.json` |
 | 19 | **Off-ramp API (Yellow Card / Kotani Pay)** | Backend | Automated USDT→KES conversion via exchange API. Yellow Card B2B API or Kotani Pay. | New: exchange service |
 
@@ -584,9 +635,9 @@ eas build --platform ios --profile production
 
 | Document | Purpose | Last Updated |
 |----------|---------|-------------|
-| [PROGRESS.md](./PROGRESS.md) | This file — development status and test results | 2026-03-11 |
+| [PROGRESS.md](./PROGRESS.md) | This file — development status and test results | 2026-03-12 |
 | [ROADMAP.md](./ROADMAP.md) | Strategic roadmap, fundraising, go-to-market, expansion plans, competitive landscape | 2026-03-09 |
-| [SYSTEM-DESIGN.md](./SYSTEM-DESIGN.md) | Technical architecture, liquidity engine, payment saga, security, regulatory compliance | 2026-03-09 |
+| [SYSTEM-DESIGN.md](./SYSTEM-DESIGN.md) | Technical architecture, liquidity engine, payment saga, security, regulatory compliance | 2026-03-12 |
 | [STARTUP-CHECKLIST.md](./STARTUP-CHECKLIST.md) | Legal, regulatory, financial checklists — updated with VASP Act 2025 requirements | 2026-03-09 |
 | [research/IMPLEMENTATION-RESEARCH-2026-03-09.md](./research/IMPLEMENTATION-RESEARCH-2026-03-09.md) | **Comprehensive research:** playbook verification, all APIs/tools/pricing, regulatory deep-dive, competitor analysis | 2026-03-09 |
 | [research/](./research/) | All research files: competitor analysis, API research, security audit, regulations | Ongoing |

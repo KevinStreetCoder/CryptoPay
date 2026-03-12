@@ -96,3 +96,18 @@ def send_push_notification(
                 )
 
     return tickets
+
+
+def send_admin_alert(title: str, body: str, data: Optional[dict] = None) -> list[dict]:
+    """
+    Send push notification to all staff/admin users.
+    Used for system alerts like circuit breaker transitions, low float, etc.
+    """
+    from apps.accounts.models import User
+
+    staff_ids = User.objects.filter(is_staff=True).values_list("id", flat=True)
+    all_tickets = []
+    for uid in staff_ids:
+        tickets = send_push_notification(str(uid), title, body, data)
+        all_tickets.extend(tickets)
+    return all_tickets

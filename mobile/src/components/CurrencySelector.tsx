@@ -1,7 +1,9 @@
-import { ScrollView, Pressable, View, Text } from "react-native";
+import { ScrollView, Pressable, View, Text, Animated, Platform } from "react-native";
+import { useRef, useCallback } from "react";
 import * as Haptics from "expo-haptics";
 import { CURRENCIES, CurrencyCode, colors, getThemeColors } from "../constants/theme";
 import { useThemeMode } from "../stores/theme";
+import { CryptoLogo } from "./CryptoLogo";
 
 interface CurrencyBalance {
   currency: CurrencyCode;
@@ -13,6 +15,118 @@ interface CurrencySelectorProps {
   selected: CurrencyCode;
   onSelect: (currency: CurrencyCode) => void;
   label?: string;
+}
+
+const useNative = Platform.OS !== "web";
+
+function CurrencyPill({
+  currency,
+  info,
+  balance,
+  isSelected,
+  isEmpty,
+  tc,
+  onSelect,
+}: {
+  currency: CurrencyCode;
+  info: (typeof CURRENCIES)[CurrencyCode];
+  balance: number;
+  isSelected: boolean;
+  isEmpty: boolean;
+  tc: ReturnType<typeof getThemeColors>;
+  onSelect: (c: CurrencyCode) => void;
+}) {
+  const scale = useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = useCallback(() => {
+    Animated.spring(scale, {
+      toValue: 0.95,
+      friction: 8,
+      useNativeDriver: useNative,
+    }).start();
+  }, []);
+
+  const handlePressOut = useCallback(() => {
+    Animated.spring(scale, {
+      toValue: 1,
+      friction: 6,
+      useNativeDriver: useNative,
+    }).start();
+  }, []);
+
+  return (
+    <Animated.View style={{ transform: [{ scale }] }}>
+      <Pressable
+        onPress={() => {
+          if (isEmpty) return;
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          onSelect(currency);
+        }}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          paddingHorizontal: 16,
+          paddingVertical: 12,
+          borderRadius: 16,
+          borderWidth: isSelected ? 2 : 1,
+          borderColor: isSelected
+            ? colors.primary[500]
+            : isEmpty
+            ? "rgba(71, 85, 105, 0.5)"
+            : tc.dark.border,
+          backgroundColor: isSelected
+            ? "rgba(13, 159, 110, 0.1)"
+            : tc.dark.card,
+          opacity: isEmpty ? 0.5 : 1,
+          gap: 10,
+          minWidth: 130,
+        }}
+      >
+        {/* Currency logo */}
+        <View
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 18,
+            backgroundColor: isSelected
+              ? "rgba(13, 159, 110, 0.2)"
+              : tc.dark.elevated,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <CryptoLogo currency={currency} size={22} />
+        </View>
+
+        <View style={{ flex: 1 }}>
+          <Text
+            style={{
+              color: isSelected ? colors.primary[400] : tc.textPrimary,
+              fontSize: 14,
+              fontFamily: "DMSans_600SemiBold",
+            }}
+          >
+            {info.symbol}
+          </Text>
+          <Text
+            style={{
+              color: tc.textMuted,
+              fontSize: 11,
+              fontFamily: "DMSans_400Regular",
+              marginTop: 1,
+            }}
+            numberOfLines={1}
+          >
+            {isEmpty
+              ? "No balance"
+              : `${balance.toFixed(info.decimals > 4 ? 4 : info.decimals)} available`}
+          </Text>
+        </View>
+      </Pressable>
+    </Animated.View>
+  );
 }
 
 export function CurrencySelector({
@@ -49,74 +163,16 @@ export function CurrencySelector({
           const isEmpty = balance <= 0;
 
           return (
-            <Pressable
+            <CurrencyPill
               key={currency}
-              onPress={() => {
-                if (isEmpty) return;
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                onSelect(currency);
-              }}
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                paddingHorizontal: 16,
-                paddingVertical: 12,
-                borderRadius: 16,
-                borderWidth: isSelected ? 2 : 1,
-                borderColor: isSelected
-                  ? colors.primary[500]
-                  : isEmpty
-                  ? "rgba(71, 85, 105, 0.5)"
-                  : tc.dark.border,
-                backgroundColor: isSelected
-                  ? "rgba(13, 159, 110, 0.1)"
-                  : tc.dark.card,
-                opacity: isEmpty ? 0.5 : 1,
-                gap: 10,
-                minWidth: 130,
-              }}
-            >
-              {/* Currency icon */}
-              <View
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 18,
-                  backgroundColor: isSelected
-                    ? "rgba(13, 159, 110, 0.2)"
-                    : tc.dark.elevated,
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <Text style={{ fontSize: 18 }}>{info.icon}</Text>
-              </View>
-
-              <View style={{ flex: 1 }}>
-                <Text
-                  style={{
-                    color: isSelected ? colors.primary[400] : tc.textPrimary,
-                    fontSize: 14,
-                    fontFamily: "DMSans_600SemiBold",
-                  }}
-                >
-                  {info.symbol}
-                </Text>
-                <Text
-                  style={{
-                    color: tc.textMuted,
-                    fontSize: 11,
-                    fontFamily: "DMSans_400Regular",
-                    marginTop: 1,
-                  }}
-                  numberOfLines={1}
-                >
-                  {isEmpty
-                    ? "No balance"
-                    : `${balance.toFixed(info.decimals > 4 ? 4 : info.decimals)} available`}
-                </Text>
-              </View>
-            </Pressable>
+              currency={currency}
+              info={info}
+              balance={balance}
+              isSelected={isSelected}
+              isEmpty={isEmpty}
+              tc={tc}
+              onSelect={onSelect}
+            />
           );
         })}
       </ScrollView>

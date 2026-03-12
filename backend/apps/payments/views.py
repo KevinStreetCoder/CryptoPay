@@ -20,6 +20,7 @@ from rest_framework.views import APIView
 
 from apps.accounts.models import AuditLog
 
+from .circuit_breaker import PaymentCircuitBreaker, PaymentsPaused
 from .models import Transaction
 from .saga import PaymentSaga, SagaError
 from .serializers import BuyCryptoSerializer, PayBillSerializer, PayTillSerializer, SendMpesaSerializer, TransactionSerializer
@@ -79,6 +80,16 @@ class PayBillView(APIView):
             return Response(
                 {"error": str(e)},
                 status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Circuit breaker — block payments if float is critically low
+        try:
+            PaymentCircuitBreaker.check_payment_allowed(Decimal(quote["kes_amount"]))
+        except PaymentsPaused as e:
+            cache.delete(redis_key)
+            return Response(
+                {"error": e.reason, "circuit_breaker": True},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
         # Create the transaction — Layer 3 (PostgreSQL unique constraint)
@@ -184,6 +195,16 @@ class PayTillView(APIView):
             cache.delete(redis_key)
             return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
 
+        # Circuit breaker — block payments if float is critically low
+        try:
+            PaymentCircuitBreaker.check_payment_allowed(Decimal(quote["kes_amount"]))
+        except PaymentsPaused as e:
+            cache.delete(redis_key)
+            return Response(
+                {"error": e.reason, "circuit_breaker": True},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
         try:
             tx = Transaction.objects.create(
                 idempotency_key=idem_key,
@@ -261,6 +282,16 @@ class SendMpesaView(APIView):
         except DailyLimitExceededError as e:
             cache.delete(redis_key)
             return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
+
+        # Circuit breaker — block payments if float is critically low
+        try:
+            PaymentCircuitBreaker.check_payment_allowed(Decimal(quote["kes_amount"]))
+        except PaymentsPaused as e:
+            cache.delete(redis_key)
+            return Response(
+                {"error": e.reason, "circuit_breaker": True},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
         try:
             tx = Transaction.objects.create(
@@ -514,3 +545,62 @@ class TransactionReceiptView(APIView):
             {"error": "Receipt generation failed. Please try again."},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+
+
+class CircuitBreakerStatusView(APIView):
+    """
+    GET  — View current circuit breaker state (admin only).
+    POST — Manually pause or resume payments.
+
+    POST body:
+      {"action": "pause", "reason": "Manual pause for maintenance"}
+      {"action": "resume"}
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not request.user.is_staff:
+            return Response({"error": "Admin access required"}, status=status.HTTP_403_FORBIDDEN)
+        return Response(PaymentCircuitBreaker.get_status_dict())
+
+    def post(self, request):
+        if not request.user.is_staff:
+            return Response({"error": "Admin access required"}, status=status.HTTP_403_FORBIDDEN)
+
+        action = request.data.get("action")
+        if action == "pause":
+            reason = request.data.get("reason", "Manual pause by admin")
+            PaymentCircuitBreaker.force_pause(reason)
+            AuditLog.objects.create(
+                user=request.user,
+                action="CIRCUIT_BREAKER_MANUAL_PAUSE",
+                entity_type="system",
+                entity_id="payment_circuit_breaker",
+                details={"reason": reason},
+                ip_address=self._get_client_ip(request),
+            )
+            return Response({"status": "paused", "reason": reason})
+
+        elif action == "resume":
+            PaymentCircuitBreaker.force_resume(str(request.user))
+            AuditLog.objects.create(
+                user=request.user,
+                action="CIRCUIT_BREAKER_MANUAL_RESUME",
+                entity_type="system",
+                entity_id="payment_circuit_breaker",
+                details={},
+                ip_address=self._get_client_ip(request),
+            )
+            return Response({"status": "resumed"})
+
+        return Response(
+            {"error": "Invalid action. Use 'pause' or 'resume'."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    def _get_client_ip(self, request):
+        xff = request.META.get("HTTP_X_FORWARDED_FOR")
+        if xff:
+            return xff.split(",")[0].strip()
+        return request.META.get("REMOTE_ADDR")

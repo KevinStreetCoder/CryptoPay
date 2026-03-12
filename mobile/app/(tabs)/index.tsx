@@ -545,11 +545,11 @@ function TransactionSummary({ transactions, tc, ts }: { transactions: Transactio
 
 /* ─── Crypto Price Charts Section (Desktop) ─── */
 const CHART_CURRENCIES: { symbol: string; name: string; color: string }[] = [
-  { symbol: "USDC", name: "USD Coin", color: colors.crypto.USDC },
   { symbol: "USDT", name: "Tether", color: colors.crypto.USDT },
+  { symbol: "USDC", name: "USD Coin", color: colors.crypto.USDC },
   { symbol: "BTC", name: "Bitcoin", color: colors.crypto.BTC },
-  { symbol: "SOL", name: "Solana", color: colors.crypto.SOL },
   { symbol: "ETH", name: "Ethereum", color: colors.crypto.ETH },
+  { symbol: "SOL", name: "Solana", color: colors.crypto.SOL },
 ];
 
 function CryptoPriceChartsSection({
@@ -563,7 +563,7 @@ function CryptoPriceChartsSection({
   tc: ReturnType<typeof getThemeColors>;
   ts: ReturnType<typeof getThemeShadows>;
 }) {
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>("USDT");
   const [chartPeriod, setChartPeriod] = useState<string>("7d");
   const [chartLoading, setChartLoading] = useState(false);
 
@@ -631,8 +631,6 @@ function CryptoPriceChartsSection({
           const changeColor = isPos ? colors.primary[400] : colors.error;
           const isExpanded = expanded === cur.symbol;
           const sparkData = sparklines[cur.symbol]?.slice(-48) || [];
-          const iconSymbol =
-            (CURRENCIES as any)[cur.symbol]?.iconSymbol || cur.symbol[0];
 
           return (
             <Pressable
@@ -777,7 +775,7 @@ function MobileCryptoCharts({
   tc: ReturnType<typeof getThemeColors>;
   ts: ReturnType<typeof getThemeShadows>;
 }) {
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>("USDT");
   const [chartPeriod, setChartPeriod] = useState<string>("7d");
 
   const sparklineQueries = useQuery({
@@ -842,8 +840,6 @@ function MobileCryptoCharts({
           const changeColor = isPos ? colors.primary[400] : colors.error;
           const isExpanded = expanded === cur.symbol;
           const sparkData = (sparklines[cur.symbol] || []).slice(-48);
-          const iconSymbol =
-            (CURRENCIES as any)[cur.symbol]?.iconSymbol || cur.symbol[0];
 
           return (
             <Pressable
@@ -975,7 +971,7 @@ export default function HomeScreen() {
 
   const firstName = user?.full_name?.split(" ")[0] || "there";
   const initials = getInitials(user?.full_name);
-  const hasUnread = true; // TODO: derive from notifications API
+  const hasUnread = false;
 
   /* ─── MOBILE LAYOUT (unchanged) ─── */
   if (!isDesktop) {
