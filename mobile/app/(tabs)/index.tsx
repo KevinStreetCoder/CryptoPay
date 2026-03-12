@@ -174,12 +174,16 @@ function PortfolioChart({
   const displayMin = hasData ? minVal : 0;
   const displayRange = displayMax - displayMin || 1;
 
+  const CHART_PAD_TOP = 16;
+  const CHART_PAD_BOTTOM = 12;
+  const usableHeight = chartHeight - CHART_PAD_TOP - CHART_PAD_BOTTOM;
+
   const points = displayPoints.map((val, i) => ({
     x: (i / (displayPoints.length - 1)) * chartWidth,
     y:
-      chartHeight -
-      ((val - displayMin) / displayRange) * (chartHeight - 20) -
-      10,
+      CHART_PAD_TOP +
+      usableHeight -
+      ((val - displayMin) / displayRange) * usableHeight,
   }));
 
   const isPositive = changePercent.startsWith("+");
@@ -195,6 +199,7 @@ function PortfolioChart({
         borderWidth: 1,
         borderColor: tc.glass.border,
         flex: 1,
+        overflow: "hidden" as const,
         ...ts.md,
       }}
     >

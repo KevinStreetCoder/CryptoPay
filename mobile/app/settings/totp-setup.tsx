@@ -589,13 +589,22 @@ export default function TOTPSetupScreen() {
 
             <Pressable
               onPress={() => router.canGoBack() ? router.back() : router.replace("/settings/security" as any)}
-              style={{
-                backgroundColor: tc.primary[500],
+              style={({ pressed, hovered }: any) => ({
+                flexDirection: "row" as const,
+                backgroundColor: hovered ? tc.primary[400] : tc.primary[500],
                 borderRadius: 16,
                 padding: 16,
-                alignItems: "center",
-              }}
+                alignItems: "center" as const,
+                justifyContent: "center" as const,
+                gap: 8,
+                maxWidth: 320,
+                alignSelf: "center" as const,
+                width: "100%" as any,
+                opacity: pressed ? 0.9 : 1,
+                ...(Platform.OS === "web" ? { cursor: "pointer", transition: "all 0.15s ease" } as any : {}),
+              })}
             >
+              <Ionicons name="shield-checkmark-outline" size={20} color="#FFFFFF" />
               <Text style={{ color: "#fff", fontSize: 17, fontFamily: "DMSans_600SemiBold" }}>
                 I've Saved My Codes
               </Text>
