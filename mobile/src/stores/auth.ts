@@ -129,6 +129,16 @@ export function useAuth() {
     return data;
   }, []);
 
+  const refreshProfile = useCallback(async () => {
+    try {
+      const { data } = await authApi.getProfile();
+      _user = data;
+      notify();
+    } catch {
+      // Non-critical — profile will refresh on next bootstrap
+    }
+  }, []);
+
   const logout = useCallback(async () => {
     await storage.deleteItemAsync("access_token");
     await storage.deleteItemAsync("refresh_token");
@@ -137,5 +147,5 @@ export function useAuth() {
     notify();
   }, []);
 
-  return { user, loading, bootstrap, login, register, googleLogin, logout };
+  return { user, loading, bootstrap, login, register, googleLogin, refreshProfile, logout };
 }
