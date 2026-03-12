@@ -645,12 +645,13 @@ export default function ProfileScreen() {
       <Pressable
         onPress={handleVerifyIdentity}
         style={({ pressed, hovered }: any) => ({
-          flex: 1,
+          flex: isDesktop ? undefined : 1,
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "center",
           gap: 8,
-          paddingVertical: 14,
+          paddingVertical: 12,
+          paddingHorizontal: 16,
           borderRadius: 14,
           backgroundColor: pressed
             ? colors.primary[600]
@@ -664,26 +665,28 @@ export default function ProfileScreen() {
         accessibilityRole="button"
         accessibilityLabel="Verify Identity"
       >
-        <Ionicons name="shield-checkmark" size={18} color="#fff" />
+        <Ionicons name="shield-checkmark" size={16} color="#fff" />
         <Text
           style={{
             color: "#FFFFFF",
-            fontSize: 14,
+            fontSize: 13,
             fontFamily: "DMSans_600SemiBold",
           }}
+          numberOfLines={1}
         >
-          Verify Identity
+          {t("profile.verifyIdentity")}
         </Text>
       </Pressable>
       <Pressable
-        onPress={() => router.push("/settings" as any)}
+        onPress={() => router.push("/settings/edit-profile" as any)}
         style={({ pressed, hovered }: any) => ({
-          flex: 1,
+          flex: isDesktop ? undefined : 1,
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "center",
           gap: 8,
-          paddingVertical: 14,
+          paddingVertical: 12,
+          paddingHorizontal: 16,
           borderRadius: 14,
           backgroundColor: pressed
             ? tc.dark.elevated + "80"
@@ -698,15 +701,16 @@ export default function ProfileScreen() {
         accessibilityRole="button"
         accessibilityLabel="Edit Profile"
       >
-        <Ionicons name="create-outline" size={18} color={tc.textPrimary} />
+        <Ionicons name="create-outline" size={16} color={tc.textPrimary} />
         <Text
           style={{
             color: tc.textPrimary,
-            fontSize: 14,
+            fontSize: 13,
             fontFamily: "DMSans_600SemiBold",
           }}
+          numberOfLines={1}
         >
-          Edit Profile
+          {t("profile.editProfile")}
         </Text>
       </Pressable>
     </View>

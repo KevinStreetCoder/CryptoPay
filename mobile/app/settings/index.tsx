@@ -509,6 +509,15 @@ export default function SettingsScreen() {
           route: "/(tabs)/profile",
         },
         {
+          key: "edit-profile",
+          icon: "create-outline",
+          iconColor: "#F59E0B",
+          iconBg: "rgba(245, 158, 11, 0.12)",
+          label: t("settings.editProfile"),
+          description: t("settings.editProfileDesc"),
+          route: "/settings/edit-profile",
+        },
+        {
           key: "kyc",
           icon: "shield-checkmark-outline",
           iconColor: colors.info,

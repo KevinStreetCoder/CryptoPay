@@ -10,10 +10,12 @@ const useNative = Platform.OS !== "web";
 
 function TabIcon({
   name,
+  label,
   color,
   focused,
 }: {
   name: keyof typeof Ionicons.glyphMap;
+  label: string;
   color: string;
   focused: boolean;
 }) {
@@ -41,41 +43,39 @@ function TabIcon({
       style={{
         alignItems: "center",
         justifyContent: "center",
-        paddingTop: 4,
         transform: [{ scale: scaleAnim }],
+        position: "relative",
+        paddingHorizontal: 14,
+        paddingVertical: 6,
       }}
     >
-      <View style={{ position: "relative" }}>
-        {/* Glow behind focused icon */}
-        {focused && (
-          <Animated.View
-            style={{
-              position: "absolute",
-              top: -2,
-              left: -2,
-              right: -2,
-              bottom: -2,
-              borderRadius: 18,
-              backgroundColor: color + "15",
-              opacity: bgOpacity,
-            }}
-          />
-        )}
-        <View
+      {/* Full pill background covering icon + label */}
+      {focused && (
+        <Animated.View
           style={{
-            width: 48,
-            height: 34,
-            borderRadius: 17,
-            backgroundColor: focused
-              ? color + "18"
-              : "transparent",
-            alignItems: "center",
-            justifyContent: "center",
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            borderRadius: 16,
+            backgroundColor: color + "18",
+            opacity: bgOpacity,
           }}
-        >
-          <Ionicons name={name} size={23} color={color} />
-        </View>
-      </View>
+        />
+      )}
+      <Ionicons name={name} size={22} color={color} />
+      <Text
+        style={{
+          color,
+          fontSize: 11,
+          fontFamily: focused ? "DMSans_600SemiBold" : "DMSans_500Medium",
+          marginTop: 2,
+          letterSpacing: 0.3,
+        }}
+      >
+        {label}
+      </Text>
     </Animated.View>
   );
 }
@@ -128,14 +128,9 @@ export default function TabLayout() {
             },
         tabBarActiveTintColor: colors.primary[400],
         tabBarInactiveTintColor: isDark ? "#556B82" : "#94A3B8",
-        tabBarLabelStyle: {
-          fontFamily: "DMSans_600SemiBold",
-          fontSize: 11,
-          marginTop: -2,
-          letterSpacing: 0.3,
-        },
+        tabBarShowLabel: false,
         tabBarItemStyle: {
-          paddingVertical: 2,
+          paddingVertical: 4,
         },
       }}
     >
@@ -146,6 +141,7 @@ export default function TabLayout() {
           tabBarIcon: ({ color, focused }) => (
             <TabIcon
               name={focused ? "home" : "home-outline"}
+              label="Home"
               color={color}
               focused={focused}
             />
@@ -159,6 +155,7 @@ export default function TabLayout() {
           tabBarIcon: ({ color, focused }) => (
             <TabIcon
               name={focused ? "send" : "send-outline"}
+              label="Pay"
               color={color}
               focused={focused}
             />
@@ -172,6 +169,7 @@ export default function TabLayout() {
           tabBarIcon: ({ color, focused }) => (
             <TabIcon
               name={focused ? "wallet" : "wallet-outline"}
+              label="Wallet"
               color={color}
               focused={focused}
             />
@@ -185,6 +183,7 @@ export default function TabLayout() {
           tabBarIcon: ({ color, focused }) => (
             <TabIcon
               name={focused ? "person" : "person-outline"}
+              label="Profile"
               color={color}
               focused={focused}
             />

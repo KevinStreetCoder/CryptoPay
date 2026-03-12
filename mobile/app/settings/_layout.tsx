@@ -21,6 +21,7 @@ export default function SettingsLayout() {
       <Stack.Screen name="language" />
       <Stack.Screen name="help" />
       <Stack.Screen name="notifications-inbox" />
+      <Stack.Screen name="edit-profile" />
     </Stack>
   );
 }

@@ -18,6 +18,7 @@ import { getThemeColors } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
 import { normalizeError } from "../../src/utils/apiErrors";
 import * as Clipboard from "expo-clipboard";
+import QRCode from "react-native-qrcode-svg";
 
 const isWeb = Platform.OS === "web";
 
@@ -179,6 +180,7 @@ export default function TOTPSetupScreen() {
 
         {step === "qr" && (
           <View>
+            {/* QR Code Card */}
             <View
               style={{
                 backgroundColor: tc.dark.card,
@@ -186,7 +188,7 @@ export default function TOTPSetupScreen() {
                 padding: 24,
                 borderWidth: 1,
                 borderColor: tc.glass.border,
-                marginBottom: 24,
+                marginBottom: 16,
               }}
             >
               <Text
@@ -197,7 +199,7 @@ export default function TOTPSetupScreen() {
                   marginBottom: 8,
                 }}
               >
-                1. Add to your authenticator app
+                1. Scan QR Code
               </Text>
               <Text
                 style={{
@@ -205,32 +207,135 @@ export default function TOTPSetupScreen() {
                   fontSize: 14,
                   fontFamily: "DMSans_400Regular",
                   lineHeight: 22,
-                  marginBottom: 16,
+                  marginBottom: 20,
                 }}
               >
-                Open Google Authenticator or Authy and manually enter this secret key:
+                Open your authenticator app and scan this QR code:
               </Text>
 
-              {/* Secret key display */}
+              {/* QR Code */}
+              {provisioningUri ? (
+                <View
+                  style={{
+                    alignItems: "center",
+                    backgroundColor: "#FFFFFF",
+                    borderRadius: 16,
+                    padding: 20,
+                    alignSelf: "center",
+                    marginBottom: 16,
+                  }}
+                >
+                  <QRCode
+                    value={provisioningUri}
+                    size={isDesktop ? 200 : 180}
+                    backgroundColor="#FFFFFF"
+                    color="#000000"
+                  />
+                </View>
+              ) : (
+                <View style={{ alignItems: "center", padding: 40 }}>
+                  <ActivityIndicator size="large" color="#8B5CF6" />
+                </View>
+              )}
+
+              {/* Supported apps */}
+              <Text
+                style={{
+                  color: tc.textMuted,
+                  fontSize: 12,
+                  fontFamily: "DMSans_500Medium",
+                  textAlign: "center",
+                  marginBottom: 12,
+                  textTransform: "uppercase",
+                  letterSpacing: 0.8,
+                }}
+              >
+                Compatible Apps
+              </Text>
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "center",
+                  gap: 12,
+                  flexWrap: "wrap",
+                }}
+              >
+                {[
+                  { name: "Google Authenticator", icon: "logo-google" },
+                  { name: "Microsoft Authenticator", icon: "logo-microsoft" },
+                  { name: "Authy", icon: "shield-checkmark" },
+                  { name: "1Password", icon: "key" },
+                ].map((app) => (
+                  <View
+                    key={app.name}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 6,
+                      backgroundColor: tc.dark.elevated,
+                      borderRadius: 10,
+                      paddingHorizontal: 10,
+                      paddingVertical: 7,
+                      borderWidth: 1,
+                      borderColor: tc.glass.border,
+                    }}
+                  >
+                    <Ionicons name={app.icon as any} size={14} color={tc.textSecondary} />
+                    <Text
+                      style={{
+                        color: tc.textSecondary,
+                        fontSize: 11,
+                        fontFamily: "DMSans_500Medium",
+                      }}
+                    >
+                      {app.name}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+
+            {/* Manual entry fallback */}
+            <View
+              style={{
+                backgroundColor: tc.dark.card,
+                borderRadius: 20,
+                padding: 20,
+                borderWidth: 1,
+                borderColor: tc.glass.border,
+                marginBottom: 24,
+              }}
+            >
+              <Text
+                style={{
+                  color: tc.textSecondary,
+                  fontSize: 13,
+                  fontFamily: "DMSans_500Medium",
+                  marginBottom: 10,
+                }}
+              >
+                Can't scan? Enter this key manually:
+              </Text>
               <Pressable
                 onPress={handleCopySecret}
-                style={{
+                style={({ hovered }: any) => ({
                   backgroundColor: tc.dark.elevated,
                   borderRadius: 12,
-                  padding: 16,
+                  padding: 14,
                   flexDirection: "row",
                   alignItems: "center",
                   justifyContent: "center",
                   borderWidth: 1,
-                  borderColor: tc.dark.border,
-                }}
+                  borderColor: hovered ? "#8B5CF6" + "40" : tc.dark.border,
+                  ...(isWeb ? { cursor: "pointer", transition: "all 0.2s ease" } as any : {}),
+                })}
               >
                 <Text
                   style={{
                     color: tc.primary[300],
-                    fontSize: 16,
+                    fontSize: 14,
                     fontFamily: "DMSans_700Bold",
-                    letterSpacing: 2,
+                    letterSpacing: 1.5,
                     flex: 1,
                     textAlign: "center",
                   }}
@@ -238,21 +343,34 @@ export default function TOTPSetupScreen() {
                 >
                   {secret}
                 </Text>
-                <Ionicons name="copy" size={20} color={tc.textMuted} style={{ marginLeft: 8 }} />
+                <Ionicons name="copy" size={18} color={tc.textMuted} style={{ marginLeft: 8 }} />
               </Pressable>
-              <Text style={{ color: tc.textMuted, fontSize: 12, textAlign: "center", marginTop: 8 }}>
-                Tap to copy
+              <Text
+                style={{
+                  color: tc.textMuted,
+                  fontSize: 11,
+                  fontFamily: "DMSans_400Regular",
+                  textAlign: "center",
+                  marginTop: 6,
+                }}
+              >
+                Tap to copy to clipboard
               </Text>
             </View>
 
             <Pressable
               onPress={() => setStep("verify")}
-              style={{
-                backgroundColor: "#8B5CF6",
+              style={({ pressed, hovered }: any) => ({
+                backgroundColor: pressed ? "#7C3AED" : hovered ? "#9B6DFF" : "#8B5CF6",
                 borderRadius: 16,
                 padding: 16,
                 alignItems: "center",
-              }}
+                maxWidth: isDesktop ? 400 : undefined,
+                alignSelf: isDesktop ? "center" as const : undefined,
+                width: isDesktop ? "100%" : undefined,
+                transform: [{ scale: pressed ? 0.98 : 1 }],
+                ...(isWeb ? { cursor: "pointer", transition: "all 0.2s ease" } as any : {}),
+              })}
             >
               <Text style={{ color: "#fff", fontSize: 17, fontFamily: "DMSans_600SemiBold" }}>
                 I've Added It
