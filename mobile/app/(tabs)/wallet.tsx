@@ -33,13 +33,13 @@ import { useBalanceVisibility } from "../../src/stores/balance";
 import { SectionHeader } from "../../src/components/SectionHeader";
 import { CryptoLogo } from "../../src/components/CryptoLogo";
 import { useLocale } from "../../src/hooks/useLocale";
-const SUPPORTED_CRYPTOS: CurrencyCode[] = ["USDT", "BTC", "ETH", "SOL"];
+const SUPPORTED_CRYPTOS: CurrencyCode[] = ["USDC", "USDT", "BTC", "SOL", "ETH"];
 
 function useRates() {
   return useQuery<Rate[]>({
     queryKey: ["rates"],
     queryFn: async () => {
-      const currencies = ["USDT", "BTC", "ETH", "SOL"];
+      const currencies = ["USDC", "USDT", "BTC", "SOL", "ETH"];
       const results = await Promise.all(
         currencies.map(async (c) => {
           try {

@@ -98,9 +98,13 @@ class WalletServiceTest(TestCase):
         user2 = User.objects.create_user(phone="+254700000000", pin="654321")
         wallets = WalletService.create_user_wallets(user2)
 
-        self.assertEqual(len(wallets), 4)  # USDT, BTC, ETH, KES
+        self.assertEqual(len(wallets), 6)  # USDC, USDT, BTC, SOL, ETH, KES
         currencies = {w.currency for w in wallets}
+        self.assertIn("USDC", currencies)
         self.assertIn("USDT", currencies)
+        self.assertIn("BTC", currencies)
+        self.assertIn("SOL", currencies)
+        self.assertIn("ETH", currencies)
         self.assertIn("KES", currencies)
 
 
