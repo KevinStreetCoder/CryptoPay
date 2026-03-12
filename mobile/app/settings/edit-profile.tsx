@@ -401,35 +401,39 @@ function EditFormStep({
       </View>
 
       {/* Save Button */}
-      <View style={{ alignItems: isDesktop ? "flex-start" : "stretch" }}>
+      <View style={{ alignItems: isDesktop ? "flex-start" : "stretch", maxWidth: isDesktop ? 280 : undefined }}>
         <Pressable
           onPress={onSubmit}
           style={({ pressed, hovered }: any) => ({
+            flexDirection: "row" as const,
             backgroundColor: hovered
               ? colors.primary[400]
               : colors.primary[500],
             borderRadius: 16,
             paddingVertical: 16,
             paddingHorizontal: 32,
-            alignItems: "center",
-            justifyContent: "center",
-            maxWidth: isDesktop ? 400 : undefined,
+            alignItems: "center" as const,
+            justifyContent: "center" as const,
             width: "100%" as any,
+            gap: 8,
             opacity: pressed ? 0.9 : 1,
             ...ts.md,
             ...(isWeb
               ? ({
                   cursor: "pointer",
                   transition: "all 0.2s ease",
-                  transform: hovered
-                    ? "translateY(-1px)"
-                    : "translateY(0px)",
+                  transform: pressed
+                    ? "scale(0.97)"
+                    : hovered
+                      ? "translateY(-1px)"
+                      : "translateY(0px)",
                 } as any)
               : {}),
           })}
           accessibilityRole="button"
           accessibilityLabel="Save changes"
         >
+          <Ionicons name="checkmark-circle-outline" size={20} color="#FFFFFF" />
           <Text
             style={{
               color: "#FFFFFF",

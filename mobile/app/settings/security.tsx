@@ -443,19 +443,26 @@ export default function SecuritySettingsScreen() {
                     <Pressable
                       onPress={handleUpdateRecovery}
                       disabled={actionLoading === "recovery" || !recoveryEmailInput}
-                      style={{
+                      style={({ pressed, hovered }: any) => ({
                         flex: 1,
-                        backgroundColor: tc.primary[500],
+                        flexDirection: "row" as const,
+                        backgroundColor: hovered ? tc.primary[400] : tc.primary[500],
                         borderRadius: 12,
                         padding: 14,
-                        alignItems: "center",
-                        opacity: !recoveryEmailInput ? 0.6 : 1,
-                      }}
+                        alignItems: "center" as const,
+                        justifyContent: "center" as const,
+                        gap: 6,
+                        opacity: !recoveryEmailInput ? 0.6 : pressed ? 0.9 : 1,
+                        ...(Platform.OS === "web" ? { cursor: "pointer", transition: "all 0.15s ease" } as any : {}),
+                      })}
                     >
                       {actionLoading === "recovery" ? (
                         <ActivityIndicator size="small" color="#fff" />
                       ) : (
-                        <Text style={{ color: "#fff", fontSize: 15, fontFamily: "DMSans_600SemiBold" }}>{t("common.save")}</Text>
+                        <>
+                          <Ionicons name="checkmark-circle-outline" size={18} color="#FFFFFF" />
+                          <Text style={{ color: "#fff", fontSize: 15, fontFamily: "DMSans_600SemiBold" }}>{t("common.save")}</Text>
+                        </>
                       )}
                     </Pressable>
                   </View>
