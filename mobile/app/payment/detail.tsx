@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   View,
   Text,
@@ -12,9 +13,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { paymentsApi, Transaction, getTxKesAmount, getTxCrypto, getTxRecipient } from "../../src/api/payments";
+import { useToast } from "../../src/components/Toast";
 import { colors, shadows, CURRENCIES, CurrencyCode, getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
 import { usePhonePrivacy } from "../../src/utils/privacy";
+
+const isWeb = Platform.OS === "web";
 
 const TYPE_CONFIG: Record<string, { icon: string; label: string; color: string }> = {
   PAYBILL_PAYMENT: { icon: "receipt-outline", label: "Pay Bill", color: colors.primary[400] },
@@ -39,8 +43,9 @@ export default function TransactionDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { width } = useWindowDimensions();
-  const isWeb = Platform.OS === "web";
   const isDesktop = isWeb && width >= 900;
+  const [downloadingReceipt, setDownloadingReceipt] = useState(false);
+  const toast = useToast();
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
   const ts = getThemeShadows(isDark);
@@ -240,6 +245,10 @@ export default function TransactionDetailScreen() {
               }}
               style={({ pressed }) => ({
                 marginTop: 24,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
                 backgroundColor: colors.primary[500],
                 borderRadius: 14,
                 paddingHorizontal: 24,
@@ -247,6 +256,7 @@ export default function TransactionDetailScreen() {
                 opacity: pressed ? 0.85 : 1,
               })}
             >
+              <Ionicons name="arrow-back-outline" size={18} color="#FFFFFF" />
               <Text
                 style={{
                   color: "#FFFFFF",
@@ -429,26 +439,99 @@ export default function TransactionDetailScreen() {
                   )
                 : null}
 
-              {/* Remove bottom border from last visible row */}
+              {tx.excise_duty_amount && parseFloat(tx.excise_duty_amount) > 0
+                ? renderDetailRow(
+                    "Excise Duty",
+                    `KSh ${parseFloat(tx.excise_duty_amount).toLocaleString("en-KE", { minimumFractionDigits: 2 })}`,
+                    "document-outline"
+                  )
+                : null}
+
+              {tx.completed_at
+                ? renderDetailRow(
+                    "Completed",
+                    formatDate(tx.completed_at) + " " + formatTime(tx.completed_at),
+                    "checkmark-done-outline"
+                  )
+                : null}
             </View>
 
-            {/* Back Button */}
+            {/* Action Buttons */}
+            {tx.status === "completed" && (
+              <Pressable
+                onPress={async () => {
+                  setDownloadingReceipt(true);
+                  try {
+                    if (isWeb) {
+                      // Open in new tab with token as query param.
+                      // This bypasses IDM browser extension (which intercepts fetch/XHR
+                      // and returns 204, breaking CORS). Direct navigation works fine.
+                      const { storage } = require("../../src/utils/storage");
+                      const { config } = require("../../src/constants/config");
+                      const token = await storage.getItemAsync("access_token");
+                      const url = `${config.apiUrl}/payments/${tx.id}/receipt/?token=${encodeURIComponent(token || "")}`;
+                      window.open(url, "_blank");
+                      toast.success("Downloading", "Receipt opened in new tab");
+                    } else {
+                      const { authApi } = require("../../src/api/auth");
+                      const response = await authApi.downloadReceipt(tx.id);
+                      toast.success("Generated", "Receipt is being prepared");
+                    }
+                  } catch {
+                    toast.error("Error", "Could not download receipt. Try again later.");
+                  } finally {
+                    setDownloadingReceipt(false);
+                  }
+                }}
+                disabled={downloadingReceipt}
+                style={({ pressed, hovered }: any) => ({
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                  backgroundColor: colors.primary[500] + "15",
+                  borderRadius: 16,
+                  paddingVertical: 16,
+                  marginTop: 28,
+                  borderWidth: 1,
+                  borderColor: colors.primary[500] + "30",
+                  opacity: downloadingReceipt ? 0.6 : pressed ? 0.85 : 1,
+                  ...(isWeb ? { cursor: "pointer", transition: "all 0.15s ease" } as any : {}),
+                })}
+              >
+                <Ionicons name="download-outline" size={20} color={colors.primary[400]} />
+                <Text
+                  style={{
+                    color: colors.primary[400],
+                    fontSize: 16,
+                    fontFamily: "DMSans_600SemiBold",
+                  }}
+                >
+                  {downloadingReceipt ? "Downloading..." : "Download PDF Receipt"}
+                </Text>
+              </Pressable>
+            )}
+
             <Pressable
               onPress={() => {
                 if (router.canGoBack()) router.back();
                 else router.replace("/(tabs)" as any);
               }}
               style={({ pressed }) => ({
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
                 backgroundColor: pressed ? tc.dark.border : tc.dark.elevated,
                 borderRadius: 16,
                 paddingVertical: 16,
-                alignItems: "center",
-                marginTop: 28,
+                marginTop: tx.status === "completed" ? 12 : 28,
                 borderWidth: 1,
                 borderColor: tc.glass.border,
                 opacity: pressed ? 0.85 : 1,
               })}
             >
+              <Ionicons name="arrow-back-outline" size={20} color="#FFFFFF" />
               <Text
                 style={{
                   color: "#FFFFFF",

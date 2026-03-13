@@ -49,7 +49,7 @@ pyotp==2.9.0
 qrcode==8.0
 
 # PDF Generation
-weasyprint==62.3
+weasyprint==68.1
 
 # Production
 gunicorn==23.0.0

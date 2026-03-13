@@ -15,6 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { storage } from "../src/utils/storage";
 import { colors, getThemeColors } from "../src/constants/theme";
 import { useThemeMode } from "../src/stores/theme";
+import { GlassCard } from "../src/components/GlassCard";
 
 const isWeb = Platform.OS === "web";
 
@@ -116,7 +117,16 @@ function Dot({
 function WebSlide({ item, tc }: { item: Slide; tc: ReturnType<typeof getThemeColors> }) {
   return (
     <View style={s.webSlide}>
-      <View style={[s.iconCircle, { backgroundColor: item.iconBg }]}>
+      <View
+        style={[
+          s.iconCircle,
+          {
+            backgroundColor: item.iconBg,
+            borderColor: item.iconColor + "30",
+          },
+          isWeb ? { boxShadow: `0 0 24px ${item.iconColor}25` } as any : {},
+        ]}
+      >
         <Ionicons name={item.icon} size={48} color={item.iconColor} />
       </View>
       <Text style={[s.webTitle, { color: tc.textPrimary }]}>{item.title}</Text>
@@ -129,11 +139,25 @@ function WebSlide({ item, tc }: { item: Slide; tc: ReturnType<typeof getThemeCol
 function MobileSlide({ item, width, tc }: { item: Slide; width: number; tc: ReturnType<typeof getThemeColors> }) {
   return (
     <View style={[s.mobileSlide, { width }]}>
-      <View style={[s.iconCircleLarge, { backgroundColor: item.iconBg }]}>
-        <Ionicons name={item.icon} size={72} color={item.iconColor} />
-      </View>
-      <Text style={[s.mobileTitle, { color: tc.textPrimary }]}>{item.title}</Text>
-      <Text style={[s.mobileDesc, { color: tc.textSecondary }]}>{item.description}</Text>
+      <GlassCard
+        glowColor={item.iconColor}
+        glowOpacity={0.2}
+        style={{ paddingVertical: 40, paddingHorizontal: 28, alignItems: "center" } as any}
+      >
+        <View
+          style={[
+            s.iconCircleLarge,
+            {
+              backgroundColor: item.iconBg,
+              borderColor: item.iconColor + "30",
+            },
+          ]}
+        >
+          <Ionicons name={item.icon} size={72} color={item.iconColor} />
+        </View>
+        <Text style={[s.mobileTitle, { color: tc.textPrimary }]}>{item.title}</Text>
+        <Text style={[s.mobileDesc, { color: tc.textSecondary }]}>{item.description}</Text>
+      </GlassCard>
     </View>
   );
 }
@@ -220,7 +244,7 @@ export function OnboardingModal({
             s.webCard,
             {
               backgroundColor: tc.dark.card,
-              borderColor: tc.dark.border,
+              borderColor: colors.primary[500] + "40",
               width: CARD_W,
               transform: [
                 {
@@ -231,7 +255,10 @@ export function OnboardingModal({
                 },
               ],
               opacity: cardAnim,
-            },
+              backdropFilter: "blur(20px)",
+              WebkitBackdropFilter: "blur(20px)",
+              boxShadow: `0 25px 80px rgba(0,0,0,0.6), 0 0 30px ${colors.primary[500]}20`,
+            } as any,
           ]}
         >
           {/* Step indicator */}

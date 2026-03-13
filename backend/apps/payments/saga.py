@@ -125,7 +125,20 @@ class PaymentSaga:
             logger.info(f"Compensated: reversed conversion for tx {self.tx.id}")
 
     def step_initiate_mpesa(self):
-        """Step 3: Call M-Pesa B2B API to pay the Paybill/Till."""
+        """Step 3: Call M-Pesa API — B2B for paybill/till, B2C for send-to-phone."""
+        from django.conf import settings as django_settings
+
+        # Dev mode: skip M-Pesa API call and auto-complete
+        if django_settings.DEBUG and not getattr(django_settings, "MPESA_CONSUMER_KEY", ""):
+            logger.info(f"[DEV] Skipping M-Pesa for tx {self.tx.id} — auto-completing")
+            short_id = str(self.tx.id)[:8]
+            self.tx.saga_data["mpesa_conversation_id"] = f"DEV-{short_id}"
+            self.tx.saga_data["mpesa_originator_id"] = f"DEV-ORIG-{short_id}"
+            self.tx.save(update_fields=["saga_data", "updated_at"])
+            # Use complete() to set status + trigger notifications
+            self.complete(mpesa_receipt=f"DEV{short_id}")
+            return
+
         from apps.mpesa.client import MpesaClient
 
         client = MpesaClient()
@@ -143,8 +156,15 @@ class PaymentSaga:
                 amount=int(self.tx.dest_amount),
                 remarks=f"CryptoPay-{self.tx.id}",
             )
+        elif self.tx.mpesa_phone:
+            result = client.b2c_payment(
+                phone=self.tx.mpesa_phone,
+                amount=int(self.tx.dest_amount),
+                remarks=f"CryptoPay-{self.tx.id}",
+                transaction_id=str(self.tx.id),
+            )
         else:
-            raise SagaError("No Paybill or Till number specified")
+            raise SagaError("No payment destination specified")
 
         self.tx.saga_data["mpesa_conversation_id"] = result.get("ConversationID", "")
         self.tx.saga_data["mpesa_originator_id"] = result.get("OriginatorConversationID", "")

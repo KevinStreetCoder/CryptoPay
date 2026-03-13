@@ -12,7 +12,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.wallets.services import WalletService
 
-from .models import AuditLog, Device, EmailVerificationToken, KYCDocument, PushToken, User
+from .models import AuditLog, Device, EmailVerificationToken, KYCDocument, PINResetToken, PushToken, User
 from rest_framework.parsers import MultiPartParser, FormParser
 
 from .serializers import (
@@ -20,6 +20,7 @@ from .serializers import (
     DeviceModelSerializer,
     DeviceSerializer,
     EmailVerifySerializer,
+    ForgotPINSerializer,
     GoogleLoginSerializer,
     KYCDocumentSerializer,
     KYCUploadSerializer,
@@ -29,8 +30,10 @@ from .serializers import (
     RecoveryEmailSerializer,
     RegisterSerializer,
     RequestOTPSerializer,
+    ResetPINSerializer,
     SetupTOTPSerializer,
     UserSerializer,
+    VerifyPINResetOTPSerializer,
     VerifyTOTPSerializer,
 )
 from .social_auth import GoogleAuthError, verify_google_token
@@ -1359,6 +1362,186 @@ class SecuritySettingsView(APIView):
             "totp_backup_codes_remaining": len(user.totp_backup_codes) if user.totp_enabled else 0,
             "devices_count": Device.objects.filter(user=user).count(),
         })
+
+
+class ForgotPINView(APIView):
+    """Step 1: Initiate PIN reset — send OTP to user's registered phone."""
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = ForgotPINSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        phone = serializer.validated_data["phone"]
+
+        # Rate limit: max 3 reset requests per phone per 30 minutes
+        rate_key = f"pin_reset_rate:{phone}"
+        attempts = cache.get(rate_key, 0)
+        if attempts >= 3:
+            return Response(
+                {"error": "Too many reset requests. Try again later."},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+
+        # Always return success to prevent phone enumeration
+        response_data = {"message": "If this number is registered, an OTP has been sent."}
+
+        try:
+            user = User.objects.get(phone=phone)
+        except User.DoesNotExist:
+            return Response(response_data)
+
+        if not user.is_active:
+            return Response(response_data)
+
+        # Generate OTP and store with pin_reset prefix
+        otp = f"{random.randint(100000, 999999)}"
+        cache.set(f"pin_reset_otp:{phone}", otp, timeout=300)
+        cache.set(rate_key, attempts + 1, timeout=1800)
+
+        # Send OTP via SMS
+        if settings.AT_API_KEY:
+            try:
+                import africastalking
+                africastalking.initialize(settings.AT_USERNAME, settings.AT_API_KEY)
+                sms = africastalking.SMS
+                sms.send(
+                    f"Your CryptoPay PIN reset code is: {otp}. Do not share this code.",
+                    [phone],
+                    sender_id=settings.AT_SENDER_ID,
+                )
+            except Exception as e:
+                logger.error(f"PIN reset SMS failed: {e}")
+                if settings.DEBUG:
+                    logger.info(f"PIN reset OTP for {phone}: {otp}")
+        else:
+            logger.info(f"[DEV] PIN reset OTP for {phone}: {otp}")
+
+        if settings.DEBUG:
+            response_data["dev_otp"] = otp
+
+        AuditLog.objects.create(
+            user=user,
+            action="PIN_RESET_REQUESTED",
+            entity_type="user",
+            entity_id=str(user.id),
+            ip_address=self._get_client_ip(request),
+        )
+
+        return Response(response_data)
+
+    def _get_client_ip(self, request):
+        xff = request.META.get("HTTP_X_FORWARDED_FOR")
+        if xff:
+            return xff.split(",")[0].strip()
+        return request.META.get("REMOTE_ADDR")
+
+
+class VerifyPINResetOTPView(APIView):
+    """Step 2: Verify OTP and issue a short-lived PIN reset token."""
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = VerifyPINResetOTPSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        phone = serializer.validated_data["phone"]
+        otp = serializer.validated_data["otp"]
+
+        stored_otp = cache.get(f"pin_reset_otp:{phone}")
+        if not stored_otp or stored_otp != otp:
+            return Response(
+                {"error": "Invalid or expired code"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            user = User.objects.get(phone=phone)
+        except User.DoesNotExist:
+            return Response(
+                {"error": "Invalid or expired code"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Invalidate OTP after successful verification
+        cache.delete(f"pin_reset_otp:{phone}")
+
+        # Invalidate any previous unused tokens for this user
+        PINResetToken.objects.filter(user=user, is_used=False).update(is_used=True)
+
+        # Create new reset token (15 min expiry)
+        token_obj = PINResetToken.create_for_user(user)
+
+        AuditLog.objects.create(
+            user=user,
+            action="PIN_RESET_OTP_VERIFIED",
+            entity_type="user",
+            entity_id=str(user.id),
+            ip_address=self._get_client_ip(request),
+        )
+
+        return Response({"reset_token": token_obj.token})
+
+    def _get_client_ip(self, request):
+        xff = request.META.get("HTTP_X_FORWARDED_FOR")
+        if xff:
+            return xff.split(",")[0].strip()
+        return request.META.get("REMOTE_ADDR")
+
+
+class ResetPINView(APIView):
+    """Step 3: Set new PIN using a valid reset token."""
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = ResetPINSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        token = serializer.validated_data["token"]
+        new_pin = serializer.validated_data["new_pin"]
+
+        try:
+            token_obj = PINResetToken.objects.get(token=token, is_used=False)
+        except PINResetToken.DoesNotExist:
+            return Response(
+                {"error": "Invalid or expired reset token"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if token_obj.is_expired:
+            return Response(
+                {"error": "Reset token has expired. Please start over."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user = token_obj.user
+
+        # Mark token as used
+        token_obj.is_used = True
+        token_obj.save(update_fields=["is_used"])
+
+        # Set new PIN
+        user.set_pin(new_pin)
+        user.pin_attempts = 0
+        user.pin_locked_until = None
+        user.otp_challenge_required = False
+        user.save(update_fields=["pin_hash", "pin_attempts", "pin_locked_until", "otp_challenge_required"])
+
+        AuditLog.objects.create(
+            user=user,
+            action="PIN_RESET_COMPLETED",
+            entity_type="user",
+            entity_id=str(user.id),
+            ip_address=self._get_client_ip(request),
+        )
+
+        return Response({"message": "PIN reset successfully. You can now sign in."})
+
+    def _get_client_ip(self, request):
+        xff = request.META.get("HTTP_X_FORWARDED_FOR")
+        if xff:
+            return xff.split(",")[0].strip()
+        return request.META.get("REMOTE_ADDR")
 
 
 class KYCCallbackView(APIView):

@@ -13,6 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { paymentsApi, Transaction, getTxKesAmount, getTxRecipient } from "../../src/api/payments";
+import * as NotifStore from "../../src/stores/notifications";
 import { colors, getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
 
@@ -80,7 +81,7 @@ function transactionsToNotifications(transactions: Transaction[]): Notification[
     title: txToNotificationTitle(tx),
     body: txToNotificationBody(tx),
     timestamp: new Date(tx.created_at),
-    read: tx.status === "completed" || tx.status === "failed",
+    read: NotifStore.isRead(tx.id),
     amount: txToNotificationAmount(tx),
   }));
 }
@@ -181,9 +182,11 @@ export default function NotificationsInboxScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
+  const [, forceUpdate] = useState(0);
 
   const loadNotifications = useCallback(async () => {
     try {
+      await NotifStore.loadReadIds();
       const { data } = await paymentsApi.history();
       const txs = Array.isArray(data) ? data : data.results || [];
       setNotifications(transactionsToNotifications(txs));
@@ -197,6 +200,17 @@ export default function NotificationsInboxScreen() {
   useEffect(() => {
     loadNotifications();
   }, [loadNotifications]);
+
+  // Subscribe to store changes so we re-render when read state changes
+  useEffect(() => {
+    return NotifStore.subscribe(() => {
+      // Rebuild notifications with fresh read state
+      setNotifications((prev) =>
+        prev.map((n) => ({ ...n, read: NotifStore.isRead(n.id) }))
+      );
+      forceUpdate((c) => c + 1);
+    });
+  }, []);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
   const isDesktop = isWeb && width >= 900;
@@ -213,16 +227,17 @@ export default function NotificationsInboxScreen() {
   const grouped = groupByDate(filteredNotifications);
 
   const markAllRead = useCallback(() => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-  }, []);
+    const allIds = notifications.map((n) => n.id);
+    NotifStore.markAllRead(allIds);
+  }, [notifications]);
 
   const markRead = useCallback((id: string) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-    );
+    NotifStore.markRead(id);
   }, []);
 
   const deleteNotification = useCallback((id: string) => {
+    // Also mark as read when deleting
+    NotifStore.markRead(id);
     setDeletedIds((prev) => new Set(prev).add(id));
   }, []);
 
@@ -409,7 +424,10 @@ export default function NotificationsInboxScreen() {
                   key={notification.id}
                   notification={notification}
                   index={index}
-                  onPress={() => markRead(notification.id)}
+                  onPress={() => {
+                    markRead(notification.id);
+                    router.push({ pathname: "/payment/detail", params: { id: notification.id } });
+                  }}
                   onDelete={() => deleteNotification(notification.id)}
                   isDesktop={isDesktop}
                   hPad={hPad}
@@ -636,10 +654,12 @@ function AnimatedNotificationRow({
             backgroundColor: isWeb && hovered
               ? tc.dark.card
               : !notification.read
-                ? "rgba(16, 185, 129, 0.03)"
+                ? "rgba(16, 185, 129, 0.08)"
                 : "transparent",
             borderBottomWidth: 1,
             borderBottomColor: tc.dark.border,
+            borderLeftWidth: 3,
+            borderLeftColor: !notification.read ? colors.primary[400] : "transparent",
             opacity: pressed ? 0.85 : 1,
             ...(isWeb
               ? ({
@@ -649,11 +669,11 @@ function AnimatedNotificationRow({
               : {}),
           })}
         >
-          {/* Unread indicator dot */}
-          {!notification.read && <UnreadDot />}
 
           {/* Type icon */}
-          <NotificationIcon type={notification.type} isDesktop={isDesktop} />
+          <View style={{ opacity: notification.read ? 0.5 : 1 }}>
+            <NotificationIcon type={notification.type} isDesktop={isDesktop} />
+          </View>
 
           {/* Content */}
           <View style={{ flex: 1, minWidth: 0 }}>
@@ -666,18 +686,41 @@ function AnimatedNotificationRow({
                 gap: 8,
               }}
             >
-              <Text
-                style={{
-                  color: notification.read ? tc.textSecondary : tc.textPrimary,
-                  fontSize: isDesktop ? 15 : 14,
-                  fontFamily: notification.read ? "DMSans_500Medium" : "DMSans_600SemiBold",
-                  letterSpacing: -0.2,
-                  flex: 1,
-                }}
-                numberOfLines={1}
-              >
-                {notification.title}
-              </Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flex: 1 }}>
+                <Text
+                  style={{
+                    color: notification.read ? tc.textSecondary : tc.textPrimary,
+                    fontSize: isDesktop ? 15 : 14,
+                    fontFamily: notification.read ? "DMSans_500Medium" : "DMSans_600SemiBold",
+                    letterSpacing: -0.2,
+                    flexShrink: 1,
+                  }}
+                  numberOfLines={1}
+                >
+                  {notification.title}
+                </Text>
+                {!notification.read && (
+                  <View
+                    style={{
+                      backgroundColor: colors.primary[500],
+                      borderRadius: 4,
+                      paddingHorizontal: 5,
+                      paddingVertical: 1,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: "#FFFFFF",
+                        fontSize: 9,
+                        fontFamily: "DMSans_700Bold",
+                        letterSpacing: 0.5,
+                      }}
+                    >
+                      NEW
+                    </Text>
+                  </View>
+                )}
+              </View>
 
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                 <Text
@@ -758,68 +801,6 @@ function AnimatedNotificationRow({
         </Pressable>
       </Animated.View>
     </Animated.View>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════════
-   Unread Dot with pulse animation
-   ═══════════════════════════════════════════════════════════════════════════════ */
-function UnreadDot() {
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    const animation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.6,
-          duration: 1200,
-          useNativeDriver: Platform.OS !== "web",
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 1200,
-          useNativeDriver: Platform.OS !== "web",
-        }),
-      ])
-    );
-    animation.start();
-    return () => animation.stop();
-  }, []);
-
-  return (
-    <View
-      style={{
-        position: "absolute",
-        left: 8,
-        top: "50%",
-        marginTop: -4,
-        width: 8,
-        height: 8,
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 10,
-      }}
-    >
-      <Animated.View
-        style={{
-          position: "absolute",
-          width: 8,
-          height: 8,
-          borderRadius: 4,
-          backgroundColor: colors.primary[400],
-          opacity: 0.3,
-          transform: [{ scale: pulseAnim }],
-        }}
-      />
-      <View
-        style={{
-          width: 6,
-          height: 6,
-          borderRadius: 3,
-          backgroundColor: colors.primary[400],
-        }}
-      />
-    </View>
   );
 }
 

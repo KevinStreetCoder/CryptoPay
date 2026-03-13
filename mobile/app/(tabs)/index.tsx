@@ -28,6 +28,7 @@ import {
 } from "../../src/components/Skeleton";
 import { useWallets } from "../../src/hooks/useWallets";
 import { useTransactions } from "../../src/hooks/useTransactions";
+import { useUnreadCount } from "../../src/hooks/useUnreadCount";
 import { useAuth } from "../../src/stores/auth";
 import { ratesApi, Rate, normalizeRate } from "../../src/api/rates";
 import { Transaction, getTxKesAmount } from "../../src/api/payments";
@@ -41,23 +42,50 @@ import {
 } from "../../src/components/CryptoChart";
 import { CryptoLogo } from "../../src/components/CryptoLogo";
 import { useLocale } from "../../src/hooks/useLocale";
+import { cacheRates, getCachedRates, rateAge } from "../../src/utils/rateCache";
 
 function useRates() {
   return useQuery<Rate[]>({
     queryKey: ["rates"],
     queryFn: async () => {
       const currencies = ["USDT", "BTC", "ETH", "SOL"];
-      const results = await Promise.all(
-        currencies.map(async (c) => {
-          try {
-            const { data } = await ratesApi.getRate(c);
-            return normalizeRate(data);
-          } catch {
-            return null;
-          }
-        })
-      );
-      return results.filter(Boolean) as Rate[];
+      try {
+        const results = await Promise.all(
+          currencies.map(async (c) => {
+            try {
+              const { data } = await ratesApi.getRate(c);
+              return normalizeRate(data);
+            } catch {
+              return null;
+            }
+          })
+        );
+        const rates = results.filter(Boolean) as Rate[];
+        // Cache rates for offline use
+        if (rates.length > 0) {
+          await cacheRates(
+            rates.map((r) => ({
+              currency: r.currency,
+              kes_rate: r.kes_rate,
+              usd_rate: r.usd_rate,
+            }))
+          );
+        }
+        return rates;
+      } catch {
+        // Network failed — try cached rates
+        const cached = await getCachedRates();
+        if (cached && cached.length > 0) {
+          return cached.map((c) => ({
+            currency: c.currency,
+            usd_rate: c.usd_rate,
+            kes_rate: c.kes_rate,
+            spread: "0",
+            updated_at: new Date(c.timestamp).toISOString(),
+          }));
+        }
+        return [];
+      }
     },
     refetchInterval: 30000,
   });
@@ -976,7 +1004,7 @@ export default function HomeScreen() {
 
   const firstName = user?.full_name?.split(" ")[0] || "there";
   const initials = getInitials(user?.full_name);
-  const hasUnread = false;
+  const { unreadCount } = useUnreadCount(allTx);
 
   /* ─── MOBILE LAYOUT (unchanged) ─── */
   if (!isDesktop) {
@@ -1095,21 +1123,35 @@ export default function HomeScreen() {
                 size={22}
                 color={tc.textSecondary}
               />
-              {/* Unread badge dot */}
-              {hasUnread && (
+              {/* Unread count badge */}
+              {unreadCount > 0 && (
                 <View
                   style={{
                     position: "absolute",
-                    top: 10,
-                    right: 11,
-                    width: 8,
-                    height: 8,
-                    borderRadius: 4,
-                    backgroundColor: colors.primary[400],
-                    borderWidth: 1.5,
+                    top: 4,
+                    right: 4,
+                    minWidth: 18,
+                    height: 18,
+                    borderRadius: 9,
+                    backgroundColor: colors.error,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    paddingHorizontal: 4,
+                    borderWidth: 2,
                     borderColor: tc.dark.card,
                   }}
-                />
+                >
+                  <Text
+                    style={{
+                      color: "#FFFFFF",
+                      fontSize: 10,
+                      fontFamily: "DMSans_700Bold",
+                      lineHeight: 12,
+                    }}
+                  >
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </Text>
+                </View>
               )}
             </Pressable>
           </View>
@@ -1603,21 +1645,35 @@ export default function HomeScreen() {
               size={22}
               color={tc.textSecondary}
             />
-            {/* Unread badge dot */}
-            {hasUnread && (
+            {/* Unread count badge */}
+            {unreadCount > 0 && (
               <View
                 style={{
                   position: "absolute",
-                  top: 10,
-                  right: 11,
-                  width: 8,
-                  height: 8,
-                  borderRadius: 4,
-                  backgroundColor: colors.primary[400],
-                  borderWidth: 1.5,
+                  top: 4,
+                  right: 4,
+                  minWidth: 18,
+                  height: 18,
+                  borderRadius: 9,
+                  backgroundColor: colors.error,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  paddingHorizontal: 4,
+                  borderWidth: 2,
                   borderColor: tc.dark.card,
                 }}
-              />
+              >
+                <Text
+                  style={{
+                    color: "#FFFFFF",
+                    fontSize: 10,
+                    fontFamily: "DMSans_700Bold",
+                    lineHeight: 12,
+                  }}
+                >
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </Text>
+              </View>
             )}
           </Pressable>
           </View>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { View, TextInput, Pressable, Platform } from "react-native";
+import { View, TextInput, Pressable, Platform, useWindowDimensions } from "react-native";
 import * as Haptics from "expo-haptics";
 import { getThemeColors } from "../constants/theme";
 import { useThemeMode } from "../stores/theme";
@@ -16,6 +16,18 @@ export function PinInput({ length = 6, onComplete, error, testID }: PinInputProp
   const tc = getThemeColors(isDark);
   const [pin, setPin] = useState("");
   const inputRef = useRef<TextInput>(null);
+  const { width: screenWidth } = useWindowDimensions();
+
+  // Responsive box sizing: fit boxes + gaps within screen
+  // Account for page padding (24×2) + card padding (32×2) + card border (2×2) = 116px
+  const containerPadding = 120;
+  const totalGaps = (length - 1) * 10;
+  const available = screenWidth - containerPadding - totalGaps;
+  const maxSize = Platform.OS === 'web' ? 54 : 50;
+  const boxSize = Math.max(36, Math.min(maxSize, Math.floor(available / length)));
+  const boxHeight = Math.round(boxSize * 1.15);
+  const boxRadius = Math.max(10, Math.round(boxSize * 0.26));
+  const dotSize = Math.max(10, Math.round(boxSize * 0.26));
 
   // Reset PIN when error changes to true so user can retry
   useEffect(() => {
@@ -43,7 +55,7 @@ export function PinInput({ length = 6, onComplete, error, testID }: PinInputProp
       accessibilityRole="none"
       accessibilityLabel={`PIN entry, ${pin.length} of ${length} digits entered`}
     >
-      <View style={{ flexDirection: "row", justifyContent: "center", gap: 12 }}>
+      <View style={{ flexDirection: "row", justifyContent: "center", gap: 10 }}>
         {Array.from({ length }).map((_, i) => {
           const isFilled = pin.length > i;
           const isActive = pin.length === i;
@@ -53,9 +65,9 @@ export function PinInput({ length = 6, onComplete, error, testID }: PinInputProp
             <View
               key={i}
               style={{
-                width: Platform.OS === 'web' ? 54 : 50,
-                height: Platform.OS === 'web' ? 62 : 58,
-                borderRadius: 14,
+                width: boxSize,
+                height: boxHeight,
+                borderRadius: boxRadius,
                 borderWidth: 2,
                 alignItems: "center",
                 justifyContent: "center",
@@ -83,9 +95,9 @@ export function PinInput({ length = 6, onComplete, error, testID }: PinInputProp
               {isFilled && (
                 <View
                   style={{
-                    width: 14,
-                    height: 14,
-                    borderRadius: 7,
+                    width: dotSize,
+                    height: dotSize,
+                    borderRadius: dotSize / 2,
                     backgroundColor: "#34D399",
                   }}
                 />

@@ -98,7 +98,7 @@ function BrandPanel({ tc }: { tc: ReturnType<typeof getThemeColors> }) {
             shadowRadius: 24,
           }}
         >
-          <Ionicons name="wallet" size={40} color="#FFFFFF" />
+          <Ionicons name="flash" size={40} color="#FFFFFF" />
         </View>
         <Text
           style={{
@@ -369,7 +369,7 @@ export default function LoginScreen() {
                   justifyContent: "center",
                 }}
               >
-                <Ionicons name="wallet" size={32} color="#FFFFFF" />
+                <Ionicons name="flash" size={32} color="#FFFFFF" />
               </View>
             </View>
 
@@ -750,13 +750,42 @@ export default function LoginScreen() {
                 </Text>
               )}
 
+              {/* Forgot PIN */}
+              <Pressable
+                onPress={() => router.push("/auth/forgot-pin")}
+                style={({ pressed, hovered }: any) => ({
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginTop: 20,
+                  paddingVertical: 8,
+                  paddingHorizontal: 16,
+                  borderRadius: 10,
+                  backgroundColor: isWeb && hovered ? "rgba(16, 185, 129, 0.06)" : "transparent",
+                  opacity: pressed ? 0.7 : 1,
+                  ...(isWeb ? { cursor: "pointer", transition: "all 0.15s ease" } as any : {}),
+                })}
+                accessibilityRole="link"
+                accessibilityLabel="Forgot PIN"
+              >
+                <Text
+                  style={{
+                    color: tc.primary[300],
+                    fontSize: 14,
+                    fontFamily: "DMSans_500Medium",
+                  }}
+                  maxFontSizeMultiplier={1.3}
+                >
+                  Forgot PIN?
+                </Text>
+              </Pressable>
+
               <Pressable
                 onPress={() => animateTransition("phone")}
                 style={({ pressed, hovered }: any) => ({
                   flexDirection: "row",
                   alignItems: "center",
                   justifyContent: "center",
-                  marginTop: 28,
+                  marginTop: 8,
                   paddingVertical: 10,
                   paddingHorizontal: 16,
                   borderRadius: 10,

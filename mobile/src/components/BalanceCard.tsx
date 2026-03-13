@@ -1,10 +1,12 @@
-import { View, Text, Pressable, StyleSheet } from "react-native";
+import { View, Text, Pressable, StyleSheet, useWindowDimensions, Platform } from "react-native";
 import { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { Wallet } from "../api/wallets";
 import { CURRENCIES, CurrencyCode, colors, shadows, getThemeColors, getThemeShadows } from "../constants/theme";
 import { useThemeMode } from "../stores/theme";
 import { CryptoLogo } from "./CryptoLogo";
+
+const isWeb = Platform.OS === "web";
 
 interface BalanceCardProps {
   wallets: Wallet[];
@@ -15,6 +17,8 @@ export function BalanceCard({ wallets }: BalanceCardProps) {
   const tc = getThemeColors(isDark);
   const ts = getThemeShadows(isDark);
   const [hidden, setHidden] = useState(false);
+  const { width: screenWidth } = useWindowDimensions();
+  const isSmall = screenWidth < 380;
 
   // Defensive: ensure wallets is always an array
   const safeWallets = Array.isArray(wallets) ? wallets : [];
@@ -78,39 +82,40 @@ export function BalanceCard({ wallets }: BalanceCardProps) {
       </Text>
 
       {/* Crypto Balances Row */}
-      <View style={styles.cryptoRow}>
+      <View style={[styles.cryptoRow, isSmall && { gap: 6 }]}>
         {cryptoWallets.map((w) => {
           const info = CURRENCIES[w.currency as CurrencyCode];
           const bal = parseFloat(w.balance);
-          const brandColor = colors.crypto[w.currency] || colors.primary[400];
+          // Cap decimals: max 4 on small screens, max 6 otherwise
+          const maxDecimals = isSmall ? 4 : 6;
+          const decimals = Math.min(info?.decimals ?? 2, maxDecimals);
           return (
             <View
               key={w.id}
-              style={styles.cryptoPill}
+              style={[styles.cryptoPill, isSmall && { paddingHorizontal: 8, paddingVertical: 8 }]}
               accessibilityLabel={
                 hidden
                   ? `${info?.symbol || w.currency} balance hidden`
-                  : `${info?.symbol || w.currency}: ${bal.toFixed(
-                      info?.decimals ?? 2
-                    )}`
+                  : `${info?.symbol || w.currency}: ${bal.toFixed(decimals)}`
               }
             >
               <View style={styles.cryptoPillHeader}>
-                <CryptoLogo currency={w.currency} size={16} />
+                <CryptoLogo currency={w.currency} size={isSmall ? 14 : 16} />
                 <Text
-                  style={styles.cryptoSymbol}
+                  style={[styles.cryptoSymbol, isSmall && { fontSize: 11 }]}
                   maxFontSizeMultiplier={1.3}
                 >
                   {info?.symbol || w.currency}
                 </Text>
               </View>
               <Text
-                style={styles.cryptoBalance}
+                style={[styles.cryptoBalance, isSmall && { fontSize: 13 }]}
+                numberOfLines={1}
                 maxFontSizeMultiplier={1.2}
               >
                 {hidden
                   ? "\u2022\u2022\u2022\u2022"
-                  : bal.toFixed(info?.decimals ?? 2)}
+                  : bal.toFixed(decimals)}
               </Text>
             </View>
           );
@@ -128,6 +133,17 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     overflow: "hidden",
     position: "relative",
+    ...(isWeb
+      ? {
+          boxShadow: `0 4px 24px rgba(16, 185, 129, 0.25), 0 0 40px rgba(16, 185, 129, 0.1)`,
+        } as any
+      : {
+          shadowColor: colors.primary[500],
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.3,
+          shadowRadius: 16,
+          elevation: 10,
+        }),
   },
   // Decorative circles
   circle: {
@@ -177,14 +193,15 @@ const styles = StyleSheet.create({
   },
   cryptoRow: {
     flexDirection: "row",
-    gap: 10,
+    flexWrap: "wrap",
+    gap: 8,
   },
   cryptoPill: {
-    flex: 1,
+    minWidth: 60,
     backgroundColor: "rgba(255, 255, 255, 0.12)",
     borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.08)",
   },
