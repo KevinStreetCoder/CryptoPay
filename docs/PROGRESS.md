@@ -1,6 +1,6 @@
 # CryptoPay — Development Progress
 
-**Last updated:** 2026-03-12
+**Last updated:** 2026-03-13
 
 > See also: [ROADMAP.md](./ROADMAP.md) for strategic vision, fundraising, and expansion plans.
 > See also: [SYSTEM-DESIGN.md](./SYSTEM-DESIGN.md) for technical architecture and liquidity engine design.
@@ -174,7 +174,7 @@
 | Master Seed Priority | ✅ Done | 3-tier: WALLET_MASTER_SEED (hex) → WALLET_MNEMONIC (BIP-39) → SECRET_KEY fallback (dev only) |
 | Wallet Seed Management | ⬜ TODO | AWS KMS encryption, HSM integration for production |
 | DeFi Wallet Connect | ⬜ TODO | Reown AppKit v2 research complete, implementation pending |
-| Multi-chain listeners | ⬜ TODO | ETH (Alchemy), BTC (Mempool), SOL (Helius) blockchain monitoring |
+| Multi-chain listeners | ✅ Done | ETH (Alchemy), BTC (BlockCypher), SOL (Helius), Tron (TronGrid) blockchain monitoring |
 
 ---
 
@@ -320,7 +320,7 @@
 
 ## Phase 3 — Production Ready & Launch (In Progress)
 
-**Last updated:** 2026-03-12
+**Last updated:** 2026-03-13
 
 ### Production Infrastructure — IMPLEMENTED ✅
 
@@ -497,6 +497,33 @@ What's real vs placeholder in the current codebase:
 | 11 | **App icon compression** | Frontend | Compressed icon.png from 393KB → 207KB (47% reduction) using sharp resize + PNG optimization. | `assets/icon.png` |
 | 12 | **M-Pesa Balance callback view** | Backend | New BalanceCallbackView parses M-Pesa Account Balance API response. Supports multi-account format with `&` separator. Feeds into circuit breaker via Celery task. | `mpesa/views.py`, `mpesa/urls.py` |
 | 13 | **Admin circuit breaker API** | Backend | GET (status) + POST (pause/resume) endpoint for admin. Staff-only. Returns full status dict with state, thresholds, last update. | `payments/views.py`, `payments/urls.py` |
+
+#### ✅ COMPLETED (March 13, 2026 — Grok Frontend Upgrade 10/10, CORS Fix, Offline Cache)
+
+| # | Task | Area | Details | Files |
+|---|------|------|---------|-------|
+| 1 | **GlassCard component** | Frontend | Reusable glassmorphism container with `expo-blur` on native, CSS `backdrop-filter` on web. Configurable glow color/opacity. Used across all payment screens. | `GlassCard.tsx` |
+| 2 | **PaymentStepper component** | Frontend | Compact 3-step progress indicator (Details → Confirm → Done) with numbered circles, checkmarks for completed steps, and connector lines. Used in all 6 payment screens. | `PaymentStepper.tsx` |
+| 3 | **Haptic countdown timer** | Frontend | SVG circular ring timer with per-second haptic ticks (last 30s), warning vibration at 10s, color transitions (green→yellow→red), dynamic labels. | `confirm.tsx` |
+| 4 | **BalanceCard emerald glow** | Frontend | Dual-layer boxShadow on web, shadowColor on native. Crypto pills use `flexWrap` with `minWidth: 60` to prevent text truncation on small screens. | `BalanceCard.tsx` |
+| 5 | **Onboarding glassmorphism upgrade** | Frontend | Mobile slides wrapped in GlassCard with per-slide glow colors. Web popup card has backdrop blur + emerald border glow. Icon circles have colored glow halos. | `onboarding.tsx` |
+| 6 | **Offline rate & quote cache** | Frontend | `rateCache.ts` utility caches exchange rates and quotes using existing storage (SecureStore/localStorage). Dashboard falls back to cached rates on network failure. Quote cache on all payment screens. Human-readable age labels ("2 min ago"). | `rateCache.ts`, `index.tsx`, `paybill.tsx`, `till.tsx`, `send.tsx` |
+| 7 | **CORS/IDM receipt download fix** | Full stack | IDM browser extension intercepts fetch/XHR with 204 status, breaking CORS. Backend now accepts JWT via `?token=` query parameter on receipt endpoint. Frontend uses `window.open()` to download — bypasses IDM entirely. | `views.py`, `detail.tsx`, `success.tsx` |
+| 8 | **Icons on all buttons** | Frontend | Added `arrow-back-outline` icons to Back and Go Back buttons in transaction detail screen. Verified all 15+ buttons across payment screens have icons. | `detail.tsx` |
+| 9 | **JSX closing tag fixes** | Frontend | Fixed extra `</View>` closing tags in GlassCard wrappers (paybill, till, send) that caused 500 build errors. | `paybill.tsx`, `till.tsx`, `send.tsx` |
+| 10 | **SVG transform-origin fix** | Frontend | Replaced react-native-svg `rotation`/`origin` props with `transform` prop on Circle component to fix invalid DOM property warning on web. | `confirm.tsx` |
+
+**Grok Recommendations Scorecard: 10/10 ✅**
+- [x] GlassCard component (expo-blur + backdrop-filter)
+- [x] PaymentStepper in all payment flows
+- [x] Haptic countdown with SVG ring timer
+- [x] BalanceCard glow + overflow fix
+- [x] GlassCard in all 6 payment screens
+- [x] Success/failure animations (spring + shake)
+- [x] Onboarding glassmorphism upgrade
+- [x] Offline rate/quote cache
+- [x] Icons on all buttons
+- [x] Payment stepper in all flows
 
 #### 🟡 HIGH PRIORITY — Remaining (Before Beta Launch)
 

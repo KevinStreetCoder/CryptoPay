@@ -17,10 +17,14 @@ import { useToast } from "../../src/components/Toast";
 import { useWallets } from "../../src/hooks/useWallets";
 import { ratesApi, Quote } from "../../src/api/rates";
 import { normalizeError } from "../../src/utils/apiErrors";
+import { cacheQuote } from "../../src/utils/rateCache";
 import { colors, getThemeColors, getThemeShadows, CURRENCIES, CurrencyCode } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
 import { SectionHeader } from "../../src/components/SectionHeader";
 import { CryptoLogo } from "../../src/components/CryptoLogo";
+import { CryptoSelector } from "../../src/components/CryptoSelector";
+import { PaymentStepper } from "../../src/components/PaymentStepper";
+import { GlassCard } from "../../src/components/GlassCard";
 import { useLocale } from "../../src/hooks/useLocale";
 
 const CRYPTO_OPTIONS: CurrencyCode[] = ["USDT", "USDC", "BTC", "ETH", "SOL"];
@@ -61,6 +65,15 @@ export default function PayTillScreen() {
         kes_amount: amount,
       });
       setQuote(data);
+      cacheQuote({
+        quote_id: data.quote_id,
+        currency: data.currency,
+        exchange_rate: data.exchange_rate,
+        crypto_amount: data.crypto_amount,
+        kes_amount: data.kes_amount,
+        fee_kes: data.fee_kes,
+        excise_duty_kes: data.excise_duty_kes,
+      });
     } catch (err: unknown) {
       const appError = normalizeError(err);
       toast.error(appError.title, appError.message);
@@ -110,38 +123,40 @@ export default function PayTillScreen() {
               : undefined
           }
         >
-          {/* Top-level back button */}
-          <Pressable
-            onPress={() => {
-              if (router.canGoBack()) router.back();
-              else router.replace("/(tabs)" as any);
-            }}
-            style={({ pressed, hovered }: any) => ({
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 8,
-              paddingVertical: 8,
-              paddingHorizontal: 12,
-              borderRadius: 12,
-              backgroundColor: isWeb && hovered
-                ? tc.glass.highlight
-                : pressed
-                  ? tc.dark.elevated
-                  : "transparent",
-              alignSelf: "flex-start",
-              marginBottom: 12,
-              marginLeft: isDesktop ? 0 : 16,
-              opacity: pressed ? 0.85 : 1,
-              ...(isWeb ? { cursor: "pointer", transition: "all 0.15s ease" } as any : {}),
-            })}
-            accessibilityRole="button"
-            accessibilityLabel="Go back"
-          >
-            <Ionicons name="arrow-back" size={20} color={tc.textSecondary} />
-            <Text style={{ color: tc.textSecondary, fontSize: 15, fontFamily: "DMSans_500Medium" }}>
-              {t("common.back")}
-            </Text>
-          </Pressable>
+          {/* Top-level back button — desktop only */}
+          {isDesktop && (
+            <Pressable
+              onPress={() => {
+                if (router.canGoBack()) router.back();
+                else router.replace("/(tabs)" as any);
+              }}
+              style={({ pressed, hovered }: any) => ({
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 8,
+                paddingVertical: 8,
+                paddingHorizontal: 12,
+                borderRadius: 12,
+                backgroundColor: hovered
+                  ? tc.glass.highlight
+                  : pressed
+                    ? tc.dark.elevated
+                    : "transparent",
+                alignSelf: "flex-start",
+                marginBottom: 12,
+                opacity: pressed ? 0.85 : 1,
+                cursor: "pointer",
+                transition: "all 0.15s ease",
+              } as any)}
+              accessibilityRole="button"
+              accessibilityLabel="Go back"
+            >
+              <Ionicons name="arrow-back" size={20} color={tc.textSecondary} />
+              <Text style={{ color: tc.textSecondary, fontSize: 15, fontFamily: "DMSans_500Medium" }}>
+                {t("common.back")}
+              </Text>
+            </Pressable>
+          )}
 
           {/* Desktop wrapper card */}
           <View
@@ -206,25 +221,8 @@ export default function PayTillScreen() {
                 {t("payment.payTill")}
               </Text>
 
-              {/* Step indicator pills */}
-              <View style={{ flexDirection: "row", gap: 6 }}>
-                <View
-                  style={{
-                    width: 24,
-                    height: 4,
-                    borderRadius: 2,
-                    backgroundColor: colors.primary[500],
-                  }}
-                />
-                <View
-                  style={{
-                    width: 24,
-                    height: 4,
-                    borderRadius: 2,
-                    backgroundColor: tc.dark.elevated,
-                  }}
-                />
-              </View>
+              {/* Step indicator */}
+              <PaymentStepper currentStep={0} />
             </View>
 
             <View
@@ -309,89 +307,17 @@ export default function PayTillScreen() {
               <View style={{ marginTop: 24 }}>
                 <SectionHeader title={t("payment.payWith")} icon="wallet-outline" iconColor={colors.primary[400]} />
               </View>
-              <View style={{ flexDirection: "row", gap: 10 }}>
-                {CRYPTO_OPTIONS.map((crypto) => {
-                  const info = CURRENCIES[crypto];
-                  const isSelected = selectedCrypto === crypto;
-                  const wallet = wallets?.find((w) => w.currency === crypto);
-                  const bal = wallet ? parseFloat(wallet.balance) : 0;
-                  const brandColor = colors.crypto[crypto] ?? colors.primary[500];
-
-                  return (
-                    <Pressable
-                      key={crypto}
-                      onPress={() => {
-                        setSelectedCrypto(crypto);
-                        setQuote(null);
-                      }}
-                      style={({ pressed, hovered }: any) => ({
-                        flex: 1,
-                        borderRadius: 16,
-                        padding: 12,
-                        borderWidth: 1,
-                        borderColor: isSelected
-                          ? colors.primary[500]
-                          : isWeb && hovered
-                            ? tc.glass.borderStrong
-                            : tc.dark.border,
-                        backgroundColor: isSelected
-                          ? colors.primary[500] + "1A"
-                          : isWeb && hovered
-                            ? tc.dark.elevated
-                            : tc.dark.card,
-                        opacity: pressed ? 0.85 : 1,
-                        ...(isWeb ? { cursor: "pointer", transition: "all 0.15s ease" } as any : {}),
-                      })}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Pay with ${crypto}`}
-                      accessibilityState={{ selected: isSelected }}
-                    >
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          marginBottom: 4,
-                        }}
-                      >
-                        <View style={{ marginRight: 6 }}>
-                          <CryptoLogo currency={crypto} size={24} />
-                        </View>
-                        <Text
-                          style={{
-                            fontSize: 14,
-                            fontFamily: "DMSans_600SemiBold",
-                            color: isSelected ? colors.primary[400] : tc.textPrimary,
-                          }}
-                        >
-                          {info.symbol}
-                        </Text>
-                      </View>
-                      <Text
-                        style={{
-                          color: tc.dark.muted,
-                          fontSize: 12,
-                          marginTop: 2,
-                        }}
-                      >
-                        {bal.toFixed(info.decimals > 4 ? 4 : info.decimals)}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
+              <CryptoSelector
+                options={CRYPTO_OPTIONS}
+                selected={selectedCrypto}
+                wallets={wallets}
+                onSelect={(c) => { setSelectedCrypto(c); setQuote(null); }}
+              />
 
               {/* Quote Display */}
               {quote && (
-                <View
-                  style={{
-                    backgroundColor: tc.dark.card,
-                    borderRadius: 16,
-                    borderWidth: 1,
-                    borderColor: colors.primary[500] + "4D",
-                    padding: 16,
-                    marginTop: 24,
-                  }}
-                >
+                <GlassCard glowOpacity={0.15} style={{ marginTop: 24 }}>
+                <View style={{ padding: 16 }}>
                   <View
                     style={{
                       flexDirection: "row",
@@ -504,6 +430,7 @@ export default function PayTillScreen() {
                     {t("payment.rateLocked30")}
                   </Text>
                 </View>
+                </GlassCard>
               )}
 
               {/* Action Button */}

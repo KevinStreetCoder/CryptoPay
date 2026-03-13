@@ -26,6 +26,8 @@ import { useScreenSecurity } from "../../src/hooks/useScreenSecurity";
 import { useAuth } from "../../src/stores/auth";
 import { colors, shadows, CURRENCIES, getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
+import { PaymentStepper } from "../../src/components/PaymentStepper";
+import { GlassCard } from "../../src/components/GlassCard";
 
 type CryptoOption = "USDT" | "USDC" | "BTC" | "ETH" | "SOL";
 
@@ -315,8 +317,10 @@ export default function BuyCryptoScreen() {
           >
             Select Crypto
           </Text>
-          <View
-            style={{ flexDirection: "row", gap: 10, marginBottom: 24 }}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 8, marginBottom: 24, paddingVertical: 2 }}
             accessibilityRole="radiogroup"
             accessibilityLabel="Select cryptocurrency"
             testID="crypto-selector"
@@ -328,7 +332,7 @@ export default function BuyCryptoScreen() {
                   key={crypto.id}
                   onPress={() => handleCryptoSelect(crypto.id)}
                   style={({ pressed }) => ({
-                    flex: 1,
+                    minWidth: 72,
                     backgroundColor: isSelected
                       ? crypto.color + "1A"
                       : tc.dark.card,
@@ -391,7 +395,7 @@ export default function BuyCryptoScreen() {
                 </Pressable>
               );
             })}
-          </View>
+          </ScrollView>
 
           {/* Amount Input */}
           <Text
@@ -693,33 +697,8 @@ export default function BuyCryptoScreen() {
             Confirm Purchase
           </Text>
 
-          {/* Step indicator pills */}
-          <View style={{ flexDirection: "row", gap: 6 }}>
-            <View
-              style={{
-                width: 24,
-                height: 4,
-                borderRadius: 2,
-                backgroundColor: tc.primary[500],
-              }}
-            />
-            <View
-              style={{
-                width: 24,
-                height: 4,
-                borderRadius: 2,
-                backgroundColor: tc.primary[500],
-              }}
-            />
-            <View
-              style={{
-                width: 24,
-                height: 4,
-                borderRadius: 2,
-                backgroundColor: tc.dark.elevated,
-              }}
-            />
-          </View>
+          {/* Step indicator */}
+          <PaymentStepper currentStep={1} />
         </View>
 
         <ScrollView
@@ -1086,33 +1065,8 @@ export default function BuyCryptoScreen() {
           Enter PIN
         </Text>
 
-        {/* Step indicator pills */}
-        <View style={{ flexDirection: "row", gap: 6 }}>
-          <View
-            style={{
-              width: 24,
-              height: 4,
-              borderRadius: 2,
-              backgroundColor: tc.primary[500],
-            }}
-          />
-          <View
-            style={{
-              width: 24,
-              height: 4,
-              borderRadius: 2,
-              backgroundColor: tc.primary[500],
-            }}
-          />
-          <View
-            style={{
-              width: 24,
-              height: 4,
-              borderRadius: 2,
-              backgroundColor: tc.primary[500],
-            }}
-          />
-        </View>
+        {/* Step indicator */}
+        <PaymentStepper currentStep={1} />
       </View>
 
       <View

@@ -7,6 +7,8 @@ import { Animated, Easing } from "react-native";
 import * as Haptics from "expo-haptics";
 import { Button } from "../../src/components/Button";
 import { useToast } from "../../src/components/Toast";
+import { GlassCard } from "../../src/components/GlassCard";
+import { PaymentStepper } from "../../src/components/PaymentStepper";
 import { colors, getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
 
@@ -166,6 +168,7 @@ export default function PaymentSuccessScreen() {
     transaction_id: string;
     status?: string; // "failed" for failure state
     error_message?: string;
+    tx_status?: string; // backend status: "completed", "processing", "confirming"
   }>();
 
   const { isDark } = useThemeMode();
@@ -182,6 +185,9 @@ export default function PaymentSuccessScreen() {
   const buttonsFade = useRef(new Animated.Value(0)).current;
 
   const isFailed = params.status === "failed";
+  const isCompleted = params.tx_status === "completed";
+  const statusLabel = isFailed ? "Failed" : isCompleted ? "Completed" : "Processing";
+  const statusColor = isFailed ? colors.error : isCompleted ? colors.success : "#F59E0B";
 
   useEffect(() => {
     if (!isWeb) {
@@ -218,20 +224,17 @@ export default function PaymentSuccessScreen() {
     }
     setDownloadingReceipt(true);
     try {
-      const { authApi } = require("../../src/api/auth");
-      const response = await authApi.downloadReceipt(txId);
       if (isWeb) {
-        const blob = new Blob([response.data], { type: "application/pdf" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `CryptoPay_Receipt_${txId.slice(0, 8)}.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        toast.success("Downloaded", "Receipt saved to downloads");
+        // Open in new tab with token query param to bypass IDM extension
+        const { storage } = require("../../src/utils/storage");
+        const { config } = require("../../src/constants/config");
+        const token = await storage.getItemAsync("access_token");
+        const url = `${config.apiUrl}/payments/${txId}/receipt/?token=${encodeURIComponent(token || "")}`;
+        window.open(url, "_blank");
+        toast.success("Downloading", "Receipt opened in new tab");
       } else {
+        const { authApi } = require("../../src/api/auth");
+        const response = await authApi.downloadReceipt(txId);
         toast.success("Generated", "Receipt is being prepared");
       }
     } catch {
@@ -242,7 +245,7 @@ export default function PaymentSuccessScreen() {
   };
 
   const handleShare = async () => {
-    const receiptText = `CryptoPay Payment Receipt\n\nAmount: KSh ${amountKES.toLocaleString()}\nCrypto: ${params.crypto_amount} ${params.crypto_currency}\nSent To: ${params.recipient}\nStatus: ${isFailed ? "Failed" : "Processing"}\n\nPowered by CryptoPay`;
+    const receiptText = `CryptoPay Payment Receipt\n\nAmount: KSh ${amountKES.toLocaleString()}\nCrypto: ${params.crypto_amount} ${params.crypto_currency}\nSent To: ${params.recipient}\nStatus: ${statusLabel}\n\nPowered by CryptoPay`;
 
     if (isWeb) {
       if (navigator.clipboard) {
@@ -269,6 +272,8 @@ export default function PaymentSuccessScreen() {
           width: isDesktop ? "100%" : undefined,
         }}
       >
+        <PaymentStepper currentStep={isFailed ? 1 : 2} />
+        <View style={{ height: 12 }} />
         {isFailed ? <AnimatedFailure /> : <AnimatedCheckmark />}
 
         <Text
@@ -280,7 +285,7 @@ export default function PaymentSuccessScreen() {
             letterSpacing: -0.5,
           }}
         >
-          {isFailed ? "Payment Failed" : "Payment Sent!"}
+          {isFailed ? "Payment Failed" : isCompleted ? "Payment Complete!" : "Payment Sent!"}
         </Text>
         <Text
           style={{
@@ -294,7 +299,9 @@ export default function PaymentSuccessScreen() {
         >
           {isFailed
             ? params.error_message || "Something went wrong. Your funds are safe."
-            : "Your payment is being processed via M-Pesa"}
+            : isCompleted
+              ? "Your payment has been completed successfully"
+              : "Your payment is being processed via M-Pesa"}
         </Text>
 
         {/* Receipt Card — animated */}
@@ -305,16 +312,10 @@ export default function PaymentSuccessScreen() {
             transform: [{ translateY: cardSlide }],
           }}
         >
-          <View
-            style={{
-              backgroundColor: tc.dark.card,
-              borderRadius: 24,
-              width: "100%",
-              overflow: "hidden",
-              borderWidth: 1,
-              borderColor: isFailed ? colors.error + "30" : tc.glass.border,
-              ...(isWeb ? { boxShadow: "0 8px 32px rgba(0,0,0,0.25)" } as any : {}),
-            }}
+          <GlassCard
+            glowColor={isFailed ? colors.error : colors.success}
+            glowOpacity={0.15}
+            style={{ width: "100%" }}
           >
             <View
               style={{
@@ -371,20 +372,20 @@ export default function PaymentSuccessScreen() {
                     paddingVertical: 5,
                   }}
                 >
-                  <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: isFailed ? colors.error : colors.success }} />
+                  <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: statusColor }} />
                   <Text
                     style={{
-                      color: isFailed ? colors.error : colors.success,
+                      color: statusColor,
                       fontSize: 13,
                       fontFamily: "DMSans_600SemiBold",
                     }}
                   >
-                    {isFailed ? "Failed" : "Processing"}
+                    {statusLabel}
                   </Text>
                 </View>
               </View>
             </View>
-          </View>
+          </GlassCard>
         </Animated.View>
 
         {/* Action Buttons — animated */}

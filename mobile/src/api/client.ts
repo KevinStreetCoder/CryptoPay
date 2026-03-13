@@ -39,7 +39,7 @@ export const api = axios.create({
 });
 
 // Auth endpoints that should work even after session expiry
-const AUTH_ENDPOINTS = ["/auth/login/", "/auth/register/", "/auth/otp/", "/auth/google/", "/auth/token/refresh/"];
+const AUTH_ENDPOINTS = ["/auth/login/", "/auth/register/", "/auth/otp/", "/auth/google/", "/auth/token/refresh/", "/auth/forgot-pin/", "/auth/reset-pin/"];
 
 api.interceptors.request.use(async (cfg) => {
   const isAuthEndpoint = AUTH_ENDPOINTS.some((ep) => cfg.url?.includes(ep));

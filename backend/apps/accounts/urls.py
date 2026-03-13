@@ -32,4 +32,8 @@ urlpatterns = [
     path("recovery/", views.RecoveryEmailView.as_view(), name="recovery-settings"),
     # Security settings overview
     path("security/", views.SecuritySettingsView.as_view(), name="security-settings"),
+    # Forgot PIN recovery flow (3-step: initiate → verify OTP → reset)
+    path("forgot-pin/", views.ForgotPINView.as_view(), name="forgot-pin"),
+    path("forgot-pin/verify/", views.VerifyPINResetOTPView.as_view(), name="forgot-pin-verify"),
+    path("reset-pin/", views.ResetPINView.as_view(), name="reset-pin"),
 ]

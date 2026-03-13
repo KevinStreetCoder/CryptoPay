@@ -497,9 +497,27 @@ class TransactionHistoryView(ListAPIView):
 
 
 class TransactionReceiptView(APIView):
-    """Download PDF receipt for a completed transaction."""
+    """Download PDF receipt for a completed transaction.
+
+    Supports two auth methods:
+    1. Standard Authorization header (native apps)
+    2. ?token=<jwt> query parameter (web — bypasses IDM browser extension
+       which intercepts fetch/XHR and breaks CORS on file downloads)
+    """
 
     permission_classes = [IsAuthenticated]
+
+    def get_authenticators(self):
+        """Allow JWT token in query parameter as fallback."""
+        authenticators = super().get_authenticators()
+        return authenticators
+
+    def initial(self, request, *args, **kwargs):
+        """Inject Authorization header from query param if present."""
+        token = request.query_params.get("token")
+        if token and "HTTP_AUTHORIZATION" not in request.META:
+            request.META["HTTP_AUTHORIZATION"] = f"Bearer {token}"
+        super().initial(request, *args, **kwargs)
 
     def get(self, request, transaction_id):
         import os
@@ -525,21 +543,18 @@ class TransactionReceiptView(APIView):
             receipt_path = generate_receipt_pdf(tx)
 
         if receipt_path and os.path.exists(receipt_path):
-            if receipt_path.endswith(".pdf"):
-                return FileResponse(
-                    open(receipt_path, "rb"),
-                    content_type="application/pdf",
-                    as_attachment=True,
-                    filename=receipt_filename,
-                )
-            else:
-                # HTML fallback
-                return FileResponse(
-                    open(receipt_path, "rb"),
-                    content_type="text/html",
-                    as_attachment=True,
-                    filename=receipt_filename.replace(".pdf", ".html"),
-                )
+            response = FileResponse(
+                open(receipt_path, "rb"),
+                content_type="application/pdf",
+                as_attachment=True,
+                filename=receipt_filename,
+            )
+            # Ensure CORS headers are present (FileResponse may bypass middleware)
+            origin = request.META.get("HTTP_ORIGIN", "")
+            if origin:
+                response["Access-Control-Allow-Origin"] = origin
+                response["Access-Control-Allow-Credentials"] = "true"
+            return response
 
         return Response(
             {"error": "Receipt generation failed. Please try again."},

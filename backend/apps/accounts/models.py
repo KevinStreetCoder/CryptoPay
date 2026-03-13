@@ -190,6 +190,40 @@ class EmailVerificationToken(models.Model):
         return timezone.now() > self.expires_at
 
 
+class PINResetToken(models.Model):
+    """Short-lived token for PIN recovery (15-minute expiry).
+    Flow: user requests reset → OTP sent → OTP verified → token issued → new PIN set.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="pin_reset_tokens")
+    token = models.CharField(max_length=64, unique=True, db_index=True)
+    is_used = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+
+    class Meta:
+        db_table = "pin_reset_tokens"
+
+    def __str__(self):
+        return f"PIN reset for {self.user.phone}"
+
+    @classmethod
+    def create_for_user(cls, user):
+        from datetime import timedelta
+
+        token = secrets.token_urlsafe(48)
+        return cls.objects.create(
+            user=user,
+            token=token,
+            expires_at=timezone.now() + timedelta(minutes=15),
+        )
+
+    @property
+    def is_expired(self):
+        return timezone.now() > self.expires_at
+
+
 class AuditLog(models.Model):
     """Immutable audit trail for all actions."""
 

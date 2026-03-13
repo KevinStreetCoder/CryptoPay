@@ -207,3 +207,45 @@ class RecoveryEmailSerializer(serializers.Serializer):
     """Set recovery email and/or phone."""
     recovery_email = serializers.EmailField(required=False)
     recovery_phone = serializers.CharField(max_length=15, required=False, default="")
+
+
+class ForgotPINSerializer(serializers.Serializer):
+    """Step 1: Initiate PIN reset — send OTP to user's phone."""
+    phone = serializers.CharField(max_length=15)
+
+    def validate_phone(self, value):
+        value = value.strip().replace(" ", "")
+        if value.startswith("0"):
+            value = "+254" + value[1:]
+        elif value.startswith("254"):
+            value = "+" + value
+        elif not value.startswith("+"):
+            value = "+254" + value
+        return value
+
+
+class VerifyPINResetOTPSerializer(serializers.Serializer):
+    """Step 2: Verify OTP and get a reset token."""
+    phone = serializers.CharField(max_length=15)
+    otp = serializers.CharField(max_length=6)
+
+    def validate_phone(self, value):
+        value = value.strip().replace(" ", "")
+        if value.startswith("0"):
+            value = "+254" + value[1:]
+        elif value.startswith("254"):
+            value = "+" + value
+        elif not value.startswith("+"):
+            value = "+254" + value
+        return value
+
+
+class ResetPINSerializer(serializers.Serializer):
+    """Step 3: Set new PIN using the reset token."""
+    token = serializers.CharField(max_length=64)
+    new_pin = serializers.CharField(min_length=6, max_length=6, write_only=True)
+
+    def validate_new_pin(self, value):
+        if not value.isdigit():
+            raise serializers.ValidationError("PIN must be 6 digits")
+        return value

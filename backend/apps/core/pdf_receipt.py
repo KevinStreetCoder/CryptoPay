@@ -50,6 +50,35 @@ def generate_receipt_pdf(transaction):
     elif transaction.mpesa_phone:
         recipient = f"M-Pesa {transaction.mpesa_phone}"
 
+    def fmt_fiat(val):
+        """Format fiat amount: 1,000.00"""
+        from decimal import Decimal
+        if not val:
+            return "0.00"
+        d = Decimal(str(val)).quantize(Decimal("0.01"))
+        return f"{d:,}"
+
+    def fmt_crypto(val, currency):
+        """Format crypto amount: strip trailing zeros, max 8 decimals."""
+        from decimal import Decimal
+        if not val:
+            return "0"
+        d = Decimal(str(val)).normalize()
+        # Cap at 8 decimal places
+        if abs(d.as_tuple().exponent) > 8:
+            d = d.quantize(Decimal("0.00000001"))
+        return str(d)
+
+    def fmt_amount(val, currency):
+        """Format based on currency type."""
+        fiat = {"KES", "USD", "EUR", "GBP", "TZS", "UGX"}
+        if currency and currency.upper() in fiat:
+            return f"KSh {fmt_fiat(val)}" if currency.upper() == "KES" else f"{currency} {fmt_fiat(val)}"
+        return f"{fmt_crypto(val, currency)} {currency}"
+
+    source_cur = transaction.source_currency or ""
+    dest_cur = transaction.dest_currency or ""
+
     context = {
         "tx": transaction,
         "user": transaction.user,
@@ -58,11 +87,11 @@ def generate_receipt_pdf(transaction):
         "reference": str(transaction.id)[:8].upper(),
         "mpesa_receipt": transaction.mpesa_receipt or "Pending",
         "date": transaction.created_at.strftime("%B %d, %Y at %I:%M %p"),
-        "source_display": f"{transaction.source_amount} {transaction.source_currency}",
-        "dest_display": f"{transaction.dest_amount} {transaction.dest_currency}",
-        "fee_display": f"KES {transaction.fee_amount}" if transaction.fee_amount else "Free",
-        "excise_display": f"KES {transaction.excise_duty_amount}" if transaction.excise_duty_amount else "N/A",
-        "rate_display": f"1 {transaction.source_currency} = KES {transaction.exchange_rate}" if transaction.exchange_rate else "",
+        "source_display": fmt_amount(transaction.source_amount, source_cur),
+        "dest_display": fmt_amount(transaction.dest_amount, dest_cur),
+        "fee_display": f"KSh {fmt_fiat(transaction.fee_amount)}" if transaction.fee_amount else "Free",
+        "excise_display": f"KSh {fmt_fiat(transaction.excise_duty_amount)}" if transaction.excise_duty_amount else "N/A",
+        "rate_display": f"1 {source_cur} = KSh {fmt_fiat(transaction.exchange_rate)}" if transaction.exchange_rate else "",
     }
 
     html_content = render_to_string("pdf/receipt.html", context)
@@ -76,13 +105,6 @@ def generate_receipt_pdf(transaction):
         HTML(string=html_content).write_pdf(pdf_path)
         logger.info(f"PDF receipt generated: {pdf_path}")
         return pdf_path
-    except ImportError:
-        # Fallback: save as HTML if weasyprint not installed
-        html_path = pdf_path.replace(".pdf", ".html")
-        with open(html_path, "w", encoding="utf-8") as f:
-            f.write(html_content)
-        logger.warning("weasyprint not installed, saved as HTML instead")
-        return html_path
     except Exception as e:
-        logger.error(f"PDF generation failed: {e}")
+        logger.error(f"PDF generation failed: {e}", exc_info=True)
         return None

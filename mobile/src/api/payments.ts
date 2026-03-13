@@ -16,6 +16,7 @@ export interface Transaction {
   mpesa_account: string;
   mpesa_phone: string;
   mpesa_receipt: string;
+  excise_duty_amount: string;
   chain: string;
   tx_hash: string;
   confirmations: number;

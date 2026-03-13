@@ -4,9 +4,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import Svg, { Circle } from "react-native-svg";
 import { PinInput } from "../../src/components/PinInput";
 import { Button } from "../../src/components/Button";
 import { useToast } from "../../src/components/Toast";
+import { GlassCard } from "../../src/components/GlassCard";
+import { PaymentStepper } from "../../src/components/PaymentStepper";
 import { paymentsApi } from "../../src/api/payments";
 import { normalizeError } from "../../src/utils/apiErrors";
 import { useScreenSecurity } from "../../src/hooks/useScreenSecurity";
@@ -57,6 +60,7 @@ function QuoteCountdown({ onExpired }: { onExpired: () => void }) {
   const tc = getThemeColors(isDark);
   const [secondsLeft, setSecondsLeft] = useState(QUOTE_TTL_SECONDS);
   const hasExpired = useRef(false);
+  const flashOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -69,9 +73,20 @@ function QuoteCountdown({ onExpired }: { onExpired: () => void }) {
           }
           return 0;
         }
-        // Haptic warning at 10 seconds left
-        if (prev === 11 && Platform.OS !== "web") {
+        // Per-second haptic tick (light) in last 30 seconds
+        if (prev <= 31 && Platform.OS !== "web") {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }
+        // Stronger haptic warning at 10 seconds left
+        if (prev <= 11 && Platform.OS !== "web") {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        }
+        // Red flash at 10s
+        if (prev === 11) {
+          Animated.sequence([
+            Animated.timing(flashOpacity, { toValue: 0.6, duration: 150, useNativeDriver: Platform.OS !== "web" }),
+            Animated.timing(flashOpacity, { toValue: 0, duration: 300, useNativeDriver: Platform.OS !== "web" }),
+          ]).start();
         }
         return prev - 1;
       });
@@ -86,56 +101,93 @@ function QuoteCountdown({ onExpired }: { onExpired: () => void }) {
   const display = `${minutes}:${seconds.toString().padStart(2, "0")}`;
   const progress = secondsLeft / QUOTE_TTL_SECONDS;
 
+  const ringColor = isCritical ? colors.error : isUrgent ? colors.warning : colors.primary[400];
+  const ringSize = 64;
+  const strokeWidth = 4;
+  const radius = (ringSize - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference * (1 - progress);
+
   return (
-    <View
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 8,
-        paddingVertical: 8,
-        paddingHorizontal: 16,
-        borderRadius: 12,
-        backgroundColor: isCritical
-          ? colors.error + "18"
-          : isUrgent
-            ? colors.warning + "15"
-            : colors.primary[500] + "12",
-      }}
-    >
-      <Ionicons
-        name="timer-outline"
-        size={16}
-        color={isCritical ? colors.error : isUrgent ? colors.warning : colors.primary[400]}
-      />
-      <Text
+    <View style={{ alignItems: "center", gap: 8 }}>
+      {/* Red flash overlay */}
+      <Animated.View
+        pointerEvents="none"
         style={{
-          color: isCritical ? colors.error : isUrgent ? colors.warning : colors.primary[400],
-          fontSize: 13,
-          fontFamily: "DMSans_600SemiBold",
+          position: "absolute",
+          top: -20,
+          left: -20,
+          right: -20,
+          bottom: -20,
+          backgroundColor: colors.error,
+          opacity: flashOpacity,
+          borderRadius: 24,
+          zIndex: 10,
         }}
-      >
-        Rate locked — {display}
-      </Text>
-      {/* Progress bar */}
+      />
+
+      {/* Circular timer ring */}
+      <View style={{ width: ringSize, height: ringSize, alignItems: "center", justifyContent: "center" }}>
+        <View style={{ position: "absolute" }}>
+          <Svg width={ringSize} height={ringSize} viewBox={`0 0 ${ringSize} ${ringSize}`}>
+            {/* Background ring */}
+            <Circle
+              cx={ringSize / 2}
+              cy={ringSize / 2}
+              r={radius}
+              fill="none"
+              stroke={tc.dark.elevated}
+              strokeWidth={strokeWidth}
+            />
+            {/* Progress ring */}
+            <Circle
+              cx={ringSize / 2}
+              cy={ringSize / 2}
+              r={radius}
+              fill="none"
+              stroke={ringColor}
+              strokeWidth={strokeWidth}
+              strokeLinecap="round"
+              strokeDasharray={`${circumference}`}
+              strokeDashoffset={strokeDashoffset}
+              transform={`rotate(-90 ${ringSize / 2} ${ringSize / 2})`}
+            />
+          </Svg>
+        </View>
+        <Text
+          style={{
+            color: ringColor,
+            fontSize: 16,
+            fontFamily: "DMSans_700Bold",
+            letterSpacing: 0.5,
+          }}
+        >
+          {display}
+        </Text>
+      </View>
+
+      {/* Label */}
       <View
         style={{
-          flex: 1,
-          maxWidth: 60,
-          height: 3,
-          borderRadius: 2,
-          backgroundColor: tc.dark.elevated,
-          overflow: "hidden",
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 6,
+          paddingVertical: 4,
+          paddingHorizontal: 12,
+          borderRadius: 10,
+          backgroundColor: isCritical ? colors.error + "15" : isUrgent ? colors.warning + "12" : colors.primary[500] + "10",
         }}
       >
-        <View
+        <PulsingDot />
+        <Text
           style={{
-            width: `${progress * 100}%`,
-            height: "100%",
-            borderRadius: 2,
-            backgroundColor: isCritical ? colors.error : isUrgent ? colors.warning : colors.primary[400],
+            color: isCritical ? colors.error : isUrgent ? colors.warning : colors.primary[400],
+            fontSize: 12,
+            fontFamily: "DMSans_500Medium",
           }}
-        />
+        >
+          {isCritical ? "Quote expiring!" : isUrgent ? "Rate expiring soon" : "Rate locked"}
+        </Text>
       </View>
     </View>
   );
@@ -225,7 +277,9 @@ export default function ConfirmPaymentScreen() {
         });
       }
 
-      const transactionId = txResponse?.data?.id || "";
+      const txData = txResponse?.data;
+      const transactionId = txData?.id || "";
+      const txStatus = txData?.status || "processing";
 
       if (Platform.OS !== "web") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -238,6 +292,7 @@ export default function ConfirmPaymentScreen() {
           crypto_currency: params.crypto_currency,
           recipient: params.paybill_number || params.till_number || params.phone || "",
           transaction_id: transactionId,
+          tx_status: txStatus,
         },
       });
     } catch (err: unknown) {
@@ -321,25 +376,8 @@ export default function ConfirmPaymentScreen() {
           {step === "review" ? t("payment.confirmPayment") : t("payment.enterYourPin")}
         </Text>
 
-        {/* Step indicator pills — step 2 of 2, both filled */}
-        <View style={{ flexDirection: "row", gap: 6 }}>
-          <View
-            style={{
-              width: 24,
-              height: 4,
-              borderRadius: 2,
-              backgroundColor: tc.primary[500],
-            }}
-          />
-          <View
-            style={{
-              width: 24,
-              height: 4,
-              borderRadius: 2,
-              backgroundColor: tc.primary[500],
-            }}
-          />
-        </View>
+        {/* Step indicator */}
+        <PaymentStepper currentStep={step === "review" ? 1 : 1} />
       </View>
 
       {step === "review" ? (
@@ -360,15 +398,11 @@ export default function ConfirmPaymentScreen() {
           <View style={{ height: 16 }} />
 
           {/* Premium Receipt Card */}
-          <View
+          <GlassCard
+            glowColor={typeColor}
+            glowOpacity={0.2}
             style={{
-              backgroundColor: tc.dark.card,
-              borderRadius: 24,
               marginTop: isDesktop ? 0 : 12,
-              overflow: "hidden",
-              borderWidth: 1,
-              borderColor: tc.glass.border,
-              ...(isWeb ? { boxShadow: '0 8px 32px rgba(0,0,0,0.3)' } as any : {}),
             }}
           >
             {/* Top section: icon + amount */}
@@ -648,7 +682,7 @@ export default function ConfirmPaymentScreen() {
                 </View>
               )}
             </View>
-          </View>
+          </GlassCard>
 
           {/* Pay Now / Expired Button */}
           <View style={{ marginTop: 24, marginBottom: isDesktop ? 8 : 32 }}>
