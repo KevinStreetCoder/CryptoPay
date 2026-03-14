@@ -28,9 +28,9 @@ class Command(BaseCommand):
     help = "Create admin user with phone, PIN, password, wallets, and test balances"
 
     def add_arguments(self, parser):
-        parser.add_argument("--phone", default="+254701961618")
-        parser.add_argument("--pin", default="869913")
-        parser.add_argument("--password", default="KELvin8699")
+        parser.add_argument("--phone", required=True, help="Admin phone number (+254...)")
+        parser.add_argument("--pin", required=True, help="6-digit PIN")
+        parser.add_argument("--password", required=True, help="Django admin password")
         parser.add_argument("--name", default="Admin")
         parser.add_argument(
             "--no-balance",

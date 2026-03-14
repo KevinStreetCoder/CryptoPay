@@ -8,6 +8,8 @@ export interface RateApiResponse {
   spread_percent: number;
   final_rate: string;
   flat_fee_kes: number;
+  rate_freshness?: "live" | "stale";
+  rate_stale?: boolean;
 }
 
 // Normalized rate used throughout the app

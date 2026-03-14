@@ -82,6 +82,7 @@ class RateService:
             fetched = True
             # Set debounce lock — don't call again for 55 seconds
             cache.set("rate:batch:lock", "1", timeout=55)
+            cache.delete("rate:stale")  # Clear stale flag on success
             logger.info("Batch rate refresh from CoinGecko successful")
 
         except Exception as e:
@@ -112,10 +113,14 @@ class RateService:
                         )
 
                 cache.set("rate:batch:lock", "1", timeout=55)
+                cache.delete("rate:stale")  # Clear stale flag on success
                 logger.info("Batch rate refresh from CryptoCompare successful")
 
             except Exception as e:
                 logger.error(f"CryptoCompare batch fetch also failed: {e}")
+                # Both providers failed — mark cached rates as stale so consumers
+                # know they are using potentially outdated prices.
+                cache.set("rate:stale", True, timeout=300)
 
     @staticmethod
     def get_crypto_usd_rate(currency: str) -> Decimal:
@@ -203,6 +208,8 @@ class RateService:
         spread = Decimal(str(settings.PLATFORM_SPREAD_PERCENT)) / Decimal("100")
         final_rate = raw_rate * (Decimal("1") - spread)  # User gets less KES per crypto
 
+        is_stale = bool(cache.get("rate:stale"))
+
         return {
             "currency": currency,
             "crypto_usd": str(crypto_usd),
@@ -212,6 +219,8 @@ class RateService:
             "final_rate": str(final_rate.quantize(Decimal("0.01"))),
             "flat_fee_kes": settings.FLAT_FEE_KES,
             "excise_duty_percent": settings.EXCISE_DUTY_PERCENT,
+            "rate_freshness": "stale" if is_stale else "live",
+            "rate_stale": is_stale,
         }
 
     @staticmethod
