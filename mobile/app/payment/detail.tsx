@@ -29,6 +29,8 @@ const TYPE_CONFIG: Record<string, { icon: string; label: string; color: string }
   BUY: { icon: "swap-horizontal-outline", label: "Buy", color: colors.primary[400] },
   SELL: { icon: "swap-vertical-outline", label: "Sell", color: colors.accentDark },
   FEE: { icon: "pricetag-outline", label: "Fee", color: colors.dark.muted },
+  KES_DEPOSIT: { icon: "arrow-down-circle-outline", label: "KES Deposit", color: colors.success },
+  KES_DEPOSIT_C2B: { icon: "arrow-down-circle-outline", label: "KES Deposit (Paybill)", color: colors.success },
 };
 
 const STATUS_CONFIG: Record<string, { color: string; bg: string; label: string }> = {

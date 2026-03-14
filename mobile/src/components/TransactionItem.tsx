@@ -48,6 +48,16 @@ const TYPE_CONFIG: Record<
     label: "Sell",
     color: colors.accentDark,
   },
+  KES_DEPOSIT: {
+    icon: "arrow-down-circle-outline",
+    label: "KES Deposit",
+    color: colors.success,
+  },
+  KES_DEPOSIT_C2B: {
+    icon: "arrow-down-circle-outline",
+    label: "KES Deposit (Paybill)",
+    color: colors.success,
+  },
 };
 
 interface TransactionItemProps {
