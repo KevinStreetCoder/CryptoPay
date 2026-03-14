@@ -83,13 +83,16 @@ class RequestOTPView(APIView):
         if esms_key and esms_account:
             try:
                 import requests as http_requests
+                payload = {
+                    "phoneNumber": phone,
+                    "text": f"Your CPay verification code is: {otp}. Expires in 5 minutes.",
+                }
+                sender_id = getattr(settings, "ESMS_SENDER_ID", "")
+                if sender_id:
+                    payload["senderId"] = sender_id
                 resp = http_requests.post(
                     "https://api.esmsafrica.io/api/sms/send",
-                    json={
-                        "phoneNumber": phone,
-                        "text": f"Your CPay verification code is: {otp}. Expires in 5 minutes.",
-                        "senderId": getattr(settings, "ESMS_SENDER_ID", ""),
-                    },
+                    json=payload,
                     headers={
                         "Content-Type": "application/json",
                         "X-API-Key": esms_key,
