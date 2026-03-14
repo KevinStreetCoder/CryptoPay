@@ -253,3 +253,68 @@ def send_push_task(
     tickets = send_push_notification(user_id, title, body, data)
     logger.info(f"Push notification sent to user {user_id}: {len(tickets)} ticket(s)")
     return tickets
+
+
+@shared_task(
+    bind=True,
+    max_retries=2,
+    default_retry_delay=60,
+    autoretry_for=_TRANSIENT_ERRORS,
+    retry_backoff=True,
+    retry_backoff_max=300,
+)
+def daily_database_backup(self):
+    """Run the database backup script daily via Celery Beat.
+
+    Executes backend/scripts/backup_db.sh which:
+      - Dumps PostgreSQL via pg_dump
+      - Compresses with gzip
+      - Retains 7 daily + 4 weekly backups
+      - Optionally uploads to S3 if AWS_S3_BUCKET is set
+    """
+    import os
+    import subprocess
+
+    script_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        "scripts",
+        "backup_db.sh",
+    )
+
+    if not os.path.isfile(script_path):
+        logger.error(f"Backup script not found at {script_path}")
+        return {"status": "error", "message": "Backup script not found"}
+
+    # Pass DB connection info from Django settings
+    env = os.environ.copy()
+    from django.conf import settings as _settings
+
+    db_conf = _settings.DATABASES.get("default", {})
+    env.setdefault("DB_NAME", db_conf.get("NAME", "cryptopay"))
+    env.setdefault("DB_USER", db_conf.get("USER", "cryptopay"))
+    env.setdefault("DB_HOST", db_conf.get("HOST", "localhost"))
+    env.setdefault("DB_PORT", str(db_conf.get("PORT", "5432")))
+    env.setdefault("DB_PASSWORD", db_conf.get("PASSWORD", ""))
+
+    try:
+        result = subprocess.run(
+            ["bash", script_path],
+            capture_output=True,
+            text=True,
+            timeout=600,  # 10 minute timeout
+            env=env,
+        )
+
+        if result.returncode != 0:
+            logger.error(f"Backup script failed (exit {result.returncode}): {result.stderr}")
+            raise RuntimeError(f"Backup script exited with code {result.returncode}")
+
+        logger.info(f"Database backup completed successfully: {result.stdout[-200:]}")
+        return {"status": "success", "output": result.stdout[-500:]}
+
+    except subprocess.TimeoutExpired:
+        logger.error("Database backup timed out after 600 seconds")
+        raise
+    except Exception as exc:
+        logger.error(f"Database backup failed: {exc}")
+        raise

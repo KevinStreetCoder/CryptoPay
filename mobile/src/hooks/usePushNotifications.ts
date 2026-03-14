@@ -185,6 +185,7 @@ function handleNotificationResponse(data: Record<string, unknown>) {
 
   switch (type) {
     case "transaction":
+    case "transaction_complete":
     case "payment_complete":
     case "payment_failed":
       if (id) {
@@ -194,6 +195,7 @@ function handleNotificationResponse(data: Record<string, unknown>) {
       }
       break;
     case "deposit":
+    case "deposit_confirmed":
       router.push("/(tabs)/wallet" as any);
       break;
     case "kyc_approved":

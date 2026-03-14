@@ -2,6 +2,7 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
+from celery.schedules import crontab
 import environ
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -176,6 +177,14 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.blockchain.sol_listener.update_sol_confirmations",
         "schedule": 10.0,  # Every 10 seconds
     },
+    "monitor-polygon-deposits": {
+        "task": "apps.blockchain.polygon_listener.monitor_polygon_deposits",
+        "schedule": 20.0,  # Every 20 seconds (Polygon ~2s blocks, fast finality)
+    },
+    "update-polygon-confirmations": {
+        "task": "apps.blockchain.polygon_listener.update_polygon_confirmations",
+        "schedule": 15.0,  # Every 15 seconds
+    },
     # Stuck payment reconciliation
     "check-pending-mpesa-payments": {
         "task": "apps.payments.tasks.check_pending_mpesa_payments",
@@ -224,6 +233,11 @@ CELERY_BEAT_SCHEDULE = {
     "reconcile-wallet-balances": {
         "task": "apps.wallets.tasks.reconcile_wallet_balances",
         "schedule": 3600.0,  # Every hour
+    },
+    # Database backup (daily at 2:00 AM EAT)
+    "daily-database-backup": {
+        "task": "apps.core.tasks.daily_database_backup",
+        "schedule": crontab(hour=2, minute=0),
     },
 }
 
@@ -385,6 +399,10 @@ TRON_NETWORK = env("TRON_NETWORK", default="shasta")
 # --- Ethereum ---
 ETH_RPC_URL = env("ETH_RPC_URL", default="")  # Alchemy/Infura URL, e.g. https://eth-mainnet.g.alchemy.com/v2/YOUR_KEY
 ETH_NETWORK = env("ETH_NETWORK", default="sepolia")  # mainnet or sepolia (testnet)
+
+# --- Polygon ---
+POLYGON_RPC_URL = env("POLYGON_RPC_URL", default="")  # Alchemy/Infura URL, e.g. https://polygon-mainnet.g.alchemy.com/v2/YOUR_KEY
+POLYGON_LOG_SCAN_RANGE = env.int("POLYGON_LOG_SCAN_RANGE", default=50)  # Blocks per scan (Polygon is fast)
 
 # --- Bitcoin ---
 BTC_NETWORK = env("BTC_NETWORK", default="test3")  # main or test3 (testnet)

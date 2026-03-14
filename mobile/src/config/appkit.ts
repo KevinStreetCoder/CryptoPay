@@ -144,6 +144,6 @@ export interface DepositNetwork {
 
 export const DEPOSIT_NETWORKS: DepositNetwork[] = [
   { chainId: 1, name: "Ethereum", symbol: "ETH", tokens: ["USDT", "USDC", "ETH"] },
-  // { chainId: 137, name: "Polygon", symbol: "MATIC", tokens: ["USDT", "USDC"] },  // TODO: Enable after polygon_listener.py implemented
+  { chainId: 137, name: "Polygon", symbol: "MATIC", tokens: ["USDT", "USDC"] },
   // { chainId: 56, name: "BNB Chain", symbol: "BNB", tokens: ["USDT", "USDC"] },    // TODO: Enable after bsc_listener.py implemented
 ];
