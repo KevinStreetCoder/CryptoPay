@@ -74,31 +74,33 @@ class RequestOTPView(APIView):
         cache.set(f"otp:{phone}", otp, timeout=300)  # Valid for 5 minutes
         cache.set(rate_key, attempts + 1, timeout=600)
 
-        # Send via Africa's Talking
+        # Send OTP via Africa's Talking SMS
         if settings.AT_API_KEY:
             try:
                 import africastalking
-
                 africastalking.initialize(settings.AT_USERNAME, settings.AT_API_KEY)
                 sms = africastalking.SMS
+                sender = getattr(settings, "AT_SENDER_ID", "") or None
                 sms.send(
-                    f"Your CryptoPay verification code is: {otp}",
+                    f"Your CPay verification code is: {otp}",
                     [phone],
-                    sender_id=settings.AT_SENDER_ID,
+                    sender_id=sender,
                 )
+                logger.info(f"OTP SMS sent to {phone[:7]}***")
             except Exception as e:
                 logger.error(f"SMS send failed: {e}")
-                # In sandbox/dev, log the OTP
-                if settings.DEBUG:
-                    logger.debug(f"OTP for {phone}: {otp}")
+                return Response(
+                    {"error": "Failed to send verification code. Please try again."},
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                )
         else:
-            # Dev mode — log OTP to console
-            logger.debug(f"[DEV] OTP for {phone}: {otp}")
+            logger.error("AT_API_KEY not configured — cannot send OTP")
+            return Response(
+                {"error": "SMS service not configured."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
-        # Log OTP server-side only — NEVER include in API response
         response_data = {"message": "OTP sent successfully"}
-        if settings.DEBUG:
-            logger.debug(f"[DEV] OTP for {phone}: {otp}")
         return Response(response_data)
 
 
@@ -169,6 +171,14 @@ class RegisterView(APIView):
             entity_id=str(user.id),
             ip_address=self._get_client_ip(request),
         )
+
+        # Send welcome email + admin alert (non-blocking)
+        try:
+            from apps.core.email import send_welcome_email, send_admin_new_user_alert
+            send_welcome_email(user)
+            send_admin_new_user_alert(user)
+        except Exception as e:
+            logger.error(f"Post-registration email dispatch failed for {user.phone}: {e}")
 
         return Response(
             {

@@ -1,0 +1,51 @@
+{% extends "email/base.html" %}
+
+{% block title %}CPay Daily Summary — {{ date }}{% endblock %}
+
+{% block content %}
+<h2>Daily Operations Summary</h2>
+<p style="color: #94a3b8; font-size: 13px;">{{ date }}</p>
+
+<div class="info-card">
+  <table role="presentation" cellpadding="0" cellspacing="0">
+    <tr>
+      <td class="label">New Users Today</td>
+      <td class="value">{{ new_users_count }}</td>
+    </tr>
+    <tr>
+      <td class="label">Total Transactions</td>
+      <td class="value">{{ total_transactions }}</td>
+    </tr>
+    <tr>
+      <td class="label">Completed Transactions</td>
+      <td class="value" style="color: #10B981;">{{ completed_transactions }}</td>
+    </tr>
+    <tr>
+      <td class="label">Failed Transactions</td>
+      <td class="value" style="color: #ef4444;">{{ failed_transactions }}</td>
+    </tr>
+    <tr>
+      <td class="label">Total Volume (KES)</td>
+      <td class="value">KES {{ total_volume_kes }}</td>
+    </tr>
+  </table>
+</div>
+
+{% if wallet_balances %}
+<h2 style="font-size: 18px; margin-top: 24px;">Wallet Balances</h2>
+<div class="info-card">
+  <table role="presentation" cellpadding="0" cellspacing="0">
+    {% for wallet in wallet_balances %}
+    <tr>
+      <td class="label">{{ wallet.currency }} ({{ wallet.wallet_type }})</td>
+      <td class="value">{{ wallet.balance }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+
+<p style="text-align: center; padding-top: 8px;">
+  <a href="https://cpay.co.ke/admin/" class="btn">Open Admin Panel</a>
+</p>
+{% endblock %}

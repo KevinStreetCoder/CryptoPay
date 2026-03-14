@@ -563,6 +563,11 @@ class BuyCryptoView(APIView):
             tx.status = Transaction.Status.FAILED
             tx.save(update_fields=["failure_reason", "status", "updated_at"])
             cache.delete(redis_key)
+            try:
+                from apps.core.tasks import send_failed_transaction_alert_task
+                send_failed_transaction_alert_task.delay(transaction_id=str(tx.id))
+            except Exception:
+                pass
             return Response(
                 {"error": "M-Pesa payment initiation failed. Please try again.", "transaction": TransactionSerializer(tx).data},
                 status=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -573,6 +578,11 @@ class BuyCryptoView(APIView):
             tx.status = Transaction.Status.FAILED
             tx.save(update_fields=["failure_reason", "status", "updated_at"])
             cache.delete(redis_key)
+            try:
+                from apps.core.tasks import send_failed_transaction_alert_task
+                send_failed_transaction_alert_task.delay(transaction_id=str(tx.id))
+            except Exception:
+                pass
             return Response(
                 {"error": "Payment initiation failed. Please try again."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
