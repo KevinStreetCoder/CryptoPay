@@ -107,3 +107,8 @@ SERVER_EMAIL = "CPay Alerts <admin@cpay.co.ke>"
 # Admin email notifications
 ADMINS = [("Kevin", "kevinisaackareithi@gmail.com")]
 MANAGERS = ADMINS
+
+# Africa's Talking SMS (sandbox for testing, production later)
+AT_API_KEY = env("AT_API_KEY", default="atsk_7305e4bfcd0107261106bfd5bb00b73391fcb791a486c4e795af13dbc8ca8acdd714cefa")
+AT_USERNAME = env("AT_USERNAME", default="sandbox")
+AT_SENDER_ID = env("AT_SENDER_ID", default="")
