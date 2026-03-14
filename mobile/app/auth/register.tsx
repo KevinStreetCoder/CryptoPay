@@ -85,24 +85,24 @@ function BrandPanel({ tc }: { tc: ReturnType<typeof getThemeColors> }) {
       <View style={{ alignItems: "center", marginBottom: 32 }}>
         <View
           style={{
-            width: 80,
-            height: 80,
-            borderRadius: 24,
+            width: 56,
+            height: 56,
+            borderRadius: 16,
             backgroundColor: tc.primary[500],
             alignItems: "center",
             justifyContent: "center",
-            marginBottom: 24,
+            marginBottom: 20,
             ...(Platform.OS !== "web"
               ? {
                   shadowColor: tc.primary[500],
-                  shadowOffset: { width: 0, height: 8 },
-                  shadowOpacity: 0.4,
-                  shadowRadius: 24,
+                  shadowOffset: { width: 0, height: 6 },
+                  shadowOpacity: 0.35,
+                  shadowRadius: 16,
                 }
-              : { boxShadow: "0 8px 24px rgba(16, 185, 129, 0.4)" } as any),
+              : { boxShadow: `0 8px 24px rgba(16, 185, 129, 0.35)` } as any),
           }}
         >
-          <Ionicons name="wallet" size={40} color="#FFFFFF" />
+          <Ionicons name="flash" size={28} color="#FFFFFF" />
         </View>
         <Text
           style={{
