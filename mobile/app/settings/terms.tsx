@@ -282,7 +282,7 @@ function TermsContent({
 
       <LegalSection title="11. Dispute Resolution" icon="chatbubbles-outline" tc={tc} ts={ts} isDesktop={isDesktop}>
         <Paragraph tc={tc}>
-          Any disputes arising from these Terms shall first be addressed through our internal complaints procedure. You may contact our support team at support@cryptopay.co.ke.
+          Any disputes arising from these Terms shall first be addressed through our internal complaints procedure. You may contact our support team at support@cpay.co.ke.
         </Paragraph>
         <Paragraph tc={tc}>
           If unresolved within 30 days, disputes shall be referred to mediation under the Nairobi Centre for International Arbitration (NCIA) rules. If mediation fails, disputes shall be resolved by binding arbitration in Nairobi, Kenya, under Kenyan law.
@@ -315,8 +315,8 @@ function TermsContent({
 
       <LegalSection title="15. Contact" icon="mail-outline" tc={tc} ts={ts} isDesktop={isDesktop}>
         <Paragraph tc={tc} bold>CryptoPay Technologies Ltd</Paragraph>
-        <Paragraph tc={tc}>Email: legal@cryptopay.co.ke</Paragraph>
-        <Paragraph tc={tc}>Support: support@cryptopay.co.ke</Paragraph>
+        <Paragraph tc={tc}>Email: legal@cpay.co.ke</Paragraph>
+        <Paragraph tc={tc}>Support: support@cpay.co.ke</Paragraph>
         <Paragraph tc={tc}>Nairobi, Kenya</Paragraph>
       </LegalSection>
     </>
@@ -372,7 +372,7 @@ function PrivacyContent({
 
       <LegalSection title="2. Data Controller" icon="business-outline" tc={tc} ts={ts} isDesktop={isDesktop}>
         <Paragraph tc={tc} bold>CryptoPay Technologies Ltd</Paragraph>
-        <Paragraph tc={tc}>Data Protection Officer: dpo@cryptopay.co.ke</Paragraph>
+        <Paragraph tc={tc}>Data Protection Officer: dpo@cpay.co.ke</Paragraph>
         <Paragraph tc={tc}>Registered Address: Nairobi, Kenya</Paragraph>
         <Paragraph tc={tc}>
           We have appointed a Data Protection Officer (DPO) as required by Section 24 of the DPA. For any privacy-related inquiries, contact our DPO at the email above.
@@ -468,7 +468,7 @@ function PrivacyContent({
         <BulletPoint tc={tc}>Withdraw consent: Withdraw consent for optional processing at any time (Section 32)</BulletPoint>
         <BulletPoint tc={tc}>Lodge a complaint: File a complaint with the ODPC at complaints@odpc.go.ke</BulletPoint>
         <Paragraph tc={tc}>
-          To exercise your rights, email dpo@cryptopay.co.ke. We will respond within 30 days. Identity verification may be required.
+          To exercise your rights, email dpo@cpay.co.ke. We will respond within 30 days. Identity verification may be required.
         </Paragraph>
       </LegalSection>
 
@@ -504,8 +504,8 @@ function PrivacyContent({
 
       <LegalSection title="14. Contact" icon="mail-outline" tc={tc} ts={ts} isDesktop={isDesktop}>
         <Paragraph tc={tc} bold>CryptoPay Technologies Ltd</Paragraph>
-        <Paragraph tc={tc}>Data Protection Officer: dpo@cryptopay.co.ke</Paragraph>
-        <Paragraph tc={tc}>General: privacy@cryptopay.co.ke</Paragraph>
+        <Paragraph tc={tc}>Data Protection Officer: dpo@cpay.co.ke</Paragraph>
+        <Paragraph tc={tc}>General: privacy@cpay.co.ke</Paragraph>
         <Paragraph tc={tc}>ODPC Complaints: complaints@odpc.go.ke</Paragraph>
         <Paragraph tc={tc}>Nairobi, Kenya</Paragraph>
       </LegalSection>

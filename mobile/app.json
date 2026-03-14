@@ -114,7 +114,7 @@
           "data": [
             {
               "scheme": "https",
-              "host": "app.cryptopay.co.ke",
+              "host": "app.cpay.co.ke",
               "pathPrefix": "/"
             }
           ],
@@ -128,9 +128,9 @@
       "name": "CryptoPay"
     },
     "extra": {
-      "privacyPolicyUrl": "https://cryptopay.co.ke/privacy",
-      "termsOfServiceUrl": "https://cryptopay.co.ke/terms",
-      "supportEmail": "support@cryptopay.co.ke",
+      "privacyPolicyUrl": "https://cpay.co.ke/privacy",
+      "termsOfServiceUrl": "https://cpay.co.ke/terms",
+      "supportEmail": "support@cpay.co.ke",
       "googleWebClientId": "",
       "googleAndroidClientId": "",
       "googleIosClientId": "",

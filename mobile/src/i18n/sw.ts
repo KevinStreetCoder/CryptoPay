@@ -457,7 +457,7 @@ const sw: Translations = {
     faqCurrencies: "Sarafu zipi zinaungwa mkono?",
     faqCurrenciesAnswer: "CryptoPay kwa sasa inaunga mkono:\n\n\u2022 USDT (Tether)\n\u2022 BTC (Bitcoin)\n\u2022 ETH (Ethereum)\n\u2022 SOL (Solana)\n\nSarafu zaidi zitaongezwa katika masasisho yajayo.",
     faqContactSupport: "Ninawezaje kuwasiliana na msaada?",
-    faqContactSupportAnswer: "Unaweza kuwafikia timu yetu ya msaada kupitia barua pepe support@cryptopay.co.ke. Kawaida tunajibu ndani ya masaa 24 siku za kazi. Unaweza pia kutufikia kupitia WhatsApp kwa +254700000000 au Twitter/X @CryptoPayKE.",
+    faqContactSupportAnswer: "Unaweza kuwafikia timu yetu ya msaada kupitia barua pepe support@cpay.co.ke. Kawaida tunajibu ndani ya masaa 24 siku za kazi. Unaweza pia kutufikia kupitia WhatsApp kwa +254700000000 au Twitter/X @CryptoPayKE.",
   },
 };
 

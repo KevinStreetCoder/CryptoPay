@@ -101,11 +101,11 @@ export function initAppKit() {
     metadata: {
       name: "CryptoPay",
       description: "Crypto to M-Pesa payments — deposit, pay bills, send money",
-      url: "https://cryptopay.co.ke",
-      icons: ["https://cryptopay.co.ke/icon.png"],
+      url: "https://cpay.co.ke",
+      icons: ["https://cpay.co.ke/icon.png"],
       redirect: {
         native: "cryptopay://",
-        universal: "https://cryptopay.co.ke/walletconnect",
+        universal: "https://cpay.co.ke/walletconnect",
       },
     },
     tokens: TOKEN_CONTRACTS,

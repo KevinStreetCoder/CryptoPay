@@ -455,7 +455,7 @@ const en = {
     faqCurrencies: "What currencies are supported?",
     faqCurrenciesAnswer: "CryptoPay currently supports:\n\n\u2022 USDT (Tether)\n\u2022 BTC (Bitcoin)\n\u2022 ETH (Ethereum)\n\u2022 SOL (Solana)\n\nMore currencies will be added in future updates.",
     faqContactSupport: "How do I contact support?",
-    faqContactSupportAnswer: "You can reach our support team via email at support@cryptopay.co.ke. We typically respond within 24 hours on business days. You can also reach us on WhatsApp at +254700000000 or on Twitter/X @CryptoPayKE.",
+    faqContactSupportAnswer: "You can reach our support team via email at support@cpay.co.ke. We typically respond within 24 hours on business days. You can also reach us on WhatsApp at +254700000000 or on Twitter/X @CryptoPayKE.",
   },
 };
 
