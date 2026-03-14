@@ -182,7 +182,7 @@ export default function SecuritySettingsScreen() {
             {description}
           </Text>
         </View>
-        {status && (
+        {status ? (
           <View
             style={{
               paddingHorizontal: 10,
@@ -195,7 +195,7 @@ export default function SecuritySettingsScreen() {
               {status}
             </Text>
           </View>
-        )}
+        ) : null}
       </View>
       {children}
     </View>
@@ -262,12 +262,15 @@ export default function SecuritySettingsScreen() {
                       <Pressable
                         onPress={handleSendEmailVerification}
                         disabled={actionLoading === "email_verify"}
-                        style={{
-                          backgroundColor: tc.primary[500],
+                        style={({ pressed, hovered }: any) => ({
+                          backgroundColor: hovered ? tc.primary[400] : tc.primary[500],
                           borderRadius: 12,
                           padding: 14,
-                          alignItems: "center",
-                        }}
+                          alignItems: "center" as const,
+                          opacity: pressed ? 0.9 : 1,
+                          transform: [{ scale: pressed ? 0.98 : 1 }],
+                          ...(isWeb ? { cursor: "pointer", transition: "all 0.2s ease" } as any : {}),
+                        })}
                       >
                         {actionLoading === "email_verify" ? (
                           <ActivityIndicator size="small" color="#fff" />
@@ -305,13 +308,15 @@ export default function SecuritySettingsScreen() {
                       <Pressable
                         onPress={handleConfirmEmail}
                         disabled={actionLoading === "confirm_email" || verificationCode.length < 6}
-                        style={{
-                          backgroundColor: tc.primary[500],
+                        style={({ pressed, hovered }: any) => ({
+                          backgroundColor: hovered ? tc.primary[400] : tc.primary[500],
                           borderRadius: 12,
                           padding: 14,
-                          alignItems: "center",
-                          opacity: verificationCode.length < 6 ? 0.6 : 1,
-                        }}
+                          alignItems: "center" as const,
+                          opacity: verificationCode.length < 6 ? 0.6 : pressed ? 0.9 : 1,
+                          transform: [{ scale: pressed ? 0.98 : 1 }],
+                          ...(isWeb ? { cursor: "pointer", transition: "all 0.2s ease" } as any : {}),
+                        })}
                       >
                         {actionLoading === "confirm_email" ? (
                           <ActivityIndicator size="small" color="#fff" />
@@ -343,16 +348,20 @@ export default function SecuritySettingsScreen() {
             >
               <Pressable
                 onPress={handleSetupTOTP}
-                style={{
-                  backgroundColor: security?.totp_enabled ? tc.dark.elevated : "rgba(139, 92, 246, 0.12)",
+                style={({ pressed, hovered }: any) => ({
+                  backgroundColor: security?.totp_enabled
+                    ? (hovered ? tc.dark.border : tc.dark.elevated)
+                    : (hovered ? "rgba(139, 92, 246, 0.18)" : "rgba(139, 92, 246, 0.12)"),
                   borderRadius: 12,
                   padding: 14,
-                  alignItems: "center",
+                  alignItems: "center" as const,
                   marginTop: 12,
                   maxWidth: btnMaxWidth,
                   borderWidth: 1,
                   borderColor: security?.totp_enabled ? tc.dark.border : "rgba(139, 92, 246, 0.2)",
-                }}
+                  transform: [{ scale: pressed ? 0.98 : 1 }],
+                  ...(isWeb ? { cursor: "pointer", transition: "all 0.2s ease" } as any : {}),
+                })}
               >
                 <Text
                   style={{
@@ -391,16 +400,18 @@ export default function SecuritySettingsScreen() {
               {!showRecoveryForm ? (
                 <Pressable
                   onPress={() => setShowRecoveryForm(true)}
-                  style={{
-                    backgroundColor: "rgba(245, 158, 11, 0.12)",
+                  style={({ pressed, hovered }: any) => ({
+                    backgroundColor: hovered ? "rgba(245, 158, 11, 0.18)" : "rgba(245, 158, 11, 0.12)",
                     borderRadius: 12,
                     padding: 14,
-                    alignItems: "center",
+                    alignItems: "center" as const,
                     marginTop: 12,
                     maxWidth: btnMaxWidth,
                     borderWidth: 1,
+                    transform: [{ scale: pressed ? 0.98 : 1 }],
+                    ...(isWeb ? { cursor: "pointer", transition: "all 0.2s ease" } as any : {}),
                     borderColor: "rgba(245, 158, 11, 0.2)",
-                  }}
+                  })}
                 >
                   <Text style={{ color: "#F59E0B", fontSize: 15, fontFamily: "DMSans_600SemiBold" }}>
                     {security?.recovery_email ? t("securityPage.updateRecoveryEmail") : t("securityPage.addRecoveryEmail")}
@@ -482,16 +493,18 @@ export default function SecuritySettingsScreen() {
             >
               <Pressable
                 onPress={() => router.push("/settings/devices" as any)}
-                style={{
-                  backgroundColor: tc.dark.elevated,
+                style={({ pressed, hovered }: any) => ({
+                  backgroundColor: hovered ? tc.dark.border : tc.dark.elevated,
                   borderRadius: 12,
                   padding: 14,
-                  alignItems: "center",
+                  alignItems: "center" as const,
                   marginTop: 12,
                   maxWidth: btnMaxWidth,
                   borderWidth: 1,
                   borderColor: tc.dark.border,
-                }}
+                  transform: [{ scale: pressed ? 0.98 : 1 }],
+                  ...(isWeb ? { cursor: "pointer", transition: "all 0.2s ease" } as any : {}),
+                })}
               >
                 <Text style={{ color: tc.textPrimary, fontSize: 15, fontFamily: "DMSans_600SemiBold" }}>
                   {t("securityPage.manageDevices")}
@@ -511,16 +524,18 @@ export default function SecuritySettingsScreen() {
             >
               <Pressable
                 onPress={() => router.push("/settings/change-pin")}
-                style={{
-                  backgroundColor: tc.dark.elevated,
+                style={({ pressed, hovered }: any) => ({
+                  backgroundColor: hovered ? tc.dark.border : tc.dark.elevated,
                   borderRadius: 12,
                   padding: 14,
-                  alignItems: "center",
+                  alignItems: "center" as const,
                   marginTop: 12,
                   maxWidth: btnMaxWidth,
                   borderWidth: 1,
                   borderColor: tc.dark.border,
-                }}
+                  transform: [{ scale: pressed ? 0.98 : 1 }],
+                  ...(isWeb ? { cursor: "pointer", transition: "all 0.2s ease" } as any : {}),
+                })}
               >
                 <Text style={{ color: tc.textPrimary, fontSize: 15, fontFamily: "DMSans_600SemiBold" }}>
                   {t("securityPage.changePin")}

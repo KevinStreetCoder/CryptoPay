@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -21,6 +21,7 @@ import { SectionHeader } from "../../src/components/SectionHeader";
 import { storage } from "../../src/utils/storage";
 import { usePhonePrivacy } from "../../src/utils/privacy";
 import { useLocale } from "../../src/hooks/useLocale";
+import { useToast } from "../../src/components/Toast";
 
 const isWeb = Platform.OS === "web";
 
@@ -423,16 +424,32 @@ function ProfileCard({
 
       {/* Info */}
       <View style={{ flex: 1 }}>
-        <Text
-          style={{
-            color: tc.textPrimary,
-            fontSize: isDesktop ? 20 : 18,
-            fontFamily: "DMSans_700Bold",
-            letterSpacing: -0.3,
-          }}
-        >
-          {user?.full_name || "User"}
-        </Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Text
+            style={{
+              color: tc.textPrimary,
+              fontSize: isDesktop ? 20 : 18,
+              fontFamily: "DMSans_700Bold",
+              letterSpacing: -0.3,
+            }}
+          >
+            {user?.full_name || "User"}
+          </Text>
+          {(user?.kyc_tier ?? 0) >= 1 && (
+            <View
+              style={{
+                width: 22,
+                height: 22,
+                borderRadius: 11,
+                backgroundColor: colors.primary[500],
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Ionicons name="checkmark" size={13} color="#FFFFFF" />
+            </View>
+          )}
+        </View>
         <Text
           style={{
             color: tc.textMuted,
@@ -478,14 +495,15 @@ export default function SettingsScreen() {
   const { formatPhone } = usePhonePrivacy();
   const { balanceHidden, toggleBalance } = useBalanceVisibility();
   const { t } = useLocale();
+  const toast = useToast();
   const [biometricEnabled, setBiometricEnabled] = useState(false);
 
   // Load biometric pref
-  useState(() => {
+  useEffect(() => {
     storage.getItemAsync("biometric_enabled").then((val) => {
       setBiometricEnabled(val === "true");
     });
-  });
+  }, []);
 
   const toggleBiometric = useCallback(async () => {
     const newVal = !biometricEnabled;
@@ -546,6 +564,7 @@ export default function SettingsScreen() {
           route: "/settings/security",
           badge: "NEW",
         },
+        // Float Management moved to admin stats page
       ],
     },
     {
@@ -579,7 +598,7 @@ export default function SettingsScreen() {
           iconBg: colors.success + "18",
           label: t("settings.defaultCurrency"),
           description: t("settings.defaultCurrencyDesc"),
-          action: () => {},
+          route: "/settings/currency",
           rightElement: (
             <View
               style={{
@@ -650,7 +669,7 @@ export default function SettingsScreen() {
           iconBg: "rgba(136,153,170,0.12)",
           label: t("settings.termsPrivacy"),
           description: t("settings.termsPrivacyDesc"),
-          action: () => {},
+          route: "/settings/terms",
         },
         {
           key: "version",
@@ -689,7 +708,6 @@ export default function SettingsScreen() {
     }
   };
 
-  const contentMaxWidth = undefined;
   const horizontalPadding = isDesktop ? 48 : isTablet ? 32 : 20;
 
   return (

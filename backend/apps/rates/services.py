@@ -215,7 +215,7 @@ class RateService:
         }
 
     @staticmethod
-    def lock_rate(currency: str, kes_amount: Decimal) -> dict:
+    def lock_rate(currency: str, kes_amount: Decimal, user_id: str = "") -> dict:
         """
         Lock a rate for 30 seconds. Returns a quote with a unique quote_id.
         The user must confirm within the TTL or the quote expires.
@@ -247,6 +247,7 @@ class RateService:
             "fee_kes": str(flat_fee),
             "excise_duty_kes": str(excise_duty),
             "total_kes": str(total_kes),
+            "user_id": user_id,  # Bind quote to requesting user
             **rate_info,
         }
 
@@ -256,9 +257,43 @@ class RateService:
         return quote
 
     @staticmethod
-    def get_locked_quote(quote_id: str) -> dict | None:
-        """Retrieve a locked quote. Returns None if expired."""
-        return cache.get(f"quote:{quote_id}")
+    def get_locked_quote(quote_id: str, user_id: str = "") -> dict | None:
+        """Retrieve a locked quote. Returns None if expired or wrong user."""
+        quote = cache.get(f"quote:{quote_id}")
+        if quote is None:
+            return None
+
+        # Verify quote belongs to requesting user (if user_id is set in quote)
+        quote_user = quote.get("user_id", "")
+        if quote_user and user_id and quote_user != user_id:
+            return None
+
+        return quote
+
+    @staticmethod
+    def consume_locked_quote(quote_id: str, user_id: str = "") -> dict | None:
+        """Retrieve and DELETE a locked quote. Atomic single-use via claim key."""
+        cache_key = f"quote:{quote_id}"
+
+        # Atomic: try to "claim" the quote — cache.add is atomic in Redis
+        # If two requests race, only one succeeds at adding the claim key
+        claim_key = f"quote_claimed:{quote_id}"
+        if not cache.add(claim_key, "1", timeout=60):
+            return None  # Already claimed by another request
+
+        quote = cache.get(cache_key)
+        if quote is None:
+            cache.delete(claim_key)
+            return None
+
+        # Verify quote belongs to requesting user
+        quote_user = quote.get("user_id", "")
+        if quote_user and user_id and quote_user != user_id:
+            cache.delete(claim_key)
+            return None
+
+        cache.delete(cache_key)
+        return quote
 
     @staticmethod
     def get_market_chart(currency: str, days: int = 7) -> list[dict]:
@@ -273,6 +308,13 @@ class RateService:
         cached = cache.get(cache_key)
         if cached:
             return cached
+
+        # Prevent cache stampede — only one fetch per currency/period at a time
+        lock_key = f"market_chart_lock:{currency}:{days}"
+        if cache.get(lock_key):
+            # Another request is already fetching, return empty (frontend handles gracefully)
+            return []
+        cache.set(lock_key, "1", timeout=30)
 
         # Determine cache TTL based on period
         if days <= 1:

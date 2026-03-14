@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { CryptoLogo } from "../../src/components/CryptoLogo";
@@ -88,6 +89,7 @@ function generateIdempotencyKey(): string {
 
 export default function BuyCryptoScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const toast = useToast();
   const { user } = useAuth();
   const { width } = useWindowDimensions();
@@ -209,6 +211,10 @@ export default function BuyCryptoScreen() {
         pin,
         idempotency_key: idempotencyKey,
       });
+
+      // Invalidate wallet balances immediately
+      queryClient.invalidateQueries({ queryKey: ["wallets"] });
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
 
       if (Platform.OS !== "web") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

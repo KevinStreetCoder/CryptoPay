@@ -1,6 +1,8 @@
 """Celery tasks for async email sending and push notifications."""
 
 import logging
+import smtplib
+import socket
 from typing import Optional
 
 from celery import shared_task
@@ -10,12 +12,22 @@ from django.template.loader import render_to_string
 
 logger = logging.getLogger(__name__)
 
+# Transient errors worth retrying (network, SMTP, external API issues)
+_TRANSIENT_ERRORS = (
+    ConnectionError,
+    TimeoutError,
+    OSError,
+    socket.error,
+    smtplib.SMTPException,
+    IOError,
+)
+
 
 @shared_task(
     bind=True,
     max_retries=3,
     default_retry_delay=10,
-    autoretry_for=(Exception,),
+    autoretry_for=_TRANSIENT_ERRORS,
     retry_backoff=True,
     retry_backoff_max=300,
 )
@@ -39,7 +51,7 @@ def send_email_task(self, subject, html_content, recipient_email):
 @shared_task(
     bind=True,
     max_retries=3,
-    autoretry_for=(Exception,),
+    autoretry_for=_TRANSIENT_ERRORS,
     retry_backoff=True,
     retry_backoff_max=300,
 )
@@ -60,7 +72,7 @@ def send_welcome_email_task(self, user_email, user_full_name, user_phone):
 @shared_task(
     bind=True,
     max_retries=3,
-    autoretry_for=(Exception,),
+    autoretry_for=_TRANSIENT_ERRORS,
     retry_backoff=True,
     retry_backoff_max=300,
 )
@@ -88,7 +100,7 @@ def send_transaction_receipt_task(
 @shared_task(
     bind=True,
     max_retries=3,
-    autoretry_for=(Exception,),
+    autoretry_for=_TRANSIENT_ERRORS,
     retry_backoff=True,
     retry_backoff_max=300,
 )
@@ -113,7 +125,7 @@ def send_kyc_status_email_task(
 @shared_task(
     bind=True,
     max_retries=3,
-    autoretry_for=(Exception,),
+    autoretry_for=_TRANSIENT_ERRORS,
     retry_backoff=True,
     retry_backoff_max=300,
 )
@@ -127,6 +139,8 @@ def send_security_alert_task(
         "pin_change": "PIN Changed",
         "suspicious_login": "Suspicious Login Attempt",
         "account_locked": "Account Locked",
+        "account_suspended": "Account Suspended",
+        "account_unsuspended": "Account Reactivated",
     }
     context = {
         "full_name": user_full_name,
@@ -146,7 +160,7 @@ def send_security_alert_task(
 @shared_task(
     bind=True,
     max_retries=3,
-    autoretry_for=(Exception,),
+    autoretry_for=_TRANSIENT_ERRORS,
     retry_backoff=True,
     retry_backoff_max=300,
 )
@@ -187,7 +201,7 @@ def send_transaction_sms_task(self, phone, tx_type, amount, currency, reference)
 @shared_task(
     bind=True,
     max_retries=3,
-    autoretry_for=(Exception,),
+    autoretry_for=_TRANSIENT_ERRORS,
     retry_backoff=True,
     retry_backoff_max=300,
 )
@@ -212,7 +226,7 @@ def generate_pdf_receipt_task(self, transaction_id):
     bind=True,
     max_retries=3,
     default_retry_delay=5,
-    autoretry_for=(Exception,),
+    autoretry_for=_TRANSIENT_ERRORS,
     retry_backoff=True,
     retry_backoff_max=60,
 )

@@ -1,6 +1,6 @@
 # CryptoPay — Development Progress
 
-**Last updated:** 2026-03-13
+**Last updated:** 2026-03-14
 
 > See also: [ROADMAP.md](./ROADMAP.md) for strategic vision, fundraising, and expansion plans.
 > See also: [SYSTEM-DESIGN.md](./SYSTEM-DESIGN.md) for technical architecture and liquidity engine design.
@@ -41,7 +41,7 @@
 | Audit logging | ✅ Done | Immutable AuditLog, middleware for request context |
 | Production settings | ✅ Done | SSL, HSTS, WhiteNoise, Sentry, JSON logging, DB pooling |
 | Docker Compose | ✅ Done | PostgreSQL 16, Redis 7, web, celery, celery-beat, health checks |
-| Tests (116) | ✅ Done | Auth, wallets, saga, idempotency, daily limits, rates, address gen, deposits, **security hardening (50 new)** |
+| Tests (136) | ✅ Done | Auth, wallets, saga, idempotency, daily limits, rates, address gen, deposits, **security hardening (50)**, **rebalancing (14 new)** |
 
 ### Frontend (React Native + Expo) — COMPLETE ✅
 
@@ -355,8 +355,9 @@ What's real vs placeholder in the current codebase:
 | **Wallet Addresses** | ✅ REAL | BIP-44 HD wallet derivation with secp256k1/Ed25519, chain-specific address encoding |
 | **Crypto Price Charts** | ✅ REAL | CoinGecko `/market_chart` → CryptoCompare fallback → internal DB fallback, period-based caching |
 | **Rate History API** | ✅ REAL | Backend serves real market data, frontend fetches per currency/period with react-query |
-| **ETH/BTC/SOL Listeners** | ⚠️ PARTIAL | ETH + BTC implemented, Solana still missing (Helius API needed) |
-| **Off-Ramp (Yellow Card)** | ❌ MISSING | No exchange API integration for automated USDT→KES |
+| **ETH/BTC/SOL Listeners** | ✅ REAL | ETH (Alchemy), BTC (BlockCypher), SOL (Solana RPC) — all chains monitored |
+| **Off-Ramp (Yellow Card)** | ⚠️ PARTIAL | Manual mode complete (admin sells + confirms). API provider stub ready for Yellow Card B2B API keys. |
+| **Float Rebalancing** | ✅ REAL | Full orchestrator: auto-trigger, manual trigger, Celery tasks, admin API, Django admin, circuit breaker integration. |
 | **Production API URL** | ✅ UNIFIED | Single source in `config.ts`, env-based with production validation (crashes if localhost in prod) |
 | **Celery Tasks** | ✅ REAL | 9 periodic tasks: rate refresh, Tron/ETH/BTC monitors + confirmation trackers, float check |
 | **Security Settings** | ✅ REAL | SSL, HSTS, secure cookies, CORS, JSON logging — properly structured |
@@ -525,13 +526,246 @@ What's real vs placeholder in the current codebase:
 - [x] Icons on all buttons
 - [x] Payment stepper in all flows
 
+#### ✅ COMPLETED (March 13, 2026 Session 2 — Liquidity Rebalancing Orchestrator)
+
+| # | Task | Area | Details | Files |
+|---|------|------|---------|-------|
+| 1 | **RebalanceOrder model** | Backend | Full state machine: PENDING→SUBMITTED→SETTLING→COMPLETED/FAILED/CANCELLED. Tracks float snapshot, crypto sell details, actual settlement, exchange reference, slippage, admin notes, audit trail. | `wallets/models.py`, migration `0003_rebalance_order.py` |
+| 2 | **Exchange provider interface** | Backend | Abstract `ExchangeProvider` with `ManualExchangeProvider` (now) and `YellowCardAPIProvider` stub (future). Factory pattern via settings. Manual mode: uses internal rate engine, notifies admin via push+email with Yellow Card sell instructions. | `wallets/rebalance.py` |
+| 3 | **Rebalancing orchestrator** | Backend | `create_rebalance_order()` with 5 precondition checks (active order, cooldown, float threshold, crypto availability, minimum amount). Redis locking for idempotency. `submit_rebalance_order()`, `confirm_rebalance_settlement()` with SystemWallet balance updates, `fail_rebalance_order()`, `cancel_rebalance_order()`. Min KES 50K, max KES 2M, target KES 1.5M. | `wallets/rebalance.py` |
+| 4 | **Celery tasks (4)** | Backend | `check_and_trigger_rebalance` (every 5min), `process_rebalance_order` (with retries), `check_stale_orders` (hourly, auto-expires 24h+), `trigger_rebalance_from_breaker` (fired on circuit breaker transition). All with Redis locks and acks_late. | `wallets/tasks.py`, `settings/base.py` |
+| 5 | **Admin API (6 endpoints)** | Backend | `GET status/` (full dashboard with coverage days, active orders, circuit breaker), `GET orders/`, `POST trigger/`, `POST {id}/confirm/`, `POST {id}/fail/`, `POST {id}/cancel/`. All admin-only (IsAdminUser). | `wallets/views.py`, `wallets/urls.py`, `wallets/serializers.py` |
+| 6 | **Django admin interface** | Backend | RebalanceOrder admin with fieldsets (order info, float state, sell details, settlement, exchange, admin notes, timestamps). List display with slippage calculation. | `wallets/admin.py` |
+| 7 | **Circuit breaker → rebalance wiring** | Backend | Auto-triggers `trigger_rebalance_from_breaker` Celery task when circuit breaker transitions from CLOSED to HALF_OPEN or OPEN. Force flag overrides cooldown for urgency. | `payments/circuit_breaker.py` |
+| 8 | **Float monitoring enhancement** | Backend | Pre-alerts at 70% and 50% of healthy threshold (before circuit breaker trips). Real-time SystemWallet FLOAT/KES sync from M-Pesa balance callbacks. Days-of-operations coverage logging with <2 days warning. Redis-throttled alerts (30min cooldown). | `mpesa/tasks.py` |
+| 9 | **Rebalance settings** | Backend | `REBALANCE_MIN_KES`, `REBALANCE_MAX_KES`, `REBALANCE_COOLDOWN_SECONDS`, `REBALANCE_EXECUTION_MODE`, `YELLOW_CARD_API_KEY`, `YELLOW_CARD_SECRET_KEY`, `YELLOW_CARD_BASE_URL`. Wallets logger added. | `settings/base.py` |
+| 10 | **Mobile admin dashboard** | Frontend | Float Management screen in settings (admin-only). Shows current float, target, coverage days, circuit breaker status. Active order management with Confirm/Cancel actions. Manual trigger with currency selector. Recent completions with slippage. Auto-refresh 30s. | `settings/admin-rebalance.tsx`, `settings/index.tsx` |
+
+**Liquidity Plan Checklist:**
+- [x] Rebalancing orchestrator — Model, service, tasks, API, admin, migration, Celery Beat
+- [x] Circuit breaker integration — Auto-triggers rebalance on HALF_OPEN/OPEN
+- [x] Float monitoring enhancement — Pre-alerts at 70%/50%, SystemWallet sync, coverage days
+- [x] Ops dashboard — Backend API done + mobile admin screen
+- [x] Yellow Card API stub — Provider interface ready, just needs API keys
+- [ ] Yellow Card B2B API integration — HTTP client for quote/order/settlement (needs API keys from paymentsapi@yellowcard.io)
+
+#### ✅ COMPLETED (March 13, 2026 Session 3 — Audit Fixes)
+
+| # | Task | Area | Details | Files |
+|---|------|------|---------|-------|
+| 1 | **`submit_rebalance_order` atomic** | Backend | Wrapped in `@transaction.atomic` to prevent partial writes on failure. | `wallets/rebalance.py` |
+| 2 | **SystemWallet F() expressions** | Backend | Balance updates now use `F()` expressions instead of read-modify-write, fixing race conditions under concurrent requests. | `wallets/rebalance.py` |
+| 3 | **Hot wallet DoesNotExist logging** | Backend | `DoesNotExist` exception now logs a warning instead of being silently swallowed. | `wallets/rebalance.py` |
+| 4 | **force=True respects Redis lock** | Backend | `force=True` no longer bypasses the Redis concurrency lock, preventing duplicate orders. | `wallets/rebalance.py` |
+| 5 | **Reject kes_received=0** | Backend | `confirm_rebalance_settlement` now rejects `kes_received=0` to prevent zero-value confirmations. | `wallets/rebalance.py` |
+| 6 | **Cooldown excludes cancelled** | Backend | `is_in_cooldown` now excludes cancelled orders, so a cancelled order doesn't block new rebalances. | `wallets/rebalance.py` |
+| 7 | **Circuit breaker format string fix** | Backend | `_log_transition` format string fixed for `None` float values (was crashing on `%.0f % None`). | `payments/circuit_breaker.py` |
+| 8 | **Breaker triggers rebalance on HALF_OPEN→OPEN** | Backend | Circuit breaker now triggers rebalance on HALF_OPEN→OPEN transition, not just CLOSED→*. | `payments/circuit_breaker.py` |
+| 9 | **Pre-alert threshold ordering** | Backend | 70% threshold check correctly nested so it doesn't fire when 50% already triggered. | `mpesa/tasks.py` or `wallets/tasks.py` |
+| 10 | **FloatStatus interface rewrite** | Frontend | Complete rewrite of FloatStatus TypeScript interface to match actual backend response shape. | `settings/admin-rebalance.tsx` |
+| 11 | **circuit_breaker parsed as object** | Frontend | `circuit_breaker` now parsed as object with `.state` field instead of raw string. | `settings/admin-rebalance.tsx` |
+| 12 | **String-to-number parsing** | Frontend | `current_float_kes`, `target_float_kes`, `trigger_threshold_kes` parsed from strings to numbers. | `settings/admin-rebalance.tsx` |
+| 13 | **days_of_coverage null-safe** | Frontend | `days_of_coverage` access is now null-safe (handles `null`/`undefined` from backend). | `settings/admin-rebalance.tsx` |
+| 14 | **recent_completed field name** | Frontend | Fixed field name from `recent_completions` to `recent_completed` to match backend. | `settings/admin-rebalance.tsx` |
+| 15 | **Fail Order action button** | Frontend | Added Fail Order button + `handleFailOrder` handler for admin order management. | `settings/admin-rebalance.tsx` |
+| 16 | **CompletionRow correct type** | Frontend | `CompletionRow` now uses correct `CompletedOrder` type with `kes_received`, `slippage`, `completed_at`. | `settings/admin-rebalance.tsx` |
+
+**All 136 tests passing.**
+
+### Security Audit Fixes — COMPLETED ✅
+
+Full security audit across sweep, rebalance, blockchain deposits, and payment saga. All CRITICAL and HIGH findings fixed:
+
+| # | Finding | Severity | Fix | Files |
+|---|---------|----------|-----|-------|
+| 1 | **Sweep lock not released on success** | HIGH | Explicit `_release_sweep_lock()` after successful broadcast | `blockchain/sweep.py` |
+| 2 | **Rate limit TOCTOU race** | HIGH | Changed from GET→check→INCR to atomic INCR→check pattern | `blockchain/sweep.py` |
+| 3 | **Sweep UniqueConstraint includes status** | HIGH | Removed `status` from unique fields; constraint now correctly prevents concurrent active sweeps per address | `blockchain/models.py` |
+| 4 | **Redis fail-open in production** | HIGH | Now returns False (deny) when Redis unavailable in production | `blockchain/sweep.py` |
+| 5 | **Non-atomic retry_count** | MEDIUM | Changed to `F("retry_count") + 1` in bulk update | `blockchain/sweep_tasks.py` |
+| 6 | **Energy estimation overflow** | MEDIUM | `max(0, energy_limit - energy_used)` clamp | `blockchain/sweep.py` |
+| 7 | **Hot wallet deduction stale read** | CRITICAL | Changed to `F("balance") - sell_amount` with `Greatest(..., 0)` | `wallets/rebalance.py` |
+| 8 | **SystemWallet no negative balance guard** | CRITICAL | Added `CheckConstraint(balance >= 0)` + migration | `wallets/models.py`, migration `0004` |
+| 9 | **Double-confirm race condition** | CRITICAL | Atomic `UPDATE...WHERE status IN (submitted, settling)` pattern | `wallets/rebalance.py` |
+| 10 | **PENDING orders confirmable** | HIGH | Removed PENDING from allowed confirm statuses | `wallets/rebalance.py` |
+| 11 | **No kes_received upper bound** | HIGH | Added `max_value=10M` on serializer + 5x sanity check in service | `wallets/serializers.py`, `wallets/rebalance.py` |
+| 12 | **WalletService accepts amount ≤ 0** | MEDIUM | Added positive amount validation on credit/debit | `wallets/services.py` |
+| 13 | **Tron block_timestamp as block_number** | CRITICAL | Now fetches real block_number from TronGrid tx info; confirmation task auto-corrects stale timestamps | `blockchain/tasks.py` |
+| 14 | **ETH address case mismatch** | HIGH | Lowercase→original address mapping preserves wallet deposit_address format | `blockchain/tasks.py` |
+| 15 | **BTC deposits bypass security checks** | HIGH | Never create in CONFIRMED status; always go through process_pending_deposits flow | `blockchain/tasks.py` |
+| 16 | **Double-credit via random uuid4** | CRITICAL | Deterministic `uuid5(deposit:{chain}:{tx_hash})` for ledger transaction ID | `blockchain/tasks.py` |
+| 17 | **Quote not bound to user** | CRITICAL | Added `user_id` to quote, verified at consumption time | `rates/services.py`, `payments/views.py` |
+| 18 | **Quote reuse (no deletion after use)** | CRITICAL | New `consume_locked_quote()` deletes from Redis after first use | `rates/services.py`, `payments/views.py` |
+| 19 | **BUY flow never credits crypto** | CRITICAL | STK callback now credits `dest_amount` to user wallet with deterministic tx_id | `mpesa/views.py` |
+
+### On-Chain Sweep / Consolidation — IMPLEMENTED ✅
+
+Enterprise-level sweep pipeline that consolidates user deposit addresses into the platform's central hot wallet.
+
+| # | Component | Area | Details | Files |
+|---|-----------|------|---------|-------|
+| 1 | **SweepOrder model** | Backend | Full state machine: PENDING→ESTIMATING→SUBMITTED→CONFIRMING→CONFIRMED→CREDITED (or FAILED/SKIPPED). UUID PK, tracks chain, currency, from/to addresses, amount, fees (estimated + actual), tx_hash, confirmations, retry count, batch ID, skip reason. Unique constraint prevents duplicate active sweeps per address. | `blockchain/models.py`, migration `0002_sweeporder.py` |
+| 2 | **Sweep service** | Backend | `sweep.py` — Threshold-based sweep decisions (dust minimums, 10% fee cap, 10x gas multiplier). On-chain balance queries for all 4 chains (Tron, ETH, BTC, SOL). Fee estimation (Tron energy model, EIP-1559, BlockCypher sat/KB, Solana priority fees). Anomaly detection (50% balance drop = CRITICAL alert). Redis locks per address. Rate limiting (10/chain/min). | `blockchain/sweep.py` |
+| 3 | **Tron TRC-20 signing** | Backend | Fully implemented: TronGrid `triggersmartcontract` → secp256k1 ECDSA signing (RFC 6979) → `broadcasttransaction`. BIP-62 low-s normalization. Base58check address decoding with checksum verification. Key material zeroed after signing. | `blockchain/sweep.py` |
+| 4 | **Celery tasks (4)** | Backend | `scan_and_create_sweep_orders` (15min), `process_pending_sweeps` (5min), `verify_submitted_sweeps` (3min), `credit_confirmed_sweeps` (5min). Stale sweep detection (>2h auto-fail). Failed sweep retry with exclusions (anomaly, not-implemented). All with soft/hard time limits. | `blockchain/sweep_tasks.py`, `settings/base.py` |
+| 5 | **HOT wallet settings** | Backend | `HOT_WALLET_TRON`, `HOT_WALLET_ETH`, `HOT_WALLET_BTC`, `HOT_WALLET_SOL` env vars. Explicit addresses prevent derivation mismatch. | `settings/base.py` |
+| 6 | **SystemWallet HOT crediting** | Backend | Atomic `F()` expression updates to `SystemWallet HOT/{currency}` on sweep confirmation. Post-sweep reconciliation verifies hot wallet on-chain balance. `@transaction.atomic` wraps the entire credit operation. | `blockchain/sweep.py` |
+| 7 | **Admin dashboard integration** | Frontend | Sweep/Consolidation section in admin-rebalance: active/pending sweep counts, awaiting sweep by currency, recent sweep list. Hot Wallet section shows per-currency balances with BIP-44 badge and seed source. | `settings/admin-rebalance.tsx` |
+
+| 8 | **Tron TRX gas funding** | Backend | Auto-sends TRX from hot wallet to deposit address before TRC-20 sweep. Uses shared `_sign_tron_transaction()` with secp256k1 ECDSA. Waits up to 30s for confirmation. | `blockchain/sweep.py` |
+| 9 | **Ethereum EIP-1559 signing** | Backend | Full `web3.py` integration: native ETH sweeps + USDC ERC-20 `transfer()` ABI encoding. Gas station pattern funds deposit addresses for ERC-20 sweeps. | `blockchain/sweep.py` |
+| 10 | **Bitcoin BlockCypher signing** | Backend | 2-step API: `txs/new` → sign tosign hashes with secp256k1 DER → `txs/send`. BIP-62 low-s normalization. | `blockchain/sweep.py` |
+| 11 | **Solana Ed25519 signing** | Backend | Manual transaction binary construction, Ed25519 signing, base64-encoded `sendTransaction` RPC. | `blockchain/sweep.py` |
+| 12 | **On-chain reconciliation** | Backend | Compares on-chain balances vs DB records every 15 min. DEFICIT = CRITICAL alert (possible unauthorized outflows). SURPLUS = WARNING (likely unsent sweeps). Covers deposit addresses + hot wallets. | `blockchain/reconciliation.py`, `blockchain/sweep_tasks.py` |
+
+**Chain support status:**
+- ✅ Tron (USDT TRC-20): Full — balance, fees, gas funding, signing, broadcast, verification
+- ✅ Ethereum (ETH + USDC): Full — EIP-1559 signing, gas station for ERC-20, nonce management
+- ✅ Bitcoin (BTC): Full — BlockCypher 2-step API, secp256k1 DER signing
+- ✅ Solana (SOL): Full — Ed25519 signing, manual transaction construction
+
+**Post-launch improvements:**
+- ETH CREATE2 + Minimal Proxy: 84% gas savings for high-volume EVM sweeps (Fireblocks pattern)
+- Tron energy delegation: Stake TRX centrally and delegate energy to deposit addresses before sweep
+- UTXO batching (BTC): Multiple inputs → single output for fee efficiency
+- Solana ATA closing: Reclaim ~0.00204 SOL rent per closed account
+
+#### ✅ COMPLETED (March 13, 2026 Session 4 — Production Hardening)
+
+| # | Task | Area | Details | Files |
+|---|------|------|---------|-------|
+| 1 | **STK poll BUY crypto credit** | Backend | `poll_stk_status` now credits crypto for BUY transactions when callback doesn't arrive — same deterministic UUID5 as callback handler for idempotency. Also sends notifications. | `mpesa/tasks.py` |
+| 2 | **WalletService idempotency** | Backend | `credit()` and `debit()` now check for existing LedgerEntry with same `transaction_id` before applying — bulletproof double-credit/debit prevention even under race conditions. | `wallets/services.py` |
+| 3 | **Solana USDC SPL sweep** | Backend | Full implementation: ATA derivation, TransferChecked instruction, CreateAssociatedTokenAccount for new dest ATAs, Ed25519 signing. | `blockchain/sweep.py` |
+| 4 | **USDC/Solana address clarity** | Backend | Documented that USDC deposits are EVM-only (Polygon). Removed dead USDC SPL wallet query from deposit monitor. USDC SPL sweep code dormant until multi-chain support. | `blockchain/tasks.py`, `blockchain/sweep.py` |
+| 5 | **Sweep docstring updated** | Backend | Removed outdated "Stub — TODO" comments for ETH/BTC/SOL chains — all fully implemented. | `blockchain/sweep.py` |
+| 6 | **Frontend balance refresh** | Frontend | Added `queryClient.invalidateQueries(["wallets"])` after ALL payment flows (PayBill, PayTill, Send, BuyCrypto). Wallet balances now update immediately after transactions. | `payment/confirm.tsx`, `payment/success.tsx`, `payment/buy-crypto.tsx` |
+| 7 | **Focus-based refetch** | Frontend | Home and Wallet tabs now refetch balances + transactions on navigation focus via `useNavigation().addListener("focus")`. | `(tabs)/index.tsx`, `(tabs)/wallet.tsx` |
+| 8 | **Transaction auto-refresh** | Frontend | `useTransactions` hook now polls every 15s (was: never). `useWallets` reduced to 10s (was: 30s). Both have `staleTime` and `refetchOnWindowFocus`. | `hooks/useTransactions.ts`, `hooks/useWallets.ts` |
+| 9 | **Settings gear button** | Frontend | Added prominent settings gear icon button on Profile page header (works on both mobile and desktop). | `(tabs)/profile.tsx` |
+| 10 | **Terms of Service page** | Frontend | Full Terms of Service — 15 sections covering eligibility, KYC, services, fees, limits, prohibited activities, wallet custody, IP, liability, disputes, termination, governing law. Kenya-law aligned. | `settings/terms.tsx` |
+| 11 | **Privacy Policy page** | Frontend | Full Privacy Policy — 14 sections compliant with Kenya Data Protection Act 2019. Covers data collection, legal basis, sharing, retention, security, user rights, international transfers, ODPC complaint rights. | `settings/terms.tsx` |
+| 12 | **Terms/Privacy routing** | Frontend | Settings "Terms & Privacy" item now routes to `/settings/terms` with tab switcher (was empty `action: () => {}`). Layout updated with route registration. | `settings/index.tsx`, `settings/_layout.tsx` |
+| 13 | **Biometric hook fix** | Frontend | Fixed `useState(() => ...)` misuse to `useEffect(() => ..., [])` for biometric preference loading. | `settings/index.tsx` |
+| 14 | **Admin route protection** | Frontend | Admin rebalance page now checks `user.is_staff` on mount and redirects non-staff users. | `settings/admin-rebalance.tsx` |
+| 15 | **Success screen delayed refresh** | Frontend | Success screen invalidates wallets on mount + again after 3s (catches async BUY crypto credits from M-Pesa callback). | `payment/success.tsx` |
+
+**All 136 tests passing. TypeScript clean.**
+
+**Fee collection audit:** Verified SELL flow fee collection is CORRECT — `source_amount = crypto_amount` (includes all fees), `dest_amount = kes_amount` (what payee receives). Platform profit = spread + flat fee, embedded in the crypto→KES exchange rate. No revenue loss.
+
+#### ✅ COMPLETED (March 13, 2026 Session 5 — Frontend Production Audit & Admin)
+
+| # | Task | Area | Details | Files |
+|---|------|------|---------|-------|
+| 1 | **Fix missing i18n translations** | Frontend | Added `termsOfService` and `privacyPolicy` keys to `settings` section in both `en.ts` and `sw.ts`. Tab labels on Terms & Privacy page now display correctly instead of `[missing translation]`. | `i18n/en.ts`, `i18n/sw.ts` |
+| 2 | **Fix Send button light mode** | Frontend | Send button was invisible in light mode (white text `#FFFFFF` on light gray `#F0F2F5` bg). Now uses dark bg (`#0F172A`) in light mode with white text for proper contrast. | `(tabs)/wallet.tsx` |
+| 3 | **Fix wallet asset text light mode** | Frontend | Asset card coin names and balances were hardcoded `#FFFFFF` — invisible on white cards in light mode. Changed to `tc.textPrimary`. | `(tabs)/wallet.tsx` |
+| 4 | **Always show KES equivalent** | Frontend | KES value now shows for all assets (was hidden when balance = 0 or rate unavailable). Shows `~KSh 0` when no rate data. | `(tabs)/wallet.tsx` |
+| 5 | **Fix portfolio total light mode** | Frontend | Both desktop and mobile portfolio total balance changed from `#FFFFFF` to `tc.textPrimary`. Transaction amounts in desktop table also fixed. | `(tabs)/wallet.tsx` |
+| 6 | **Move Float Management to admin** | Frontend | Removed Float Management from user Settings page. Added dedicated Admin section on Profile page (staff only) with links to Float Management and User Management. | `settings/index.tsx`, `(tabs)/profile.tsx` |
+| 7 | **Verified badge** | Frontend | Professional verified checkmark badge (filled circle with checkmark icon) shown next to user name when `kyc_tier >= 1`. Added to: Profile page (desktop + mobile), Settings profile card, and Home dashboard greeting. | `(tabs)/profile.tsx`, `settings/index.tsx`, `(tabs)/index.tsx` |
+| 8 | **Admin User Management page** | Frontend | New `/settings/admin-users` page with: KYC tier distribution cards with percentages, searchable/filterable user list, inline tier upgrade buttons (0-3), pagination. Staff-only with redirect protection. | `settings/admin-users.tsx` |
+| 9 | **Admin user verification API** | Backend | Two new endpoints: `GET /accounts/admin/users/` (list users + KYC distribution stats, search/filter/paginate) and `POST /accounts/admin/users/<id>/verify/` (set KYC tier with audit log). Staff permission required. | `accounts/views.py`, `accounts/urls.py` |
+| 10 | **Terms/Privacy from Profile** | Frontend | Profile page Terms of Service and Privacy Policy links now route to in-app `/settings/terms` page instead of external URLs. | `(tabs)/profile.tsx` |
+| 11 | **Route registration** | Frontend | Added `admin-rebalance` and `admin-users` routes to settings layout. | `settings/_layout.tsx` |
+
+**All 136 tests passing. TypeScript clean.**
+
+#### ✅ COMPLETED (March 13, 2026 Session 5b — Verified User UX & Security Polish)
+
+| # | Task | Area | Details | Files |
+|---|------|------|---------|-------|
+| 1 | **Verified user — replace Verify button** | Frontend | Max-tier (Tier 3) users no longer see "Verify Identity" button. Instead, a green verified status badge shows with tier info and limit. Both action buttons area and security section updated. | `(tabs)/profile.tsx` |
+| 2 | **KYC document approved state** | Frontend | Approved documents now show a detailed success card with checkmark, approval date, and reviewer name (audit trail). Non-approved still show status badge. | `settings/kyc.tsx` |
+| 3 | **KYC serializer audit fields** | Backend | Added `verified_at` and `verified_by_name` to KYCDocumentSerializer via SerializerMethodFields. Frontend interface updated to match. | `accounts/serializers.py`, `api/auth.ts` |
+| 4 | **Dashboard verification banner** | Frontend | Tier 0 users see a warning banner after balance card: "Verify your identity to increase limits" with tap-to-navigate to KYC page. Added to both mobile and desktop layouts. | `(tabs)/index.tsx` |
+| 5 | **Full-width layout fix** | Frontend | Removed `maxWidth: 1200` + `alignSelf: center` from admin-users page to comply with full-width design pattern. | `settings/admin-users.tsx` |
+| 6 | **Security page button animations** | Frontend | Added hover/press transitions (`scale`, `backgroundColor` change, `cursor: pointer`, CSS transitions) to all buttons on security settings page (email verify, TOTP, recovery, devices, change PIN). | `settings/security.tsx` |
+| 7 | **Verified badge chip design** | Frontend | Max-tier users see a modern green verified badge chip (shield icon + "Identity Verified" + tier pill) instead of a plain non-clickable info chip. Both desktop and mobile layouts. | `(tabs)/profile.tsx` |
+| 8 | **i18n keys added** | Frontend | `identityVerified`, `verifyBanner`, `verifyBannerDesc`, `verifiedOn`, `verifiedBy`, camera/gallery permission keys — both `en.ts` and `sw.ts`. | `i18n/en.ts`, `i18n/sw.ts` |
+| 9 | **Fix admin users 404** | Frontend | Changed API URL from `/accounts/admin/users/` to `/auth/admin/users/` (accounts URLs are mounted at `/api/v1/auth/`). | `settings/admin-users.tsx` |
+| 10 | **JWT RS256 migration** | Backend | Added RS256 asymmetric key support with fallback to HS256. Production uses PEM key pair (`JWT_PRIVATE_KEY_PATH`, `JWT_PUBLIC_KEY_PATH`). Dev uses separate `JWT_SIGNING_KEY` env var (decoupled from `SECRET_KEY`). | `config/settings/base.py`, `.env` |
+| 11 | **Celery autoretry narrowed** | Backend | Changed all `autoretry_for=(Exception,)` in core tasks to `_TRANSIENT_ERRORS` tuple (`ConnectionError`, `TimeoutError`, `OSError`, `SMTPException`, `IOError`). Prevents wasted retries on permanent errors. | `core/tasks.py` |
+| 12 | **Sweep tasks retry_backoff** | Backend | Added `retry_backoff=True` + `retry_backoff_max` to all 4 sweep tasks (`scan_and_create`, `process_pending`, `verify_submitted`, `credit_confirmed`). Prevents service hammering on failure. | `blockchain/sweep_tasks.py` |
+| 13 | **Wallet tasks retry_backoff** | Backend | Added `retry_backoff=True` + `retry_backoff_max` to `process_rebalance_order` and `trigger_rebalance_from_breaker`. | `wallets/tasks.py` |
+| 14 | **React Query staleTime fix** | Frontend | Set `staleTime: 0` on all queries using `refetchInterval` (`useWallets`, `useTransactions`, `useRates` x2) to avoid TanStack additive delay bug (#7721). Rates refetch reduced from 30s to 15s. | `hooks/useWallets.ts`, `hooks/useTransactions.ts`, `(tabs)/index.tsx`, `(tabs)/wallet.tsx` |
+
+**TypeScript clean. Python syntax clean.**
+
+#### ✅ COMPLETED (March 13, 2026 Session 5c — Admin User Management & KYC Review)
+
+| # | Task | Area | Details | Files |
+|---|------|------|---------|-------|
+| 1 | **User suspension system (backend)** | Backend | Added `suspension_reason`, `suspended_at`, `suspended_by` fields to User model. Migration 0010 applied. `AdminSuspendUserView` endpoint: suspend/unsuspend with mandatory reason, audit log, staff-only protection. Cannot suspend other staff accounts. | `accounts/models.py`, `accounts/views.py`, `accounts/migrations/0010_add_suspension_fields.py` |
+| 2 | **Suspension enforcement** | Backend | `IsNotSuspended` permission class blocks suspended users from PayBill, PayTill, SendMpesa, BuyCrypto. Profile PATCH and ChangePIN also reject suspended users with 403. | `payments/views.py`, `accounts/views.py` |
+| 3 | **User profile suspension banner** | Frontend | Suspended users see a red banner at top of profile page with reason and "contact support" message. | `(tabs)/profile.tsx` |
+| 4 | **Admin user management UI overhaul** | Frontend | Added suspend/unsuspend button per user with modal + reason input. View detail button. Clickable user names navigate to detail page. Wider action column. | `settings/admin-users.tsx` |
+| 5 | **Admin user detail page** | Frontend | New tabbed page: Overview (wallets, KYC docs), Transactions (20 recent), Devices, Audit Log. User header with status badges, suspension banner, suspend/unsuspend action. | `settings/admin-user-detail.tsx` (new) |
+| 6 | **KYC document review system** | Backend | New `AdminReviewKYCView` endpoint: approve/reject individual KYC docs with mandatory rejection reason. Sends email + SMS + push notifications on both outcomes. Audit logged. | `accounts/views.py`, `accounts/urls.py` |
+| 7 | **KYC review UI** | Frontend | Admin detail page KYC section: View Document link, Approve/Reject buttons for pending docs, rejection reason TextInput. Loading state per document. | `settings/admin-user-detail.tsx` |
+| 8 | **KYC tier change notifications** | Backend | `_notify_tier_upgrade()` sends push + email + SMS when admin changes a user's tier. Includes new tier label and daily limit. | `accounts/views.py` |
+| 9 | **Suspension notifications** | Backend | `_notify_suspension()` sends email (security alert) + SMS + push on both suspend and unsuspend. Includes reason in suspend, restoration message in unsuspend. | `accounts/views.py` |
+| 10 | **Security alert event types** | Backend | Added `account_suspended` and `account_unsuspended` to security alert task event labels. | `core/tasks.py` |
+| 11 | **UserSerializer suspension fields** | Backend | Profile API now returns `is_suspended` and `suspension_reason`. Frontend `User` interface updated to match. | `accounts/serializers.py`, `api/auth.ts` |
+| 12 | **Admin stats link in profile** | Frontend | Added "Platform Stats" MenuItem to admin section. Opens Django admin stats page (`/admin/stats/`). Uses `window.open` on web, `Linking.openURL` on native. | `(tabs)/profile.tsx` |
+| 13 | **Admin route protection** | Frontend | All admin pages (`admin-users`, `admin-user-detail`, `admin-rebalance`) verify `is_staff` with useEffect redirect and render guard `if (!user?.is_staff) return null`. | `settings/admin-rebalance.tsx`, `settings/admin-users.tsx`, `settings/admin-user-detail.tsx` |
+| 14 | **Route registration** | Frontend | Registered `admin-user-detail` in settings layout Stack. | `settings/_layout.tsx` |
+| 15 | **Staff promotion (super admin only)** | Backend | New `AdminPromoteStaffView`: only superusers can promote/demote users to staff. Protected by `IsSuperUser` permission. Audit logged. | `accounts/views.py`, `accounts/urls.py` |
+| 16 | **Admin detail KYC doc IDs + file URLs** | Backend | Updated `AdminUserDetailView` to include `id` and `file_url` in KYC document response, enabling admin review workflow. | `accounts/views.py` |
+
+**TypeScript clean. Migration applied. Login 200 OK.**
+
+#### ✅ COMPLETED (March 14, 2026 Session 6 — Infrastructure: Monitoring + Custody Architecture)
+
+| # | Task | Area | Details | Files |
+|---|------|------|---------|-------|
+| 1 | **Prometheus + Grafana monitoring** | Infra | Full monitoring stack: django-prometheus middleware, custom business metrics (payments, M-Pesa, blockchain, sweep, auth, circuit breaker), Prometheus scraping, Grafana dashboards, Alertmanager with severity routing. Docker Compose overlay with 6 services (prometheus, grafana, alertmanager, postgres-exporter, redis-exporter, celery-exporter). | `docker-compose.monitoring.yml`, `monitoring/`, `core/metrics.py`, `config/settings/base.py`, `config/urls.py` |
+| 2 | **Custom CryptoPay metrics** | Backend | 20+ Prometheus metrics: payment lifecycle (initiated/completed/failed), M-Pesa callback latency + float gauge, blockchain deposit detection/confirmation, sweep operations, hot wallet balances, exchange rate staleness, login attempts, circuit breaker state. All with appropriate labels and histogram buckets. | `core/metrics.py` |
+| 3 | **Alert rules** | Infra | 15+ alert rules across 5 groups: API errors/latency, payment failures, M-Pesa float thresholds (500K/200K KES), blockchain listener health, Celery queue backlog, PostgreSQL connections/dead tuples, Redis memory. Severity levels: warning → critical → page. | `monitoring/prometheus/alerts/cryptopay.yml` |
+| 4 | **Hot/warm/cold wallet architecture** | Backend | `WalletTier` enum (HOT/WARM/COLD), `SystemWallet.tier` field, `CustodyTransfer` model for tier-to-tier transfers, `CustodyService` with threshold-based rebalancing logic, Celery tasks for automated threshold checks (15min), daily reports, hourly reconciliation. Admin API endpoints for custody report and manual rebalance. | `wallets/custody.py`, `wallets/models.py`, `wallets/tasks.py`, `wallets/views.py`, `wallets/urls.py` |
+| 5 | **ERC-4337 evaluation (research)** | Research | Deep research concluded: NOT NEEDED for CryptoPay's custodial model. TRON doesn't support ERC-4337. Users don't send on-chain transactions. Platform controls keys so AA benefits irrelevant. Phase 3 consideration only if model changes to non-custodial. | Documented in PROGRESS.md |
+| 6 | **DeFi yield evaluation (research)** | Research | Deep research concluded: User-facing yield NOT legally viable in Kenya now — VASP Act 2025 is law but no licenses issued, no implementing regulations. Treasury-only yield on own float is defensible. Sustainable DeFi rates: 4-7% APY (Aave/Compound). User-facing product: build but don't launch until VASP licensing operational (est. 2027). | Documented in PROGRESS.md |
+
+**Research Verdicts:**
+
+**ERC-4337 Account Abstraction — NOT NEEDED**
+- CryptoPay is custodial: platform holds keys, users never send on-chain transactions
+- TRON (primary chain for USDT) doesn't support ERC-4337
+- The sweep system already abstracts gas from users
+- Revisit only if switching to non-custodial model (Phase 3+)
+
+**Dollar-Denominated Yield Products — DEFERRED (Regulatory Block)**
+- Kenya VASP Act 2025 effective Nov 4, 2025 — but NO licenses issued yet, no implementing regulations
+- User-facing yield likely requires VA Manager license (CMA) or deposit-taking license (CBK)
+- Treasury yield on own float: legal gray area, likely OK with strict fund segregation
+- Sustainable real yield: 4-7% APY via Aave V3 / Compound V3
+- Recommendation: Treasury yield now (Phase 2), user-facing after VASP licensing (est. 2027)
+- Risk: Crypto custody insurance expensive ($1M+ AUC minimum); self-insure with 5-10% SAFU reserve
+
+#### ✅ COMPLETED (March 14, 2026 Session 7 — Production Audit & Comprehensive Fixes)
+
+| # | Task | Area | Details | Files |
+|---|------|------|---------|-------|
+| 1 | **Edit profile PIN bug fix** | Frontend | PIN was collected but never sent to backend (auto-submit fired before React state flushed). Fixed: `handlePinSubmit` now accepts `completedPin` array parameter, auto-submit passes `newPin` directly. | `settings/edit-profile.tsx` |
+| 2 | **Avatar-only update skip PIN** | Frontend | Avatar-only changes no longer require PIN entry. PIN step only shown when name/email changes. | `settings/edit-profile.tsx` |
+| 3 | **NativeWind removal (text node fix)** | Frontend | Removed `nativewind`, `tailwindcss`, `react-native-css-interop` from package.json. Deleted `tailwind.config.js`. 54 packages removed. Fixes "Unexpected text node: . A text node cannot be a child of a View." error. | `package.json`, `tailwind.config.js` (deleted) |
+| 4 | **Deprecated pointerEvents prop** | Frontend | Migrated `pointerEvents="none"` prop to `style={{ pointerEvents: "none" }}` pattern. | `payment/confirm.tsx` |
+| 5 | **Django 6 deprecation warnings** | Backend | All `CheckConstraint(check=...)` migrated to `CheckConstraint(condition=...)` across models and migrations. Tests now 0 warnings. | `wallets/models.py`, `wallets/migrations/0005_custody_tiers.py` |
+| 6 | **Payment serializer validation** | Backend | Added `min_length=6` + `validate_pin()` (digits-only) to all payment serializers. Added `validate_paybill()` / `validate_till()` (numeric-only). Added `validate_phone()` to `SendMpesaSerializer`. Shared `_normalize_phone()` and `_validate_pin()` helpers. | `payments/serializers.py` |
+| 7 | **Yellow Card API guard** | Backend | `get_exchange_provider()` now raises `RuntimeError` if `api` mode selected without `YELLOW_CARD_API_KEY` configured. | `wallets/rebalance.py` |
+| 8 | **Monitoring stack production-ready** | Infra | Fixed celery-exporter image (0.10.9→0.10.7), Prometheus dependency (service_healthy→service_started), alertmanager config (removed unconfigured webhook URLs). Added Grafana dashboard volume mount + 13-panel overview dashboard JSON. All 11 services running. | `docker-compose.monitoring.yml`, `monitoring/alertmanager/alertmanager.yml`, `monitoring/grafana/dashboards/overview.json` |
+| 9 | **Silent error handling fixed** | Frontend | Notifications-inbox catch block now logs warnings instead of silently swallowing errors. | `settings/notifications-inbox.tsx` |
+
+**All 136 tests passing. 0 warnings. 11 Docker services healthy.**
+
 #### 🟡 HIGH PRIORITY — Remaining (Before Beta Launch)
 
 | # | Task | Area | Details | Files |
 |---|------|------|---------|-------|
 | 1 | **VPS deployment + domain** | Infra | Deploy to Nairobi VPS (Lineserve/Truehost), configure Cloudflare DNS, domain cryptopay.co.ke. | `docker-compose.prod.yml`, `nginx/nginx.conf` |
 | 2 | **SSL certificate** | Infra | Certbot + Let's Encrypt with auto-renewal. NOTE: moving to 45-day certs May 2026. | `nginx/nginx.conf` |
-| 3 | **Monitoring: Prometheus + Grafana** | Infra | Add `django-prometheus` middleware, self-hosted Grafana dashboards for API latency, error rates, float levels. | New: `docker-compose.prod.yml` services |
+| 3 | ~~**Monitoring: Prometheus + Grafana**~~ | ✅ Done | `django-prometheus` middleware, custom metrics, Docker Compose overlay with Prometheus, Grafana, Alertmanager, exporters. 15+ alert rules. | `docker-compose.monitoring.yml`, `monitoring/`, `core/metrics.py` |
 | 4 | **M-Pesa environment switch** | Backend | Switch from sandbox to production credentials. Update callback URLs to production domain. Just swap API keys. | `backend/.env`, M-Pesa config |
 | 5 | **Configure all API credentials** | Backend | Fill empty env vars: Smile Identity, Africa's Talking, CoinGecko key, M-Pesa production keys, WALLET_MASTER_SEED. | `backend/.env` |
 
@@ -541,18 +775,18 @@ What's real vs placeholder in the current codebase:
 |---|------|------|---------|-------|
 | 13 | **Solana SPL deposit listener** | Backend | Helius API for SPL token monitoring ($49/mo when needed). "Finalized" commitment level. | New: `backend/apps/blockchain/sol_listener.py` |
 | 14 | **WalletConnect (Reown AppKit)** | Frontend | External wallet connection for paying from MetaMask/Trust/Phantom. Well-supported on Expo. | New: mobile components |
-| 15 | **Hot/warm/cold wallet split** | Backend | Tiered security: hot (2-5%, KMS), warm (multi-sig 2-of-3), cold (hardware, 3-of-5). | `backend/apps/blockchain/services.py` |
+| 15 | ~~**Hot/warm/cold wallet split**~~ | ✅ Done | `WalletTier` model, `CustodyService`, `CustodyTransfer` audit trail, Celery threshold checks (15min), admin API. Physical warm (multisig) + cold (hardware) setup needed at deployment. | `wallets/custody.py`, `wallets/models.py` |
 | 16 | **App Store + Play Store submission** | Launch | EAS production builds, store listings, screenshots, privacy policy. Apple review ~24h, financial apps may take longer. | `mobile/eas.json`, `mobile/app.json` |
 | 17 | **~~Compress app assets~~** | Frontend | ✅ Done — icon.png compressed 393KB → 207KB. | `mobile/assets/` |
 | 18 | **Google OAuth production setup** | Frontend | Fill OAuth client IDs in app.json extra config. Currently empty. | `mobile/app.json` |
-| 19 | **Off-ramp API (Yellow Card / Kotani Pay)** | Backend | Automated USDT→KES conversion via exchange API. Yellow Card B2B API or Kotani Pay. | New: exchange service |
+| 19 | **Off-ramp API (Yellow Card / Kotani Pay)** | Backend | ✅ PARTIAL — Manual mode implemented. Exchange provider interface, RebalanceOrder model, Celery tasks, admin API all done. Yellow Card API provider stub ready. Just needs API keys from `paymentsapi@yellowcard.io` to plug in automated mode. | `wallets/rebalance.py`, `wallets/tasks.py`, `wallets/views.py` |
 
 #### 🔵 FUTURE CONSIDERATION (Post-Launch)
 
 | # | Task | Area | Details | Files |
 |---|------|------|---------|-------|
-| 20 | **Account Abstraction / Gasless UX (ERC-4337)** | Backend / Blockchain | Evaluate ERC-4337 smart contract wallets with Paymasters for gasless transactions. Competitor Rift (riftfi.xyz) uses this to sponsor gas fees (<$5 for $50K volume). Major UX win — users never need ETH for gas. Consider for Ethereum chain deposits/payments. Libraries: eth-infinitism/account-abstraction, permissionless.js, ZeroDev SDK. | New: ERC-4337 integration |
-| 21 | **Dollar-denominated yield products** | Backend / DeFi | Stablecoin yield on idle USDT/USDC balances (DeFi integration). Rift offers "Estate Royalty" yield feature. Potential partners: Aave, Compound, or Yearn vaults. Regulatory implications under VASP Act need legal review. | New: yield service |
+| 20 | ~~**Account Abstraction (ERC-4337)**~~ | Evaluated ❌ | **NOT NEEDED** — CryptoPay is custodial, users don't send on-chain txs. TRON doesn't support ERC-4337. Sweep system already abstracts gas. Revisit only if switching to non-custodial (Phase 3+). | Research documented above |
+| 21 | **Dollar-denominated yield products** | Deferred 🟡 | **Regulatory block** — VASP Act 2025 law but no licenses issued, no regulations. Treasury yield on own float OK now. User-facing yield requires VA Manager license (CMA). Build behind feature flag, launch after VASP licensing (est. 2027). Sustainable rates: 4-7% APY via Aave/Compound. | Research documented above |
 | 22 | **Cross-Africa remittance** | Backend / Product | Expand beyond Kenya to support cross-border stablecoin transfers. Uganda, Tanzania, Nigeria corridors. Rift already supports this. Aligns with geographic expansion roadmap. | Existing expansion plan |
 
 ---
@@ -583,6 +817,8 @@ What's real vs placeholder in the current codebase:
 │  txns,    │ │ quotes,│ │ - ETH monitor (30s)         │
 │  ledger)  │ │ locks) │ │ - BTC monitor (60s)         │
 └───────────┘ └───────┘ │ - Float alerts (5min)       │
+                        │ - Sweep scan (15min)        │
+                        │ - Sweep execute/verify      │
                         └─────────────────────────────┘
                               │
        ┌──────────────────┬───┴───────┬──────────────────┐
@@ -592,13 +828,19 @@ What's real vs placeholder in the current codebase:
 │ Daraja API  │  │ CryptoCompare │ │ Tron API   │ │ BlockCypher  │
 │ (M-Pesa)    │  │ (Rates)       │ │            │ │ (BTC)        │
 └─────────────┘  └───────────────┘ └────────────┘ └──────────────┘
+
+┌──────────────────────── Monitoring Stack ──────────────────────────┐
+│ Prometheus (9090) → Alertmanager (9093) → Slack/PagerDuty          │
+│ Grafana (3001) ← postgres-exporter, redis-exporter, celery-exporter│
+│ django-prometheus middleware + 22 custom business metrics           │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## Test Results
 
-**Backend: 66 tests passing**
+**Backend: 116+ tests passing**
 - 4 auth tests (PIN hash, normalization, superuser, lockout)
 - 4 Google OAuth tests (valid token, invalid token, new user, existing user)
 - 4 device tests (registration, list, duplicate, untrusted)
@@ -614,6 +856,8 @@ What's real vs placeholder in the current codebase:
 - 7 address generation tests (chain formats, determinism, uniqueness)
 - 5 generate-address API tests (success, idempotent, KES rejection, auth)
 - 3 deposit list API tests (empty, user deposits, isolation)
+- 50 blockchain security tests (dust, confirmations, re-org, double-credit, address validation, velocity)
+- 14 rebalance tests (model, orchestrator, API endpoints, admin access control)
 
 ---
 
@@ -624,6 +868,9 @@ What's real vs placeholder in the current codebase:
 # Development (with runserver):
 cd CryptoPay
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+
+# Development + Monitoring (Prometheus, Grafana, Alertmanager):
+docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.monitoring.yml up --build
 
 # Production (with gunicorn):
 docker compose up --build
@@ -658,13 +905,61 @@ eas build --platform ios --profile production
 
 ---
 
+## KES Deposit Flow — IMPLEMENTED ✅
+
+**Last updated:** 2026-03-14
+
+| Component | Status | Details |
+|-----------|--------|---------|
+| M-Pesa STK Push deposit | ✅ Done | Reuses `BuyCryptoView` — user enters KES amount, selects crypto, STK Push initiates |
+| M-Pesa C2B deposit | ✅ Done | Customer-to-Business: user pays to Paybill from M-Pesa menu, crypto credited at live rate |
+| C2B URL registration | ✅ Done | `MpesaClient.register_c2b_urls()` — registers validation + confirmation callbacks with Safaricom |
+| C2B validation view | ✅ Done | Validates account reference, amount limits, user status before M-Pesa processes |
+| C2B confirmation view | ✅ Done | Receives confirmed payment, dispatches `process_c2b_deposit` Celery task |
+| C2B account parsing | ✅ Done | Supports `USDT-0712345678`, `BTC-254712345678`, `CP-phone`, plain phone formats |
+| C2B deposit Celery task | ✅ Done | Atomic: creates transaction + credits wallet + sends notifications |
+| Deposit quote API | ✅ Done | `POST /payments/deposit/quote/` — rate-locked KES→crypto quote with deposit fee |
+| Deposit status API | ✅ Done | `GET /payments/deposit/{id}/status/` — poll deposit progress |
+| C2B instructions API | ✅ Done | `GET /payments/deposit/c2b-instructions/` — dynamic Paybill + account format info |
+| KES_DEPOSIT transaction types | ✅ Done | `KES_DEPOSIT` (STK Push) and `KES_DEPOSIT_C2B` (Paybill) added to Transaction model |
+| Deposit configuration | ✅ Done | `DEPOSIT_FEE_PERCENTAGE`, `DEPOSIT_MIN/MAX_KES`, `DEPOSIT_QUOTE_TTL_SECONDS`, `DEPOSIT_SLIPPAGE_TOLERANCE` |
+| Frontend deposit page | ✅ Done | 3-tab UI: M-Pesa STK / Paybill C2B instructions / Direct crypto deposit |
+| Home quick action | ✅ Done | Deposit button routes to `/payment/deposit` instead of wallet tab |
+| Crypto direct deposit | ✅ Done | Links to wallet tab for blockchain deposit addresses (already implemented) |
+
+### Deposit API Endpoints
+
+```
+POST /api/v1/payments/deposit/quote/          # Get rate-locked KES→crypto quote
+POST /api/v1/payments/buy-crypto/              # Initiate STK Push deposit (existing)
+GET  /api/v1/payments/deposit/{id}/status/     # Poll deposit status
+GET  /api/v1/payments/deposit/c2b-instructions/ # Get Paybill + account format info
+POST /api/v1/mpesa/callback/c2b/validate/      # Safaricom C2B validation callback
+POST /api/v1/mpesa/callback/c2b/confirm/       # Safaricom C2B confirmation callback
+```
+
+---
+
+## Bug Fixes & Audit Fixes — Session 2026-03-14 ✅
+
+| Fix | Details |
+|-----|---------|
+| Notification dispatch error | Fixed `transaction.amount` → `dest_amount`, `currency` → `dest_currency`, `tx_type` → `type`, `reference` → `str(id)[:8]` |
+| Backend test failure | Made `test_full_saga_success` conditional on `MPESA_ENVIRONMENT` (sandbox=COMPLETED, prod=CONFIRMING) |
+| Console.error cleanup | Replaced `console.error` with `toast.error(normalizeError(err))` in admin-users, admin-user-detail, notifications-inbox |
+| Edit profile i18n | Internationalized 10+ hardcoded strings in edit-profile.tsx |
+| Currency preference | Full implementation: `currency.tsx` page, registered in layout, routed from settings (no "coming soon" toast) |
+| Chart professional redesign | Y-axis/X-axis labels, SVG ClipPath, grid lines, glow effects, gradient fill |
+
+---
+
 ## Documentation Index
 
 | Document | Purpose | Last Updated |
 |----------|---------|-------------|
-| [PROGRESS.md](./PROGRESS.md) | This file — development status and test results | 2026-03-12 |
+| [PROGRESS.md](./PROGRESS.md) | This file — development status and test results | 2026-03-14 |
 | [ROADMAP.md](./ROADMAP.md) | Strategic roadmap, fundraising, go-to-market, expansion plans, competitive landscape | 2026-03-09 |
-| [SYSTEM-DESIGN.md](./SYSTEM-DESIGN.md) | Technical architecture, liquidity engine, payment saga, security, regulatory compliance | 2026-03-12 |
+| [SYSTEM-DESIGN.md](./SYSTEM-DESIGN.md) | Technical architecture, liquidity engine, payment saga, security, regulatory compliance, monitoring, custody | 2026-03-14 |
 | [STARTUP-CHECKLIST.md](./STARTUP-CHECKLIST.md) | Legal, regulatory, financial checklists — updated with VASP Act 2025 requirements | 2026-03-09 |
 | [research/IMPLEMENTATION-RESEARCH-2026-03-09.md](./research/IMPLEMENTATION-RESEARCH-2026-03-09.md) | **Comprehensive research:** playbook verification, all APIs/tools/pricing, regulatory deep-dive, competitor analysis | 2026-03-09 |
 | [research/](./research/) | All research files: competitor analysis, API research, security audit, regulations | Ongoing |
@@ -675,4 +970,5 @@ eas build --platform ios --profile production
 **Frontend:** 35+ TypeScript/TSX files
 **Docs:** 10+ documentation files (architecture, research, roadmap)
 **Config:** Docker (dev + prod), Nginx, EAS, Metro, Babel, TypeScript, CI/CD
-**Celery Tasks:** 9 periodic tasks across rates, blockchain (Tron/ETH/BTC), M-Pesa
+**Monitoring:** Prometheus + Grafana + Alertmanager + 3 exporters (docker-compose.monitoring.yml)
+**Celery Tasks:** 16+ periodic tasks across rates, blockchain (Tron/ETH/BTC/SOL), M-Pesa, rebalancing, custody

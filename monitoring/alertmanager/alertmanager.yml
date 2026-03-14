@@ -1,0 +1,45 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: default
+  group_by: [alertname, severity]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - match:
+        severity: page
+      receiver: default
+      group_wait: 10s
+      repeat_interval: 15m
+
+    - match:
+        severity: critical
+      receiver: default
+      group_wait: 15s
+      repeat_interval: 1h
+
+    - match:
+        severity: warning
+      receiver: default
+      repeat_interval: 4h
+
+receivers:
+  # Default: log-only receiver (no external webhooks required)
+  # In production, configure Slack/PagerDuty via environment variables:
+  #   SLACK_WEBHOOK_CRITICAL, SLACK_WEBHOOK_WARNING, PAGERDUTY_WEBHOOK_URL
+  - name: default
+
+inhibit_rules:
+  - source_match:
+      severity: critical
+    target_match:
+      severity: warning
+    equal: [alertname]
+
+  - source_match:
+      severity: page
+    target_match:
+      severity: critical
+    equal: [alertname]

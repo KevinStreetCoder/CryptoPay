@@ -8,5 +8,8 @@ export function useTransactions(page = 1) {
       const { data } = await paymentsApi.history(page);
       return data;
     },
+    refetchInterval: 15000,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
 }

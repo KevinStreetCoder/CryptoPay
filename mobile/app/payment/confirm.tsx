@@ -10,6 +10,7 @@ import { Button } from "../../src/components/Button";
 import { useToast } from "../../src/components/Toast";
 import { GlassCard } from "../../src/components/GlassCard";
 import { PaymentStepper } from "../../src/components/PaymentStepper";
+import { useQueryClient } from "@tanstack/react-query";
 import { paymentsApi } from "../../src/api/payments";
 import { normalizeError } from "../../src/utils/apiErrors";
 import { useScreenSecurity } from "../../src/hooks/useScreenSecurity";
@@ -112,7 +113,6 @@ function QuoteCountdown({ onExpired }: { onExpired: () => void }) {
     <View style={{ alignItems: "center", gap: 8 }}>
       {/* Red flash overlay */}
       <Animated.View
-        pointerEvents="none"
         style={{
           position: "absolute",
           top: -20,
@@ -121,6 +121,7 @@ function QuoteCountdown({ onExpired }: { onExpired: () => void }) {
           bottom: -20,
           backgroundColor: colors.error,
           opacity: flashOpacity,
+          pointerEvents: "none",
           borderRadius: 24,
           zIndex: 10,
         }}
@@ -195,6 +196,7 @@ function QuoteCountdown({ onExpired }: { onExpired: () => void }) {
 
 export default function ConfirmPaymentScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const toast = useToast();
   const { width } = useWindowDimensions();
   const isWeb = Platform.OS === "web";
@@ -280,6 +282,10 @@ export default function ConfirmPaymentScreen() {
       const txData = txResponse?.data;
       const transactionId = txData?.id || "";
       const txStatus = txData?.status || "processing";
+
+      // Immediately invalidate wallet balances so they refresh on next screen
+      queryClient.invalidateQueries({ queryKey: ["wallets"] });
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
 
       if (Platform.OS !== "web") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

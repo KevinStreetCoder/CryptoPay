@@ -23,16 +23,27 @@ from apps.accounts.models import AuditLog
 from .circuit_breaker import PaymentCircuitBreaker, PaymentsPaused
 from .models import Transaction
 from .saga import PaymentSaga, SagaError
-from .serializers import BuyCryptoSerializer, PayBillSerializer, PayTillSerializer, SendMpesaSerializer, TransactionSerializer
+from .serializers import BuyCryptoSerializer, DepositQuoteSerializer, PayBillSerializer, PayTillSerializer, SendMpesaSerializer, TransactionSerializer
 from .services import DailyLimitExceededError, check_daily_limit
 
 logger = logging.getLogger(__name__)
 
 
+class IsNotSuspended(IsAuthenticated):
+    """Block suspended users from making transactions."""
+
+    message = "Your account is suspended. Contact support for assistance."
+
+    def has_permission(self, request, view):
+        if not super().has_permission(request, view):
+            return False
+        return not getattr(request.user, "is_suspended", False)
+
+
 class PayBillView(APIView):
     """Pay a Paybill number with crypto."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsNotSuspended]
 
     def post(self, request):
         serializer = PayBillSerializer(data=request.data)
@@ -61,14 +72,14 @@ class PayBillView(APIView):
                 status=status.HTTP_409_CONFLICT,
             )
 
-        # Get the locked quote
+        # Peek at the locked quote (don't consume yet — validate first)
         from apps.rates.services import RateService
 
-        quote = RateService.get_locked_quote(data["quote_id"])
+        quote = RateService.get_locked_quote(data["quote_id"], user_id=str(user.id))
         if not quote:
             cache.delete(redis_key)
             return Response(
-                {"error": "Quote expired. Please request a new quote."},
+                {"error": "Quote expired or invalid. Please request a new quote."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -90,6 +101,15 @@ class PayBillView(APIView):
             return Response(
                 {"error": e.reason, "circuit_breaker": True},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        # Now consume the quote (validation passed)
+        quote = RateService.consume_locked_quote(data["quote_id"], user_id=str(user.id))
+        if not quote:
+            cache.delete(redis_key)
+            return Response(
+                {"error": "Quote expired or was already used. Please request a new quote."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Create the transaction — Layer 3 (PostgreSQL unique constraint)
@@ -155,13 +175,13 @@ class PayBillView(APIView):
         xff = request.META.get("HTTP_X_FORWARDED_FOR")
         if xff:
             return xff.split(",")[0].strip()
-        return request.META.get("REMOTE_ADDR")
+        return request.META.get("REMOTE_ADDR", "0.0.0.0")
 
 
 class PayTillView(APIView):
     """Pay a Till number with crypto."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsNotSuspended]
 
     def post(self, request):
         serializer = PayTillSerializer(data=request.data)
@@ -183,10 +203,10 @@ class PayTillView(APIView):
 
         from apps.rates.services import RateService
 
-        quote = RateService.get_locked_quote(data["quote_id"])
+        quote = RateService.get_locked_quote(data["quote_id"], user_id=str(user.id))
         if not quote:
             cache.delete(redis_key)
-            return Response({"error": "Quote expired"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "Quote expired or invalid"}, status=status.HTTP_400_BAD_REQUEST)
 
         # Check daily transaction limit based on KYC tier
         try:
@@ -204,6 +224,12 @@ class PayTillView(APIView):
                 {"error": e.reason, "circuit_breaker": True},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
+
+        # Now consume the quote (validation passed)
+        quote = RateService.consume_locked_quote(data["quote_id"], user_id=str(user.id))
+        if not quote:
+            cache.delete(redis_key)
+            return Response({"error": "Quote expired or was already used"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             tx = Transaction.objects.create(
@@ -243,13 +269,13 @@ class PayTillView(APIView):
         xff = request.META.get("HTTP_X_FORWARDED_FOR")
         if xff:
             return xff.split(",")[0].strip()
-        return request.META.get("REMOTE_ADDR")
+        return request.META.get("REMOTE_ADDR", "0.0.0.0")
 
 
 class SendMpesaView(APIView):
     """Send crypto to an M-Pesa phone number (B2C)."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsNotSuspended]
 
     def post(self, request):
         serializer = SendMpesaSerializer(data=request.data)
@@ -271,10 +297,10 @@ class SendMpesaView(APIView):
 
         from apps.rates.services import RateService
 
-        quote = RateService.get_locked_quote(data["quote_id"])
+        quote = RateService.get_locked_quote(data["quote_id"], user_id=str(user.id))
         if not quote:
             cache.delete(redis_key)
-            return Response({"error": "Quote expired"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "Quote expired or invalid"}, status=status.HTTP_400_BAD_REQUEST)
 
         # Check daily transaction limit based on KYC tier
         try:
@@ -292,6 +318,12 @@ class SendMpesaView(APIView):
                 {"error": e.reason, "circuit_breaker": True},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
+
+        # Now consume the quote (validation passed)
+        quote = RateService.consume_locked_quote(data["quote_id"], user_id=str(user.id))
+        if not quote:
+            cache.delete(redis_key)
+            return Response({"error": "Quote expired or was already used"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             tx = Transaction.objects.create(
@@ -345,13 +377,13 @@ class SendMpesaView(APIView):
         xff = request.META.get("HTTP_X_FORWARDED_FOR")
         if xff:
             return xff.split(",")[0].strip()
-        return request.META.get("REMOTE_ADDR")
+        return request.META.get("REMOTE_ADDR", "0.0.0.0")
 
 
 class BuyCryptoView(APIView):
     """Buy crypto with M-Pesa (STK Push deposit)."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsNotSuspended]
 
     def post(self, request):
         serializer = BuyCryptoSerializer(data=request.data)
@@ -372,13 +404,13 @@ class BuyCryptoView(APIView):
                 return Response(TransactionSerializer(existing).data)
             return Response({"error": "Payment already in progress"}, status=status.HTTP_409_CONFLICT)
 
-        # Get the locked quote
+        # Peek at the locked quote (validate before consuming)
         from apps.rates.services import RateService
 
-        quote = RateService.get_locked_quote(data["quote_id"])
+        quote = RateService.get_locked_quote(data["quote_id"], user_id=str(user.id))
         if not quote:
             cache.delete(redis_key)
-            return Response({"error": "Quote expired"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "Quote expired or invalid"}, status=status.HTTP_400_BAD_REQUEST)
 
         # Check daily limit
         try:
@@ -386,6 +418,12 @@ class BuyCryptoView(APIView):
         except DailyLimitExceededError as e:
             cache.delete(redis_key)
             return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
+
+        # Now consume the quote (validation passed)
+        quote = RateService.consume_locked_quote(data["quote_id"], user_id=str(user.id))
+        if not quote:
+            cache.delete(redis_key)
+            return Response({"error": "Quote expired or was already used"}, status=status.HTTP_400_BAD_REQUEST)
 
         # Create the buy transaction
         try:
@@ -483,7 +521,127 @@ class BuyCryptoView(APIView):
         xff = request.META.get("HTTP_X_FORWARDED_FOR")
         if xff:
             return xff.split(",")[0].strip()
-        return request.META.get("REMOTE_ADDR")
+        return request.META.get("REMOTE_ADDR", "0.0.0.0")
+
+
+class DepositQuoteView(APIView):
+    """Get a rate-locked quote for KES → crypto deposit."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = DepositQuoteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        data = serializer.validated_data
+        kes_amount = data["kes_amount"]
+        dest_currency = data["dest_currency"]
+
+        # Check daily limit
+        try:
+            check_daily_limit(request.user, kes_amount)
+        except DailyLimitExceededError as e:
+            return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
+
+        # Get rate-locked quote (reuse existing lock_rate infrastructure)
+        from apps.rates.services import RateService
+
+        try:
+            quote = RateService.lock_rate(
+                dest_currency, kes_amount, user_id=str(request.user.id)
+            )
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Add deposit-specific fields
+        from django.conf import settings as app_settings
+
+        fee_pct = Decimal(str(app_settings.DEPOSIT_FEE_PERCENTAGE))
+        deposit_fee = (kes_amount * fee_pct / Decimal("100")).quantize(Decimal("0.01"))
+
+        quote["deposit_fee_kes"] = str(deposit_fee)
+        quote["deposit_fee_percent"] = str(fee_pct)
+        quote["valid_seconds"] = app_settings.DEPOSIT_QUOTE_TTL_SECONDS
+
+        return Response(quote, status=status.HTTP_200_OK)
+
+
+class DepositStatusView(APIView):
+    """Check the status of a deposit transaction."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, transaction_id):
+        try:
+            tx = Transaction.objects.get(id=transaction_id, user=request.user)
+        except Transaction.DoesNotExist:
+            return Response(
+                {"error": "Transaction not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        data = TransactionSerializer(tx).data
+
+        # Add human-readable summary for deposits
+        if tx.type in (Transaction.Type.BUY, Transaction.Type.KES_DEPOSIT, Transaction.Type.KES_DEPOSIT_C2B):
+            if tx.status == Transaction.Status.COMPLETED:
+                data["summary"] = f"Deposited KES {tx.source_amount:,.0f} → {tx.dest_amount} {tx.dest_currency}"
+            elif tx.status == Transaction.Status.PROCESSING:
+                data["summary"] = "Waiting for M-Pesa payment confirmation..."
+            elif tx.status == Transaction.Status.FAILED:
+                data["summary"] = tx.failure_reason or "Deposit failed"
+
+        return Response(data)
+
+
+class C2BInstructionsView(APIView):
+    """Return M-Pesa C2B deposit instructions for the authenticated user."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from django.conf import settings as app_settings
+
+        user = request.user
+        phone = user.phone.replace("+", "") if user.phone else ""
+
+        return Response({
+            "paybill": app_settings.MPESA_SHORTCODE,
+            "account_formats": [
+                {
+                    "currency": "USDT",
+                    "account_number": f"USDT-{phone}",
+                    "description": "Deposit and receive USDT (Tether)",
+                },
+                {
+                    "currency": "BTC",
+                    "account_number": f"BTC-{phone}",
+                    "description": "Deposit and receive Bitcoin",
+                },
+                {
+                    "currency": "ETH",
+                    "account_number": f"ETH-{phone}",
+                    "description": "Deposit and receive Ethereum",
+                },
+                {
+                    "currency": "SOL",
+                    "account_number": f"SOL-{phone}",
+                    "description": "Deposit and receive Solana",
+                },
+            ],
+            "min_amount": app_settings.DEPOSIT_MIN_KES,
+            "max_amount": app_settings.DEPOSIT_MAX_KES,
+            "fee_percent": app_settings.DEPOSIT_FEE_PERCENTAGE,
+            "instructions": [
+                "Open M-Pesa on your phone",
+                "Select Lipa Na M-Pesa → Pay Bill",
+                f"Enter Business Number: {app_settings.MPESA_SHORTCODE}",
+                "Enter Account Number using format above (e.g., USDT-0712345678)",
+                "Enter the KES amount you want to deposit",
+                "Enter your M-Pesa PIN to confirm",
+                "Your crypto will be credited at the current market rate",
+            ],
+        })
 
 
 class TransactionHistoryView(ListAPIView):
@@ -618,4 +776,4 @@ class CircuitBreakerStatusView(APIView):
         xff = request.META.get("HTTP_X_FORWARDED_FOR")
         if xff:
             return xff.split(",")[0].strip()
-        return request.META.get("REMOTE_ADDR")
+        return request.META.get("REMOTE_ADDR", "0.0.0.0")

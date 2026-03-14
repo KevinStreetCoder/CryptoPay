@@ -315,6 +315,43 @@ Step 5: RECORD & NOTIFY
   → Log to audit trail
 ```
 
+### KES Deposit Flow (M-Pesa → Crypto)
+
+```
+KES DEPOSIT — TWO CHANNELS:
+
+Channel 1: STK Push (in-app initiated)
+  → User enters KES amount + selects crypto in app
+  → Backend creates rate-locked quote (30s TTL)
+  → STK Push sent to user's phone
+  → User enters M-Pesa PIN
+  → Callback confirms payment
+  → Crypto credited atomically (deterministic UUID for idempotency)
+
+Channel 2: C2B Paybill (user-initiated from M-Pesa menu)
+  → User opens M-Pesa → Lipa Na M-Pesa → Pay Bill
+  → Enters CryptoPay shortcode + account ref (e.g., "USDT-0712345678")
+  → Safaricom calls Validation URL → CryptoPay validates account + limits
+  → Safaricom processes payment
+  → Safaricom calls Confirmation URL → Celery task processes deposit
+  → Live market rate applied (no pre-locked quote for C2B)
+  → Crypto credited atomically + notifications sent
+
+C2B Account Reference Formats:
+  "USDT-0712345678"  → Deposit KES, receive USDT
+  "BTC-254712345678"  → Deposit KES, receive BTC
+  "ETH-0712345678"   → Deposit KES, receive ETH
+  "SOL-0712345678"   → Deposit KES, receive SOL
+  "CP-0712345678"    → Default: receive USDT
+
+Security:
+  - MSISDN must match registered CryptoPay phone
+  - KYC-based daily deposit limits enforced
+  - Idempotency on M-Pesa TransID (prevents double-credit)
+  - Suspended accounts rejected at validation
+  - Min/max deposit amount enforcement
+```
+
 ### Timeout & Failure Handling
 
 ```
@@ -418,25 +455,39 @@ The Liquidity Engine is CryptoPay's operational core. It manages two pools that 
 | Critical | < 500,000 | Auto-sell crypto, pause large payments (>50K) |
 | Emergency | < 200,000 | Pause ALL outgoing payments, emergency top-up |
 
-### Automated Rebalancing
+### Automated Rebalancing (Implemented March 13, 2026)
 
-```python
-# Pseudocode for liquidity rebalancing
-def rebalance():
-    kes_balance = get_mpesa_float()
-    target = 1_500_000  # KES
+```
+Rebalance State Machine:
+  PENDING → SUBMITTED → SETTLING → COMPLETED
+                                  → FAILED
+                                  → CANCELLED
 
-    if kes_balance < 800_000:
-        deficit = target - kes_balance
-        # Sell crypto to cover deficit
-        sell_amount_usd = deficit / get_usd_kes_rate()
-        execute_sell(asset="USDT", amount=sell_amount_usd, exchange="binance")
-        # Settlement: Exchange → Bank → M-Pesa float (1-24h)
-        notify_ops(f"Rebalancing: selling ${sell_amount_usd} USDT to cover KES deficit")
+Trigger Sources:
+  1. Periodic Celery task (every 5 min, checks float < KES 800K)
+  2. Circuit breaker transition (CLOSED → HALF_OPEN/OPEN)
+  3. Manual admin trigger (POST /api/v1/wallets/admin/rebalance/trigger/)
 
-    if kes_balance < 200_000:
-        pause_outgoing_payments()
-        alert_emergency("KES float critically low - all payments paused")
+Execution Modes:
+  MANUAL (current): Admin sells on Yellow Card dashboard, confirms via API
+  API (future):     Automated via Yellow Card B2B API (just plug in API keys)
+
+Flow:
+  1. Float drops below KES 800K trigger
+  2. Celery task creates RebalanceOrder (Redis-locked, idempotent)
+  3. System calculates crypto sell amount (KES deficit / exchange rate)
+  4. Admin notified via push + email with Yellow Card instructions
+  5. Admin sells crypto, confirms settlement with actual KES received
+  6. System updates SystemWallet (FLOAT/KES +, HOT/USDT -)
+  7. Circuit breaker auto-resumes if float recovers
+
+Safeguards:
+  - Min rebalance: KES 50K | Max: KES 2M
+  - 5-minute cooldown between orders
+  - Auto-expire stale orders after 24h
+  - Stale alerts after 4h
+  - Redis lock prevents duplicate orders
+  - Audit trail (AuditLog) for every state change
 ```
 
 ### Exchange Integration (Liquidity Sources) — Updated March 2026
@@ -455,29 +506,131 @@ def rebalance():
 >
 > **Kotani Pay:** Kenya-based, received strategic investment from Tether (Oct 2025). Supports USDT/USDC off-ramp to M-Pesa via API. Also offers USSD-based access for feature phones.
 
-### Implementation Status (as of March 12, 2026)
+### Implementation Status (as of March 13, 2026)
 
 | Component | Status | Details |
 |-----------|--------|---------|
-| **Float balance monitoring** | ✅ Implemented | `check_float_balance` Celery task runs every 5min, checks M-Pesa Account Balance API |
-| **PlatformWallet model (FLOAT type)** | ✅ Implemented | System wallets seeded via `seed_system_wallets` management command |
+| **Float balance monitoring** | ✅ Implemented | `check_float_balance` Celery task every 5min + real-time SystemWallet sync |
+| **SystemWallet FLOAT/KES tracking** | ✅ Implemented | M-Pesa balance synced to SystemWallet on every callback. Balance used by rebalancer. |
 | **M-Pesa Account Balance API** | ✅ Implemented | Daraja integration in `mpesa/client.py`, called by float check task |
-| **Threshold alerts** | ⚠️ Partial | Low float warning logged, but no SMS/email alert to ops team yet |
-| **Auto-sell crypto (rebalancing)** | ❌ Not implemented | Requires exchange API integration (Yellow Card / Kotani Pay) |
-| **Yellow Card API integration** | ❌ Not implemented | KYB onboarding needed with `paymentsapi@yellowcard.io` |
+| **Threshold alerts (4 levels)** | ✅ Implemented | Circuit breaker (emergency/critical) + pre-alerts at 70%/50% of healthy threshold. Push + email to all staff. Redis-throttled (30min). |
+| **Days-of-coverage monitoring** | ✅ Implemented | Computed from 24h outflow. Logged with <2 days warning. Shown in admin dashboard API. |
+| **Rebalancing orchestrator** | ✅ Implemented | Full state machine, Celery tasks (periodic + breaker-triggered), Redis-locked, idempotent. Manual + API modes. |
+| **RebalanceOrder model** | ✅ Implemented | Tracks: trigger, status, crypto sell details, actual settlement, slippage, exchange reference, audit trail. |
+| **Admin rebalance API (6 endpoints)** | ✅ Implemented | Status, orders, trigger, confirm, fail, cancel — all admin-only. |
+| **Mobile admin dashboard** | ✅ Implemented | Float Management screen with real-time status, order management, manual trigger. |
+| **Circuit breaker → rebalance** | ✅ Implemented | Auto-fires `trigger_rebalance_from_breaker` Celery task on CLOSED→HALF_OPEN/OPEN. |
+| **Emergency payment pause** | ✅ Implemented | 3-state circuit breaker with hysteresis, admin override, audit logging |
+| **Exchange provider interface** | ✅ Implemented | Abstract interface with ManualExchangeProvider (now) and YellowCardAPIProvider stub (future) |
+| **Yellow Card API integration** | ⚠️ Stub ready | Provider interface coded with full API endpoints documented. Needs API keys from `paymentsapi@yellowcard.io` |
 | **Kotani Pay API integration** | ❌ Not implemented | Alternative off-ramp provider |
-| **Emergency payment pause** | ✅ Implemented | 3-state circuit breaker (CLOSED/HALF_OPEN/OPEN) with Redis state, threshold-based auto-trigger, admin manual override, audit logging |
 | **Bank account top-up flow** | ❌ Not implemented | Manual process — no API integration for bank transfers |
 
-**What this means for transaction automation:**
-1. **Deposits** (crypto in): Fully automated. Blockchain listeners detect, confirm, and credit.
-2. **Payments** (crypto → M-Pesa): Fully automated via Payment Saga (Lock → Convert → B2B).
-3. **Conversion** (crypto → KES): Currently uses **internal pool** (pre-funded KES float). No exchange API yet.
-4. **Float replenishment**: Manual. When KES float runs low, operator must manually top up via bank transfer or sell crypto on an exchange.
+**Transaction Automation Status:**
+1. **Deposits** (crypto in): ✅ Fully automated — 4 blockchain listeners (Tron/ETH/BTC/SOL)
+2. **Payments** (crypto → M-Pesa): ✅ Fully automated — Payment Saga (Lock → Convert → B2B/B2C)
+3. **Conversion** (crypto → KES): ✅ Internal pool (pre-funded KES float)
+4. **Float replenishment**: ⚠️ Semi-automated — System detects low float, creates order, notifies admin. Admin sells on Yellow Card and confirms. Full automation when API keys available.
 
-**To reach full automation, the remaining gap is:**
-- Exchange API integration (Yellow Card primary, Kotani Pay secondary) for automated crypto-to-KES conversion
-- This enables: auto-rebalancing when float drops below threshold, automated crypto sell orders, real-time settlement
+**Balance Deduction Flow (CRITICAL for production):**
+
+When a user sends crypto via M-Pesa (B2C, B2B, or BuyGoods), the saga deducts crypto in Step 2:
+```
+Step 1: Lock   → wallet.locked_balance += amount (available decreases)
+Step 2: Debit  → wallet.balance -= amount, locked_balance reset (actual deduction)
+Step 3: M-Pesa → Initiate B2C/B2B API call, status = CONFIRMING
+```
+
+**On M-Pesa callback:**
+- **Success (ResultCode=0):** Transaction marked COMPLETED, user notified.
+- **Failure (any ResultCode≠0):** Transaction marked FAILED, saga `compensate_convert()` credits crypto back to user wallet.
+
+**Test admin data uses pre-seeded balances** (set in `apps/wallets/admin.py`). In production:
+- Users deposit crypto via blockchain → balance increases
+- Users pay via M-Pesa → balance decreases (saga Step 2)
+- Failed M-Pesa → balance restored (compensation)
+- Total balance shown in app = `wallet.balance` (NOT `available_balance`)
+- `available_balance = balance - locked_balance` is used for spend checks only
+
+**Sandbox B2C Known Issues:**
+- Safaricom sandbox locks initiator after ~5 failed credential attempts (ResultCode 8006)
+- Lock is temporary (~30 min). No manual unlock available.
+- Wrong cert = "initiator information is invalid" (ResultCode 2001)
+- Always use the M-Pesa API cert (`CN=apicrypt.safaricom.co.ke`), NOT the TLS cert
+- `MPESA_INITIATOR_PASSWORD=Safaricom123!!` and `MPESA_B2C_SHORTCODE=600987` for sandbox
+
+**Financial Safety Measures (Hardened March 14, 2026):**
+
+| Protection | Implementation | File |
+|------------|---------------|------|
+| **Double-credit/debit prevention** | DB unique constraint on `(transaction_id, wallet_id, entry_type)` | `wallets/models.py` |
+| **Idempotent completion** | `complete()` checks tx.status before processing | `payments/saga.py` |
+| **Atomic saga checkpoints** | `saga_data` writes inside same `db_transaction.atomic()` as step operations | `payments/saga.py` |
+| **Callback status guards** | All M-Pesa callbacks skip already-terminal transactions | `mpesa/views.py` |
+| **Atomic BUY credit** | STK callback wraps status update + crypto credit in single atomic block | `mpesa/views.py` |
+| **B2C/B2B compensation** | Failed callbacks trigger `saga.compensate_convert()` to return crypto | `mpesa/views.py` |
+| **Timeout recovery** | `TimeoutCallbackView` finds transaction and compensates | `mpesa/views.py` |
+| **Stuck tx reconciliation** | Celery task auto-compensates CONFIRMING txns after 10 min | `payments/tasks.py` |
+| **Quote consumption order** | Validate (daily limit, circuit breaker) BEFORE consuming locked quote | `payments/views.py` |
+| **Address generation lock** | `select_for_update()` prevents orphaned deposit addresses | `wallets/views.py` |
+| **Admin balance protection** | SystemWallet `balance` field is read-only in Django admin | `wallets/admin.py` |
+| **Financial record deletion** | `has_delete_permission = False` on Wallet, SystemWallet, LedgerEntry | `wallets/admin.py` |
+| **Circuit breaker safety** | Falls back to safe state (OPEN/HALF_OPEN) when Redis state missing + float low | `payments/circuit_breaker.py` |
+| **Force resume warning** | Admin warned when force-resuming with float below emergency threshold | `payments/circuit_breaker.py` |
+| **Hot wallet deficit alerting** | `CRITICAL` log when rebalance clamps hot wallet to zero due to deficit | `wallets/rebalance.py` |
+
+**Known Remaining Items (deferred for production):**
+- ETH/BTC blockchain listeners have duplicate task definitions in `eth_listener.py` + `tasks.py` — consolidate before production
+- Blockchain high-water marks stored in volatile Redis cache — deposits may be missed after Redis restart (move to DB)
+- Daily limit check has TOCTOU race under concurrent payments — acceptable for MVP, add `select_for_update` for high-volume
+- Quote consumption uses non-atomic GET+DELETE — use Redis `GETDEL` or Lua script at scale
+
+**Remaining gap for full automation:**
+- Yellow Card API keys (KYB onboarding at `paymentsapi@yellowcard.io`)
+- Implement `YellowCardAPIProvider.get_sell_quote()`, `execute_sell()`, `check_settlement()`
+- Set `REBALANCE_EXECUTION_MODE=api` in settings
+- Optional: Kotani Pay as secondary provider
+
+### Liquidity Architecture — Where the Money Sits
+
+Understanding where funds physically reside is key to reasoning about CryptoPay's float management:
+
+**1. KES Float (M-Pesa Business Account)**
+The KES that pays Paybills and Tills sits in the Safaricom Daraja shortcode's M-Pesa business account. `SystemWallet` with `wallet_type=FLOAT, currency=KES` is a **database mirror** of this balance, synced from M-Pesa balance callbacks. The source of truth is Safaricom; our DB tracks it for threshold checks, circuit breaker decisions, and dashboard display.
+
+**2. Crypto Hot Wallet (HD Wallet)**
+The platform's master HD wallet is derived from `WALLET_MNEMONIC` using BIP-44 derivation paths. User deposit addresses are child keys derived per-user per-currency. `SystemWallet` with `wallet_type=HOT` and `currency=USDT/BTC/ETH/SOL` tracks the platform's available crypto inventory for selling or converting.
+
+**3. On-Chain Sweep (Deposit → HOT Consolidation)**
+When a user deposits crypto to their HD-derived address, the blockchain listener credits the user's internal wallet. A separate **sweep pipeline** then consolidates those on-chain funds into the platform's central hot wallet:
+
+1. **Scan** (every 15 min): `scan_and_create_sweep_orders` queries credited deposits, checks on-chain balances via RPC, estimates gas fees, and creates `SweepOrder` records (PENDING or SKIPPED).
+2. **Execute** (every 5 min): `process_pending_sweeps` derives the BIP-44 private key in memory, signs the sweep transaction, broadcasts it, and zeros the key material.
+3. **Verify** (every 3 min): `verify_submitted_sweeps` polls chain RPCs for confirmation counts. Stale sweeps (>2h unconfirmed) are auto-failed for investigation.
+4. **Credit** (every 5 min): `credit_confirmed_sweeps` atomically increments `SystemWallet HOT/{currency}` via `F()` expressions and marks the order as CREDITED.
+
+**Sweep decision criteria:**
+- Balance must exceed dust minimum per currency (BTC: 0.0001, ETH: 0.005, USDT/USDC: $5, SOL: 0.1)
+- Gas fees must not exceed 10% of balance
+- Balance must be ≥10x the gas cost (for native token sweeps)
+- No active sweep already in progress for the address (Redis lock + DB constraint)
+
+**Security:** Private keys are derived in-memory from the HD seed (`WALLET_MNEMONIC`) using the same BIP-44 derivation path as deposit address generation. Keys are zeroed after signing. Rate limiting (10 sweeps/chain/min) and anomaly detection (50% balance drop triggers CRITICAL alert) provide additional safeguards.
+
+**Supported chains:** Tron TRC-20 (fully implemented), Ethereum/Bitcoin/Solana (balance queries + fee estimation + verification implemented; signing stubs ready for web3.py/blockcypher/solders integration).
+
+**Model:** `SweepOrder` tracks the full lifecycle: PENDING → ESTIMATING → SUBMITTED → CONFIRMING → CONFIRMED → CREDITED (or FAILED/SKIPPED). Unique constraint prevents duplicate active sweeps per address.
+
+**4. Rebalance Flow (Crypto → KES)**
+When the KES float drops below threshold:
+1. System detects low float (Celery task or circuit breaker transition)
+2. Creates a `RebalanceOrder` to sell crypto from HOT wallet
+3. Admin sells on exchange (Yellow Card) — or future API automation does it
+4. KES arrives in M-Pesa business account
+5. `SystemWallet FLOAT/KES` incremented, `SystemWallet HOT/{crypto}` decremented (using `F()` expressions for atomicity)
+
+**5. Double-Entry Tracking**
+`SystemWallet` tracks platform-level pool balances (FLOAT and HOT). `LedgerEntry` provides a per-user audit trail with balanced DEBIT/CREDIT entries for every wallet mutation. Together they ensure every KES and every satoshi is accounted for at both the system and user level.
 
 ### CRITICAL Security Rule
 
@@ -843,6 +996,95 @@ Safaricom Daraja API (v2 and v3, as of March 2026) does NOT sign callbacks. Anyo
 
 ---
 
+## 8.5 Admin & User Management Architecture
+
+### Role Hierarchy
+
+```
+Superuser (Django is_superuser)
+  └── Can promote/demote staff
+  └── Full platform access
+
+Staff (is_staff = true)
+  └── User management (list, search, filter)
+  └── KYC document review (approve/reject with reason)
+  └── KYC tier management (set 0-3)
+  └── Account suspension (with mandatory reason)
+  └── User detail view (wallets, transactions, devices, audit log)
+  └── Float management & rebalance dashboard
+  └── Platform stats (Django admin)
+
+Regular User (is_staff = false)
+  └── Standard app features
+  └── Cannot access any /admin/ routes
+```
+
+### Account States
+
+| State | Trigger | Effect | Reversible |
+|-------|---------|--------|------------|
+| **Active** | Default | Full access | — |
+| **Suspended** | Admin action (with reason) | No transactions, no profile updates, login shows banner | Admin unsuspend |
+| **Locked (PIN)** | 3+ wrong PIN attempts | OTP challenge required | Automatic on correct OTP |
+
+### Suspension Enforcement Points
+
+1. **Payments**: `IsNotSuspended` permission class on `PayBillView`, `PayTillView`, `SendMpesaView`, `BuyCryptoView`
+2. **Profile updates**: Explicit 403 check in `ProfileView.patch()`
+3. **PIN changes**: Explicit 403 check in `ChangePINView.post()`
+4. **Frontend**: Red suspension banner on profile page with reason + contact support message
+5. **JWT auth**: Tokens remain valid (user can log in to see status) but actions are blocked at view level
+
+### KYC Document Review Workflow
+
+```
+User uploads document (national_id, passport, selfie, kra_pin, proof_of_address)
+  → Status: "pending"
+  → Admin opens user detail page → Overview tab → KYC Documents section
+  → Admin clicks "View Document" to review uploaded file
+  → Admin clicks "Approve" or "Reject"
+    → If Reject: must enter reason (required)
+  → Backend updates doc status, creates audit log
+  → Notifications sent: Email + SMS + Push
+    → Approved: "Your [doc] has been verified. Limits upgraded."
+    → Rejected: "Your [doc] was not approved. Reason: [reason]. Please re-upload."
+```
+
+### Notification Matrix
+
+| Event | Email | SMS | Push |
+|-------|-------|-----|------|
+| KYC doc approved | KYC status template | AT SMS | Expo push |
+| KYC doc rejected (with reason) | KYC status template | AT SMS with reason | Expo push with reason |
+| Tier upgraded | KYC status template | AT SMS with new limit | Expo push |
+| Account suspended | Security alert template | AT SMS with reason | Expo push |
+| Account unsuspended | Security alert template | AT SMS | Expo push |
+
+### Admin API Endpoints
+
+```
+GET  /auth/admin/users/                    → User list + KYC distribution (staff)
+POST /auth/admin/users/{id}/verify/        → Set KYC tier 0-3 (staff)
+POST /auth/admin/users/{id}/suspend/       → Suspend/unsuspend with reason (staff)
+GET  /auth/admin/users/{id}/detail/        → Full user detail + activity (staff)
+POST /auth/admin/kyc/{doc_id}/review/      → Approve/reject KYC document (staff)
+POST /auth/admin/users/{id}/promote/       → Promote/demote to staff (superuser only)
+GET  /admin/stats/                         → Platform KPIs dashboard (Django admin)
+```
+
+### Frontend Admin Pages
+
+| Page | Route | Protection | Purpose |
+|------|-------|------------|---------|
+| User Management | `/settings/admin-users` | `is_staff` guard + redirect | List/search/filter users, tier buttons, suspend buttons |
+| User Detail | `/settings/admin-user-detail?id=` | `is_staff` guard + redirect | Tabbed view: overview, transactions, devices, audit log |
+| Float Management | `/settings/admin-rebalance` | `is_staff` guard + redirect | Circuit breaker, rebalance orders, crypto balances |
+| Platform Stats | External `/admin/stats/` | Django `@staff_member_required` | KPIs, system health, milestones |
+
+All admin pages are hidden from non-staff users (not rendered in profile menu) AND protected by runtime `is_staff` checks with redirect to home.
+
+---
+
 ## 9. Regulatory Compliance
 
 ### VASP Act 2025 (Act No. 20 of 2025) — Now Law
@@ -1155,7 +1397,158 @@ Estimated cost: $200-500/month
 
 ---
 
-## 13. Development Phases
+## 13. Monitoring & Observability (Prometheus + Grafana)
+
+### Stack
+
+| Service | Image | Port | Purpose |
+|---------|-------|------|---------|
+| Prometheus | `prom/prometheus:v2.55.0` | 9090 | Metrics collection, alerting |
+| Grafana | `grafana/grafana:11.4.0` | 3001 | Dashboards, visualization |
+| Alertmanager | `prom/alertmanager:v0.28.1` | 9093 | Alert routing (Slack, PagerDuty) |
+| postgres-exporter | `prometheuscommunity/postgres-exporter:v0.16.0` | 9187 | PostgreSQL metrics |
+| redis-exporter | `oliver006/redis_exporter:v1.67.0` | 9121 | Redis metrics |
+| celery-exporter | `danihodovic/celery-exporter:0.10.9` | 9808 | Celery task metrics |
+
+### Django Integration
+
+- `django-prometheus==2.3.1` middleware wraps all requests (latency, status codes, view-level metrics)
+- Prometheus-instrumented DB backend (`django_prometheus.db.backends.postgresql`)
+- **Critical**: Do NOT enable Django 5.1 `pool: True` with django-prometheus (GitHub issue #445 — causes severe performance degradation)
+- Custom metrics in `backend/apps/core/metrics.py`: 20+ business-specific counters, gauges, histograms
+
+### Custom Business Metrics
+
+```
+cryptopay_payment_{initiated,completed,failed}_total    — Payment lifecycle by currency/type
+cryptopay_payment_amount_kes                             — Amount distribution histogram
+cryptopay_payment_processing_seconds                     — End-to-end processing time
+cryptopay_mpesa_float_balance_kes                        — Real-time float gauge
+cryptopay_mpesa_callback_latency_seconds                 — M-Pesa API response time
+cryptopay_deposit_{detected,confirmed}_total             — Blockchain deposit tracking
+cryptopay_sweep_{initiated,completed,failed}_total       — Sweep pipeline health
+cryptopay_hot_wallet_balance                             — Per-currency hot wallet balance
+cryptopay_exchange_rate_stale                             — 1 if rates >5min old
+cryptopay_circuit_breaker_state                          — 0=closed, 1=half-open, 2=open
+cryptopay_login_attempts_total                           — Auth security monitoring
+```
+
+### Alert Rules (15+ rules, 5 groups)
+
+| Alert | Condition | Severity |
+|-------|-----------|----------|
+| HighAPIErrorRate | >5% 5xx in 5min | critical |
+| SlowAPIResponse | p95 >2s | warning |
+| HighPaymentFailureRate | >10% failures in 10min | critical |
+| MpesaFloatCritical | <KES 500,000 | critical |
+| MpesaFloatEmergency | <KES 200,000 | page |
+| ExchangeRatesStale | >5min old | critical |
+| CircuitBreakerOpen | state=OPEN | critical |
+| BlockchainListenerDown | 0 deposits for 1h | warning |
+| CeleryWorkersDown | 0 workers alive | critical |
+| PostgresConnectionsHigh | >80% of max | warning |
+| RedisMemoryHigh | >85% used | warning |
+
+### Deployment
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up --build
+```
+
+### Security
+
+- `/metrics` endpoint should be IP-restricted in production (internal networks only)
+- Grafana: `GF_USERS_ALLOW_SIGN_UP=false`, strong admin password via env var
+- Prometheus/Alertmanager ports should NOT be exposed externally in production
+- Use `PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus_multiproc` with gunicorn
+
+---
+
+## 14. Custody Architecture (Hot/Warm/Cold Wallet Split)
+
+### Fund Distribution
+
+| Tier | % of Funds | Access Speed | Security | Purpose |
+|------|-----------|--------------|----------|---------|
+| **Hot** | 2-5% | Instant | Encrypted key in Vault/KMS | Active withdrawals, M-Pesa payouts, gas fees |
+| **Warm** | 10-20% | Minutes-hours | 2-of-3 multisig | Daily operational float, auto-replenishment |
+| **Cold** | 75-90% | Hours-days (manual) | Hardware wallet, 3-of-5 Shamir | Long-term reserves, regulatory compliance |
+
+### Implementation
+
+```
+Deposit Addresses → [sweep] → Hot Wallet → [threshold trigger] → Warm Wallet → [manual] → Cold Wallet
+                                    ↑                                    |
+                                    └──── [auto-replenish] ──────────────┘
+```
+
+**Models:**
+- `SystemWallet.tier` — HOT/WARM/COLD classification
+- `CustodyTransfer` — Audit trail for all tier-to-tier transfers (from_tier, to_tier, amount, status, tx_hash, initiated_by)
+
+**Automated Thresholds (Celery Beat, every 15min):**
+- Hot wallet > 150% of daily average → sweep excess to warm
+- Hot wallet < 50% of daily average → replenish from warm
+- Warm wallet > target allocation → alert ops for cold transfer
+
+**Admin API:**
+- `GET /wallets/custody/report/` — Full custody report (staff only)
+- `POST /wallets/custody/rebalance/` — Manual rebalance trigger (staff only)
+
+### Launch Plan
+
+| Phase | Timeline | Action |
+|-------|----------|--------|
+| Phase 1 (launch) | Week 1-2 | Deploy HashiCorp Vault (Docker), migrate WALLET_MNEMONIC from env var, separate hot wallet addresses per chain |
+| Phase 2 (warm) | Week 3-4 | Safe{Wallet} 2-of-3 multisig (EVM), Bitcoin/Tron native multisig |
+| Phase 3 (cold) | Week 5-6 | Ledger Nano X hardware wallets, SLIP-39 Shamir backup (3-of-5 shares in separate locations) |
+| Phase 4 (scale) | 6mo+ | Evaluate Dfns/Fireblocks MPC when >$100K monthly volume |
+
+### Kenya VASP Act 2025 Compliance
+
+- **Dual control of private keys** — multisig satisfies this requirement
+- **Segregation of client assets** — separate wallets for client vs operational funds
+- **Disaster recovery plans** — Shamir shares in geographically distributed locations
+- **Proof of reserves** — periodic on-chain balance reconciliation (already implemented)
+
+### Cost
+
+| Item | Cost |
+|------|------|
+| HashiCorp Vault (self-hosted Docker) | $0 |
+| Safe{Wallet} deployment (EVM) | Gas fees only (~$50-100) |
+| 2x Ledger Nano X | ~$300 |
+| Shamir backup materials (steel plates) | ~$50 |
+| **Total launch cost** | **~$400 + gas** |
+
+---
+
+## 15. Research Verdicts
+
+### ERC-4337 Account Abstraction — NOT NEEDED
+
+| Factor | Assessment |
+|--------|-----------|
+| CryptoPay model | Custodial — platform holds keys, users never send on-chain transactions |
+| TRON support | TRON (primary USDT chain) does NOT support ERC-4337 |
+| Gas abstraction | Already handled by sweep system (platform pays all gas) |
+| Recommendation | Phase 3+ consideration only if switching to non-custodial model |
+
+### Dollar-Denominated Yield — DEFERRED (Regulatory Block)
+
+| Factor | Assessment |
+|--------|-----------|
+| Sustainable yield | 4-7% APY real yield from Aave V3 / Compound V3 (lending demand) |
+| Kenya VASP Act 2025 | Law effective Nov 4, 2025 — but NO licenses issued, NO implementing regulations |
+| User-facing yield | Likely requires VA Manager license (CMA) or deposit-taking license (CBK) |
+| Treasury yield | Legal gray area, likely OK with strict fund segregation |
+| Timeline | Treasury yield now; user-facing after VASP licensing operational (est. 2027) |
+| Risk management | Max 30% of float deployed, multi-protocol diversification, Nexus Mutual coverage |
+| Insurance | Crypto custody insurance requires $1M+ AUC minimum; self-insure with 5-10% SAFU reserve |
+
+---
+
+## 16. Development Phases
 
 ### Phase 1: MVP (Weeks 1-8)
 **Goal: Crypto → Paybill/Till payment working end-to-end**
@@ -1203,7 +1596,7 @@ Estimated cost: $200-500/month
 
 ---
 
-## 14. Revenue Model
+## 17. Revenue Model
 
 ```
 Primary Revenue:
@@ -1231,7 +1624,7 @@ Cost Structure:
 
 ---
 
-## 15. Risks & Mitigations
+## 18. Risks & Mitigations
 
 | Risk | Severity | Mitigation |
 |------|----------|-----------|

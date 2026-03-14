@@ -18,6 +18,10 @@ urlpatterns = [
     path("callback/balance/", views.BalanceCallbackView.as_view(), name="balance-callback"),
     path("callback/balance/timeout/", views.TimeoutCallbackView.as_view(), name="balance-timeout"),
 
+    # C2B (Customer to Business) callback paths — for KES deposit flow
+    path("callback/c2b/validate/", views.C2BValidationView.as_view(), name="c2b-validate"),
+    path("callback/c2b/confirm/", views.C2BConfirmationView.as_view(), name="c2b-confirm"),
+
     # Dynamic token callback paths (per-transaction HMAC token for anti-forgery)
     path("callback/stk/<str:token>/", views.STKCallbackView.as_view(), name="stk-callback-token"),
     path("callback/b2b/<str:token>/", views.B2BCallbackView.as_view(), name="b2b-callback-token"),

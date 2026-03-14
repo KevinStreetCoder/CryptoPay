@@ -36,4 +36,12 @@ urlpatterns = [
     path("forgot-pin/", views.ForgotPINView.as_view(), name="forgot-pin"),
     path("forgot-pin/verify/", views.VerifyPINResetOTPView.as_view(), name="forgot-pin-verify"),
     path("reset-pin/", views.ResetPINView.as_view(), name="reset-pin"),
+    # Admin endpoints (staff only)
+    path("admin/users/", views.AdminUserListView.as_view(), name="admin-users"),
+    path("admin/users/<uuid:user_id>/verify/", views.AdminVerifyUserView.as_view(), name="admin-verify-user"),
+    path("admin/users/<uuid:user_id>/suspend/", views.AdminSuspendUserView.as_view(), name="admin-suspend-user"),
+    path("admin/users/<uuid:user_id>/detail/", views.AdminUserDetailView.as_view(), name="admin-user-detail"),
+    path("admin/kyc/<uuid:doc_id>/review/", views.AdminReviewKYCView.as_view(), name="admin-review-kyc"),
+    # Super admin only — staff promotion/demotion
+    path("admin/users/<uuid:user_id>/promote/", views.AdminPromoteStaffView.as_view(), name="admin-promote-staff"),
 ]

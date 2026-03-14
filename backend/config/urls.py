@@ -31,6 +31,7 @@ def api_root(request):
 
 urlpatterns = [
     path("", api_root, name="api-root"),
+    path("", include("django_prometheus.urls")),
     path("health/", HealthCheckView.as_view(), name="health-check"),
     path("admin/stats/", admin_stats_dashboard, name="admin-stats"),
     path("admin/", admin.site.urls),

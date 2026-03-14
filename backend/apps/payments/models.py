@@ -15,6 +15,8 @@ class Transaction(models.Model):
         PAYBILL_PAYMENT = "PAYBILL_PAYMENT"
         TILL_PAYMENT = "TILL_PAYMENT"
         SEND_MPESA = "SEND_MPESA"
+        KES_DEPOSIT = "KES_DEPOSIT"
+        KES_DEPOSIT_C2B = "KES_DEPOSIT_C2B"
         INTERNAL_TRANSFER = "INTERNAL_TRANSFER"
         FEE = "FEE"
 

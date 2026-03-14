@@ -15,7 +15,23 @@ class WalletService:
     @staticmethod
     @db_transaction.atomic
     def credit(wallet_id, amount: Decimal, transaction_id, description: str = "") -> LedgerEntry:
-        """Credit (add funds to) a wallet. Locks the row for update."""
+        """Credit (add funds to) a wallet. Locks the row for update.
+
+        Idempotent: if a LedgerEntry with the same transaction_id + wallet + CREDIT
+        already exists, returns the existing entry without double-crediting.
+        """
+        if amount <= 0:
+            raise ValueError(f"Credit amount must be positive, got {amount}")
+
+        # Idempotency check: prevent double-credit with same transaction_id
+        existing = LedgerEntry.objects.filter(
+            transaction_id=transaction_id,
+            wallet_id=wallet_id,
+            entry_type=LedgerEntry.EntryType.CREDIT,
+        ).first()
+        if existing:
+            return existing
+
         wallet = Wallet.objects.select_for_update().get(id=wallet_id)
         wallet.balance += amount
         wallet.save(update_fields=["balance"])
@@ -32,7 +48,23 @@ class WalletService:
     @staticmethod
     @db_transaction.atomic
     def debit(wallet_id, amount: Decimal, transaction_id, description: str = "") -> LedgerEntry:
-        """Debit (remove funds from) a wallet. Checks available balance."""
+        """Debit (remove funds from) a wallet. Checks available balance.
+
+        Idempotent: if a LedgerEntry with the same transaction_id + wallet + DEBIT
+        already exists, returns the existing entry without double-debiting.
+        """
+        if amount <= 0:
+            raise ValueError(f"Debit amount must be positive, got {amount}")
+
+        # Idempotency check: prevent double-debit with same transaction_id
+        existing = LedgerEntry.objects.filter(
+            transaction_id=transaction_id,
+            wallet_id=wallet_id,
+            entry_type=LedgerEntry.EntryType.DEBIT,
+        ).first()
+        if existing:
+            return existing
+
         wallet = Wallet.objects.select_for_update().get(id=wallet_id)
 
         if wallet.available_balance < amount:

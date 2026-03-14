@@ -387,22 +387,73 @@ export default function KYCScreen() {
                   </Text>
 
                   {existing ? (
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                      <StatusBadge status={existing.status} />
-                      {existing.status === "rejected" && existing.rejection_reason ? (
-                        <Text
-                          style={{
-                            color: colors.error,
-                            fontSize: 11,
-                            fontFamily: "DMSans_400Regular",
-                            flex: 1,
-                          }}
-                          numberOfLines={1}
-                        >
-                          {existing.rejection_reason}
-                        </Text>
-                      ) : null}
-                    </View>
+                    isApproved ? (
+                      /* Approved: show success status with audit trail */
+                      <View
+                        style={{
+                          backgroundColor: colors.success + "0C",
+                          borderRadius: 10,
+                          padding: 10,
+                          borderWidth: 1,
+                          borderColor: colors.success + "20",
+                        }}
+                      >
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                          <Ionicons name="checkmark-circle" size={16} color={colors.success} />
+                          <Text
+                            style={{
+                              color: colors.success,
+                              fontSize: 13,
+                              fontFamily: "DMSans_600SemiBold",
+                            }}
+                          >
+                            {t("kyc.approved")}
+                          </Text>
+                        </View>
+                        {existing.verified_at ? (
+                          <Text
+                            style={{
+                              color: tc.textMuted,
+                              fontSize: 11,
+                              fontFamily: "DMSans_400Regular",
+                              marginLeft: 24,
+                            }}
+                          >
+                            {t("kyc.verifiedOn")} {new Date(existing.verified_at).toLocaleDateString()}
+                          </Text>
+                        ) : null}
+                        {existing.verified_by_name ? (
+                          <Text
+                            style={{
+                              color: tc.textMuted,
+                              fontSize: 11,
+                              fontFamily: "DMSans_400Regular",
+                              marginLeft: 24,
+                              marginTop: 2,
+                            }}
+                          >
+                            {t("kyc.verifiedBy")} {existing.verified_by_name}
+                          </Text>
+                        ) : null}
+                      </View>
+                    ) : (
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                        <StatusBadge status={existing.status} />
+                        {existing.status === "rejected" && existing.rejection_reason ? (
+                          <Text
+                            style={{
+                              color: colors.error,
+                              fontSize: 11,
+                              fontFamily: "DMSans_400Regular",
+                              flex: 1,
+                            }}
+                            numberOfLines={1}
+                          >
+                            {existing.rejection_reason}
+                          </Text>
+                        ) : null}
+                      </View>
+                    )
                   ) : null}
 
                   {/* Upload / Re-upload button */}

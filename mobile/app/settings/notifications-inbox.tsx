@@ -14,6 +14,8 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { paymentsApi, Transaction, getTxKesAmount, getTxRecipient } from "../../src/api/payments";
 import * as NotifStore from "../../src/stores/notifications";
+import { useToast } from "../../src/components/Toast";
+import { normalizeError } from "../../src/utils/apiErrors";
 import { colors, getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
 
@@ -176,6 +178,7 @@ export default function NotificationsInboxScreen() {
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
   const ts = getThemeShadows(isDark);
+  const toast = useToast();
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [activeFilter, setActiveFilter] = useState<FilterTab>("all");
@@ -190,8 +193,9 @@ export default function NotificationsInboxScreen() {
       const { data } = await paymentsApi.history();
       const txs = Array.isArray(data) ? data : data.results || [];
       setNotifications(transactionsToNotifications(txs));
-    } catch {
-      // Keep existing notifications on error
+    } catch (err) {
+      const appError = normalizeError(err);
+      toast.error(appError.title, appError.message);
     } finally {
       setLoading(false);
     }
@@ -770,7 +774,7 @@ function AnimatedNotificationRow({
             </Text>
 
             {/* Amount badge */}
-            {notification.amount && (
+            {notification.amount ? (
               <View
                 style={{
                   marginTop: 8,
@@ -796,7 +800,7 @@ function AnimatedNotificationRow({
                   {notification.amount}
                 </Text>
               </View>
-            )}
+            ) : null}
           </View>
         </Pressable>
       </Animated.View>

@@ -88,7 +88,7 @@ export function OTPInput({
 
   return (
     <View style={{ alignItems: "center" }}>
-      {icon && (
+      {icon ? (
         <View
           style={{
             width: 64,
@@ -104,9 +104,9 @@ export function OTPInput({
         >
           <Ionicons name={icon as any} size={28} color={effectiveIconColor} />
         </View>
-      )}
+      ) : null}
 
-      {title && (
+      {title ? (
         <Text
           style={{
             color: tc.textPrimary,
@@ -119,9 +119,9 @@ export function OTPInput({
         >
           {title}
         </Text>
-      )}
+      ) : null}
 
-      {subtitle && (
+      {subtitle ? (
         <Text
           style={{
             color: tc.textSecondary,
@@ -135,7 +135,7 @@ export function OTPInput({
         >
           {subtitle}
         </Text>
-      )}
+      ) : null}
 
       {/* OTP Cells */}
       <View style={{ flexDirection: "row", gap: 10, marginBottom: 16 }}>
@@ -194,7 +194,7 @@ export function OTPInput({
         })}
       </View>
 
-      {error && (
+      {error ? (
         <View
           style={{
             flexDirection: "row",
@@ -212,7 +212,7 @@ export function OTPInput({
             {error}
           </Text>
         </View>
-      )}
+      ) : null}
 
       {loading && (
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 16 }}>

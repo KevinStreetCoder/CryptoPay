@@ -1,16 +1,29 @@
-"""Tests for the wallet system and double-entry ledger."""
+"""Tests for the wallet system, double-entry ledger, and rebalancing orchestrator."""
 
 import uuid
+from datetime import timedelta
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.test import APIClient, APITestCase
 
 from apps.accounts.models import User
 from apps.blockchain.models import BlockchainDeposit
 from apps.blockchain.services import generate_deposit_address
 
-from .models import LedgerEntry, Wallet
+from .models import LedgerEntry, RebalanceOrder, SystemWallet, Wallet
+from .rebalance import (
+    MAX_REBALANCE_KES,
+    MIN_REBALANCE_KES,
+    REBALANCE_COOLDOWN_SECONDS,
+    TARGET_FLOAT_KES,
+    TRIGGER_FLOAT_KES,
+    calculate_rebalance_amount,
+    has_active_rebalance,
+    is_in_cooldown,
+)
 from .services import InsufficientBalanceError, WalletService
 
 
@@ -232,3 +245,303 @@ class DepositListAPITest(APITestCase):
         self.assertEqual(response.status_code, 200)
         results = response.data.get("results", response.data)
         self.assertEqual(len(results), 0)
+
+
+# ── Rebalance Order Model Tests ──────────────────────────────────────────────
+
+
+class RebalanceOrderModelTest(TestCase):
+    """Tests for the RebalanceOrder model fields and properties."""
+
+    def _create_order(self, **kwargs):
+        defaults = dict(
+            trigger=RebalanceOrder.TriggerType.AUTO,
+            execution_mode=RebalanceOrder.ExecutionMode.MANUAL,
+            status=RebalanceOrder.Status.PENDING,
+            float_balance_at_trigger=Decimal("500000.00"),
+            target_float_balance=Decimal("1500000.00"),
+            sell_currency="USDT",
+            sell_amount=Decimal("700.00000000"),
+            expected_kes_amount=Decimal("1000000.00"),
+            exchange_rate_at_quote=Decimal("142.85714286"),
+        )
+        defaults.update(kwargs)
+        return RebalanceOrder.objects.create(**defaults)
+
+    def test_create_order_with_all_fields(self):
+        order = self._create_order(
+            reason="Float low",
+            admin_notes="Test note",
+        )
+        order.refresh_from_db()
+
+        self.assertIsNotNone(order.id)
+        self.assertEqual(order.trigger, "auto")
+        self.assertEqual(order.sell_currency, "USDT")
+        self.assertEqual(order.sell_amount, Decimal("700.00000000"))
+        self.assertEqual(order.expected_kes_amount, Decimal("1000000.00"))
+        self.assertEqual(order.status, "pending")
+        self.assertEqual(order.reason, "Float low")
+
+    def test_is_active_for_active_states(self):
+        for active_status in (
+            RebalanceOrder.Status.PENDING,
+            RebalanceOrder.Status.SUBMITTED,
+            RebalanceOrder.Status.SETTLING,
+        ):
+            order = self._create_order(status=active_status)
+            self.assertTrue(order.is_active, f"Expected is_active=True for {active_status}")
+
+    def test_is_active_false_for_terminal_states(self):
+        for terminal_status in (
+            RebalanceOrder.Status.COMPLETED,
+            RebalanceOrder.Status.FAILED,
+            RebalanceOrder.Status.CANCELLED,
+        ):
+            order = self._create_order(status=terminal_status)
+            self.assertFalse(order.is_active, f"Expected is_active=False for {terminal_status}")
+
+    def test_slippage_kes_property(self):
+        order = self._create_order(expected_kes_amount=Decimal("1000000.00"))
+
+        # Before settlement, slippage is None
+        self.assertIsNone(order.slippage_kes)
+
+        # After settlement, slippage = actual - expected
+        order.actual_kes_received = Decimal("980000.00")
+        order.save()
+        self.assertEqual(order.slippage_kes, Decimal("-20000.00"))
+
+        # Positive slippage (received more than expected)
+        order.actual_kes_received = Decimal("1010000.00")
+        order.save()
+        self.assertEqual(order.slippage_kes, Decimal("10000.00"))
+
+    def test_age_minutes_property(self):
+        order = self._create_order()
+        # Freshly created order should be less than 1 minute old
+        self.assertLess(order.age_minutes, 1.0)
+        self.assertGreaterEqual(order.age_minutes, 0.0)
+
+
+# ── Rebalance Orchestrator Logic Tests ───────────────────────────────────────
+
+
+class RebalanceOrchestratorTest(TestCase):
+    """Tests for the rebalance orchestrator helper functions."""
+
+    def test_calculate_rebalance_amount_returns_deficit(self):
+        """When float is below target, returns the deficit."""
+        current = TARGET_FLOAT_KES - Decimal("200000")
+        result = calculate_rebalance_amount(current)
+        self.assertEqual(result, Decimal("200000"))
+
+    def test_calculate_rebalance_amount_zero_below_minimum(self):
+        """When deficit is below MIN_REBALANCE_KES, returns 0."""
+        # Set current float just slightly below target, so deficit < min
+        current = TARGET_FLOAT_KES - (MIN_REBALANCE_KES - Decimal("1"))
+        result = calculate_rebalance_amount(current)
+        self.assertEqual(result, Decimal("0"))
+
+    def test_calculate_rebalance_amount_zero_when_at_target(self):
+        """When float is at or above target, returns 0."""
+        result = calculate_rebalance_amount(TARGET_FLOAT_KES)
+        self.assertEqual(result, Decimal("0"))
+
+        result = calculate_rebalance_amount(TARGET_FLOAT_KES + Decimal("100000"))
+        self.assertEqual(result, Decimal("0"))
+
+    def test_calculate_rebalance_amount_clamped_to_max(self):
+        """When deficit exceeds MAX_REBALANCE_KES, clamp to max."""
+        # Float at 0 means deficit = target, which could exceed max
+        current = Decimal("0")
+        result = calculate_rebalance_amount(current)
+        self.assertLessEqual(result, MAX_REBALANCE_KES)
+
+        # Explicitly test with a very low float
+        current = TARGET_FLOAT_KES - MAX_REBALANCE_KES - Decimal("500000")
+        result = calculate_rebalance_amount(current)
+        self.assertEqual(result, MAX_REBALANCE_KES)
+
+    def test_has_active_rebalance_true_when_pending_order_exists(self):
+        """Returns True when there is a pending/submitted/settling order."""
+        RebalanceOrder.objects.create(
+            trigger=RebalanceOrder.TriggerType.MANUAL,
+            status=RebalanceOrder.Status.SUBMITTED,
+            float_balance_at_trigger=Decimal("500000"),
+            sell_currency="USDT",
+            sell_amount=Decimal("100"),
+            expected_kes_amount=Decimal("100000"),
+            exchange_rate_at_quote=Decimal("140"),
+        )
+        self.assertTrue(has_active_rebalance())
+
+    def test_has_active_rebalance_false_when_no_active_orders(self):
+        """Returns False when all orders are in terminal states."""
+        RebalanceOrder.objects.create(
+            trigger=RebalanceOrder.TriggerType.MANUAL,
+            status=RebalanceOrder.Status.COMPLETED,
+            float_balance_at_trigger=Decimal("500000"),
+            sell_currency="USDT",
+            sell_amount=Decimal("100"),
+            expected_kes_amount=Decimal("100000"),
+            exchange_rate_at_quote=Decimal("140"),
+        )
+        self.assertFalse(has_active_rebalance())
+
+    def test_is_in_cooldown_during_cooldown(self):
+        """Returns True when last order was created within cooldown window."""
+        RebalanceOrder.objects.create(
+            trigger=RebalanceOrder.TriggerType.AUTO,
+            status=RebalanceOrder.Status.COMPLETED,
+            float_balance_at_trigger=Decimal("500000"),
+            sell_currency="USDT",
+            sell_amount=Decimal("100"),
+            expected_kes_amount=Decimal("100000"),
+            exchange_rate_at_quote=Decimal("140"),
+        )
+        # Just created, so we should be in cooldown
+        self.assertTrue(is_in_cooldown())
+
+    def test_is_in_cooldown_after_cooldown_expires(self):
+        """Returns False when last order is older than cooldown period."""
+        order = RebalanceOrder.objects.create(
+            trigger=RebalanceOrder.TriggerType.AUTO,
+            status=RebalanceOrder.Status.COMPLETED,
+            float_balance_at_trigger=Decimal("500000"),
+            sell_currency="USDT",
+            sell_amount=Decimal("100"),
+            expected_kes_amount=Decimal("100000"),
+            exchange_rate_at_quote=Decimal("140"),
+        )
+        # Move created_at back beyond cooldown
+        old_time = timezone.now() - timedelta(seconds=REBALANCE_COOLDOWN_SECONDS + 60)
+        RebalanceOrder.objects.filter(id=order.id).update(created_at=old_time)
+
+        self.assertFalse(is_in_cooldown())
+
+    def test_is_in_cooldown_false_when_no_orders(self):
+        """Returns False when no rebalance orders exist at all."""
+        self.assertFalse(is_in_cooldown())
+
+
+# ── Rebalance API Tests ──────────────────────────────────────────────────────
+
+
+class RebalanceAPITest(APITestCase):
+    """Tests for the admin rebalance API endpoints."""
+
+    BASE = "/api/v1/wallets/admin/rebalance"
+
+    def setUp(self):
+        self.admin = User.objects.create_superuser(
+            phone="+254700000099", is_staff=True,
+        )
+        self.regular_user = User.objects.create_user(
+            phone="+254700000001", pin="1234",
+        )
+        self.client = APIClient()
+
+        # Create a float SystemWallet so status endpoint has data
+        SystemWallet.objects.create(
+            wallet_type="float", currency="KES", balance=Decimal("600000"),
+        )
+
+    def test_status_endpoint_returns_correct_structure(self):
+        """GET /admin/rebalance/status/ returns expected keys for admin."""
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.get(f"{self.BASE}/status/")
+        self.assertEqual(response.status_code, 200)
+
+        data = response.data
+        expected_keys = {
+            "current_float_kes",
+            "target_float_kes",
+            "trigger_threshold_kes",
+            "needs_rebalance",
+            "execution_mode",
+            "active_orders",
+            "recent_completed",
+            "is_in_cooldown",
+        }
+        self.assertTrue(expected_keys.issubset(set(data.keys())))
+
+    def test_non_admin_gets_403_on_status(self):
+        """Regular users cannot access admin rebalance endpoints."""
+        self.client.force_authenticate(user=self.regular_user)
+        response = self.client.get(f"{self.BASE}/status/")
+        self.assertEqual(response.status_code, 403)
+
+    def test_non_admin_gets_403_on_trigger(self):
+        """Regular users cannot trigger rebalance."""
+        self.client.force_authenticate(user=self.regular_user)
+        response = self.client.post(f"{self.BASE}/trigger/", {"force": True})
+        self.assertEqual(response.status_code, 403)
+
+    @patch("apps.wallets.rebalance.get_current_float_kes")
+    @patch("apps.wallets.rebalance.ManualExchangeProvider.get_sell_quote")
+    @patch("apps.wallets.rebalance.ManualExchangeProvider.execute_sell")
+    def test_trigger_endpoint_creates_order(self, mock_execute, mock_quote, mock_float):
+        """POST /admin/rebalance/trigger/ creates a new rebalance order."""
+        mock_float.return_value = Decimal("400000")
+        mock_quote.return_value = {
+            "rate": Decimal("140"),
+            "kes_amount": Decimal("1000000"),
+            "fee_kes": Decimal("10000"),
+            "quote_id": "test_quote",
+            "expires_at": timezone.now() + timedelta(minutes=15),
+        }
+        mock_execute.return_value = {
+            "exchange_order_id": "manual_test",
+            "status": "submitted",
+            "message": "Admin notified",
+        }
+
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.post(
+            f"{self.BASE}/trigger/",
+            {"sell_currency": "USDT", "force": True, "reason": "Test trigger"},
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertIn("id", response.data)
+        self.assertEqual(response.data["sell_currency"], "USDT")
+
+        # Verify order was persisted
+        self.assertTrue(
+            RebalanceOrder.objects.filter(id=response.data["id"]).exists()
+        )
+
+    def test_confirm_endpoint_completes_order(self):
+        """POST /admin/rebalance/{id}/confirm/ transitions order to completed."""
+        order = RebalanceOrder.objects.create(
+            trigger=RebalanceOrder.TriggerType.MANUAL,
+            status=RebalanceOrder.Status.SUBMITTED,
+            float_balance_at_trigger=Decimal("500000"),
+            sell_currency="USDT",
+            sell_amount=Decimal("700"),
+            expected_kes_amount=Decimal("1000000"),
+            exchange_rate_at_quote=Decimal("142.857"),
+        )
+
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.post(
+            f"{self.BASE}/{order.id}/confirm/",
+            {
+                "kes_received": "980000.00",
+                "actual_rate": "140.00",
+                "fee_kes": "5000.00",
+                "exchange_reference": "YC-REF-123",
+                "admin_notes": "Confirmed manually",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+
+        order.refresh_from_db()
+        self.assertEqual(order.status, RebalanceOrder.Status.COMPLETED)
+        self.assertEqual(order.actual_kes_received, Decimal("980000.00"))
+        self.assertIsNotNone(order.completed_at)
+
+    def test_unauthenticated_gets_401(self):
+        """Unauthenticated requests are rejected with 401."""
+        response = self.client.get(f"{self.BASE}/status/")
+        self.assertEqual(response.status_code, 401)

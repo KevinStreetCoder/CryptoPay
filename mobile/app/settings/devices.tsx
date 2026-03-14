@@ -182,14 +182,14 @@ function DeviceCard({
           borderTopColor: tc.glass.border,
         }}
       >
-        {device.ip_address && (
+        {device.ip_address ? (
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
             <Ionicons name="wifi-outline" size={14} color={tc.textMuted} />
             <Text style={{ color: tc.textSecondary, fontSize: 13 }}>
               {device.ip_address}
             </Text>
           </View>
-        )}
+        ) : null}
         <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
           <Ionicons name="time-outline" size={14} color={tc.textMuted} />
           <Text style={{ color: tc.textSecondary, fontSize: 13 }}>

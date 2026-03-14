@@ -1,3 +1,4 @@
+import logging
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 
@@ -12,6 +13,8 @@ from rest_framework.views import APIView
 from .models import ExchangeRate
 from .services import RateService
 
+logger = logging.getLogger(__name__)
+
 
 class RateView(APIView):
     """Get current crypto/KES rate."""
@@ -25,7 +28,8 @@ class RateView(APIView):
             return Response(rate_info)
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Rate fetch failed for {currency}: {e}", exc_info=True)
             return Response(
                 {"error": "Rate unavailable. Please try again."},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -52,9 +56,11 @@ class QuoteView(APIView):
             return Response({"error": "Invalid kes_amount"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            quote = RateService.lock_rate(currency, kes_amount)
+            user_id = str(request.user.id) if request.user.is_authenticated else ""
+            quote = RateService.lock_rate(currency, kes_amount, user_id=user_id)
             return Response(quote)
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Quote generation failed for {currency}/{kes_amount}: {e}", exc_info=True)
             return Response(
                 {"error": "Unable to generate quote. Please try again."},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -102,7 +108,8 @@ class RateHistoryView(APIView):
 
         try:
             data = RateService.get_market_chart(currency, days)
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Market chart fetch failed for {currency}/{period}: {e}", exc_info=True)
             data = []
 
         # If external APIs failed, fall back to our internal rate history

@@ -247,12 +247,11 @@ def verify_block_hash(chain: str, deposit) -> bool:
 
     if chain == "ethereum":
         try:
-            from apps.blockchain.tasks import _eth_rpc_call
-            result = _eth_rpc_call(
+            from apps.blockchain.eth_listener import _eth_rpc_call
+            block = _eth_rpc_call(
                 "eth_getBlockByNumber",
                 [hex(deposit.block_number), False],
             )
-            block = result.get("result")
             if not block:
                 logger.warning(
                     f"Block {deposit.block_number} not found on {chain} — "

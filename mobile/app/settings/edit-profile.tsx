@@ -12,7 +12,7 @@ import {
   Animated,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useAuth } from "../../src/stores/auth";
@@ -26,7 +26,7 @@ import { useLocale } from "../../src/hooks/useLocale";
 
 const isWeb = Platform.OS === "web";
 
-type Step = "edit" | "pin" | "success";
+type Step = "edit" | "pin" | "email-verify" | "success";
 
 function resolveAvatarUrl(url: string | null | undefined): string | null {
   if (!url) return null;
@@ -58,19 +58,10 @@ function formatDate(dateStr: string | undefined): string {
   }
 }
 
-function getKYCLabel(tier: number | undefined): string {
-  switch (tier) {
-    case 0:
-      return "Unverified";
-    case 1:
-      return "Basic";
-    case 2:
-      return "Intermediate";
-    case 3:
-      return "Advanced";
-    default:
-      return "Unverified";
-  }
+const KYC_LABEL_KEYS = ["editProfile.unverified", "editProfile.basic", "editProfile.intermediate", "editProfile.advanced"] as const;
+
+function getKYCLabelKey(tier: number | undefined): string {
+  return KYC_LABEL_KEYS[tier ?? 0] || KYC_LABEL_KEYS[0];
 }
 
 function getKYCColor(tier: number | undefined): string {
@@ -97,6 +88,7 @@ function EditFormStep({
   avatarUrl,
   kycTier,
   memberSince,
+  emailVerified,
   isDesktop,
   isTablet,
   tc,
@@ -107,6 +99,8 @@ function EditFormStep({
   setNameFocused,
   emailFocused,
   setEmailFocused,
+  onVerifyEmail,
+  userEmail,
 }: {
   fullName: string;
   setFullName: (v: string) => void;
@@ -117,6 +111,7 @@ function EditFormStep({
   avatarUrl: string | null;
   kycTier: number;
   memberSince: string;
+  emailVerified: boolean;
   isDesktop: boolean;
   isTablet: boolean;
   tc: ReturnType<typeof getThemeColors>;
@@ -127,9 +122,12 @@ function EditFormStep({
   setNameFocused: (v: boolean) => void;
   emailFocused: boolean;
   setEmailFocused: (v: boolean) => void;
+  onVerifyEmail?: () => void;
+  userEmail?: string;
 }) {
   const avatarSize = isDesktop ? 120 : 100;
   const displayAvatar = avatarUri || avatarUrl;
+  const { t } = useLocale();
   const initials = getInitials(fullName);
   const useColumns = isDesktop || isTablet;
 
@@ -242,7 +240,7 @@ function EditFormStep({
             marginTop: 12,
           }}
         >
-          Tap to change photo
+          {t("editProfile.tapToChangePhoto")}
         </Text>
       </View>
 
@@ -267,7 +265,7 @@ function EditFormStep({
             letterSpacing: -0.2,
           }}
         >
-          Personal Information
+          {t("editProfile.personalInfo")}
         </Text>
 
         <View
@@ -289,7 +287,7 @@ function EditFormStep({
                 letterSpacing: 0.5,
               }}
             >
-              Full Name
+              {t("editProfile.fullName")}
             </Text>
             <TextInput
               value={fullName}
@@ -306,18 +304,56 @@ function EditFormStep({
 
           {/* Email */}
           <View style={{ flex: useColumns ? 1 : undefined, marginBottom: 16 }}>
-            <Text
-              style={{
-                color: tc.textSecondary,
-                fontSize: 13,
-                fontFamily: "DMSans_600SemiBold",
-                marginBottom: 8,
-                textTransform: "uppercase",
-                letterSpacing: 0.5,
-              }}
-            >
-              Email Address
-            </Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <Text
+                style={{
+                  color: tc.textSecondary,
+                  fontSize: 13,
+                  fontFamily: "DMSans_600SemiBold",
+                  textTransform: "uppercase",
+                  letterSpacing: 0.5,
+                }}
+              >
+                {t("editProfile.emailAddress")}
+              </Text>
+              {email ? (
+                emailVerified ? (
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 4,
+                      backgroundColor: colors.success + "15",
+                      paddingHorizontal: 8,
+                      paddingVertical: 2,
+                      borderRadius: 8,
+                    }}
+                  >
+                    <Ionicons name="checkmark-circle" size={12} color={colors.success} />
+                    <Text style={{ color: colors.success, fontSize: 11, fontFamily: "DMSans_600SemiBold" }}>
+                      {t("editProfile.verified")}
+                    </Text>
+                  </View>
+                ) : (
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 4,
+                      backgroundColor: colors.warning + "15",
+                      paddingHorizontal: 8,
+                      paddingVertical: 2,
+                      borderRadius: 8,
+                    }}
+                  >
+                    <Ionicons name="alert-circle" size={12} color={colors.warning} />
+                    <Text style={{ color: colors.warning, fontSize: 11, fontFamily: "DMSans_600SemiBold" }}>
+                      {t("editProfile.notVerified")}
+                    </Text>
+                  </View>
+                )
+              ) : null}
+            </View>
             <TextInput
               value={email}
               onChangeText={setEmail}
@@ -330,6 +366,36 @@ function EditFormStep({
               autoCapitalize="none"
               autoCorrect={false}
             />
+            {email && !emailVerified ? (
+              <View style={{ flexDirection: "row", alignItems: "center", marginTop: 6, gap: 8 }}>
+                <Text
+                  style={{
+                    color: tc.textMuted,
+                    fontSize: 12,
+                    fontFamily: "DMSans_400Regular",
+                    lineHeight: 17,
+                    flex: 1,
+                  }}
+                >
+                  {email === (userEmail || "")
+                    ? "Email not verified."
+                    : "A verification email will be sent when you save changes."}
+                </Text>
+                {email === (userEmail || "") && onVerifyEmail ? (
+                  <Pressable onPress={onVerifyEmail}>
+                    <Text
+                      style={{
+                        color: colors.warning,
+                        fontSize: 12,
+                        fontFamily: "DMSans_600SemiBold",
+                      }}
+                    >
+                      Verify Now
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : null}
           </View>
         </View>
       </View>
@@ -368,8 +434,8 @@ function EditFormStep({
           {/* Phone */}
           <InfoRow
             icon="call-outline"
-            label="Phone Number"
-            value={phone || "Not set"}
+            label={t("payment.phoneNumber")}
+            value={phone || t("common.notSet")}
             badge={null}
             isDesktop={isDesktop}
             useColumns={useColumns}
@@ -379,8 +445,8 @@ function EditFormStep({
           {/* KYC Tier */}
           <InfoRow
             icon="shield-checkmark-outline"
-            label="KYC Level"
-            value={getKYCLabel(kycTier)}
+            label={t("editProfile.kycLevel")}
+            value={t(getKYCLabelKey(kycTier) as any)}
             badge={{ text: `Tier ${kycTier}`, color: getKYCColor(kycTier) }}
             isDesktop={isDesktop}
             useColumns={useColumns}
@@ -390,7 +456,7 @@ function EditFormStep({
           {/* Member Since */}
           <InfoRow
             icon="calendar-outline"
-            label="Member Since"
+            label={t("editProfile.memberSince")}
             value={formatDate(memberSince)}
             badge={null}
             isDesktop={isDesktop}
@@ -560,7 +626,7 @@ function PinStep({
   error: string;
   loading: boolean;
   onCancel: () => void;
-  onSubmit: () => void;
+  onSubmit: (completedPin?: string[]) => void;
   isDesktop: boolean;
   tc: ReturnType<typeof getThemeColors>;
   ts: ReturnType<typeof getThemeShadows>;
@@ -579,9 +645,10 @@ function PinStep({
       inputRefs.current[index + 1]?.focus();
     }
 
-    // Auto-submit when all 6 digits entered
+    // Auto-submit when all 6 digits entered — pass newPin directly
+    // because React state hasn't flushed yet at this point
     if (digit && index === 5 && newPin.every((d) => d !== "")) {
-      onSubmit();
+      onSubmit(newPin);
     }
   };
 
@@ -871,6 +938,324 @@ function SuccessStep({
   );
 }
 
+// ── Email Verify Step ────────────────────────────────────────────────────────
+function EmailVerifyStep({
+  email,
+  isDesktop,
+  tc,
+  ts,
+  onVerified,
+  onSkip,
+}: {
+  email: string;
+  isDesktop: boolean;
+  tc: ReturnType<typeof getThemeColors>;
+  ts: ReturnType<typeof getThemeShadows>;
+  onVerified: () => void;
+  onSkip: () => void;
+}) {
+  const [otp, setOtp] = useState<string[]>(["", "", "", "", "", ""]);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const inputRefs = useRef<(TextInput | null)[]>([]);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setTimeout(() => setResendCooldown(resendCooldown - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [resendCooldown]);
+
+  const handleOtpChange = (text: string, index: number) => {
+    const digit = text.replace(/[^0-9]/g, "").slice(-1);
+    const newOtp = [...otp];
+    newOtp[index] = digit;
+    setOtp(newOtp);
+
+    if (digit && index < 5) {
+      inputRefs.current[index + 1]?.focus();
+    }
+
+    if (digit && index === 5 && newOtp.every((d) => d !== "")) {
+      handleVerify(newOtp);
+    }
+  };
+
+  const handleKeyPress = (e: any, index: number) => {
+    if (e.nativeEvent.key === "Backspace" && !otp[index] && index > 0) {
+      inputRefs.current[index - 1]?.focus();
+      const newOtp = [...otp];
+      newOtp[index - 1] = "";
+      setOtp(newOtp);
+    }
+  };
+
+  const handleVerify = async (completedOtp?: string[]) => {
+    const otpArray = completedOtp || otp;
+    const code = otpArray.join("");
+    if (code.length < 6) {
+      setError("Please enter all 6 digits");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    try {
+      await authApi.confirmEmailVerification(code);
+      onVerified();
+    } catch (err) {
+      const appError = normalizeError(err);
+      setError(appError.message);
+      setOtp(["", "", "", "", "", ""]);
+      setTimeout(() => inputRefs.current[0]?.focus(), 100);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (resendCooldown > 0) return;
+    setResending(true);
+    try {
+      await authApi.sendEmailVerification(email);
+      setResendCooldown(60);
+      setError("");
+      setOtp(["", "", "", "", "", ""]);
+    } catch (err) {
+      const appError = normalizeError(err);
+      setError(appError.message);
+    } finally {
+      setResending(false);
+    }
+  };
+
+  return (
+    <View
+      style={{
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
+        paddingHorizontal: 20,
+      }}
+    >
+      <View
+        style={{
+          backgroundColor: tc.dark.card,
+          borderRadius: 24,
+          borderWidth: 1,
+          borderColor: tc.glass.border,
+          padding: isDesktop ? 40 : 28,
+          width: "100%",
+          maxWidth: 440,
+          alignItems: "center",
+          ...ts.md,
+        }}
+      >
+        {/* Mail Icon */}
+        <View
+          style={{
+            width: 64,
+            height: 64,
+            borderRadius: 20,
+            backgroundColor: colors.info + "15",
+            alignItems: "center",
+            justifyContent: "center",
+            marginBottom: 20,
+          }}
+        >
+          <Ionicons name="mail" size={28} color={colors.info} />
+        </View>
+
+        <Text
+          style={{
+            color: tc.textPrimary,
+            fontSize: 22,
+            fontFamily: "DMSans_700Bold",
+            textAlign: "center",
+            letterSpacing: -0.3,
+            marginBottom: 8,
+          }}
+        >
+          Verify Your Email
+        </Text>
+        <Text
+          style={{
+            color: tc.textMuted,
+            fontSize: 14,
+            fontFamily: "DMSans_500Medium",
+            textAlign: "center",
+            lineHeight: 21,
+            marginBottom: 8,
+            maxWidth: 300,
+          }}
+        >
+          Enter the 6-digit code sent to
+        </Text>
+        <Text
+          style={{
+            color: colors.primary[400],
+            fontSize: 14,
+            fontFamily: "DMSans_600SemiBold",
+            textAlign: "center",
+            marginBottom: 28,
+          }}
+        >
+          {email}
+        </Text>
+
+        {/* OTP Inputs */}
+        <View
+          style={{
+            flexDirection: "row",
+            gap: isDesktop ? 12 : 10,
+            marginBottom: error ? 16 : 28,
+          }}
+        >
+          {otp.map((digit, i) => (
+            <TextInput
+              key={i}
+              ref={(ref) => {
+                inputRefs.current[i] = ref;
+              }}
+              value={digit}
+              onChangeText={(text) => handleOtpChange(text, i)}
+              onKeyPress={(e) => handleKeyPress(e, i)}
+              maxLength={1}
+              keyboardType="number-pad"
+              autoFocus={i === 0}
+              style={{
+                width: isDesktop ? 52 : 46,
+                height: isDesktop ? 58 : 52,
+                borderRadius: 14,
+                borderWidth: 2,
+                borderColor: digit
+                  ? colors.primary[500]
+                  : error
+                    ? colors.error + "60"
+                    : tc.glass.borderStrong,
+                backgroundColor: digit
+                  ? colors.primary[500] + "10"
+                  : tc.dark.elevated,
+                textAlign: "center",
+                fontSize: 22,
+                fontFamily: "DMSans_700Bold",
+                color: tc.textPrimary,
+                ...(isWeb
+                  ? ({
+                      outlineStyle: "none",
+                      transition: "all 0.15s ease",
+                      boxShadow: digit
+                        ? `0 0 0 3px ${colors.primary[500]}20`
+                        : "none",
+                    } as any)
+                  : {}),
+              }}
+            />
+          ))}
+        </View>
+
+        {/* Error */}
+        {error ? (
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 6,
+              marginBottom: 20,
+              backgroundColor: colors.error + "12",
+              paddingHorizontal: 14,
+              paddingVertical: 8,
+              borderRadius: 10,
+            }}
+          >
+            <Ionicons name="alert-circle" size={16} color={colors.error} />
+            <Text
+              style={{
+                color: colors.error,
+                fontSize: 13,
+                fontFamily: "DMSans_500Medium",
+              }}
+            >
+              {error}
+            </Text>
+          </View>
+        ) : null}
+
+        {/* Loading */}
+        {loading ? (
+          <ActivityIndicator
+            size="small"
+            color={colors.primary[500]}
+            style={{ marginBottom: 20 }}
+          />
+        ) : null}
+
+        {/* Resend */}
+        <Pressable
+          onPress={handleResend}
+          disabled={resendCooldown > 0 || resending}
+          style={({ pressed }: any) => ({
+            paddingVertical: 8,
+            opacity: pressed ? 0.7 : resendCooldown > 0 ? 0.5 : 1,
+            marginBottom: 16,
+          })}
+        >
+          <Text
+            style={{
+              color: resendCooldown > 0 ? tc.textMuted : colors.primary[400],
+              fontSize: 14,
+              fontFamily: "DMSans_600SemiBold",
+              textAlign: "center",
+            }}
+          >
+            {resending
+              ? "Sending..."
+              : resendCooldown > 0
+                ? `Resend code in ${resendCooldown}s`
+                : "Resend code"}
+          </Text>
+        </Pressable>
+
+        {/* Skip / Verify Later */}
+        <Pressable
+          onPress={onSkip}
+          disabled={loading}
+          style={({ pressed, hovered }: any) => ({
+            paddingVertical: 12,
+            paddingHorizontal: 28,
+            borderRadius: 12,
+            backgroundColor: hovered
+              ? tc.glass.highlight
+              : "transparent",
+            borderWidth: 1,
+            borderColor: tc.glass.border,
+            opacity: pressed ? 0.8 : loading ? 0.5 : 1,
+            ...(isWeb
+              ? ({
+                  cursor: loading ? "not-allowed" : "pointer",
+                  transition: "all 0.2s ease",
+                } as any)
+              : {}),
+          })}
+          accessibilityRole="button"
+          accessibilityLabel="Skip email verification"
+        >
+          <Text
+            style={{
+              color: tc.textSecondary,
+              fontSize: 15,
+              fontFamily: "DMSans_600SemiBold",
+            }}
+          >
+            Verify Later
+          </Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 // ── Main Screen ──────────────────────────────────────────────────────────────
 export default function EditProfileScreen() {
   const router = useRouter();
@@ -883,6 +1268,7 @@ export default function EditProfileScreen() {
   const { user, refreshProfile } = useAuth();
   const toast = useToast();
   const { t } = useLocale();
+  const params = useLocalSearchParams<{ verify?: string }>();
 
   const [step, setStep] = useState<Step>("edit");
   const [fullName, setFullName] = useState(user?.full_name || "");
@@ -894,6 +1280,14 @@ export default function EditProfileScreen() {
   const [loading, setLoading] = useState(false);
   const [nameFocused, setNameFocused] = useState(false);
   const [emailFocused, setEmailFocused] = useState(false);
+
+  // Handle ?verify=1 param — jump straight to email verification
+  useEffect(() => {
+    if (params.verify && user?.email && !user?.email_verified) {
+      setEmail(user.email);
+      setStep("email-verify");
+    }
+  }, [params.verify, user?.email, user?.email_verified]);
 
   const phone = user?.phone || "";
   const kycTier = user?.kyc_tier ?? 0;
@@ -972,24 +1366,26 @@ export default function EditProfileScreen() {
       return;
     }
 
-    // Go to PIN step
-    setStep("pin");
-    setPinError("");
-    setPin(["", "", "", "", "", ""]);
+    // PIN only required for name/email changes, not avatar-only
+    if (nameChanged || emailChanged) {
+      setStep("pin");
+      setPinError("");
+      setPin(["", "", "", "", "", ""]);
+    } else {
+      // Avatar-only change — submit directly without PIN
+      submitProfileUpdate();
+    }
   };
 
-  const handlePinSubmit = async () => {
-    const pinStr = pin.join("");
-    if (pinStr.length < 6) {
-      setPinError("Please enter all 6 digits");
-      return;
-    }
-
+  const submitProfileUpdate = async (pinStr?: string) => {
     setLoading(true);
     setPinError("");
 
     try {
       const formData = new FormData();
+      if (pinStr) {
+        formData.append("pin", pinStr);
+      }
       formData.append("full_name", fullName.trim());
       if (email.trim()) {
         formData.append("email", email.trim());
@@ -998,36 +1394,89 @@ export default function EditProfileScreen() {
         formData.append("avatar", avatarFile);
       }
 
-      await authApi.updateProfile(formData);
+      const res = await authApi.updateProfile(formData);
 
       // Refresh user data in auth store
       await refreshProfile();
 
-      setStep("success");
+      // Check if email verification was sent
+      const emailVerificationSent = (res.data as any)?.email_verification_sent;
 
-      // Navigate back after brief delay
-      setTimeout(() => {
-        if (router.canGoBack()) {
-          router.back();
-        } else {
-          router.replace("/settings" as any);
-        }
-      }, 1800);
+      if (emailVerificationSent) {
+        // Go to email verification step
+        setStep("email-verify");
+      } else {
+        setStep("success");
+        // Navigate back after brief delay
+        setTimeout(() => {
+          if (router.canGoBack()) {
+            router.back();
+          } else {
+            router.replace("/settings" as any);
+          }
+        }, 1800);
+      }
     } catch (err) {
       const appError = normalizeError(err);
-      setPinError(appError.message);
+      if (step === "pin") {
+        setPinError(appError.message);
+        // Clear PIN on error so user can re-enter
+        setPin(["", "", "", "", "", ""]);
+      } else {
+        toast.error("Update Failed", appError.message);
+      }
     } finally {
       setLoading(false);
     }
   };
 
+  const handlePinSubmit = async (completedPin?: string[]) => {
+    // Use the passed-in pin array (from auto-submit) or fall back to state
+    const pinArray = completedPin || pin;
+    const pinStr = pinArray.join("");
+    if (pinStr.length < 6) {
+      setPinError("Please enter all 6 digits");
+      return;
+    }
+
+    await submitProfileUpdate(pinStr);
+  };
+
   const horizontalPadding = isDesktop ? 48 : isTablet ? 32 : 20;
+
+  const navigateBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace("/settings" as any);
+    }
+  };
+
+  const handleEmailVerified = async () => {
+    await refreshProfile();
+    setStep("success");
+    setTimeout(navigateBack, 1800);
+  };
+
+  const handleSkipVerification = () => {
+    toast.info("Verify Later", "You can verify your email from Settings anytime.");
+    navigateBack();
+  };
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
       <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
         {step === "success" ? (
           <SuccessStep isDesktop={isDesktop} tc={tc} ts={ts} />
+        ) : step === "email-verify" ? (
+          <EmailVerifyStep
+            email={email.trim()}
+            isDesktop={isDesktop}
+            tc={tc}
+            ts={ts}
+            onVerified={handleEmailVerified}
+            onSkip={handleSkipVerification}
+          />
         ) : step === "pin" ? (
           <>
             {/* Header for PIN step */}
@@ -1193,6 +1642,7 @@ export default function EditProfileScreen() {
               avatarUrl={avatarUrl}
               kycTier={kycTier}
               memberSince={memberSince}
+              emailVerified={!!(user?.email_verified && email === (user?.email || ""))}
               isDesktop={isDesktop}
               isTablet={isTablet}
               tc={tc}
@@ -1203,6 +1653,15 @@ export default function EditProfileScreen() {
               setNameFocused={setNameFocused}
               emailFocused={emailFocused}
               setEmailFocused={setEmailFocused}
+              userEmail={user?.email || ""}
+              onVerifyEmail={async () => {
+                try {
+                  await authApi.sendEmailVerification(email);
+                  setStep("email-verify");
+                } catch {
+                  // handled silently
+                }
+              }}
             />
           </ScrollView>
         )}

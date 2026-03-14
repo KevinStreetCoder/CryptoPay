@@ -1,10 +1,11 @@
-import { View, Text, Pressable, Platform, useWindowDimensions, Share } from "react-native";
+import { View, Text, Pressable, Platform, useWindowDimensions, Share, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useRef, useState } from "react";
 import { Animated, Easing } from "react-native";
 import * as Haptics from "expo-haptics";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "../../src/components/Button";
 import { useToast } from "../../src/components/Toast";
 import { GlassCard } from "../../src/components/GlassCard";
@@ -160,6 +161,7 @@ function DetailRow({
    ═══════════════════════════════════════════════════════════════════════════════ */
 export default function PaymentSuccessScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const params = useLocalSearchParams<{
     amount_kes: string;
     crypto_amount: string;
@@ -178,6 +180,17 @@ export default function PaymentSuccessScreen() {
 
   const { width } = useWindowDimensions();
   const isDesktop = isWeb && width >= 768;
+
+  // Refresh wallet balances immediately + again after 3s for async callbacks (BUY flow)
+  useEffect(() => {
+    queryClient.invalidateQueries({ queryKey: ["wallets"] });
+    queryClient.invalidateQueries({ queryKey: ["transactions"] });
+    const timer = setTimeout(() => {
+      queryClient.invalidateQueries({ queryKey: ["wallets"] });
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Staggered fade-in for content sections
   const cardFade = useRef(new Animated.Value(0)).current;
@@ -261,16 +274,19 @@ export default function PaymentSuccessScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
-      <View
-        style={{
-          flex: 1,
+      <ScrollView
+        contentContainerStyle={{
+          flexGrow: 1,
           alignItems: "center",
           justifyContent: "center",
           paddingHorizontal: isDesktop ? 48 : 24,
-          maxWidth: isDesktop ? 560 : undefined,
+          paddingTop: isDesktop ? 40 : 24,
+          paddingBottom: isDesktop ? 48 : 36,
+          maxWidth: isDesktop ? 520 : undefined,
           alignSelf: isDesktop ? "center" : undefined,
           width: isDesktop ? "100%" : undefined,
         }}
+        showsVerticalScrollIndicator={false}
       >
         <PaymentStepper currentStep={isFailed ? 1 : 2} />
         <View style={{ height: 12 }} />
@@ -279,7 +295,7 @@ export default function PaymentSuccessScreen() {
         <Text
           style={{
             color: tc.textPrimary,
-            fontSize: 26,
+            fontSize: isDesktop ? 28 : 26,
             fontFamily: "DMSans_700Bold",
             marginBottom: 8,
             letterSpacing: -0.5,
@@ -293,7 +309,7 @@ export default function PaymentSuccessScreen() {
             fontSize: 15,
             fontFamily: "DMSans_400Regular",
             textAlign: "center",
-            marginBottom: 32,
+            marginBottom: 28,
             lineHeight: 22,
           }}
         >
@@ -388,7 +404,7 @@ export default function PaymentSuccessScreen() {
           </GlassCard>
         </Animated.View>
 
-        {/* Action Buttons — animated */}
+        {/* Action Buttons — PDF Receipt & Share */}
         {!isFailed && (
           <Animated.View style={{ flexDirection: "row", gap: 12, marginTop: 20, width: "100%", opacity: buttonsFade }}>
             <Pressable
@@ -438,6 +454,7 @@ export default function PaymentSuccessScreen() {
           </Animated.View>
         )}
 
+        {/* Info text */}
         <Animated.View style={{ opacity: buttonsFade, width: "100%", marginTop: isFailed ? 20 : 8 }}>
           <Text
             style={{
@@ -448,7 +465,7 @@ export default function PaymentSuccessScreen() {
               marginTop: isFailed ? 0 : 6,
               lineHeight: 18,
               opacity: 0.8,
-              marginBottom: 12,
+              marginBottom: 16,
             }}
           >
             {isFailed
@@ -456,53 +473,51 @@ export default function PaymentSuccessScreen() {
               : "You'll receive an M-Pesa confirmation SMS and email receipt shortly.\nTransaction details are in your history."}
           </Text>
         </Animated.View>
-      </View>
 
-      <Animated.View
-        style={{
-          paddingHorizontal: isDesktop ? 48 : 24,
-          paddingBottom: 32,
-          gap: 12,
-          maxWidth: isDesktop ? 560 : undefined,
-          alignSelf: isDesktop ? "center" : undefined,
-          width: isDesktop ? "100%" : undefined,
-          opacity: buttonsFade,
-        }}
-      >
-        {isFailed ? (
-          <>
-            <Button
-              title="Try Again"
-              onPress={() => { if (router.canGoBack()) router.back(); else router.replace("/(tabs)/pay" as any); }}
-              size="lg"
-              icon={<Ionicons name="refresh-outline" size={20} color="#FFFFFF" />}
-            />
-            <Button
-              title="Go Home"
-              onPress={() => router.replace("/(tabs)")}
-              variant="secondary"
-              size="lg"
-              icon={<Ionicons name="home-outline" size={20} color={isDark ? "#FFFFFF" : "#0F172A"} />}
-            />
-          </>
-        ) : (
-          <>
-            <Button
-              title="Done"
-              onPress={() => router.replace("/(tabs)")}
-              size="lg"
-              icon={<Ionicons name="checkmark-done-outline" size={20} color="#FFFFFF" />}
-            />
-            <Button
-              title="Make Another Payment"
-              onPress={() => router.replace("/(tabs)/pay")}
-              variant="secondary"
-              size="lg"
-              icon={<Ionicons name="repeat-outline" size={20} color={isDark ? "#FFFFFF" : "#0F172A"} />}
-            />
-          </>
-        )}
-      </Animated.View>
+        {/* Primary action buttons — inline with content */}
+        <Animated.View
+          style={{
+            width: "100%",
+            gap: 12,
+            opacity: buttonsFade,
+            maxWidth: isDesktop ? 400 : undefined,
+          }}
+        >
+          {isFailed ? (
+            <>
+              <Button
+                title="Try Again"
+                onPress={() => { if (router.canGoBack()) router.back(); else router.replace("/(tabs)/pay" as any); }}
+                size="lg"
+                icon={<Ionicons name="refresh-outline" size={20} color="#FFFFFF" />}
+              />
+              <Button
+                title="Go Home"
+                onPress={() => router.replace("/(tabs)")}
+                variant="secondary"
+                size="lg"
+                icon={<Ionicons name="home-outline" size={20} color={isDark ? "#FFFFFF" : "#0F172A"} />}
+              />
+            </>
+          ) : (
+            <>
+              <Button
+                title="Done"
+                onPress={() => router.replace("/(tabs)")}
+                size="lg"
+                icon={<Ionicons name="checkmark-done-outline" size={20} color="#FFFFFF" />}
+              />
+              <Button
+                title="Make Another Payment"
+                onPress={() => router.replace("/(tabs)/pay")}
+                variant="secondary"
+                size="lg"
+                icon={<Ionicons name="repeat-outline" size={20} color={isDark ? "#FFFFFF" : "#0F172A"} />}
+              />
+            </>
+          )}
+        </Animated.View>
+      </ScrollView>
     </SafeAreaView>
   );
 }

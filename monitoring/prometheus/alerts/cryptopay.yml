@@ -1,0 +1,199 @@
+groups:
+  # ── API Health ──────────────────────────────────────────────
+  - name: api_health
+    rules:
+      - alert: APIErrorRateHigh
+        expr: |
+          (
+            sum(rate(django_http_responses_total_by_status_total{status=~"5.."}[5m]))
+            /
+            sum(rate(django_http_responses_total_by_status_total[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: "API error rate above 5%"
+          description: "HTTP 5xx error rate is {{ $value | humanizePercentage }} over the last 5 minutes."
+
+      - alert: APIP95LatencyHigh
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(django_http_requests_latency_seconds_by_view_method_bucket[5m])) by (le)
+          ) > 2
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "API p95 latency above 2s"
+          description: "p95 request latency is {{ $value | humanizeDuration }}."
+
+      - alert: APIP99LatencyCritical
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(django_http_requests_latency_seconds_by_view_method_bucket[5m])) by (le)
+          ) > 5
+        for: 5m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: "API p99 latency above 5s"
+          description: "p99 request latency is {{ $value | humanizeDuration }}."
+
+  # ── Payment Pipeline ────────────────────────────────────────
+  - name: payments
+    rules:
+      - alert: PaymentFailureRateHigh
+        expr: |
+          (
+            sum(rate(cryptopay_payment_failed_total[10m]))
+            /
+            (sum(rate(cryptopay_payment_completed_total[10m])) + sum(rate(cryptopay_payment_failed_total[10m])) + 1e-10)
+          ) > 0.10
+        for: 5m
+        labels:
+          severity: critical
+          team: payments
+        annotations:
+          summary: "Payment failure rate above 10%"
+          description: "{{ $value | humanizePercentage }} of payments are failing in the last 10 minutes."
+
+      - alert: MpesaFloatLow
+        expr: cryptopay_mpesa_float_balance_kes < 500000
+        for: 2m
+        labels:
+          severity: critical
+          team: payments
+        annotations:
+          summary: "M-Pesa float below 500K KES"
+          description: "Current float balance is {{ $value | humanize }} KES."
+
+      - alert: MpesaFloatEmergency
+        expr: cryptopay_mpesa_float_balance_kes < 200000
+        for: 1m
+        labels:
+          severity: page
+          team: payments
+        annotations:
+          summary: "M-Pesa float below 200K KES — EMERGENCY"
+          description: "Float balance at {{ $value | humanize }} KES. Payments will be blocked."
+
+      - alert: ExchangeRatesStale
+        expr: cryptopay_exchange_rate_stale > 0
+        for: 5m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: "Exchange rates are stale"
+          description: "Rate feed has not refreshed successfully. Quotes may be inaccurate."
+
+      - alert: CircuitBreakerOpen
+        expr: cryptopay_circuit_breaker_state == 2
+        for: 1m
+        labels:
+          severity: critical
+          team: payments
+        annotations:
+          summary: "Circuit breaker is OPEN"
+          description: "The payment circuit breaker is open — all outbound payments are halted."
+
+      - alert: NoDepositsDetected
+        expr: |
+          sum(increase(cryptopay_blockchain_deposit_detected_total[1h])) == 0
+        for: 1h
+        labels:
+          severity: warning
+          team: blockchain
+        annotations:
+          summary: "No deposits detected in 1 hour"
+          description: "No blockchain deposits have been detected in the last hour. Check listeners."
+
+  # ── Celery ──────────────────────────────────────────────────
+  - name: celery
+    rules:
+      - alert: CeleryQueueBacklog
+        expr: celery_queue_length > 100
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "Celery queue backlog above 100"
+          description: "Queue {{ $labels.queue_name }} has {{ $value }} pending tasks."
+
+      - alert: CeleryNoWorkers
+        expr: celery_workers == 0
+        for: 2m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: "No Celery workers available"
+          description: "Zero Celery workers are registered. Background tasks will not be processed."
+
+      - alert: CeleryTaskFailureRateHigh
+        expr: |
+          (
+            sum(rate(celery_task_failed_total[10m]))
+            /
+            (sum(rate(celery_task_succeeded_total[10m])) + sum(rate(celery_task_failed_total[10m])) + 1e-10)
+          ) > 0.10
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "Celery task failure rate above 10%"
+          description: "{{ $value | humanizePercentage }} of Celery tasks are failing."
+
+  # ── PostgreSQL ──────────────────────────────────────────────
+  - name: postgres
+    rules:
+      - alert: PostgreSQLConnectionsHigh
+        expr: |
+          pg_stat_activity_count / pg_settings_max_connections > 0.80
+        for: 5m
+        labels:
+          severity: warning
+          team: infra
+        annotations:
+          summary: "PostgreSQL connections above 80%"
+          description: "{{ $value | humanizePercentage }} of max connections are in use."
+
+      - alert: PostgreSQLDeadTuplesHigh
+        expr: pg_stat_user_tables_n_dead_tup > 100000
+        for: 15m
+        labels:
+          severity: warning
+          team: infra
+        annotations:
+          summary: "PostgreSQL dead tuples above 100K"
+          description: "Table {{ $labels.relname }} has {{ $value }} dead tuples. Consider running VACUUM."
+
+  # ── Redis ───────────────────────────────────────────────────
+  - name: redis
+    rules:
+      - alert: RedisMemoryHigh
+        expr: |
+          redis_memory_used_bytes / redis_memory_max_bytes > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          team: infra
+        annotations:
+          summary: "Redis memory usage above 85%"
+          description: "Redis is using {{ $value | humanizePercentage }} of max configured memory."
+
+      - alert: RedisConnectionsHigh
+        expr: redis_connected_clients > 200
+        for: 5m
+        labels:
+          severity: warning
+          team: infra
+        annotations:
+          summary: "Redis connections above 200"
+          description: "{{ $value }} clients are connected to Redis."

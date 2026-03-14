@@ -6,11 +6,13 @@ import {
   Pressable,
   Platform,
   useWindowDimensions,
+  Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
+import { useNavigation } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { BalanceCard } from "../../src/components/BalanceCard";
 import { QuickAction, DesktopQuickActionCard } from "../../src/components/QuickAction";
@@ -43,6 +45,7 @@ import {
 import { CryptoLogo } from "../../src/components/CryptoLogo";
 import { useLocale } from "../../src/hooks/useLocale";
 import { cacheRates, getCachedRates, rateAge } from "../../src/utils/rateCache";
+import { config } from "../../src/constants/config";
 
 function useRates() {
   return useQuery<Rate[]>({
@@ -87,7 +90,8 @@ function useRates() {
         return [];
       }
     },
-    refetchInterval: 30000,
+    refetchInterval: 15000,
+    staleTime: 0,
   });
 }
 
@@ -105,6 +109,13 @@ function getInitials(name: string | undefined): string {
   const parts = name.trim().split(/\s+/);
   if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
   return parts[0][0].toUpperCase();
+}
+
+function resolveAvatarUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  const base = config.apiUrl.replace(/\/api\/v1\/?$/, "");
+  return `${base}${url.startsWith("/") ? "" : "/"}${url}`;
 }
 
 /* ─── Helpers to derive chart data from transactions ─── */
@@ -980,6 +991,16 @@ export default function HomeScreen() {
   const { data: rates, isLoading: ratesLoading } = useRates();
   const [refreshing, setRefreshing] = useState(false);
 
+  // Refetch wallet balances when this tab gains focus (e.g., after payment)
+  const navigation = useNavigation();
+  useEffect(() => {
+    const unsubscribe = navigation.addListener("focus", () => {
+      refetchWallets();
+      refetchTx();
+    });
+    return unsubscribe;
+  }, [navigation, refetchWallets, refetchTx]);
+
   const onRefresh = async () => {
     setRefreshing(true);
     await Promise.all([refetchWallets(), refetchTx()]);
@@ -1037,36 +1058,58 @@ export default function HomeScreen() {
           >
             <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
               {/* Avatar */}
-              <View
-                style={{
-                  width: 46,
-                  height: 46,
-                  borderRadius: 23,
-                  backgroundColor: colors.primary[500],
-                  alignItems: "center",
-                  justifyContent: "center",
-                  ...(Platform.OS !== "web"
-                    ? {
-                        shadowColor: colors.primary[400],
-                        shadowOffset: { width: 0, height: 2 },
-                        shadowOpacity: 0.3,
-                        shadowRadius: 8,
-                        elevation: 4,
-                      }
-                    : { boxShadow: "0 2px 8px rgba(52, 211, 153, 0.3)" } as any),
-                }}
-              >
-                <Text
+              {resolveAvatarUrl(user?.avatar_url) ? (
+                <Image
+                  source={{ uri: resolveAvatarUrl(user?.avatar_url)! }}
                   style={{
-                    color: "#FFFFFF",
-                    fontSize: 17,
-                    fontFamily: "DMSans_700Bold",
-                    letterSpacing: 0.5,
+                    width: 46,
+                    height: 46,
+                    borderRadius: 23,
+                    borderWidth: 2,
+                    borderColor: colors.primary[500] + "50",
+                    ...(Platform.OS !== "web"
+                      ? {
+                          shadowColor: colors.primary[400],
+                          shadowOffset: { width: 0, height: 2 },
+                          shadowOpacity: 0.3,
+                          shadowRadius: 8,
+                          elevation: 4,
+                        }
+                      : { boxShadow: "0 2px 8px rgba(52, 211, 153, 0.3)" } as any),
+                  }}
+                />
+              ) : (
+                <View
+                  style={{
+                    width: 46,
+                    height: 46,
+                    borderRadius: 23,
+                    backgroundColor: colors.primary[500],
+                    alignItems: "center",
+                    justifyContent: "center",
+                    ...(Platform.OS !== "web"
+                      ? {
+                          shadowColor: colors.primary[400],
+                          shadowOffset: { width: 0, height: 2 },
+                          shadowOpacity: 0.3,
+                          shadowRadius: 8,
+                          elevation: 4,
+                        }
+                      : { boxShadow: "0 2px 8px rgba(52, 211, 153, 0.3)" } as any),
                   }}
                 >
-                  {initials}
-                </Text>
-              </View>
+                  <Text
+                    style={{
+                      color: "#FFFFFF",
+                      fontSize: 17,
+                      fontFamily: "DMSans_700Bold",
+                      letterSpacing: 0.5,
+                    }}
+                  >
+                    {initials}
+                  </Text>
+                </View>
+              )}
               <View>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                   <Ionicons name={getGreeting().icon as any} size={14} color={tc.textMuted} />
@@ -1081,16 +1124,32 @@ export default function HomeScreen() {
                     {t(getGreeting().textKey)}
                   </Text>
                 </View>
-                <Text
-                  style={{
-                    color: tc.textPrimary,
-                    fontSize: 22,
-                    fontFamily: "DMSans_700Bold",
-                    letterSpacing: -0.4,
-                  }}
-                >
-                  {firstName}
-                </Text>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <Text
+                    style={{
+                      color: tc.textPrimary,
+                      fontSize: 22,
+                      fontFamily: "DMSans_700Bold",
+                      letterSpacing: -0.4,
+                    }}
+                  >
+                    {firstName}
+                  </Text>
+                  {(user?.kyc_tier ?? 0) >= 1 && (
+                    <View
+                      style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: 10,
+                        backgroundColor: colors.primary[500],
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <Ionicons name="checkmark" size={12} color="#FFFFFF" />
+                    </View>
+                  )}
+                </View>
               </View>
             </View>
 
@@ -1162,6 +1221,69 @@ export default function HomeScreen() {
             {walletsLoading && <BalanceCardSkeleton />}
           </View>
 
+          {/* KYC Upgrade Banner — show for Tier 0 users */}
+          {(user?.kyc_tier ?? 0) === 0 && (
+            <Pressable
+              onPress={() => router.push("/settings/kyc" as any)}
+              style={({ pressed, hovered }: any) => ({
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 12,
+                marginHorizontal: 16,
+                marginBottom: 20,
+                paddingVertical: 14,
+                paddingHorizontal: 16,
+                borderRadius: 16,
+                backgroundColor: colors.warning + "14",
+                borderWidth: 1,
+                borderColor: colors.warning + "30",
+                ...(Platform.OS === "web" ? {
+                  cursor: "pointer",
+                  transition: "all 0.2s ease",
+                  ...(hovered ? { backgroundColor: colors.warning + "20", borderColor: colors.warning + "50" } : {}),
+                } as any : {}),
+                opacity: pressed ? 0.85 : 1,
+              })}
+              accessibilityRole="button"
+              accessibilityLabel={t("home.verifyBanner")}
+            >
+              <View
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 10,
+                  backgroundColor: colors.warning + "20",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Ionicons name="warning-outline" size={18} color={colors.warning} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text
+                  style={{
+                    color: tc.textPrimary,
+                    fontSize: 13,
+                    fontFamily: "DMSans_600SemiBold",
+                    marginBottom: 2,
+                  }}
+                >
+                  {t("home.verifyBanner")}
+                </Text>
+                <Text
+                  style={{
+                    color: tc.textSecondary,
+                    fontSize: 11,
+                    fontFamily: "DMSans_400Regular",
+                  }}
+                >
+                  {t("home.verifyBannerDesc")}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={tc.textMuted} />
+            </Pressable>
+          )}
+
           {/* Quick Actions */}
           <View
             style={{
@@ -1201,7 +1323,7 @@ export default function HomeScreen() {
                 icon="arrow-down-circle-outline"
                 label={t("wallet.deposit")}
                 color={colors.success}
-                onPress={() => router.push("/(tabs)/wallet")}
+                onPress={() => router.push("/payment/deposit" as any)}
               />
               <QuickAction
                 icon="send-outline"
@@ -1676,6 +1798,54 @@ export default function HomeScreen() {
               </View>
             )}
           </Pressable>
+
+          {/* User Avatar */}
+          <Pressable
+            onPress={() => router.push("/(tabs)/profile")}
+            accessibilityRole="button"
+            accessibilityLabel="Profile"
+            style={({ pressed, hovered }: any) => ({
+              opacity: pressed ? 0.85 : 1,
+              transform: [{ scale: pressed ? 0.96 : 1 }],
+              ...(Platform.OS === "web" ? { cursor: "pointer", transition: "all 0.15s ease" } as any : {}),
+            })}
+          >
+            {resolveAvatarUrl(user?.avatar_url) ? (
+              <Image
+                source={{ uri: resolveAvatarUrl(user?.avatar_url)! }}
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 14,
+                  borderWidth: 2,
+                  borderColor: colors.primary[500] + "40",
+                }}
+              />
+            ) : (
+              <View
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 14,
+                  backgroundColor: colors.primary[500] + "25",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderWidth: 1,
+                  borderColor: colors.primary[500] + "35",
+                }}
+              >
+                <Text
+                  style={{
+                    color: colors.primary[400],
+                    fontSize: 16,
+                    fontFamily: "DMSans_700Bold",
+                  }}
+                >
+                  {initials}
+                </Text>
+              </View>
+            )}
+          </Pressable>
           </View>
         </View>
 
@@ -1833,6 +2003,68 @@ export default function HomeScreen() {
           </View>
         </View>
 
+        {/* KYC Upgrade Banner — desktop, show for Tier 0 users */}
+        {(user?.kyc_tier ?? 0) === 0 && (
+          <Pressable
+            onPress={() => router.push("/settings/kyc" as any)}
+            style={({ pressed, hovered }: any) => ({
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 14,
+              marginBottom: 20,
+              paddingVertical: 14,
+              paddingHorizontal: 20,
+              borderRadius: 16,
+              backgroundColor: colors.warning + "14",
+              borderWidth: 1,
+              borderColor: colors.warning + "30",
+              ...(Platform.OS === "web" ? {
+                cursor: "pointer",
+                transition: "all 0.2s ease",
+                ...(hovered ? { backgroundColor: colors.warning + "20", borderColor: colors.warning + "50" } : {}),
+              } as any : {}),
+              opacity: pressed ? 0.85 : 1,
+            })}
+            accessibilityRole="button"
+            accessibilityLabel={t("home.verifyBanner")}
+          >
+            <View
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 12,
+                backgroundColor: colors.warning + "20",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Ionicons name="warning-outline" size={20} color={colors.warning} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text
+                style={{
+                  color: tc.textPrimary,
+                  fontSize: 14,
+                  fontFamily: "DMSans_600SemiBold",
+                  marginBottom: 2,
+                }}
+              >
+                {t("home.verifyBanner")}
+              </Text>
+              <Text
+                style={{
+                  color: tc.textSecondary,
+                  fontSize: 12,
+                  fontFamily: "DMSans_400Regular",
+                }}
+              >
+                {t("home.verifyBannerDesc")}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={tc.textMuted} />
+          </Pressable>
+        )}
+
         {/* Row 2: Quick Actions */}
         <View style={{ marginBottom: 24 }}>
           <SectionHeader
@@ -1865,7 +2097,7 @@ export default function HomeScreen() {
               label={t("wallet.deposit")}
               description={t("home.depositDesc")}
               color={colors.success}
-              onPress={() => router.push("/(tabs)/wallet")}
+              onPress={() => router.push("/payment/deposit" as any)}
             />
             <DesktopQuickActionCard
               icon="send-outline"

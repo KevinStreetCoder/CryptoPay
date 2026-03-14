@@ -104,8 +104,23 @@ def monitor_sol_deposits():
     for address in sol_wallets:
         try:
             # Get last known signature for this address (high-water mark)
+            # Priority: 1) Redis cache, 2) latest tx_hash from DB for this address
             cache_key = f"sol:last_sig:{address[:16]}"
             last_sig = cache.get(cache_key)
+            if not last_sig:
+                # Fall back to the most recent deposit tx_hash for this address,
+                # so a Redis restart doesn't cause re-scanning from scratch.
+                latest_deposit = (
+                    BlockchainDeposit.objects.filter(
+                        chain="solana", to_address=address
+                    )
+                    .order_by("-block_number")
+                    .values_list("tx_hash", flat=True)
+                    .first()
+                )
+                if latest_deposit:
+                    # Strip any suffix (e.g. ":USDC:0") to get the raw signature
+                    last_sig = latest_deposit.split(":")[0]
 
             # Query recent signatures
             sig_params = [

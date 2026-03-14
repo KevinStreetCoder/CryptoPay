@@ -17,6 +17,9 @@ import Svg, {
   Line,
   Circle,
   Rect,
+  ClipPath,
+  G,
+  Text as SvgText,
 } from "react-native-svg";
 import { colors, getThemeColors, getThemeShadows } from "../constants/theme";
 import { useThemeMode } from "../stores/theme";
@@ -74,6 +77,15 @@ function formatPrice(value: number): string {
   return `KES ${value.toFixed(6)}`;
 }
 
+/** Compact Y-axis label — no "KES" prefix, abbreviate large numbers */
+function formatAxisPrice(value: number): string {
+  if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
+  if (value >= 10000) return `${(value / 1000).toFixed(1)}K`;
+  if (value >= 1000) return value.toLocaleString(undefined, { maximumFractionDigits: 0 });
+  if (value >= 1) return value.toFixed(2);
+  return value.toFixed(4);
+}
+
 function formatDate(timestamp: string): string {
   const d = new Date(timestamp);
   return d.toLocaleDateString(undefined, {
@@ -82,6 +94,18 @@ function formatDate(timestamp: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+/** X-axis date label — short format based on period */
+function formatXAxisDate(timestamp: string, period: Period): string {
+  const d = new Date(timestamp);
+  if (period === "1D") {
+    return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  }
+  if (period === "7D") {
+    return d.toLocaleDateString(undefined, { weekday: "short" });
+  }
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 /**
@@ -339,6 +363,11 @@ const PERIOD_API_MAP: Record<Period, string> = {
   "3M": "90d",
 };
 
+// Layout constants
+const Y_AXIS_WIDTH = 52; // Space for Y-axis labels on the right
+const X_AXIS_HEIGHT = 22; // Space for X-axis labels at the bottom
+const X_LABEL_COUNT = 5; // Number of X-axis labels
+
 /* ─── Main CryptoChart Component ─── */
 export function CryptoChart({
   data,
@@ -365,15 +394,18 @@ export function CryptoChart({
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
   const isWeb = Platform.OS === "web";
-  const PADDING_H = 0;
   const PADDING_V = 6;
-  // Extra inset so the line + glow never clips at top/bottom
-  const DATA_INSET_TOP = 10;
-  const DATA_INSET_BOTTOM = 4;
+  // Extra inset so the line + glow stroke never clips at top/bottom
+  const DATA_INSET_TOP = 16;
+  const DATA_INSET_BOTTOM = 10;
 
   const onLayout = useCallback((e: LayoutChangeEvent) => {
     setContainerWidth(e.nativeEvent.layout.width);
   }, []);
+
+  // The SVG chart area is narrower to leave room for Y-axis labels
+  const svgWidth = Math.max(0, containerWidth - Y_AXIS_WIDTH);
+  const svgHeight = height - X_AXIS_HEIGHT;
 
   // Data is already filtered by period from API — use directly
   const filteredData = useMemo(() => data || [], [data]);
@@ -402,11 +434,10 @@ export function CryptoChart({
   const changeColor = isPositive ? colors.primary[400] : colors.error;
 
   // Compute SVG points
-  const chartWidth = containerWidth - PADDING_H * 2;
-  const chartHeight = height - PADDING_V * 2;
+  const chartHeight = svgHeight - PADDING_V * 2;
 
   const { points, minRate, maxRate } = useMemo(() => {
-    if (chartData.length < 2 || chartWidth <= 0)
+    if (chartData.length < 2 || svgWidth <= 0)
       return { points: [], minRate: 0, maxRate: 0 };
 
     const rates = chartData.map((d) => d.rate);
@@ -416,32 +447,32 @@ export function CryptoChart({
 
     const drawableHeight = chartHeight - DATA_INSET_TOP - DATA_INSET_BOTTOM;
     const pts = chartData.map((d, i) => ({
-      x: PADDING_H + (i / (chartData.length - 1)) * chartWidth,
+      x: (i / (chartData.length - 1)) * svgWidth,
       y: PADDING_V + DATA_INSET_TOP + drawableHeight - ((d.rate - mn) / range) * drawableHeight,
     }));
 
     return { points: pts, minRate: mn, maxRate: mx };
-  }, [chartData, chartWidth, chartHeight]);
+  }, [chartData, svgWidth, chartHeight]);
 
   const linePath = useMemo(
-    () => buildSmoothPath(points, false, chartHeight + PADDING_V, containerWidth),
-    [points, chartHeight, containerWidth]
+    () => buildSmoothPath(points, false, chartHeight + PADDING_V, svgWidth),
+    [points, chartHeight, svgWidth]
   );
 
   const areaPath = useMemo(
-    () => buildSmoothPath(points, true, chartHeight + PADDING_V, containerWidth),
-    [points, chartHeight, containerWidth]
+    () => buildSmoothPath(points, true, chartHeight + PADDING_V, svgWidth),
+    [points, chartHeight, svgWidth]
   );
 
   // Interaction handlers
   const getIndexFromX = useCallback(
     (pageX: number, containerX: number) => {
-      if (chartData.length < 2 || chartWidth <= 0) return null;
+      if (chartData.length < 2 || svgWidth <= 0) return null;
       const x = pageX - containerX;
-      const ratio = Math.max(0, Math.min(1, x / chartWidth));
+      const ratio = Math.max(0, Math.min(1, x / svgWidth));
       return Math.round(ratio * (chartData.length - 1));
     },
-    [chartData.length, chartWidth]
+    [chartData.length, svgWidth]
   );
 
   const svgContainerRef = useRef<View>(null);
@@ -510,7 +541,6 @@ export function CryptoChart({
   // Measure container on layout
   const handleSvgLayout = useCallback(
     (e: LayoutChangeEvent) => {
-      // Measure absolute position for touch/mouse offset
       if (svgContainerRef.current) {
         (svgContainerRef.current as any).measure?.(
           (_x: number, _y: number, _w: number, _h: number, px: number) => {
@@ -522,15 +552,31 @@ export function CryptoChart({
     []
   );
 
-  // Grid lines at 25%, 50%, 75%
+  // Y-axis: grid lines at 0%, 25%, 50%, 75%, 100%
   const drawableH = chartHeight - DATA_INSET_TOP - DATA_INSET_BOTTOM;
-  const gridLines = [0.25, 0.5, 0.75].map((pct) => ({
+  const gridLines = [0, 0.25, 0.5, 0.75, 1].map((pct) => ({
     y: PADDING_V + DATA_INSET_TOP + drawableH - pct * drawableH,
     label:
       minRate > 0
-        ? formatPrice(minRate + pct * (maxRate - minRate))
+        ? formatAxisPrice(minRate + pct * (maxRate - minRate))
         : "",
   }));
+
+  // X-axis: pick evenly spaced timestamps
+  const xAxisLabels = useMemo(() => {
+    if (chartData.length < 2) return [];
+    const labels: { x: number; label: string }[] = [];
+    const count = Math.min(X_LABEL_COUNT, chartData.length);
+    for (let i = 0; i < count; i++) {
+      const dataIdx = Math.round((i / (count - 1)) * (chartData.length - 1));
+      const xPos = svgWidth > 0 ? (dataIdx / (chartData.length - 1)) * svgWidth : 0;
+      labels.push({
+        x: xPos,
+        label: formatXAxisDate(chartData[dataIdx].timestamp, period),
+      });
+    }
+    return labels;
+  }, [chartData, svgWidth, period]);
 
   // Loading / Empty state
   if (loading || !data || data.length === 0) {
@@ -578,6 +624,7 @@ export function CryptoChart({
         padding: 20,
         borderWidth: 1,
         borderColor: tc.glass.border,
+        overflow: "hidden" as any,
         ...ts.md,
       }}
     >
@@ -638,112 +685,182 @@ export function CryptoChart({
         </View>
       </View>
 
-      {/* Chart Area */}
+      {/* Chart Area + Y-Axis wrapper */}
       <View
-        ref={svgContainerRef}
-        onLayout={(e) => {
-          onLayout(e);
-          handleSvgLayout(e);
-        }}
-        {...webProps}
-        {...nativeTouchProps}
-        style={{
-          width: "100%",
-          height: height,
-          ...(isWeb && interactive ? ({ cursor: "crosshair" } as any) : {}),
-        }}
+        onLayout={onLayout}
+        style={{ width: "100%", height: height }}
       >
-        {containerWidth > 0 && points.length >= 2 && (
-          <Svg
-            width={containerWidth}
-            height={height}
-            viewBox={`0 0 ${containerWidth} ${height}`}
+        <View style={{ flexDirection: "row", height: svgHeight }}>
+          {/* SVG Chart */}
+          <View
+            ref={svgContainerRef}
+            onLayout={handleSvgLayout}
+            {...webProps}
+            {...nativeTouchProps}
+            style={{
+              flex: 1,
+              height: svgHeight,
+              ...(isWeb && interactive ? ({ cursor: "crosshair" } as any) : {}),
+            }}
           >
-            <Defs>
-              <SvgLinearGradient id={`grad-${currency}`} x1="0" y1="0" x2="0" y2="1">
-                <Stop offset="0%" stopColor={color} stopOpacity={0.45} />
-                <Stop offset="60%" stopColor={color} stopOpacity={0.12} />
-                <Stop offset="100%" stopColor={color} stopOpacity={0.0} />
-              </SvgLinearGradient>
-            </Defs>
+            {svgWidth > 0 && points.length >= 2 && (
+              <Svg
+                width={svgWidth}
+                height={svgHeight}
+                viewBox={`0 0 ${svgWidth} ${svgHeight}`}
+              >
+                <Defs>
+                  <SvgLinearGradient id={`grad-${currency}`} x1="0" y1="0" x2="0" y2="1">
+                    <Stop offset="0%" stopColor={color} stopOpacity={0.3} />
+                    <Stop offset="50%" stopColor={color} stopOpacity={0.08} />
+                    <Stop offset="100%" stopColor={color} stopOpacity={0.0} />
+                  </SvgLinearGradient>
+                  <ClipPath id={`clip-${currency}`}>
+                    <Rect x="0" y="0" width={svgWidth} height={svgHeight} />
+                  </ClipPath>
+                </Defs>
 
-            {/* Grid lines */}
-            {gridLines.map((gl, i) => (
-              <Line
-                key={`grid-${i}`}
-                x1={PADDING_H}
-                y1={gl.y}
-                x2={containerWidth - PADDING_H}
-                y2={gl.y}
-                stroke={tc.dark.border}
-                strokeWidth={1}
-                strokeDasharray="4 4"
-                opacity={0.5}
-              />
-            ))}
+                {/* Grid lines */}
+                {gridLines.map((gl, i) => (
+                  <Line
+                    key={`grid-${i}`}
+                    x1={0}
+                    y1={gl.y}
+                    x2={svgWidth}
+                    y2={gl.y}
+                    stroke={tc.dark.border}
+                    strokeWidth={1}
+                    strokeDasharray={i === 0 || i === gridLines.length - 1 ? "0" : "4 4"}
+                    opacity={i === 0 || i === gridLines.length - 1 ? 0.3 : 0.4}
+                  />
+                ))}
 
-            {/* Gradient fill area */}
-            <Path d={areaPath} fill={`url(#grad-${currency})`} />
+                {/* Gradient fill area */}
+                <Path d={areaPath} fill={`url(#grad-${currency})`} clipPath={`url(#clip-${currency})`} />
 
-            {/* Line — glow layer for visibility */}
-            <Path
-              d={linePath}
-              fill="none"
-              stroke={color}
-              strokeWidth={6}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              opacity={0.2}
-            />
-            {/* Line — main */}
-            <Path
-              d={linePath}
-              fill="none"
-              stroke={color}
-              strokeWidth={2.5}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-
-            {/* Active indicator */}
-            {activePoint && (
-              <>
-                {/* Vertical guide line */}
-                <Line
-                  x1={activePoint.x}
-                  y1={PADDING_V}
-                  x2={activePoint.x}
-                  y2={chartHeight + PADDING_V}
+                {/* Line — glow layer */}
+                <Path
+                  d={linePath}
+                  fill="none"
                   stroke={color}
-                  strokeWidth={1}
-                  strokeDasharray="3 3"
-                  opacity={0.5}
+                  strokeWidth={5}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  opacity={0.15}
+                  clipPath={`url(#clip-${currency})`}
                 />
-                {/* Dot */}
-                <Circle
-                  cx={activePoint.x}
-                  cy={activePoint.y}
-                  r={5}
-                  fill={color}
-                  stroke={tc.dark.card}
+                {/* Line — main */}
+                <Path
+                  d={linePath}
+                  fill="none"
+                  stroke={color}
                   strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  clipPath={`url(#clip-${currency})`}
                 />
-              </>
-            )}
-          </Svg>
-        )}
 
-        {/* Tooltip overlay (RN View for better text rendering) */}
-        {activePoint && activeData && (
-          <Tooltip
-            x={activePoint.x}
-            y={activePoint.y}
-            price={formatPrice(activeData.rate)}
-            date={formatDate(activeData.timestamp)}
-            chartWidth={containerWidth}
-            color={color}
-          />
-        )}
+                {/* Active indicator */}
+                {activePoint && (
+                  <>
+                    {/* Vertical guide line */}
+                    <Line
+                      x1={activePoint.x}
+                      y1={PADDING_V}
+                      x2={activePoint.x}
+                      y2={chartHeight + PADDING_V}
+                      stroke={color}
+                      strokeWidth={1}
+                      strokeDasharray="3 3"
+                      opacity={0.5}
+                    />
+                    {/* Outer glow circle */}
+                    <Circle
+                      cx={activePoint.x}
+                      cy={activePoint.y}
+                      r={8}
+                      fill={color}
+                      opacity={0.15}
+                    />
+                    {/* Dot */}
+                    <Circle
+                      cx={activePoint.x}
+                      cy={activePoint.y}
+                      r={4.5}
+                      fill={color}
+                      stroke={tc.dark.card}
+                      strokeWidth={2}
+                    />
+                  </>
+                )}
+              </Svg>
+            )}
+
+            {/* Tooltip overlay (RN View for better text rendering) */}
+            {activePoint && activeData && (
+              <Tooltip
+                x={activePoint.x}
+                y={activePoint.y}
+                price={formatPrice(activeData.rate)}
+                date={formatDate(activeData.timestamp)}
+                chartWidth={svgWidth}
+                color={color}
+              />
+            )}
+          </View>
+
+          {/* Y-Axis Labels */}
+          <View
+            style={{
+              width: Y_AXIS_WIDTH,
+              height: svgHeight,
+              justifyContent: "space-between",
+              paddingLeft: 8,
+            }}
+          >
+            {gridLines.slice().reverse().map((gl, i) => (
+              <Text
+                key={`y-${i}`}
+                style={{
+                  color: tc.textMuted,
+                  fontSize: 10,
+                  fontFamily: "DMSans_400Regular",
+                  textAlign: "left",
+                  lineHeight: 12,
+                }}
+                numberOfLines={1}
+              >
+                {gl.label}
+              </Text>
+            ))}
+          </View>
+        </View>
+
+        {/* X-Axis Labels */}
+        <View
+          style={{
+            height: X_AXIS_HEIGHT,
+            flexDirection: "row",
+            justifyContent: "space-between",
+            paddingRight: Y_AXIS_WIDTH,
+            paddingTop: 6,
+          }}
+        >
+          {xAxisLabels.map((label, i) => (
+            <Text
+              key={`x-${i}`}
+              style={{
+                color: tc.textMuted,
+                fontSize: 10,
+                fontFamily: "DMSans_400Regular",
+                textAlign: i === 0 ? "left" : i === xAxisLabels.length - 1 ? "right" : "center",
+              }}
+              numberOfLines={1}
+            >
+              {label.label}
+            </Text>
+          ))}
+        </View>
       </View>
 
       {/* Period Selector */}
@@ -787,7 +904,7 @@ export function SparklineChart({
 
     const pts = data.map((d, i) => ({
       x: (i / (data.length - 1)) * w,
-      y: 4 + (propHeight - 8) - ((d.rate - mn) / range) * (propHeight - 8),
+      y: 6 + (propHeight - 12) - ((d.rate - mn) / range) * (propHeight - 12),
     }));
 
     return {
@@ -801,7 +918,7 @@ export function SparklineChart({
   return (
     <View
       onLayout={onLayout}
-      style={{ width: propWidth || "100%", height: propHeight }}
+      style={{ width: propWidth || "100%", height: propHeight, overflow: "hidden" as any }}
     >
       {w > 0 && (
         <Svg width={w} height={propHeight} viewBox={`0 0 ${w} ${propHeight}`}>
