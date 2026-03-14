@@ -1387,8 +1387,13 @@ export default function EditProfileScreen() {
       if (pinStr) {
         formData.append("pin", pinStr);
       }
-      formData.append("full_name", fullName.trim());
-      if (email.trim()) {
+      // Only send changed fields to avoid unnecessary PIN requirement
+      const nameChanged = fullName.trim() !== (user?.full_name || "");
+      const emailChanged = email.trim() !== (user?.email || "");
+      if (nameChanged) {
+        formData.append("full_name", fullName.trim());
+      }
+      if (emailChanged) {
         formData.append("email", email.trim());
       }
       if (avatarFile) {
