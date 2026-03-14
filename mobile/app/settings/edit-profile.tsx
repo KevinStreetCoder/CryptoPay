@@ -291,7 +291,7 @@ function EditFormStep({
             </Text>
             <TextInput
               value={fullName}
-              onChangeText={setFullName}
+              onChangeText={(text) => setFullName(text.replace(/[^a-zA-Z\u00C0-\u024F\s'\-\.]/g, ""))}
               onFocus={() => setNameFocused(true)}
               onBlur={() => setNameFocused(false)}
               placeholder="Enter your full name"
@@ -299,6 +299,7 @@ function EditFormStep({
               style={inputStyle(nameFocused)}
               autoCapitalize="words"
               autoCorrect={false}
+              maxLength={50}
             />
           </View>
 

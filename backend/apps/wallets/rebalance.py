@@ -273,9 +273,10 @@ def create_rebalance_order(
     reason: str = "",
     sell_currency: str = "USDT",
     force: bool = False,
-) -> Optional[RebalanceOrder]:
+) -> tuple[Optional["RebalanceOrder"], str]:
     """
     Create a new rebalance order if conditions are met.
+    Returns (order, reject_reason) — order is None if preconditions fail.
 
     Checks:
     1. No active rebalance already in-flight
@@ -287,33 +288,33 @@ def create_rebalance_order(
     lock = cache.add(REBALANCE_LOCK_KEY, "1", timeout=60)
     if not lock:
         logger.info("Rebalance lock held by another process, skipping")
-        return None
+        return None, "Another rebalance is being processed. Please wait."
 
     try:
         if has_active_rebalance():
             logger.info("Active rebalance order exists, skipping new order")
-            return None
+            return None, "An active rebalance order already exists. Complete or cancel it first."
 
         if is_in_cooldown() and not force:
             logger.info("Rebalance cool-down active, skipping")
-            return None
+            return None, "Rebalance cool-down period active. Use 'Force' to override."
 
         current_float = get_current_float_kes()
         if current_float is None:
             logger.warning("Cannot determine float balance — skipping rebalance")
-            return None
+            return None, "Cannot determine current M-Pesa float balance. Check balance API."
 
         if current_float >= TRIGGER_FLOAT_KES and not force:
             logger.info(
                 f"Float KES {current_float:,.0f} >= trigger {TRIGGER_FLOAT_KES:,.0f}, "
                 f"no rebalance needed"
             )
-            return None
+            return None, f"Float is healthy (KES {current_float:,.0f}). No rebalance needed. Use 'Force' to override."
 
         kes_needed = calculate_rebalance_amount(current_float)
         if kes_needed <= 0 and not force:
             logger.info("Rebalance deficit below minimum threshold")
-            return None
+            return None, f"Deficit below minimum threshold (KES {MIN_REBALANCE_KES:,.0f}). Use 'Force' to override."
 
         if force and kes_needed <= 0:
             kes_needed = MIN_REBALANCE_KES
@@ -324,11 +325,11 @@ def create_rebalance_order(
             rate = quote["rate"]
         except Exception as e:
             logger.error(f"Failed to get exchange rate: {e}")
-            return None
+            return None, f"Failed to get exchange rate for {sell_currency}. Try again later."
 
         if rate <= 0:
             logger.error(f"Invalid exchange rate: {rate}")
-            return None
+            return None, "Invalid exchange rate received. Try again later."
 
         crypto_amount = (kes_needed / rate).quantize(Decimal("0.00000001"))
 
@@ -358,6 +359,9 @@ def create_rebalance_order(
             reason=reason,
         )
 
+        # Safe to set unconditionally: REBALANCE_LOCK_KEY (acquired above via
+        # cache.add) serialises all create_rebalance_order calls, and
+        # has_active_rebalance() already rejected if an active order exists.
         cache.set(REBALANCE_ACTIVE_KEY, str(order.id), timeout=86400)
 
         logger.info(
@@ -365,7 +369,7 @@ def create_rebalance_order(
             f"Sell {crypto_amount} {sell_currency} → ~KES {kes_needed:,.0f}"
         )
 
-        return order
+        return order, ""
 
     finally:
         cache.delete(REBALANCE_LOCK_KEY)
@@ -422,8 +426,18 @@ def confirm_rebalance_settlement(
     if kes_received <= 0:
         raise ValueError("KES received must be greater than zero")
 
-    # Upper-bound sanity check: kes_received cannot exceed 5x expected amount
+    # Bounds sanity checks on kes_received
     order = RebalanceOrder.objects.select_for_update().get(id=order_id)
+
+    # Lower bound: reject if received less than 50% of expected
+    min_allowed = order.expected_kes_amount * Decimal("0.5")
+    if kes_received < min_allowed:
+        raise ValueError(
+            f"KES received ({kes_received:,.0f}) is less than 50% of expected "
+            f"({order.expected_kes_amount:,.0f}). Verify amount."
+        )
+
+    # Upper bound: reject if received more than 5x expected
     max_allowed = order.expected_kes_amount * 5
     if kes_received > max_allowed:
         raise ValueError(
@@ -476,10 +490,10 @@ def confirm_rebalance_settlement(
     if hot_wallet:
         if hot_wallet.balance < order.sell_amount:
             deficit = order.sell_amount - hot_wallet.balance
-            logger.critical(
-                f"HOT/{order.sell_currency} balance deficit detected during rebalance! "
-                f"Balance: {hot_wallet.balance}, Sell: {order.sell_amount}, "
-                f"Deficit: {deficit}. Clamping to zero — INVESTIGATE IMMEDIATELY."
+            raise ValueError(
+                f"HOT/{order.sell_currency} has insufficient balance for deduction. "
+                f"Balance: {hot_wallet.balance}, Required: {order.sell_amount}, "
+                f"Deficit: {deficit}. Top up the hot wallet or adjust the order."
             )
         SystemWallet.objects.filter(id=hot_wallet.id).update(
             balance=Greatest(F("balance") - order.sell_amount, Value(Decimal("0"))),

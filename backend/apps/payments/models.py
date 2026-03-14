@@ -79,6 +79,10 @@ class Transaction(models.Model):
     class Meta:
         db_table = "transactions"
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=['user', 'status', 'created_at'], name='tx_user_status_created'),
+            models.Index(fields=['user', 'created_at'], name='tx_user_created'),
+        ]
 
     def __str__(self):
         return f"{self.type} {self.status} - {self.source_amount} {self.source_currency}"

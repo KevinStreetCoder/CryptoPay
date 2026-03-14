@@ -12,6 +12,7 @@ import { GlassCard } from "../../src/components/GlassCard";
 import { PaymentStepper } from "../../src/components/PaymentStepper";
 import { colors, getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
+import { useLocale } from "../../src/hooks/useLocale";
 
 const isWeb = Platform.OS === "web";
 const useNative = Platform.OS !== "web";
@@ -176,30 +177,51 @@ export default function PaymentSuccessScreen() {
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
   const ts = getThemeShadows(isDark);
+  const { t } = useLocale();
   const [downloadingReceipt, setDownloadingReceipt] = useState(false);
+  const [liveStatus, setLiveStatus] = useState(params.tx_status || "processing");
 
   const { width } = useWindowDimensions();
   const isDesktop = isWeb && width >= 768;
 
-  // Refresh wallet balances immediately + again after 3s for async callbacks (BUY flow)
+  // Refresh wallet balances immediately
   useEffect(() => {
     queryClient.invalidateQueries({ queryKey: ["wallets"] });
     queryClient.invalidateQueries({ queryKey: ["transactions"] });
-    const timer = setTimeout(() => {
-      queryClient.invalidateQueries({ queryKey: ["wallets"] });
-      queryClient.invalidateQueries({ queryKey: ["transactions"] });
-    }, 3000);
-    return () => clearTimeout(timer);
   }, []);
+
+  // Auto-poll when status is processing — update live when backend confirms
+  useEffect(() => {
+    if (liveStatus === "completed" || liveStatus === "failed" || !params.transaction_id) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const { paymentsApi } = require("../../src/api/payments");
+        const { data } = await paymentsApi.transactionStatus(params.transaction_id);
+        const newStatus = data.status || "processing";
+        if (newStatus !== liveStatus) {
+          setLiveStatus(newStatus);
+          queryClient.invalidateQueries({ queryKey: ["wallets"] });
+          queryClient.invalidateQueries({ queryKey: ["transactions"] });
+          if (newStatus === "completed" && !isWeb) {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          }
+        }
+      } catch {}
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [liveStatus, params.transaction_id]);
 
   // Staggered fade-in for content sections
   const cardFade = useRef(new Animated.Value(0)).current;
   const cardSlide = useRef(new Animated.Value(30)).current;
   const buttonsFade = useRef(new Animated.Value(0)).current;
 
-  const isFailed = params.status === "failed";
-  const isCompleted = params.tx_status === "completed";
-  const statusLabel = isFailed ? "Failed" : isCompleted ? "Completed" : "Processing";
+  const isFailed = params.status === "failed" || liveStatus === "failed";
+  const isCompleted = liveStatus === "completed";
+  const isProcessing = !isFailed && !isCompleted;
+  const statusLabel = isFailed ? t("payment.failed") : isCompleted ? t("payment.completed") : t("payment.processing");
   const statusColor = isFailed ? colors.error : isCompleted ? colors.success : "#F59E0B";
 
   useEffect(() => {
@@ -207,7 +229,9 @@ export default function PaymentSuccessScreen() {
       Haptics.notificationAsync(
         isFailed
           ? Haptics.NotificationFeedbackType.Error
-          : Haptics.NotificationFeedbackType.Success
+          : isCompleted
+            ? Haptics.NotificationFeedbackType.Success
+            : Haptics.NotificationFeedbackType.Warning
       );
     }
 
@@ -228,6 +252,8 @@ export default function PaymentSuccessScreen() {
 
   const toast = useToast();
   const amountKES = parseFloat(params.amount_kes || "0");
+  // Detect if this is a deposit/buy flow (crypto received) vs payment flow (crypto spent)
+  const isBuyFlow = !params.recipient || params.recipient?.startsWith("+254") || params.recipient?.startsWith("0");
 
   const handleDownloadReceipt = async () => {
     const txId = params.transaction_id;
@@ -258,7 +284,7 @@ export default function PaymentSuccessScreen() {
   };
 
   const handleShare = async () => {
-    const receiptText = `CryptoPay Payment Receipt\n\nAmount: KSh ${amountKES.toLocaleString()}\nCrypto: ${params.crypto_amount} ${params.crypto_currency}\nSent To: ${params.recipient}\nStatus: ${statusLabel}\n\nPowered by CryptoPay`;
+    const receiptText = `CryptoPay Receipt\n\nTotal: KSh ${amountKES.toLocaleString()}\n${isBuyFlow ? "Received" : "Used"}: ${params.crypto_amount} ${params.crypto_currency}\n${isBuyFlow ? "Phone" : "Sent To"}: ${params.recipient}\nStatus: ${statusLabel}\n${params.transaction_id ? `Ref: ${params.transaction_id.slice(0, 8)}` : ""}\n\nPowered by CryptoPay`;
 
     if (isWeb) {
       if (navigator.clipboard) {
@@ -301,7 +327,7 @@ export default function PaymentSuccessScreen() {
             letterSpacing: -0.5,
           }}
         >
-          {isFailed ? "Payment Failed" : isCompleted ? "Payment Complete!" : "Payment Sent!"}
+          {isFailed ? t("payment.paymentFailed") : isCompleted ? t("payment.paymentComplete") : t("payment.paymentProcessing")}
         </Text>
         <Text
           style={{
@@ -314,10 +340,10 @@ export default function PaymentSuccessScreen() {
           }}
         >
           {isFailed
-            ? params.error_message || "Something went wrong. Your funds are safe."
+            ? params.error_message || t("payment.paymentFailedDesc")
             : isCompleted
-              ? "Your payment has been completed successfully"
-              : "Your payment is being processed via M-Pesa"}
+              ? t("payment.paymentConfirmedDesc")
+              : t("payment.paymentProcessingDesc")}
         </Text>
 
         {/* Receipt Card — animated */}
@@ -353,7 +379,7 @@ export default function PaymentSuccessScreen() {
                   marginBottom: 8,
                 }}
               >
-                {isFailed ? "Amount" : "Amount Paid"}
+                {isFailed ? "Amount" : "Total Charged"}
               </Text>
               <Text
                 style={{
@@ -368,13 +394,23 @@ export default function PaymentSuccessScreen() {
             </View>
 
             <View style={{ paddingHorizontal: 24 }}>
-              <DetailRow label="Crypto Used" value={`${params.crypto_amount} ${params.crypto_currency}`} icon="wallet-outline" tc={tc} />
+              <DetailRow
+                label={isBuyFlow ? "Crypto Received" : "Crypto Used"}
+                value={`${params.crypto_amount} ${params.crypto_currency}`}
+                icon={isBuyFlow ? "arrow-down-circle-outline" : "wallet-outline"}
+                tc={tc}
+              />
               <View style={{ height: 1, backgroundColor: tc.glass.border }} />
-              <DetailRow label="Sent To" value={params.recipient || "\u2014"} icon="person-outline" tc={tc} />
+              <DetailRow
+                label={isBuyFlow ? "M-Pesa Phone" : "Sent To"}
+                value={params.recipient || "\u2014"}
+                icon={isBuyFlow ? "phone-portrait-outline" : "person-outline"}
+                tc={tc}
+              />
               <View style={{ height: 1, backgroundColor: tc.glass.border }} />
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 14 }}>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                  <Ionicons name={isFailed ? "close-circle-outline" : "checkmark-circle-outline"} size={16} color={tc.textMuted} />
+                  <Ionicons name={isFailed ? "close-circle-outline" : isCompleted ? "checkmark-circle" : "time-outline"} size={16} color={statusColor} />
                   <Text style={{ color: tc.textMuted, fontSize: 14, fontFamily: "DMSans_400Regular" }}>Status</Text>
                 </View>
                 <View
@@ -382,7 +418,7 @@ export default function PaymentSuccessScreen() {
                     flexDirection: "row",
                     alignItems: "center",
                     gap: 6,
-                    backgroundColor: isFailed ? colors.error + "15" : colors.success + "15",
+                    backgroundColor: statusColor + "15",
                     borderRadius: 10,
                     paddingHorizontal: 12,
                     paddingVertical: 5,

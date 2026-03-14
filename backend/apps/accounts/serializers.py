@@ -4,12 +4,38 @@ from rest_framework import serializers
 
 from .models import User
 
+# Name validation: letters, spaces, hyphens, apostrophes, periods — supports
+# international names (accents, Swahili, Arabic, etc.) via Unicode \w.
+# Max 50 chars per best practices. No numbers, no special symbols.
+NAME_REGEX = re.compile(r"^[\w\s'\-\.]+$", re.UNICODE)
+NAME_MAX_LENGTH = 50
+NAME_MIN_LENGTH = 2
+
+
+def validate_full_name(value: str) -> str:
+    """Shared name validation for registration and profile update."""
+    value = " ".join(value.split())  # Normalize whitespace
+    if not value:
+        return value
+    if len(value) < NAME_MIN_LENGTH:
+        raise serializers.ValidationError(f"Name must be at least {NAME_MIN_LENGTH} characters.")
+    if len(value) > NAME_MAX_LENGTH:
+        raise serializers.ValidationError(f"Name must be at most {NAME_MAX_LENGTH} characters.")
+    if not NAME_REGEX.match(value):
+        raise serializers.ValidationError(
+            "Name can only contain letters, spaces, hyphens, apostrophes, and periods."
+        )
+    # Reject names that are all numbers or contain suspicious patterns
+    if value.replace(" ", "").isdigit():
+        raise serializers.ValidationError("Name cannot be only numbers.")
+    return value
+
 
 class RegisterSerializer(serializers.Serializer):
     phone = serializers.CharField(max_length=15)
     pin = serializers.CharField(min_length=6, max_length=6, write_only=True)
     otp = serializers.CharField(max_length=6, write_only=True)
-    full_name = serializers.CharField(max_length=150, required=False, default="")
+    full_name = serializers.CharField(max_length=NAME_MAX_LENGTH, required=False, default="")
 
     def validate_phone(self, value):
         # Normalize Kenyan phone: 07XX → +2547XX
@@ -28,6 +54,9 @@ class RegisterSerializer(serializers.Serializer):
             raise serializers.ValidationError("Phone number already registered")
 
         return value
+
+    def validate_full_name(self, value):
+        return validate_full_name(value)
 
     def validate_pin(self, value):
         if not value.isdigit():
@@ -190,14 +219,17 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class ProfileUpdateSerializer(serializers.Serializer):
-    full_name = serializers.CharField(max_length=150, required=False)
+    full_name = serializers.CharField(max_length=NAME_MAX_LENGTH, required=False)
     email = serializers.EmailField(required=False, allow_blank=True)
+
+    def validate_full_name(self, value):
+        return validate_full_name(value)
 
     def validate_email(self, value):
         if not value:
             return value
         user = self.context.get("user")
-        if User.objects.filter(email=value).exclude(id=user.id).exists():
+        if User.objects.filter(email__iexact=value).exclude(id=user.id).exists():
             raise serializers.ValidationError("Email already in use")
         return value
 

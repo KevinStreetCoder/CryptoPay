@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { View } from "react-native";
+import { View, Platform } from "react-native";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
@@ -19,6 +19,25 @@ import { getThemeColors } from "../src/constants/theme";
 import { initPrivacy } from "../src/utils/privacy";
 import { LanguageProvider } from "../src/contexts/LanguageContext";
 import { OnboardingModal, ONBOARDING_COMPLETED_KEY } from "./onboarding";
+import { AppTourProvider, triggerAppTour } from "../src/components/AppTour";
+
+// WalletConnect AppKit — gracefully degrade if not available (Expo Go)
+let AppKitModal: React.ComponentType | null = null;
+let initAppKit: (() => any) | null = null;
+
+try {
+  const appkitConfig = require("../src/config/appkit");
+  initAppKit = appkitConfig.initAppKit;
+
+  // Only load the native AppKit modal on non-web platforms
+  // On web, AppKit uses a web modal that doesn't need this component
+  if (Platform.OS !== "web") {
+    const appkitRN = require("@reown/appkit-react-native");
+    AppKitModal = appkitRN.AppKit;
+  }
+} catch {
+  // AppKit not available — Expo Go or missing dependencies
+}
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -92,6 +111,8 @@ function RootNavigator() {
 
   const handleOnboardingComplete = useCallback(() => {
     setShowOnboarding(false);
+    // Trigger the interactive tooltip tour after onboarding slides
+    triggerAppTour();
   }, []);
 
   if (!appReady) {
@@ -136,6 +157,18 @@ function RootNavigator() {
   );
 }
 
+// Initialize AppKit once at module level
+// initAppKit() returns null if PROJECT_ID is missing — guard <AppKit /> on success
+let appKitReady = false;
+if (initAppKit) {
+  try {
+    const result = initAppKit();
+    appKitReady = result != null;
+  } catch {
+    // Silently fail — WalletConnect won't be available
+  }
+}
+
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
     DMSans_400Regular,
@@ -154,7 +187,10 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <LanguageProvider>
             <ToastProvider>
-              <RootNavigator />
+              <AppTourProvider>
+                <RootNavigator />
+              </AppTourProvider>
+              {appKitReady && AppKitModal && <AppKitModal />}
             </ToastProvider>
           </LanguageProvider>
         </QueryClientProvider>

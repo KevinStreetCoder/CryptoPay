@@ -455,7 +455,12 @@ CONFIRMATION_TIERS = {
 
 # --- Logging ---
 LOG_DIR = BASE_DIR / "logs"
-LOG_DIR.mkdir(exist_ok=True)
+try:
+    LOG_DIR.mkdir(exist_ok=True)
+except OSError:
+    # Fallback for non-root user in Docker
+    LOG_DIR = Path("/tmp/cryptopay-logs")
+    LOG_DIR.mkdir(exist_ok=True)
 
 LOGGING = {
     "version": 1,

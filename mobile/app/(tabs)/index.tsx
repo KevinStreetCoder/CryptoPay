@@ -132,6 +132,9 @@ function getLast7DayLabels(): string[] {
   return labels;
 }
 
+const DEPOSIT_TYPES = ["BUY", "KES_DEPOSIT", "KES_DEPOSIT_C2B"];
+const PAYMENT_TYPES = ["PAYBILL_PAYMENT", "TILL_PAYMENT", "SEND_MPESA"];
+
 function getLast7DayTotals(transactions: Transaction[]): number[] {
   const now = new Date();
   const totals: number[] = [0, 0, 0, 0, 0, 0, 0];
@@ -140,7 +143,6 @@ function getLast7DayTotals(transactions: Transaction[]): number[] {
     const txDate = new Date(tx.created_at);
     const diffMs = now.getTime() - txDate.getTime();
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    // Index 6 = today, 5 = yesterday, ..., 0 = 6 days ago
     if (diffDays >= 0 && diffDays < 7) {
       const index = 6 - diffDays;
       totals[index] += getTxKesAmount(tx);
@@ -148,6 +150,33 @@ function getLast7DayTotals(transactions: Transaction[]): number[] {
   }
 
   return totals;
+}
+
+function getLast7DaySplit(transactions: Transaction[]): {
+  deposits: number[];
+  payments: number[];
+} {
+  const now = new Date();
+  const deposits: number[] = [0, 0, 0, 0, 0, 0, 0];
+  const payments: number[] = [0, 0, 0, 0, 0, 0, 0];
+
+  for (const tx of transactions) {
+    if (tx.status !== "completed") continue;
+    const txDate = new Date(tx.created_at);
+    const diffMs = now.getTime() - txDate.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    if (diffDays >= 0 && diffDays < 7) {
+      const index = 6 - diffDays;
+      const amount = getTxKesAmount(tx);
+      if (DEPOSIT_TYPES.includes(tx.type)) {
+        deposits[index] += amount;
+      } else if (PAYMENT_TYPES.includes(tx.type)) {
+        payments[index] += amount;
+      }
+    }
+  }
+
+  return { deposits, payments };
 }
 
 function computeChangePercent(transactions: Transaction[]): string {
@@ -181,53 +210,136 @@ function computeChangePercent(transactions: Transaction[]): string {
   return `${sign}${change.toFixed(2)}%`;
 }
 
-/* ─── Mini line chart built with View elements ─── */
+/* ─── Interactive dual-line portfolio chart ─── */
 interface PortfolioChartProps {
   chartPoints: number[];
   chartLabels: string[];
   changePercent: string;
+  depositPoints: number[];
+  paymentPoints: number[];
   tc: ReturnType<typeof getThemeColors>;
   ts: ReturnType<typeof getThemeShadows>;
 }
+
+const DEPOSIT_COLOR = "#10B981"; // emerald
+const PAYMENT_COLOR = "#A78BFA"; // violet
 
 function PortfolioChart({
   chartPoints,
   chartLabels,
   changePercent,
+  depositPoints,
+  paymentPoints,
   tc,
   ts,
 }: PortfolioChartProps) {
   const { width: windowWidth } = useWindowDimensions();
-  const isDesktopChart = Platform.OS === "web" && windowWidth >= 900;
-  const chartWidth = isDesktopChart ? Math.min(windowWidth * 0.25, 400) : 280;
-  const chartHeight = isDesktopChart ? 120 : 100;
-  const hasData = chartPoints.some((v) => v > 0);
+  const isWeb = Platform.OS === "web";
+  const isDesktopChart = isWeb && windowWidth >= 900;
+  const chartWidth = isDesktopChart ? Math.min(windowWidth * 0.25, 400) : windowWidth - 80;
+  const chartHeight = isDesktopChart ? 130 : 110;
 
-  const maxVal = hasData ? Math.max(...chartPoints) : 1;
-  const minVal = hasData ? Math.min(...chartPoints) : 0;
-  const range = maxVal - minVal || 1;
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
-  // If no data, show a flat line in the middle
-  const displayPoints = hasData ? chartPoints : chartPoints.map(() => 0.5);
-  const displayMax = hasData ? maxVal : 1;
-  const displayMin = hasData ? minVal : 0;
-  const displayRange = displayMax - displayMin || 1;
+  const allValues = [...depositPoints, ...paymentPoints];
+  const hasData = allValues.some((v) => v > 0);
+  const globalMax = hasData ? Math.max(...allValues, 1) : 1;
 
-  const CHART_PAD_TOP = 16;
-  const CHART_PAD_BOTTOM = 12;
+  const CHART_PAD_TOP = 12;
+  const CHART_PAD_BOTTOM = 8;
   const usableHeight = chartHeight - CHART_PAD_TOP - CHART_PAD_BOTTOM;
 
-  const points = displayPoints.map((val, i) => ({
-    x: (i / (displayPoints.length - 1)) * chartWidth,
-    y:
-      CHART_PAD_TOP +
-      usableHeight -
-      ((val - displayMin) / displayRange) * usableHeight,
-  }));
+  const toPoints = (data: number[]) =>
+    data.map((val, i) => ({
+      x: (i / Math.max(data.length - 1, 1)) * chartWidth,
+      y: CHART_PAD_TOP + usableHeight - (val / globalMax) * usableHeight,
+      value: val,
+    }));
+
+  const depPts = toPoints(depositPoints);
+  const payPts = toPoints(paymentPoints);
 
   const isPositive = changePercent.startsWith("+");
   const trendIcon = isPositive ? "trending-up" : "trending-down";
   const trendColor = isPositive ? colors.primary[400] : colors.error;
+
+  const renderLine = (
+    pts: { x: number; y: number }[],
+    color: string,
+    prefix: string
+  ) =>
+    pts.map((point, i) => {
+      if (i === 0) return null;
+      const prev = pts[i - 1];
+      const dx = point.x - prev.x;
+      const dy = point.y - prev.y;
+      const length = Math.sqrt(dx * dx + dy * dy);
+      const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+      return (
+        <View
+          key={`${prefix}-${i}`}
+          style={{
+            position: "absolute",
+            left: prev.x,
+            top: prev.y,
+            width: length,
+            height: 2.5,
+            backgroundColor: color,
+            borderRadius: 1.5,
+            transform: [{ rotate: `${angle}deg` }],
+            transformOrigin: "0 0",
+          }}
+        />
+      );
+    });
+
+  const renderDots = (
+    pts: { x: number; y: number }[],
+    color: string,
+    prefix: string
+  ) =>
+    pts.map((point, i) => (
+      <View
+        key={`${prefix}-dot-${i}`}
+        style={{
+          position: "absolute",
+          left: point.x - 3.5,
+          top: point.y - 3.5,
+          width: 7,
+          height: 7,
+          borderRadius: 3.5,
+          backgroundColor: activeIndex === i ? color : color + "B0",
+          borderWidth: 2,
+          borderColor: tc.dark.card,
+          ...(activeIndex === i ? { width: 9, height: 9, borderRadius: 4.5, left: point.x - 4.5, top: point.y - 4.5 } : {}),
+        }}
+      />
+    ));
+
+  // Touch/hover zones for interactivity
+  const hitZones = chartLabels.map((_, i) => {
+    const zoneWidth = chartWidth / chartLabels.length;
+    return (
+      <Pressable
+        key={`hit-${i}`}
+        onPressIn={() => setActiveIndex(i)}
+        onPressOut={() => setActiveIndex(null)}
+        onHoverIn={() => setActiveIndex(i)}
+        onHoverOut={() => setActiveIndex(null)}
+        style={{
+          position: "absolute",
+          left: i * zoneWidth,
+          top: 0,
+          width: zoneWidth,
+          height: chartHeight,
+          ...(isWeb ? { cursor: "crosshair" } as any : {}),
+        }}
+      />
+    );
+  });
+
+  const totalDeposits = depositPoints.reduce((a, b) => a + b, 0);
+  const totalPayments = paymentPoints.reduce((a, b) => a + b, 0);
 
   return (
     <View
@@ -248,7 +360,7 @@ function PortfolioChart({
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "space-between",
-          marginBottom: 16,
+          marginBottom: 12,
         }}
       >
         <View>
@@ -267,7 +379,7 @@ function PortfolioChart({
           <Text
             style={{
               color: tc.textPrimary,
-              fontSize: 22,
+              fontSize: 20,
               fontFamily: "DMSans_700Bold",
             }}
           >
@@ -285,7 +397,7 @@ function PortfolioChart({
             gap: 4,
           }}
         >
-          <Ionicons name={trendIcon} size={14} color={trendColor} />
+          <Ionicons name={trendIcon as any} size={14} color={trendColor} />
           <Text
             style={{
               color: trendColor,
@@ -298,6 +410,58 @@ function PortfolioChart({
         </View>
       </View>
 
+      {/* Legend */}
+      <View style={{ flexDirection: "row", gap: 16, marginBottom: 12 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: DEPOSIT_COLOR }} />
+          <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_500Medium" }}>
+            Deposits
+          </Text>
+          <Text style={{ color: tc.textSecondary, fontSize: 11, fontFamily: "DMSans_600SemiBold" }}>
+            KSh {totalDeposits.toLocaleString()}
+          </Text>
+        </View>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: PAYMENT_COLOR }} />
+          <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_500Medium" }}>
+            Payments
+          </Text>
+          <Text style={{ color: tc.textSecondary, fontSize: 11, fontFamily: "DMSans_600SemiBold" }}>
+            KSh {totalPayments.toLocaleString()}
+          </Text>
+        </View>
+      </View>
+
+      {/* Interactive tooltip */}
+      {activeIndex !== null && (
+        <View
+          style={{
+            backgroundColor: tc.dark.elevated,
+            borderRadius: 10,
+            paddingHorizontal: 12,
+            paddingVertical: 8,
+            marginBottom: 8,
+            borderWidth: 1,
+            borderColor: tc.glass.border,
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <Text style={{ color: tc.textSecondary, fontSize: 12, fontFamily: "DMSans_600SemiBold" }}>
+            {chartLabels[activeIndex]}
+          </Text>
+          <View style={{ flexDirection: "row", gap: 14 }}>
+            <Text style={{ color: DEPOSIT_COLOR, fontSize: 12, fontFamily: "DMSans_600SemiBold" }}>
+              +KSh {depositPoints[activeIndex]?.toLocaleString() || "0"}
+            </Text>
+            <Text style={{ color: PAYMENT_COLOR, fontSize: 12, fontFamily: "DMSans_600SemiBold" }}>
+              -KSh {paymentPoints[activeIndex]?.toLocaleString() || "0"}
+            </Text>
+          </View>
+        </View>
+      )}
+
       {/* Chart area */}
       <View
         style={{
@@ -308,83 +472,81 @@ function PortfolioChart({
         }}
       >
         {/* Horizontal grid lines */}
-        {[0, 1, 2].map((i) => (
+        {[0, 1, 2, 3].map((i) => (
           <View
             key={`grid-${i}`}
             style={{
               position: "absolute",
               left: 0,
               right: 0,
-              top: (i / 2) * chartHeight,
+              top: (i / 3) * chartHeight,
               height: 1,
-              backgroundColor: tc.glass.border,
+              backgroundColor: tc.glass.border + "60",
             }}
           />
         ))}
 
-        {/* Line segments */}
-        {points.map((point, i) => {
-          if (i === 0) return null;
-          const prev = points[i - 1];
-          const dx = point.x - prev.x;
-          const dy = point.y - prev.y;
-          const length = Math.sqrt(dx * dx + dy * dy);
-          const angle = Math.atan2(dy, dx) * (180 / Math.PI);
-          return (
-            <View
-              key={`line-${i}`}
-              style={{
-                position: "absolute",
-                left: prev.x,
-                top: prev.y,
-                width: length,
-                height: 2,
-                backgroundColor: hasData
-                  ? colors.primary[400]
-                  : tc.textMuted,
-                borderRadius: 1,
-                transform: [{ rotate: `${angle}deg` }],
-                transformOrigin: "0 0",
-              }}
-            />
-          );
-        })}
-
-        {/* Dots */}
-        {points.map((point, i) => (
+        {/* Active day vertical indicator */}
+        {activeIndex !== null && (
           <View
-            key={`dot-${i}`}
             style={{
               position: "absolute",
-              left: point.x - 4,
-              top: point.y - 4,
-              width: 8,
-              height: 8,
-              borderRadius: 4,
-              backgroundColor: hasData
-                ? colors.primary[400]
-                : tc.textMuted,
-              borderWidth: 2,
-              borderColor: tc.dark.card,
+              left: (activeIndex / Math.max(chartLabels.length - 1, 1)) * chartWidth,
+              top: 0,
+              width: 1,
+              height: chartHeight,
+              backgroundColor: tc.textMuted + "40",
+            }}
+          />
+        )}
+
+        {/* Area fills (subtle gradient approximation) */}
+        {hasData && depPts.map((point, i) => (
+          <View
+            key={`dep-area-${i}`}
+            style={{
+              position: "absolute",
+              left: point.x - 1,
+              top: point.y,
+              width: 2,
+              height: chartHeight - point.y,
+              backgroundColor: DEPOSIT_COLOR + "08",
+            }}
+          />
+        ))}
+        {hasData && payPts.map((point, i) => (
+          <View
+            key={`pay-area-${i}`}
+            style={{
+              position: "absolute",
+              left: point.x - 1,
+              top: point.y,
+              width: 2,
+              height: chartHeight - point.y,
+              backgroundColor: PAYMENT_COLOR + "06",
             }}
           />
         ))}
 
-        {/* Glow under the line (area fill approximation) */}
-        {hasData &&
-          points.map((point, i) => (
-            <View
-              key={`glow-${i}`}
-              style={{
-                position: "absolute",
-                left: point.x - 1,
-                top: point.y,
-                width: 2,
-                height: chartHeight - point.y,
-                backgroundColor: colors.primary[400] + "08",
-              }}
-            />
-          ))}
+        {/* Lines */}
+        {hasData && renderLine(depPts, DEPOSIT_COLOR, "dep")}
+        {hasData && renderLine(payPts, PAYMENT_COLOR, "pay")}
+
+        {/* Dots */}
+        {hasData && renderDots(depPts, DEPOSIT_COLOR, "dep")}
+        {hasData && renderDots(payPts, PAYMENT_COLOR, "pay")}
+
+        {/* No data message */}
+        {!hasData && (
+          <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+            <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_400Regular" }}>
+              No activity this week
+            </Text>
+          </View>
+        )}
+
+        {/* Hit zones for interactivity */}
+        {hitZones}
       </View>
 
       {/* X-axis labels */}
@@ -392,8 +554,7 @@ function PortfolioChart({
         style={{
           flexDirection: "row",
           justifyContent: "space-between",
-          marginTop: 10,
-          paddingHorizontal: 0,
+          marginTop: 8,
           width: chartWidth,
           alignSelf: "center",
         }}
@@ -402,9 +563,9 @@ function PortfolioChart({
           <Text
             key={`${label}-${idx}`}
             style={{
-              color: tc.textMuted,
+              color: activeIndex === idx ? tc.textPrimary : tc.textMuted,
               fontSize: 10,
-              fontFamily: "DMSans_400Regular",
+              fontFamily: activeIndex === idx ? "DMSans_600SemiBold" : "DMSans_400Regular",
               textAlign: "center",
               width: chartWidth / chartLabels.length,
             }}
@@ -965,7 +1126,9 @@ function MobileCryptoCharts({
   );
 }
 
-export default function HomeScreen() {
+import { AppTourProvider, TourStep, TourAutoStart } from "../../src/components/AppTour";
+
+function HomeScreenContent() {
   const router = useRouter();
   const { user } = useAuth();
   const { t } = useLocale();
@@ -1013,6 +1176,7 @@ export default function HomeScreen() {
   /* ─── Derive chart data from real transactions ─── */
   const chartLabels = useMemo(() => getLast7DayLabels(), []);
   const chartPoints = useMemo(() => getLast7DayTotals(allTx), [allTx]);
+  const chartSplit = useMemo(() => getLast7DaySplit(allTx), [allTx]);
   const changePercent = useMemo(() => computeChangePercent(allTx), [allTx]);
 
   const tickerRates = (rates || [])
@@ -1046,6 +1210,7 @@ export default function HomeScreen() {
           }}
         >
           {/* Header */}
+          <TourStep nameKey="tour.step5Title" textKey="tour.step5Text" order={5}>
           <View
             style={{
               flexDirection: "row",
@@ -1214,12 +1379,15 @@ export default function HomeScreen() {
               )}
             </Pressable>
           </View>
+          </TourStep>
 
           {/* Balance Card */}
+          <TourStep nameKey="tour.step1Title" textKey="tour.step1Text" order={1}>
           <View style={{ marginBottom: 24, paddingHorizontal: 0 }}>
             {wallets && <BalanceCard wallets={wallets} />}
             {walletsLoading && <BalanceCardSkeleton />}
           </View>
+          </TourStep>
 
           {/* KYC Upgrade Banner — show for Tier 0 users */}
           {(user?.kyc_tier ?? 0) === 0 && (
@@ -1285,6 +1453,7 @@ export default function HomeScreen() {
           )}
 
           {/* Quick Actions */}
+          <TourStep nameKey="tour.step3Title" textKey="tour.step3Text" order={3}>
           <View
             style={{
               paddingHorizontal: 16,
@@ -1514,6 +1683,8 @@ export default function HomeScreen() {
             </View>
           </Pressable>
 
+          </TourStep>
+
           {/* Recent Transactions */}
           <View style={{ paddingHorizontal: 16 }}>
             <SectionHeader
@@ -1655,6 +1826,7 @@ export default function HomeScreen() {
             </View>
           </View>
         </ScrollView>
+        <TourAutoStart />
       </SafeAreaView>
     );
   }
@@ -1700,6 +1872,9 @@ export default function HomeScreen() {
                 }}
               >
                 {t(getGreeting().textKey)}, {firstName}
+                {(user?.kyc_tier ?? 0) >= 1 && (
+                  <Text>{" "}<Ionicons name="checkmark-circle" size={14} color={colors.primary[400]} /></Text>
+                )}
               </Text>
             </View>
             <Text
@@ -1715,6 +1890,7 @@ export default function HomeScreen() {
           </View>
 
           {/* Notification Bell + Settings */}
+          <TourStep nameKey="tour.step6Title" textKey="tour.step6Text" order={6}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
           <Pressable
             onPress={() => router.push("/settings")}
@@ -1847,6 +2023,7 @@ export default function HomeScreen() {
             )}
           </Pressable>
           </View>
+          </TourStep>
         </View>
 
         {/* Live Stats Row — visible on large desktop */}
@@ -1985,10 +2162,13 @@ export default function HomeScreen() {
           }}
         >
           <View style={{ flex: isXLDesktop ? 7 : 6 }}>
-            {wallets && <BalanceCard wallets={wallets} />}
-            {walletsLoading && <BalanceCardSkeleton />}
+            <TourStep nameKey="tour.step1Title" textKey="tour.step1Text" order={1}>
+              <View>{wallets && <BalanceCard wallets={wallets} />}
+              {walletsLoading && <BalanceCardSkeleton />}</View>
+            </TourStep>
           </View>
           <View style={{ flex: isXLDesktop ? 3 : 4 }}>
+            <TourStep nameKey="tour.step2Title" textKey="tour.step2Text" order={2}>
             {txLoading ? (
               <PortfolioChartSkeleton />
             ) : (
@@ -1996,10 +2176,13 @@ export default function HomeScreen() {
                 chartPoints={chartPoints}
                 chartLabels={chartLabels}
                 changePercent={changePercent}
+                depositPoints={chartSplit.deposits}
+                paymentPoints={chartSplit.payments}
                 tc={tc}
                 ts={ts}
               />
             )}
+            </TourStep>
           </View>
         </View>
 
@@ -2066,6 +2249,7 @@ export default function HomeScreen() {
         )}
 
         {/* Row 2: Quick Actions */}
+        <TourStep nameKey="tour.step3Title" textKey="tour.step3Text" order={3}>
         <View style={{ marginBottom: 24 }}>
           <SectionHeader
             title={t("home.quickActions")}
@@ -2108,13 +2292,16 @@ export default function HomeScreen() {
             />
           </View>
         </View>
+        </TourStep>
 
         {/* Row 2.5: Crypto Price Charts */}
+        <TourStep nameKey="tour.step4Title" textKey="tour.step4Text" order={4}>
         {tickerRates.length > 0 ? (
           <CryptoPriceChartsSection rates={rates || []} tickerRates={tickerRates} tc={tc} ts={ts} />
         ) : ratesLoading ? (
           <CryptoChartsSkeleton />
         ) : null}
+        </TourStep>
 
         {/* Row 3: Rate Ticker (full width, contained) */}
         {tickerRates.length > 0 ? (
@@ -2280,6 +2467,11 @@ export default function HomeScreen() {
           </View>
         </View>
       </ScrollView>
+      <TourAutoStart />
     </SafeAreaView>
   );
+}
+
+export default function HomeScreen() {
+  return <HomeScreenContent />;
 }

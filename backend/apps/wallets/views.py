@@ -152,7 +152,7 @@ class TriggerRebalanceView(APIView):
         from .rebalance import create_rebalance_order, submit_rebalance_order
 
         reason = serializer.validated_data.get("reason") or f"Manual trigger by {request.user}"
-        order = create_rebalance_order(
+        order, reject_reason = create_rebalance_order(
             trigger=RebalanceOrder.TriggerType.MANUAL,
             reason=reason,
             sell_currency=serializer.validated_data["sell_currency"],
@@ -161,7 +161,7 @@ class TriggerRebalanceView(APIView):
 
         if not order:
             return Response(
-                {"detail": "Rebalance not needed or preconditions not met."},
+                {"detail": reject_reason or "Rebalance not needed or preconditions not met."},
                 status=status.HTTP_409_CONFLICT,
             )
 

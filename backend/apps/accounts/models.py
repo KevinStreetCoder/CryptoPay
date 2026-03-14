@@ -1,11 +1,21 @@
+import base64
+import hashlib
 import secrets
 import uuid
 
 import bcrypt
+from cryptography.fernet import Fernet, InvalidToken
+from django.conf import settings
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from django.db import models
 
 from .managers import UserManager
+
+
+def _get_fernet():
+    """Return a Fernet instance keyed from Django's SECRET_KEY."""
+    key = hashlib.sha256(settings.SECRET_KEY.encode()).digest()
+    return Fernet(base64.urlsafe_b64encode(key))
 
 
 class User(AbstractBaseUser, PermissionsMixin):
@@ -17,7 +27,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     phone = models.CharField(max_length=15, unique=True, db_index=True)
     email = models.EmailField(blank=True, null=True, unique=True)
-    full_name = models.CharField(max_length=150, blank=True, default="")
+    full_name = models.CharField(max_length=50, blank=True, default="")
     avatar = models.ImageField(upload_to="avatars/%Y/%m/", blank=True, null=True)
     pin_hash = models.CharField(max_length=255, blank=True)
     kyc_tier = models.SmallIntegerField(default=0)
@@ -54,7 +64,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     last_login_country = models.CharField(max_length=2, blank=True, default="")
 
     # TOTP (authenticator app) — encrypted secret key
-    totp_secret = models.CharField(max_length=64, blank=True, default="")
+    totp_secret = models.CharField(max_length=255, blank=True, default="")
     totp_enabled = models.BooleanField(default=False)
     totp_backup_codes = models.JSONField(default=list, blank=True)
 
@@ -83,6 +93,28 @@ class User(AbstractBaseUser, PermissionsMixin):
         return bcrypt.checkpw(
             raw_pin.encode("utf-8"), self.pin_hash.encode("utf-8")
         )
+
+    # --- TOTP encryption helpers ---
+
+    @property
+    def totp_secret_decrypted(self):
+        """Return the decrypted TOTP secret, handling legacy plaintext values."""
+        if not self.totp_secret:
+            return None
+        # Fernet tokens always start with 'gAAAAA'
+        if self.totp_secret.startswith("gAAAAA"):
+            try:
+                return _get_fernet().decrypt(self.totp_secret.encode()).decode()
+            except (InvalidToken, Exception):
+                return self.totp_secret  # Fallback if decryption fails
+        return self.totp_secret  # Legacy plaintext — not yet encrypted
+
+    def set_totp_secret(self, value):
+        """Encrypt and store the TOTP secret."""
+        if value:
+            self.totp_secret = _get_fernet().encrypt(value.encode()).decode()
+        else:
+            self.totp_secret = ""
 
 
 class KYCDocument(models.Model):
@@ -204,7 +236,7 @@ class EmailVerificationToken(models.Model):
 
 class PINResetToken(models.Model):
     """Short-lived token for PIN recovery (15-minute expiry).
-    Flow: user requests reset → OTP sent → OTP verified → token issued → new PIN set.
+    Flow: user requests reset -> OTP sent -> OTP verified -> token issued -> new PIN set.
     """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

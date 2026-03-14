@@ -6,6 +6,7 @@ import { useAuth } from "../stores/auth";
 import { colors, getThemeColors, getThemeShadows } from "../constants/theme";
 import { useThemeMode } from "../stores/theme";
 import { config } from "../constants/config";
+import { TourStep } from "./AppTour";
 
 function resolveAvatarUrl(url: string | null | undefined): string | null {
   if (!url) return null;
@@ -182,14 +183,16 @@ export function WebSidebar() {
       {/* Top section */}
       <View>
         {/* Logo + toggle */}
-        <View
+        <Pressable
+          onPress={() => router.push("/(tabs)" as any)}
           style={{
             paddingHorizontal: collapsed ? 0 : 24,
             paddingBottom: 12,
             flexDirection: "row",
-            alignItems: collapsed ? "center" : "center",
+            alignItems: "center",
             justifyContent: collapsed ? "center" : "flex-start",
             gap: collapsed ? 0 : 12,
+            ...(Platform.OS === "web" ? { cursor: "pointer" } as any : {}),
           }}
         >
           <View
@@ -205,29 +208,18 @@ export function WebSidebar() {
             <Ionicons name="flash" size={20} color="#FFFFFF" />
           </View>
           {!collapsed && (
-            <View style={{ flex: 1 }}>
-              <Text
-                style={{
-                  color: tc.textPrimary,
-                  fontSize: 18,
-                  fontFamily: "DMSans_700Bold",
-                  letterSpacing: -0.3,
-                }}
-              >
-                CryptoPay
-              </Text>
-              <Text
-                style={{
-                  color: tc.textMuted,
-                  fontSize: 11,
-                  fontFamily: "DMSans_400Regular",
-                }}
-              >
-                Dashboard
-              </Text>
-            </View>
+            <Text
+              style={{
+                color: tc.textPrimary,
+                fontSize: 18,
+                fontFamily: "DMSans_700Bold",
+                letterSpacing: -0.3,
+              }}
+            >
+              CryptoPay
+            </Text>
           )}
-        </View>
+        </Pressable>
 
         {/* Toggle button */}
         <View
@@ -276,6 +268,8 @@ export function WebSidebar() {
 
         {/* Main navigation */}
         <View style={{ paddingHorizontal: collapsed ? 8 : 12, gap: 4 }}>
+          <TourStep nameKey="tour.step5Title" textKey="tour.step5Text" order={5}>
+          <View>
           {!collapsed && (
             <Text
               style={{
@@ -370,6 +364,8 @@ export function WebSidebar() {
               </NavTooltip>
             );
           })}
+          </View>
+          </TourStep>
         </View>
 
         {/* Divider */}

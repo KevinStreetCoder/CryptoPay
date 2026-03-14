@@ -344,7 +344,7 @@ def poll_stk_status(checkout_request_id: str, transaction_id: str, attempt: int 
 
     from .client import MpesaClient
 
-    max_attempts = 3
+    max_attempts = 5  # More retries for sandbox rate limiting
 
     try:
         tx = Transaction.objects.get(id=transaction_id)
@@ -441,11 +441,16 @@ def poll_stk_status(checkout_request_id: str, transaction_id: str, attempt: int 
                 logger.error(f"STK Push timeout for tx {transaction_id} after {max_attempts} polls")
 
     except Exception as e:
-        logger.error(f"STK status poll error: {e}")
+        error_msg = str(e)
+        # Rate limiting from Safaricom — retry with longer backoff
+        is_rate_limited = "spike" in error_msg.lower() or "rate" in error_msg.lower()
+        retry_delay = 90 if is_rate_limited else 30
+
+        logger.error(f"STK status poll error (attempt {attempt}/{max_attempts}): {e}")
         if attempt < max_attempts:
             poll_stk_status.apply_async(
                 args=[checkout_request_id, transaction_id, attempt + 1],
-                countdown=30,
+                countdown=retry_delay,
             )
 
 

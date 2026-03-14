@@ -101,5 +101,6 @@ export const paymentsApi = {
   // KES Deposit endpoints
   depositQuote: (data: DepositQuoteData) => api.post("/payments/deposit/quote/", data),
   depositStatus: (transactionId: string) => api.get<Transaction>(`/payments/deposit/${transactionId}/status/`),
+  transactionStatus: (transactionId: string) => api.get<Transaction>(`/payments/${transactionId}/status/`),
   c2bInstructions: () => api.get<C2BInstructions>("/payments/deposit/c2b-instructions/"),
 };

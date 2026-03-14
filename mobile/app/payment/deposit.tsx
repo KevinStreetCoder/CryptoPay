@@ -17,12 +17,14 @@ import { CryptoLogo } from "../../src/components/CryptoLogo";
 import { Button } from "../../src/components/Button";
 import { useToast } from "../../src/components/Toast";
 import { paymentsApi, C2BInstructions } from "../../src/api/payments";
+import { walletsApi, Wallet } from "../../src/api/wallets";
 import { normalizeError } from "../../src/utils/apiErrors";
 import { useAuth } from "../../src/stores/auth";
 import { colors, getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
 import { GlassCard } from "../../src/components/GlassCard";
 import { useLocale } from "../../src/hooks/useLocale";
+import { WalletConnectDeposit } from "../../src/components/WalletConnectDeposit";
 
 const isWeb = Platform.OS === "web";
 const useNative = Platform.OS !== "web";
@@ -55,6 +57,24 @@ export default function DepositScreen() {
   const [amount, setAmount] = useState("");
   const [c2bInstructions, setC2bInstructions] = useState<C2BInstructions | null>(null);
   const [loadingC2B, setLoadingC2B] = useState(false);
+  const [ethDepositAddress, setEthDepositAddress] = useState<string>("");
+
+  // Fetch ETH deposit address for WalletConnect deposits
+  useEffect(() => {
+    if (method === "crypto" && !ethDepositAddress) {
+      walletsApi
+        .list()
+        .then((res) => {
+          const ethWallet = res.data.find(
+            (w: Wallet) => w.currency === "ETH" && w.deposit_address
+          );
+          if (ethWallet?.deposit_address) {
+            setEthDepositAddress(ethWallet.deposit_address);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [method]);
 
   // Fetch C2B instructions when switching to that method
   useEffect(() => {
@@ -70,7 +90,7 @@ export default function DepositScreen() {
 
   const handleSTKDeposit = useCallback(() => {
     const kesAmount = parseFloat(amount);
-    if (!kesAmount || kesAmount < 100) {
+    if (!kesAmount || kesAmount < 10) {
       toast.error(t("payment.invalidAmount"), t("payment.minimumAmount"));
       return;
     }
@@ -699,6 +719,99 @@ export default function DepositScreen() {
         {/* Crypto Deposit */}
         {method === "crypto" && (
           <View style={{ marginTop: 20, gap: 16 }}>
+            {/* WalletConnect — deposit from MetaMask, Trust, etc. */}
+            <View
+              style={{
+                backgroundColor: tc.dark.card,
+                borderRadius: 18,
+                padding: 20,
+                borderWidth: 1,
+                borderColor: tc.glass.border,
+                gap: 16,
+                ...ts.sm,
+              }}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                <View
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 12,
+                    backgroundColor: "#627EEA" + "18",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Ionicons name="link-outline" size={20} color="#627EEA" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={{
+                      color: tc.textPrimary,
+                      fontSize: 16,
+                      fontFamily: "DMSans_700Bold",
+                    }}
+                  >
+                    Connect External Wallet
+                  </Text>
+                  <Text
+                    style={{
+                      color: tc.textMuted,
+                      fontSize: 12,
+                      fontFamily: "DMSans_400Regular",
+                    }}
+                  >
+                    MetaMask, Trust Wallet, Rainbow, and more
+                  </Text>
+                </View>
+              </View>
+
+              <WalletConnectDeposit
+                depositAddress={ethDepositAddress}
+                onDepositInitiated={(txHash, token, amt) => {
+                  toast.success(
+                    "Deposit Sent",
+                    `${amt} ${token} will be credited after confirmation.`
+                  );
+                }}
+              />
+            </View>
+
+            {/* Divider */}
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 12,
+                paddingHorizontal: 4,
+              }}
+            >
+              <View
+                style={{
+                  flex: 1,
+                  height: 1,
+                  backgroundColor: tc.glass.border,
+                }}
+              />
+              <Text
+                style={{
+                  color: tc.textMuted,
+                  fontSize: 12,
+                  fontFamily: "DMSans_500Medium",
+                }}
+              >
+                OR
+              </Text>
+              <View
+                style={{
+                  flex: 1,
+                  height: 1,
+                  backgroundColor: tc.glass.border,
+                }}
+              />
+            </View>
+
+            {/* Manual deposit via address */}
             <View
               style={{
                 backgroundColor: tc.dark.card,
@@ -708,14 +821,13 @@ export default function DepositScreen() {
                 borderColor: tc.glass.border,
                 alignItems: "center",
                 gap: 16,
-                ...ts.sm,
               }}
             >
               <View
                 style={{
-                  width: 56,
-                  height: 56,
-                  borderRadius: 18,
+                  width: 48,
+                  height: 48,
+                  borderRadius: 16,
                   backgroundColor: colors.primary[500] + "15",
                   alignItems: "center",
                   justifyContent: "center",
@@ -723,32 +835,32 @@ export default function DepositScreen() {
               >
                 <Ionicons
                   name="download-outline"
-                  size={28}
+                  size={24}
                   color={colors.primary[400]}
                 />
               </View>
               <Text
                 style={{
                   color: tc.textPrimary,
-                  fontSize: 18,
+                  fontSize: 16,
                   fontFamily: "DMSans_700Bold",
                   textAlign: "center",
                 }}
               >
-                Deposit Crypto Directly
+                Manual Deposit via Address
               </Text>
               <Text
                 style={{
                   color: tc.textMuted,
-                  fontSize: 14,
+                  fontSize: 13,
                   fontFamily: "DMSans_400Regular",
                   textAlign: "center",
-                  lineHeight: 20,
+                  lineHeight: 19,
                   maxWidth: 360,
                 }}
               >
-                Send crypto from any external wallet or exchange to your CryptoPay
-                deposit address. Supports USDT, BTC, ETH, SOL, and USDC.
+                Copy your deposit address from the Wallet tab and send crypto
+                from any exchange or wallet.
               </Text>
             </View>
 
@@ -825,9 +937,10 @@ export default function DepositScreen() {
             </View>
 
             <Button
-              title="Go to Wallet"
+              title="View Deposit Addresses"
               onPress={handleCryptoDeposit}
               icon="wallet-outline"
+              variant="outline"
               style={{ maxWidth: isDesktop ? 420 : undefined }}
             />
           </View>

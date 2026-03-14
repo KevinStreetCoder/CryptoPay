@@ -72,7 +72,8 @@ export function RateTicker({ rates, speed = 4000 }: RateTickerProps) {
 
   if (rates.length === 0) return null;
 
-  const current = rates[activeIndex];
+  const current = rates[activeIndex % rates.length];
+  if (!current) return null;
   const isPositive = (current.change24h ?? 0) >= 0;
   const changeColor = isPositive ? colors.success : colors.error;
 

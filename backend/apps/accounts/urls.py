@@ -10,6 +10,7 @@ urlpatterns = [
     path("register/", views.RegisterView.as_view(), name="register"),
     path("login/", views.LoginView.as_view(), name="login"),
     path("google/", views.GoogleLoginView.as_view(), name="google-login"),
+    path("set-initial-pin/", views.SetInitialPINView.as_view(), name="set-initial-pin"),
     path("token/refresh/", TokenRefreshView.as_view(), name="token-refresh"),
     path("profile/", views.ProfileView.as_view(), name="profile"),
     path("devices/", views.DeviceListView.as_view(), name="devices"),
@@ -32,7 +33,7 @@ urlpatterns = [
     path("recovery/", views.RecoveryEmailView.as_view(), name="recovery-settings"),
     # Security settings overview
     path("security/", views.SecuritySettingsView.as_view(), name="security-settings"),
-    # Forgot PIN recovery flow (3-step: initiate → verify OTP → reset)
+    # Forgot PIN recovery flow (3-step: initiate -> verify OTP -> reset)
     path("forgot-pin/", views.ForgotPINView.as_view(), name="forgot-pin"),
     path("forgot-pin/verify/", views.VerifyPINResetOTPView.as_view(), name="forgot-pin-verify"),
     path("reset-pin/", views.ResetPINView.as_view(), name="reset-pin"),
