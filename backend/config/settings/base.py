@@ -626,3 +626,15 @@ KYC_DAILY_LIMITS = {
 
 # --- Prometheus ---
 PROMETHEUS_MULTIPROC_DIR = env("PROMETHEUS_MULTIPROC_DIR", default="")
+
+# CSRF trusted origins (required for admin behind Cloudflare proxy)
+CSRF_TRUSTED_ORIGINS = [
+    "https://cpay.co.ke",
+    "https://www.cpay.co.ke",
+    "https://api.cpay.co.ke",
+    "http://localhost:8000",
+    "http://localhost:8081",
+]
+
+# Trust X-Forwarded-Proto from Cloudflare
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
