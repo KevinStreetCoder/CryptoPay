@@ -24,6 +24,14 @@ function getApiUrl(): string {
   const envUrl = Constants.expoConfig?.extra?.API_URL ?? process.env.API_URL;
   if (envUrl) return envUrl;
 
+  // Web production: if running on cpay.co.ke, use same-origin API
+  if (Platform.OS === "web" && typeof window !== "undefined") {
+    const host = window.location?.hostname;
+    if (host && host !== "localhost" && host !== "127.0.0.1") {
+      return `${window.location.origin}/api/v1`;
+    }
+  }
+
   // Fallback for local development
   return Platform.select({
     android: "http://10.0.2.2:8000/api/v1",
