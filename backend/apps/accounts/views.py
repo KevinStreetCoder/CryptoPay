@@ -681,9 +681,13 @@ class GoogleLoginView(APIView):
         user = User.objects.filter(email__iexact=email).first()
         created = False
         if not user:
+            import uuid as _uuid
+            # Generate a temporary placeholder phone (unique per user)
+            temp_phone = f"+000{_uuid.uuid4().hex[:10]}"
             user = User.objects.create_user(
-                phone="",  # Google users may not have a phone yet
+                phone=temp_phone,
                 email=email,
+                full_name=google_info.get("name", ""),
             )
             # Create default wallets
             WalletService.create_user_wallets(user)
