@@ -402,7 +402,7 @@ export default function HelpScreen() {
   }, []);
 
   const handleEmail = () => {
-    Linking.openURL("mailto:support@cryptopay.co.ke");
+    Linking.openURL("mailto:support@cpay.co.ke");
   };
 
   const handleWhatsApp = () => {
@@ -696,7 +696,7 @@ export default function HelpScreen() {
                 iconColor={colors.primary[400]}
                 iconBg={colors.primary[500] + "18"}
                 label={t("help.email")}
-                value="support@cryptopay.co.ke"
+                value="support@cpay.co.ke"
                 onPress={handleEmail}
                 isDesktop={isDesktop}
                 tc={tc}

@@ -1,0 +1,179 @@
+# ─────────────────────────────────────────────────────────────
+# CryptoPay — Production Docker Compose (Contabo VPS)
+#
+# Ports: Django=8100, Postgres=5433, Redis=6380
+# (avoids conflicts with camhub on 80/443/5432/6379)
+#
+# Usage:
+#   cd /opt/cryptopay
+#   docker compose -f deploy/docker-compose.prod.yml up -d --build
+#
+# The HOST-LEVEL nginx (not containerised) routes
+# cpay.co.ke -> 127.0.0.1:8100
+# ─────────────────────────────────────────────────────────────
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: cryptopay_db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-cryptopay}
+      POSTGRES_USER: ${POSTGRES_USER:-cryptopay}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - cryptopay_postgres:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5433:5432"
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cryptopay} -d ${POSTGRES_DB:-cryptopay}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  redis:
+    image: redis:7-alpine
+    container_name: cryptopay_redis
+    command: >
+      redis-server
+        --maxmemory 256mb
+        --maxmemory-policy allkeys-lru
+        --requirepass ${REDIS_PASSWORD:-}
+        --appendonly yes
+    volumes:
+      - cryptopay_redis:/data
+    ports:
+      - "127.0.0.1:6380:6379"
+    restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  web:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: cryptopay_web
+    command: >
+      gunicorn config.wsgi:application
+        --bind 0.0.0.0:8000
+        --workers ${GUNICORN_WORKERS:-3}
+        --timeout 120
+        --max-requests 1000
+        --max-requests-jitter 50
+        --access-logfile -
+        --error-logfile -
+    volumes:
+      - cryptopay_static:/app/staticfiles
+      - cryptopay_media:/app/media
+      - cryptopay_logs:/app/logs
+      - cryptopay_certs:/app/certs
+    ports:
+      - "127.0.0.1:8100:8000"
+    env_file:
+      - .env.production
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings.production
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  celery:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: cryptopay_celery
+    command: >
+      celery -A config worker
+        -l warning
+        -Q default,blockchain,notifications
+        --concurrency=4
+        --max-tasks-per-child=1000
+    volumes:
+      - cryptopay_media:/app/media
+      - cryptopay_logs:/app/logs
+      - cryptopay_certs:/app/certs
+    env_file:
+      - .env.production
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings.production
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A config inspect ping --timeout 10 2>/dev/null || exit 1"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  celery-beat:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: cryptopay_beat
+    command: >
+      celery -A config beat
+        -l info
+        --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    volumes:
+      - cryptopay_logs:/app/logs
+    env_file:
+      - .env.production
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings.production
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+volumes:
+  cryptopay_postgres:
+    name: cryptopay_postgres
+  cryptopay_redis:
+    name: cryptopay_redis
+  cryptopay_static:
+    name: cryptopay_static
+  cryptopay_media:
+    name: cryptopay_media
+  cryptopay_logs:
+    name: cryptopay_logs
+  cryptopay_certs:
+    name: cryptopay_certs

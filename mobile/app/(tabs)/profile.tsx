@@ -455,7 +455,7 @@ export default function ProfileScreen() {
   };
 
   const handleHelpSupport = () => {
-    handleOpenUrl("mailto:support@cryptopay.co.ke");
+    handleOpenUrl("mailto:support@cpay.co.ke");
   };
 
   const handleTermsOfService = () => {
