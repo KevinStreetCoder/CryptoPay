@@ -63,10 +63,11 @@ if SENTRY_DSN:
 # SES:    EMAIL_HOST=email-smtp.eu-west-1.amazonaws.com, EMAIL_HOST_USER=AKIA..., EMAIL_HOST_PASSWORD=...
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 EMAIL_HOST = env("EMAIL_HOST", default="smtp.resend.com")  # noqa: F405
-EMAIL_PORT = env.int("EMAIL_PORT", default=587)  # noqa: F405
+EMAIL_PORT = env.int("EMAIL_PORT", default=465)  # noqa: F405
 EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="resend")  # noqa: F405
-EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")  # noqa: F405
-EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)  # noqa: F405
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="re_CojuPUB8_LzVcTtJyFrHArxopmx5JP2Jm")  # noqa: F405
+EMAIL_USE_TLS = False
+EMAIL_USE_SSL = True  # noqa: F405
 
 # --- Production Logging Override ---
 # Use JSON formatter for all handlers in production (better for log aggregation)
@@ -88,3 +89,21 @@ MPESA_CERT_PATH = env(  # noqa: F405
 
 # --- Google OAuth ---
 GOOGLE_CLIENT_ID = env("GOOGLE_CLIENT_ID", default="")  # noqa: F405
+
+# Cloudflare proxy CSRF + SSL trust
+CSRF_TRUSTED_ORIGINS = [
+    "https://cpay.co.ke",
+    "https://www.cpay.co.ke",
+    "https://api.cpay.co.ke",
+    "http://localhost:8000",
+    "http://localhost:8081",
+]
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# Email branding
+DEFAULT_FROM_EMAIL = "CPay <noreply@cpay.co.ke>"
+SERVER_EMAIL = "CPay Alerts <admin@cpay.co.ke>"
+
+# Admin email notifications
+ADMINS = [("Kevin", "kevinisaackareithi@gmail.com")]
+MANAGERS = ADMINS
