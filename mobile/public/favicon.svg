@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Background: Emerald green rounded square -->
+  <rect x="0" y="0" width="512" height="512" rx="108" ry="108" fill="#10B981"/>
+
+  <!-- Lightning bolt icon (white) -->
+  <path d="M296 48L168 272h80l-40 192 168-256h-96z" fill="#FFFFFF" stroke="none"/>
+</svg>

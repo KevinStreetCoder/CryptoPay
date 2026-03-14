@@ -5,6 +5,27 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def send_otp_email(user, otp_code):
+    """Send OTP verification email.
+
+    Args:
+        user: User model instance (must have email, full_name, phone).
+        otp_code: str, the 6-digit OTP code.
+    """
+    if not user.email:
+        logger.warning(f"Cannot send OTP email: user {user.phone} has no email.")
+        return
+
+    from apps.core.tasks import send_otp_email_task
+
+    send_otp_email_task.delay(
+        user_email=user.email,
+        user_full_name=user.full_name or user.phone,
+        otp_code=otp_code,
+    )
+    logger.info(f"Queued OTP email for {user.email}")
+
+
 def send_welcome_email(user):
     """Send welcome email to a newly registered user.
 
@@ -49,6 +70,13 @@ def send_transaction_receipt(user, transaction):
         status=str(transaction.status),
         reference=ref,
         timestamp=transaction.created_at.isoformat(),
+        # Enhanced fields
+        source_amount=str(transaction.source_amount) if transaction.source_amount else None,
+        source_currency=transaction.source_currency or None,
+        exchange_rate=str(transaction.exchange_rate) if transaction.exchange_rate else None,
+        fee_amount=str(transaction.fee_amount) if transaction.fee_amount else None,
+        fee_currency=transaction.fee_currency or None,
+        mpesa_receipt=transaction.mpesa_receipt or None,
     )
     logger.info(f"Queued transaction receipt for {user.email} — ref {ref}")
 
@@ -123,6 +151,14 @@ def send_transaction_notifications(user, transaction):
         data={"transaction_id": str(transaction.id), "type": "transaction_complete"},
     )
 
+    # Admin alert for failed transactions
+    if str(transaction.status) == "failed":
+        from apps.core.tasks import send_failed_transaction_alert_task
+
+        send_failed_transaction_alert_task.delay(
+            transaction_id=str(transaction.id),
+        )
+
 
 def send_security_alert(user, event_type, ip_address, device_info):
     """Send security alert email.
@@ -148,3 +184,20 @@ def send_security_alert(user, event_type, ip_address, device_info):
         device_info=device_info,
     )
     logger.info(f"Queued security alert for {user.email} — {event_type}")
+
+
+def send_admin_new_user_alert(user):
+    """Send admin alert about a new user registration.
+
+    Args:
+        user: User model instance just created.
+    """
+    from apps.core.tasks import send_admin_new_user_alert_task
+
+    send_admin_new_user_alert_task.delay(
+        user_phone=user.phone,
+        user_full_name=user.full_name or "",
+        user_email=user.email or "",
+        kyc_tier=getattr(user, "kyc_tier", 0),
+    )
+    logger.info(f"Queued admin new-user alert for {user.phone}")

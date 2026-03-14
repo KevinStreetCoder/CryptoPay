@@ -239,6 +239,11 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.core.tasks.daily_database_backup",
         "schedule": crontab(hour=2, minute=0),
     },
+    # Daily operations summary email to admins (8:00 AM EAT)
+    "daily-summary-email": {
+        "task": "apps.core.tasks.daily_summary_email",
+        "schedule": crontab(hour=8, minute=0),
+    },
 }
 
 # --- DRF ---
@@ -608,8 +613,12 @@ LOGGING = {
 
 # --- Email ---
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
-DEFAULT_FROM_EMAIL = "CryptoPay <noreply@cryptopay.co.ke>"
-SERVER_EMAIL = "CryptoPay Alerts <alerts@cryptopay.co.ke>"
+DEFAULT_FROM_EMAIL = "CPay <noreply@cpay.co.ke>"
+SERVER_EMAIL = "CPay Alerts <alerts@cpay.co.ke>"
+
+# Admin email recipients (overridden in production.py)
+ADMINS = [("Admin", "admin@cpay.co.ke")]
+MANAGERS = ADMINS
 
 # --- Smile Identity KYC ---
 SMILE_IDENTITY_PARTNER_ID = env("SMILE_IDENTITY_PARTNER_ID", default="")

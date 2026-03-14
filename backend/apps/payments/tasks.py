@@ -75,6 +75,13 @@ def check_pending_mpesa_payments():
                     f"MANUAL INTERVENTION REQUIRED."
                 )
 
+            # Alert admins about the failed transaction
+            try:
+                from apps.core.tasks import send_failed_transaction_alert_task
+                send_failed_transaction_alert_task.delay(transaction_id=str(tx.id))
+            except Exception:
+                pass
+
         # Between 3-10 minutes, just flag for review
         elif tx.updated_at < (timezone.now() - timedelta(minutes=3)):
             if not tx.failure_reason:
