@@ -76,8 +76,10 @@ class MpesaClient:
         }
 
     def _generate_password(self) -> tuple[str, str]:
-        """Generate the STK Push password: base64(shortcode + passkey + timestamp)."""
-        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        """Generate the STK Push password: base64(shortcode + passkey + timestamp).
+        Uses Africa/Nairobi timezone explicitly to match Safaricom's EAT expectation."""
+        from zoneinfo import ZoneInfo
+        timestamp = datetime.now(tz=ZoneInfo("Africa/Nairobi")).strftime("%Y%m%d%H%M%S")
         raw = f"{self.shortcode}{self.passkey}{timestamp}"
         password = base64.b64encode(raw.encode()).decode()
         return password, timestamp
@@ -366,12 +368,11 @@ class MpesaClient:
                 cert_path = auto_path
 
         if not cert_path.is_file():
-            logger.warning(
-                "M-Pesa certificate not found at %s — returning raw password. "
-                "B2C/B2B calls WILL FAIL without a valid certificate.",
-                cert_path,
+            raise MpesaError(
+                f"M-Pesa certificate not found at {cert_path}. "
+                f"B2C/B2B operations require a valid Safaricom certificate. "
+                f"Download from Daraja portal and place in certs/ directory."
             )
-            return settings.MPESA_INITIATOR_PASSWORD
 
         cert_pem = cert_path.read_bytes()
         certificate = load_pem_x509_certificate(cert_pem)

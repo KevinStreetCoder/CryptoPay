@@ -179,7 +179,6 @@ class EmailVerificationToken(models.Model):
 
     @classmethod
     def create_for_user(cls, user, email):
-        import random
         from datetime import timedelta
 
         from django.utils import timezone
@@ -188,7 +187,7 @@ class EmailVerificationToken(models.Model):
         cls.objects.filter(user=user, email=email, is_used=False).update(is_used=True)
 
         token = secrets.token_urlsafe(48)
-        otp_code = f"{random.randint(100000, 999999)}"
+        otp_code = f"{secrets.randbelow(900000) + 100000}"
         return cls.objects.create(
             user=user,
             email=email,
