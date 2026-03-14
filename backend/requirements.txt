@@ -51,6 +51,9 @@ qrcode==8.0
 # PDF Generation
 weasyprint==68.1
 
+# Monitoring
+django-prometheus==2.3.1
+
 # Production
 gunicorn==23.0.0
 whitenoise==6.8.2

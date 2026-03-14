@@ -78,10 +78,28 @@ export interface BuyCryptoData {
   idempotency_key: string;
 }
 
+export interface DepositQuoteData {
+  kes_amount: string;
+  dest_currency: string;
+}
+
+export interface C2BInstructions {
+  paybill: string;
+  account_formats: { currency: string; account_number: string; description: string }[];
+  min_amount: number;
+  max_amount: number;
+  fee_percent: number;
+  instructions: string[];
+}
+
 export const paymentsApi = {
   payBill: (data: PayBillData) => api.post<Transaction>("/payments/pay-bill/", data),
   payTill: (data: PayTillData) => api.post<Transaction>("/payments/pay-till/", data),
   sendMpesa: (data: SendMpesaData) => api.post<Transaction>("/payments/send-mpesa/", data),
   buyCrypto: (data: BuyCryptoData) => api.post<Transaction>("/payments/buy-crypto/", data),
   history: (page = 1) => api.get<{ results: Transaction[]; count: number }>("/payments/history/", { params: { page } }),
+  // KES Deposit endpoints
+  depositQuote: (data: DepositQuoteData) => api.post("/payments/deposit/quote/", data),
+  depositStatus: (transactionId: string) => api.get<Transaction>(`/payments/deposit/${transactionId}/status/`),
+  c2bInstructions: () => api.get<C2BInstructions>("/payments/deposit/c2b-instructions/"),
 };

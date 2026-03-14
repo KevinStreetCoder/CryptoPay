@@ -43,7 +43,7 @@ export function SectionHeader({
       }}
     >
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
-        {icon && (
+        {icon ? (
           <View
             style={{
               width: 28,
@@ -60,7 +60,7 @@ export function SectionHeader({
               color={iconColor || colors.primary[400]}
             />
           </View>
-        )}
+        ) : null}
         <View>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
             <Text
@@ -106,7 +106,7 @@ export function SectionHeader({
               </View>
             )}
           </View>
-          {subtitle && (
+          {subtitle ? (
             <Text
               style={{
                 color: tc.textMuted,
@@ -117,7 +117,7 @@ export function SectionHeader({
             >
               {subtitle}
             </Text>
-          )}
+          ) : null}
         </View>
       </View>
 

@@ -123,13 +123,16 @@ export function TransactionItem({ transaction, onPress }: TransactionItemProps) 
         onPress={handlePress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
-        style={({ pressed }) => [
+        style={({ pressed, hovered }: any) => [
           {
             flexDirection: "row" as const,
             alignItems: "center" as const,
             paddingHorizontal: 16,
             paddingVertical: 14,
+            borderRadius: 12,
+            ...(Platform.OS === "web" ? { cursor: "pointer", transition: "background-color 0.15s ease" } as any : {}),
           },
+          (hovered && Platform.OS === "web") && { backgroundColor: tc.glass.highlight },
           pressed && { backgroundColor: tc.glass.bgLight },
         ]}
         accessibilityRole="button"

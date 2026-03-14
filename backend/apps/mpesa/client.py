@@ -87,6 +87,7 @@ class MpesaClient:
         Initiate an STK Push (Lipa Na M-Pesa Online).
         Used for: User buying crypto with M-Pesa.
         """
+        phone = self._normalize_phone(phone)
         password, timestamp = self._generate_password()
 
         # Build secure callback URL with per-transaction HMAC token
@@ -120,6 +121,37 @@ class MpesaClient:
         logger.info(f"STK Push initiated: {data.get('CheckoutRequestID')}")
         return data
 
+    def register_c2b_urls(self) -> dict:
+        """
+        Register C2B validation and confirmation URLs with Safaricom.
+        One-time setup per environment. URLs must be HTTPS.
+
+        IMPORTANT: Do not include "mpesa" or "safaricom" in callback URL paths
+        — Safaricom filters and blocks them.
+        """
+        payload = {
+            "ShortCode": self.shortcode,
+            "ResponseType": getattr(
+                settings, "MPESA_C2B_RESPONSE_TYPE", "Completed"
+            ),
+            "ConfirmationURL": f"{self.callback_base}/api/v1/mpesa/callback/c2b/confirm/",
+            "ValidationURL": f"{self.callback_base}/api/v1/mpesa/callback/c2b/validate/",
+        }
+
+        response = requests.post(
+            f"{self.base_url}/mpesa/c2b/v1/registerurl",
+            json=payload,
+            headers=self._headers(),
+            timeout=30,
+        )
+        data = response.json()
+
+        if data.get("ResponseCode") != "0" and data.get("ResponseDescription", "").lower() != "success":
+            raise MpesaError(f"C2B URL registration failed: {data}")
+
+        logger.info(f"C2B URLs registered: {data}")
+        return data
+
     def stk_query(self, checkout_request_id: str) -> dict:
         """Query the status of an STK Push transaction."""
         password, timestamp = self._generate_password()
@@ -139,11 +171,22 @@ class MpesaClient:
         )
         return response.json()
 
+    @staticmethod
+    def _normalize_phone(phone: str) -> str:
+        """Normalize phone to 254XXXXXXXXX format (no +, no spaces)."""
+        phone = phone.strip().replace(" ", "").replace("-", "")
+        if phone.startswith("+"):
+            phone = phone[1:]
+        if phone.startswith("0"):
+            phone = "254" + phone[1:]
+        return phone
+
     def b2c_payment(self, phone: str, amount: int, remarks: str = "", transaction_id: str = "") -> dict:
         """
         B2C payment (send money to user's M-Pesa).
         Used for: User selling crypto, receiving KES.
         """
+        phone = self._normalize_phone(phone)
         tx_ref = transaction_id or f"b2c-{phone}"
         payload = {
             "InitiatorName": settings.MPESA_INITIATOR_NAME,
@@ -167,7 +210,8 @@ class MpesaClient:
         data = response.json()
 
         if data.get("ResponseCode") != "0":
-            raise MpesaError(f"B2C failed: {data.get('ResponseDescription', data)}")
+            msg = data.get("ResponseDescription") or data.get("errorMessage") or str(data)
+            raise MpesaError(f"B2C failed: {msg}")
 
         return data
 
@@ -306,7 +350,6 @@ class MpesaClient:
     def _get_security_credential(self) -> str:
         """
         Encrypt the initiator password with Safaricom's RSA public certificate.
-        In production, use the production cert. In sandbox, use the sandbox cert.
 
         Steps:
         1. Load the PEM certificate from disk (sandbox or production).
@@ -316,10 +359,16 @@ class MpesaClient:
         """
         cert_path = Path(getattr(settings, "MPESA_CERT_PATH", ""))
 
+        # Auto-resolve: if explicit path not set, try environment-specific cert
+        if not cert_path.is_file():
+            auto_path = Path(f"certs/{'sandbox' if self.environment == 'sandbox' else 'production'}.cer")
+            if auto_path.is_file():
+                cert_path = auto_path
+
         if not cert_path.is_file():
             logger.warning(
                 "M-Pesa certificate not found at %s — returning raw password. "
-                "This is acceptable only in sandbox mode.",
+                "B2C/B2B calls WILL FAIL without a valid certificate.",
                 cert_path,
             )
             return settings.MPESA_INITIATOR_PASSWORD

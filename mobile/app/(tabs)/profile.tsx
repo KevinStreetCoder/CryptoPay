@@ -110,7 +110,7 @@ function MenuItem({ icon, label, subtitle, onPress, danger, iconBg, iconColor, t
         >
           {label}
         </Text>
-        {subtitle && (
+        {subtitle ? (
           <Text
             style={{
               color: tc.textMuted,
@@ -120,7 +120,7 @@ function MenuItem({ icon, label, subtitle, onPress, danger, iconBg, iconColor, t
           >
             {subtitle}
           </Text>
-        )}
+        ) : null}
       </View>
       {trailing || <Ionicons name="chevron-forward" size={16} color={tc.dark.muted} />}
     </Pressable>
@@ -190,12 +190,14 @@ function ProfileInfoChip({
   value,
   tc,
   onPress,
+  badge,
 }: {
   icon: string;
   label: string;
   value: string;
   tc: ReturnType<typeof getThemeColors>;
   onPress?: () => void;
+  badge?: { text: string; color: string; onPress?: () => void } | null;
 }) {
   const content = (
     <View
@@ -224,18 +226,66 @@ function ProfileInfoChip({
         <Ionicons name={icon as any} size={16} color={colors.primary[400]} />
       </View>
       <View style={{ flex: 1 }}>
-        <Text
-          style={{
-            color: tc.textMuted,
-            fontSize: 11,
-            fontFamily: "DMSans_500Medium",
-            textTransform: "uppercase",
-            letterSpacing: 0.6,
-            marginBottom: 2,
-          }}
-        >
-          {label}
-        </Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 }}>
+          <Text
+            style={{
+              color: tc.textMuted,
+              fontSize: 11,
+              fontFamily: "DMSans_500Medium",
+              textTransform: "uppercase",
+              letterSpacing: 0.6,
+            }}
+          >
+            {label}
+          </Text>
+          {badge ? (
+            badge.onPress ? (
+              <Pressable
+                onPress={badge.onPress}
+                style={({ hovered }: any) => ({
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 3,
+                  backgroundColor: badge.color + "15",
+                  paddingHorizontal: 7,
+                  paddingVertical: 2,
+                  borderRadius: 6,
+                  ...(isWeb ? { cursor: "pointer", transition: "all 0.15s ease", opacity: hovered ? 0.8 : 1 } as any : {}),
+                })}
+              >
+                <Ionicons
+                  name={badge.color === colors.success ? "checkmark-circle" : "alert-circle"}
+                  size={10}
+                  color={badge.color}
+                />
+                <Text style={{ color: badge.color, fontSize: 10, fontFamily: "DMSans_600SemiBold" }}>
+                  {badge.text}
+                </Text>
+              </Pressable>
+            ) : (
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 3,
+                  backgroundColor: badge.color + "15",
+                  paddingHorizontal: 7,
+                  paddingVertical: 2,
+                  borderRadius: 6,
+                }}
+              >
+                <Ionicons
+                  name={badge.color === colors.success ? "checkmark-circle" : "alert-circle"}
+                  size={10}
+                  color={badge.color}
+                />
+                <Text style={{ color: badge.color, fontSize: 10, fontFamily: "DMSans_600SemiBold" }}>
+                  {badge.text}
+                </Text>
+              </View>
+            )
+          ) : null}
+        </View>
         <Text
           style={{
             color: tc.textPrimary,
@@ -246,7 +296,7 @@ function ProfileInfoChip({
           {value}
         </Text>
       </View>
-      {onPress && <Ionicons name="chevron-forward" size={14} color={tc.dark.muted} />}
+      {onPress ? <Ionicons name="chevron-forward" size={14} color={tc.dark.muted} /> : null}
     </View>
   );
 
@@ -293,6 +343,26 @@ export default function ProfileScreen() {
 
   const [avatarUri, setAvatarUri] = useState<string | null>(resolveAvatarUrl(user?.avatar_url));
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  const handleVerifyEmail = async () => {
+    if (!user?.email) {
+      router.push("/settings/edit-profile" as any);
+      return;
+    }
+    try {
+      await authApi.sendEmailVerification(user.email);
+      toast.success("Code Sent", `Verification code sent to ${user.email}`);
+      router.push("/settings/edit-profile?verify=1" as any);
+    } catch {
+      toast.error("Failed", "Could not send verification email. Try again.");
+    }
+  };
+
+  const emailBadge = user?.email
+    ? user.email_verified
+      ? { text: "Verified", color: colors.success }
+      : { text: "Verify", color: colors.warning, onPress: handleVerifyEmail }
+    : null;
 
   const handlePickAvatar = async () => {
     try {
@@ -389,11 +459,11 @@ export default function ProfileScreen() {
   };
 
   const handleTermsOfService = () => {
-    handleOpenUrl("https://cryptopay.co.ke/terms");
+    router.push("/settings/terms" as any);
   };
 
   const handlePrivacyPolicy = () => {
-    handleOpenUrl("https://cryptopay.co.ke/privacy");
+    router.push("/settings/terms" as any);
   };
 
   const handleSelectLanguage = async (lang: string) => {
@@ -639,44 +709,105 @@ export default function ProfileScreen() {
     </View>
   );
 
+  const isMaxTier = (user?.kyc_tier ?? 0) >= 3;
+
   // ── Edit Profile / Verify Identity action buttons ──
   const renderActionButtons = () => (
     <View style={{ flexDirection: isDesktop ? "column" : "row", gap: 10, marginTop: isDesktop ? 0 : 20 }}>
-      <Pressable
-        onPress={handleVerifyIdentity}
-        style={({ pressed, hovered }: any) => ({
-          flex: isDesktop ? undefined : 1,
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 8,
-          paddingVertical: 12,
-          paddingHorizontal: 16,
-          borderRadius: 14,
-          backgroundColor: pressed
-            ? colors.primary[600]
-            : isWeb && hovered
-              ? colors.primary[500]
-              : colors.primary[500] + "E6",
-          ...ts.glow(colors.primary[500], pressed ? 0.1 : isWeb && hovered ? 0.4 : 0.25),
-          ...(isWeb ? { cursor: "pointer", transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)" } as any : {}),
-          transform: [{ scale: pressed ? 0.97 : 1 }],
-        })}
-        accessibilityRole="button"
-        accessibilityLabel="Verify Identity"
-      >
-        <Ionicons name="shield-checkmark" size={16} color="#fff" />
-        <Text
+      {isMaxTier ? (
+        /* ── Verified status badge for max-tier users ── */
+        <View
           style={{
-            color: "#FFFFFF",
-            fontSize: 13,
-            fontFamily: "DMSans_600SemiBold",
+            flex: isDesktop ? undefined : 1,
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 10,
+            paddingVertical: 12,
+            paddingHorizontal: 16,
+            borderRadius: 14,
+            backgroundColor: colors.success + "18",
+            borderWidth: 1,
+            borderColor: colors.success + "40",
+            ...(isWeb ? { transition: "all 0.3s ease" } as any : {}),
           }}
-          numberOfLines={1}
+          accessibilityLabel="Identity Verified"
         >
-          {t("profile.verifyIdentity")}
-        </Text>
-      </Pressable>
+          <View
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 14,
+              backgroundColor: colors.success + "30",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Ionicons name="shield-checkmark" size={16} color={colors.success} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text
+              style={{
+                color: colors.success,
+                fontSize: 13,
+                fontFamily: "DMSans_700Bold",
+                letterSpacing: 0.2,
+              }}
+              numberOfLines={1}
+            >
+              {t("profile.identityVerified")}
+            </Text>
+            <Text
+              style={{
+                color: colors.success + "B0",
+                fontSize: 11,
+                fontFamily: "DMSans_400Regular",
+                marginTop: 1,
+              }}
+              numberOfLines={1}
+            >
+              {t("kyc.enhancedDd")} — {currentTier?.limit}
+            </Text>
+          </View>
+          <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+        </View>
+      ) : (
+        <Pressable
+          onPress={handleVerifyIdentity}
+          style={({ pressed, hovered }: any) => ({
+            flex: isDesktop ? undefined : 1,
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 8,
+            paddingVertical: 12,
+            paddingHorizontal: 16,
+            borderRadius: 14,
+            backgroundColor: pressed
+              ? colors.primary[600]
+              : isWeb && hovered
+                ? colors.primary[500]
+                : colors.primary[500] + "E6",
+            ...ts.glow(colors.primary[500], pressed ? 0.1 : isWeb && hovered ? 0.4 : 0.25),
+            ...(isWeb ? { cursor: "pointer", transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)" } as any : {}),
+            transform: [{ scale: pressed ? 0.97 : 1 }],
+          })}
+          accessibilityRole="button"
+          accessibilityLabel="Verify Identity"
+        >
+          <Ionicons name="shield-checkmark" size={16} color="#fff" />
+          <Text
+            style={{
+              color: "#FFFFFF",
+              fontSize: 13,
+              fontFamily: "DMSans_600SemiBold",
+            }}
+            numberOfLines={1}
+          >
+            {t("profile.verifyIdentity")}
+          </Text>
+        </Pressable>
+      )}
       <Pressable
         onPress={() => router.push("/settings/edit-profile" as any)}
         style={({ pressed, hovered }: any) => ({
@@ -721,16 +852,83 @@ export default function ProfileScreen() {
     <>
       <SectionHeader title={t("profile.security")} icon="shield-checkmark-outline" iconColor={colors.primary[400]} />
       <View style={{ ...cardStyle, marginBottom: 24 }}>
-        <MenuItem
-          icon="shield-checkmark-outline"
-          label={t("profile.verifyIdentity")}
-          subtitle={currentTier ? `${t(currentTier.labelKey)} - ${currentTier.limit}` : undefined}
-          onPress={handleVerifyIdentity}
-          iconBg={colors.primary[500] + "20"}
-          iconColor={colors.primary[400]}
-          tc={tc}
-          ts={ts}
-        />
+        {isMaxTier ? (
+          /* Verified status display for max-tier users */
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 14,
+              paddingVertical: 14,
+              paddingHorizontal: 18,
+            }}
+          >
+            <View
+              style={{
+                width: 42,
+                height: 42,
+                borderRadius: 12,
+                backgroundColor: colors.success + "18",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Ionicons name="shield-checkmark" size={22} color={colors.success} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text
+                style={{
+                  color: colors.success,
+                  fontSize: 15,
+                  fontFamily: "DMSans_600SemiBold",
+                }}
+              >
+                {t("profile.identityVerified")}
+              </Text>
+              <Text
+                style={{
+                  color: tc.textSecondary,
+                  fontSize: 12,
+                  fontFamily: "DMSans_400Regular",
+                  marginTop: 2,
+                }}
+              >
+                {t("kyc.enhancedDd")} — {currentTier?.limit}
+              </Text>
+            </View>
+            <View
+              style={{
+                paddingHorizontal: 10,
+                paddingVertical: 4,
+                borderRadius: 8,
+                backgroundColor: colors.success + "18",
+                borderWidth: 1,
+                borderColor: colors.success + "30",
+              }}
+            >
+              <Text
+                style={{
+                  color: colors.success,
+                  fontSize: 11,
+                  fontFamily: "DMSans_600SemiBold",
+                }}
+              >
+                {t("common.verified")}
+              </Text>
+            </View>
+          </View>
+        ) : (
+          <MenuItem
+            icon="shield-checkmark-outline"
+            label={t("profile.verifyIdentity")}
+            subtitle={currentTier ? `${t(currentTier.labelKey)} - ${currentTier.limit}` : undefined}
+            onPress={handleVerifyIdentity}
+            iconBg={colors.primary[500] + "20"}
+            iconColor={colors.primary[400]}
+            tc={tc}
+            ts={ts}
+          />
+        )}
         <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 76 }} />
         <MenuItem
           icon="lock-closed-outline"
@@ -899,6 +1097,57 @@ export default function ProfileScreen() {
     </>
   );
 
+  // ── Admin section (staff only) ──
+  const renderAdminSection = () => {
+    if (!user?.is_staff) return null;
+    return (
+      <>
+        <SectionHeader title="Admin" icon="shield-outline" iconColor="#F59E0B" />
+        <View style={{ ...cardStyle, marginBottom: 24 }}>
+          <MenuItem
+            icon="analytics-outline"
+            label="Float Management"
+            subtitle="Rebalance dashboard & float status"
+            onPress={() => router.push("/settings/admin-rebalance" as any)}
+            iconBg="rgba(245, 158, 11, 0.15)"
+            iconColor="#F59E0B"
+            tc={tc}
+            ts={ts}
+          />
+          <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 76 }} />
+          <MenuItem
+            icon="people-outline"
+            label="User Management"
+            subtitle="Manage accounts, verify KYC & suspend"
+            onPress={() => router.push("/settings/admin-users" as any)}
+            iconBg="rgba(99, 102, 241, 0.15)"
+            iconColor="#6366F1"
+            tc={tc}
+            ts={ts}
+          />
+          <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 76 }} />
+          <MenuItem
+            icon="stats-chart-outline"
+            label="Platform Stats"
+            subtitle="KPIs, system health & milestones"
+            onPress={() => {
+              const statsUrl = `${config.apiUrl}`.replace(/\/api\/v1\/?$/, "") + "/admin/stats/";
+              if (Platform.OS === "web") {
+                window.open(statsUrl, "_blank");
+              } else {
+                Linking.openURL(statsUrl);
+              }
+            }}
+            iconBg="rgba(16, 185, 129, 0.15)"
+            iconColor="#10B981"
+            tc={tc}
+            ts={ts}
+          />
+        </View>
+      </>
+    );
+  };
+
   // ── Support section ──
   const renderSupportSection = () => (
     <>
@@ -1009,9 +1258,84 @@ export default function ProfileScreen() {
             : {}),
         }}
       >
-        {/* Page title - mobile only */}
-        {!isDesktop && (
-          <View style={{ paddingHorizontal: hPad + 4, paddingTop: 8, paddingBottom: 6 }}>
+        {/* ── Suspension Banner ── */}
+        {user?.is_suspended && (
+          <View
+            style={{
+              marginHorizontal: hPad,
+              marginTop: isDesktop ? 12 : 8,
+              marginBottom: 12,
+              backgroundColor: colors.error + "12",
+              borderRadius: 16,
+              padding: 18,
+              borderWidth: 1,
+              borderColor: colors.error + "30",
+              flexDirection: "row",
+              alignItems: "flex-start",
+              gap: 14,
+            }}
+          >
+            <View
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 12,
+                backgroundColor: colors.error + "20",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Ionicons name="ban-outline" size={20} color={colors.error} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text
+                style={{
+                  color: colors.error,
+                  fontSize: 15,
+                  fontFamily: "DMSans_700Bold",
+                  marginBottom: 4,
+                }}
+              >
+                Account Suspended
+              </Text>
+              {user.suspension_reason ? (
+                <Text
+                  style={{
+                    color: colors.error + "CC",
+                    fontSize: 13,
+                    fontFamily: "DMSans_400Regular",
+                    lineHeight: 19,
+                  }}
+                >
+                  {user.suspension_reason}
+                </Text>
+              ) : null}
+              <Text
+                style={{
+                  color: tc.textMuted,
+                  fontSize: 12,
+                  fontFamily: "DMSans_400Regular",
+                  marginTop: 6,
+                }}
+              >
+                Transactions and profile updates are disabled. Contact support for assistance.
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* Page title with settings button */}
+        <View
+          style={{
+            paddingHorizontal: hPad + 4,
+            paddingTop: isDesktop ? 12 : 8,
+            paddingBottom: 6,
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          {!isDesktop && (
             <Text
               style={{
                 color: tc.textPrimary,
@@ -1022,8 +1346,37 @@ export default function ProfileScreen() {
             >
               {t("profile.profile")}
             </Text>
-          </View>
-        )}
+          )}
+          {isDesktop && <View />}
+          <Pressable
+            onPress={() => router.push("/settings" as any)}
+            style={({ pressed, hovered }: any) => ({
+              width: 44,
+              height: 44,
+              borderRadius: 14,
+              backgroundColor: hovered
+                ? tc.glass.highlight
+                : tc.dark.card,
+              alignItems: "center",
+              justifyContent: "center",
+              borderWidth: 1,
+              borderColor: hovered ? tc.glass.borderStrong : tc.glass.border,
+              opacity: pressed ? 0.8 : 1,
+              ...ts.sm,
+              ...(isWeb
+                ? ({
+                    cursor: "pointer",
+                    transition: "all 0.2s ease",
+                    transform: hovered ? "scale(1.05)" : "scale(1)",
+                  } as any)
+                : {}),
+            })}
+            accessibilityRole="button"
+            accessibilityLabel="Settings"
+          >
+            <Ionicons name="settings-outline" size={22} color={tc.textSecondary} />
+          </Pressable>
+        </View>
 
         {/* ── Profile Header Card ── */}
         <View
@@ -1045,19 +1398,34 @@ export default function ProfileScreen() {
               {/* Left: Avatar + Name + Phone */}
               <View style={{ alignItems: "center", minWidth: 180 }}>
                 {renderAvatar(96)}
-                <Text
-                  style={{
-                    color: tc.textPrimary,
-                    fontSize: 22,
-                    fontFamily: "DMSans_700Bold",
-                    letterSpacing: -0.3,
-                    marginTop: 16,
-                    marginBottom: 8,
-                    textAlign: "center",
-                  }}
-                >
-                  {user?.full_name || "User"}
-                </Text>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 16, marginBottom: 8 }}>
+                  <Text
+                    style={{
+                      color: tc.textPrimary,
+                      fontSize: 22,
+                      fontFamily: "DMSans_700Bold",
+                      letterSpacing: -0.3,
+                      textAlign: "center",
+                    }}
+                  >
+                    {user?.full_name || "User"}
+                  </Text>
+                  {(user?.kyc_tier ?? 0) >= 1 && (
+                    <View
+                      style={{
+                        width: 24,
+                        height: 24,
+                        borderRadius: 12,
+                        backgroundColor: colors.primary[500],
+                        alignItems: "center",
+                        justifyContent: "center",
+                        ...ts.glow(colors.primary[500], 0.3),
+                      }}
+                    >
+                      <Ionicons name="checkmark" size={14} color="#FFFFFF" />
+                    </View>
+                  )}
+                </View>
                 <View
                   style={{
                     flexDirection: "row",
@@ -1107,16 +1475,66 @@ export default function ProfileScreen() {
                       label={t("help.email")}
                       value={user?.email || t("common.notSet")}
                       tc={tc}
+                      badge={emailBadge}
                     />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <ProfileInfoChip
-                      icon="shield-checkmark-outline"
-                      label={t("kyc.currentLevel")}
-                      value={currentTier ? `${t("kyc.tier")} ${currentTier.tier}: ${t(currentTier.labelKey)}` : t("common.unverified")}
-                      tc={tc}
-                      onPress={handleVerifyIdentity}
-                    />
+                    {isMaxTier ? (
+                      /* Verified badge chip for max-tier */
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 10,
+                          backgroundColor: colors.success + "10",
+                          borderRadius: 14,
+                          padding: 14,
+                          borderWidth: 1,
+                          borderColor: colors.success + "25",
+                        }}
+                      >
+                        <View
+                          style={{
+                            width: 36,
+                            height: 36,
+                            borderRadius: 10,
+                            backgroundColor: colors.success + "20",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <Ionicons name="shield-checkmark" size={18} color={colors.success} />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_500Medium" }}>
+                            {t("kyc.currentLevel")}
+                          </Text>
+                          <Text style={{ color: colors.success, fontSize: 14, fontFamily: "DMSans_700Bold", marginTop: 1 }}>
+                            {t("profile.identityVerified")}
+                          </Text>
+                        </View>
+                        <View
+                          style={{
+                            paddingHorizontal: 8,
+                            paddingVertical: 3,
+                            borderRadius: 6,
+                            backgroundColor: colors.success + "18",
+                          }}
+                        >
+                          <Text style={{ color: colors.success, fontSize: 10, fontFamily: "DMSans_700Bold" }}>
+                            {t("kyc.tier").toUpperCase()} {currentTier?.tier}
+                          </Text>
+                        </View>
+                      </View>
+                    ) : (
+                      <ProfileInfoChip
+                        icon="shield-checkmark-outline"
+                        label={t("kyc.currentLevel")}
+                        value={currentTier ? `${t("kyc.tier")} ${currentTier.tier}: ${t(currentTier.labelKey)}` : t("common.unverified")}
+                        tc={tc}
+                        onPress={handleVerifyIdentity}
+                      />
+                    )}
                   </View>
                 </View>
 
@@ -1131,18 +1549,34 @@ export default function ProfileScreen() {
               <View style={{ alignItems: "center", marginBottom: 24, gap: 16 }}>
                 {renderAvatar(88)}
                 <View style={{ alignItems: "center" }}>
-                  <Text
-                    style={{
-                      color: tc.textPrimary,
-                      fontSize: 24,
-                      fontFamily: "DMSans_700Bold",
-                      letterSpacing: -0.3,
-                      marginBottom: 6,
-                      textAlign: "center",
-                    }}
-                  >
-                    {user?.full_name || "User"}
-                  </Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                    <Text
+                      style={{
+                        color: tc.textPrimary,
+                        fontSize: 24,
+                        fontFamily: "DMSans_700Bold",
+                        letterSpacing: -0.3,
+                        textAlign: "center",
+                      }}
+                    >
+                      {user?.full_name || "User"}
+                    </Text>
+                    {(user?.kyc_tier ?? 0) >= 1 && (
+                      <View
+                        style={{
+                          width: 26,
+                          height: 26,
+                          borderRadius: 13,
+                          backgroundColor: colors.primary[500],
+                          alignItems: "center",
+                          justifyContent: "center",
+                          ...ts.glow(colors.primary[500], 0.3),
+                        }}
+                      >
+                        <Ionicons name="checkmark" size={15} color="#FFFFFF" />
+                      </View>
+                    )}
+                  </View>
                   <View
                     style={{
                       flexDirection: "row",
@@ -1183,14 +1617,67 @@ export default function ProfileScreen() {
                   label={t("help.email")}
                   value={user?.email || t("common.notSet")}
                   tc={tc}
+                  badge={emailBadge}
                 />
-                <ProfileInfoChip
-                  icon="shield-checkmark-outline"
-                  label={t("kyc.currentLevel")}
-                  value={currentTier ? `${t("kyc.tier")} ${currentTier.tier}: ${t(currentTier.labelKey)}` : t("common.unverified")}
-                  tc={tc}
-                  onPress={handleVerifyIdentity}
-                />
+                {isMaxTier ? (
+                  /* Verified badge chip for max-tier — mobile */
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 12,
+                      backgroundColor: colors.success + "10",
+                      borderRadius: 14,
+                      padding: 14,
+                      borderWidth: 1,
+                      borderColor: colors.success + "25",
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 12,
+                        backgroundColor: colors.success + "20",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <Ionicons name="shield-checkmark" size={20} color={colors.success} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_500Medium" }}>
+                        {t("kyc.currentLevel")}
+                      </Text>
+                      <Text style={{ color: colors.success, fontSize: 15, fontFamily: "DMSans_700Bold", marginTop: 2 }}>
+                        {t("profile.identityVerified")}
+                      </Text>
+                      <Text style={{ color: tc.textSecondary, fontSize: 11, fontFamily: "DMSans_400Regular", marginTop: 1 }}>
+                        {t("kyc.enhancedDd")} — {currentTier?.limit}
+                      </Text>
+                    </View>
+                    <View
+                      style={{
+                        paddingHorizontal: 8,
+                        paddingVertical: 3,
+                        borderRadius: 6,
+                        backgroundColor: colors.success + "18",
+                      }}
+                    >
+                      <Text style={{ color: colors.success, fontSize: 10, fontFamily: "DMSans_700Bold" }}>
+                        {t("kyc.tier").toUpperCase()} {currentTier?.tier}
+                      </Text>
+                    </View>
+                  </View>
+                ) : (
+                  <ProfileInfoChip
+                    icon="shield-checkmark-outline"
+                    label={t("kyc.currentLevel")}
+                    value={currentTier ? `${t("kyc.tier")} ${currentTier.tier}: ${t(currentTier.labelKey)}` : t("common.unverified")}
+                    tc={tc}
+                    onPress={handleVerifyIdentity}
+                  />
+                )}
               </View>
 
               {/* KYC progress */}
@@ -1217,6 +1704,7 @@ export default function ProfileScreen() {
           >
             {/* Left column */}
             <View style={{ flex: 1 }}>
+              {renderAdminSection()}
               {renderSecuritySection()}
               {renderSupportSection()}
             </View>
@@ -1230,6 +1718,7 @@ export default function ProfileScreen() {
         ) : (
           /* Mobile: single column */
           <View style={{ paddingHorizontal: hPad }}>
+            {renderAdminSection()}
             {renderSecuritySection()}
             {renderPreferencesSection()}
             {renderSupportSection()}

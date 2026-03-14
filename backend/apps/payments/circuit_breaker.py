@@ -84,8 +84,35 @@ class PaymentCircuitBreaker:
 
     @classmethod
     def get_state(cls) -> str:
-        """Current breaker state. Defaults to CLOSED if no state in Redis."""
-        return cache.get(BREAKER_STATE_KEY, cls.CLOSED)
+        """Current breaker state.
+
+        If Redis state is missing (TTL expired, Redis restart), check the last
+        known float balance. If float was low, default to safe state instead of
+        blindly allowing payments.
+        """
+        state = cache.get(BREAKER_STATE_KEY)
+        if state is not None:
+            return state
+
+        # State missing — check if we have a last-known float to decide safely
+        last_float = cache.get(BREAKER_LAST_FLOAT_KEY)
+        if last_float is not None:
+            float_val = Decimal(str(last_float))
+            if float_val < FLOAT_EMERGENCY_KES:
+                logger.warning(
+                    f"Circuit breaker state missing, last float KES {float_val:,.0f} "
+                    f"< emergency threshold — defaulting to OPEN"
+                )
+                return cls.OPEN
+            if float_val < FLOAT_CRITICAL_KES:
+                logger.warning(
+                    f"Circuit breaker state missing, last float KES {float_val:,.0f} "
+                    f"< critical threshold — defaulting to HALF_OPEN"
+                )
+                return cls.HALF_OPEN
+
+        # No state, no float data — assume CLOSED (first boot / fresh Redis)
+        return cls.CLOSED
 
     @classmethod
     def get_reason(cls) -> str:
@@ -214,6 +241,10 @@ class PaymentCircuitBreaker:
         if old_state != new_state:
             cls._log_transition(old_state, new_state, reason, float_balance_kes)
 
+            # Trigger rebalance when entering or escalating to HALF_OPEN/OPEN
+            if new_state in (cls.HALF_OPEN, cls.OPEN):
+                cls._trigger_rebalance(float_balance_kes, new_state)
+
         return new_state
 
     # ── Manual controls (admin) ──────────────────────────────────────────
@@ -229,15 +260,48 @@ class PaymentCircuitBreaker:
         logger.warning(f"Circuit breaker FORCE PAUSED: {reason}")
 
     @classmethod
-    def force_resume(cls, admin_info: str = "admin") -> None:
-        """Admin manually resumes payments."""
+    def force_resume(cls, admin_info: str = "admin") -> dict:
+        """Admin manually resumes payments. Returns status dict with any warnings."""
         old_state = cls.get_state()
+        last_float = cls.get_last_float()
+
+        warnings = []
+        if last_float is not None and last_float < FLOAT_EMERGENCY_KES:
+            warnings.append(
+                f"WARNING: Last known float KES {last_float:,.0f} is below "
+                f"emergency threshold KES {FLOAT_EMERGENCY_KES:,.0f}. "
+                f"Payments will resume but may fail. The breaker will re-trip "
+                f"on next float check (~5 min)."
+            )
+            logger.warning(
+                f"Admin {admin_info} force-resuming payments with float "
+                f"KES {last_float:,.0f} BELOW emergency threshold"
+            )
+
         reason = f"Manual resume by {admin_info}"
         cls._set_state(cls.CLOSED, "")
         cache.delete(BREAKER_MANUAL_KEY)
         cache.delete(BREAKER_PAUSED_AT_KEY)
-        cls._log_transition(old_state, cls.CLOSED, reason, cls.get_last_float())
+        cls._log_transition(old_state, cls.CLOSED, reason, last_float)
         logger.info(f"Circuit breaker FORCE RESUMED by {admin_info}")
+        return {"resumed": True, "warnings": warnings}
+
+    # ── Rebalance integration ────────────────────────────────────────────
+
+    @classmethod
+    def _trigger_rebalance(cls, float_balance_kes: Decimal, breaker_state: str) -> None:
+        """Fire-and-forget Celery task to trigger rebalance when breaker trips."""
+        try:
+            from apps.wallets.tasks import trigger_rebalance_from_breaker
+            trigger_rebalance_from_breaker.delay(
+                str(float_balance_kes), breaker_state,
+            )
+            logger.info(
+                f"Rebalance task dispatched from circuit breaker "
+                f"(state={breaker_state}, float=KES {float_balance_kes:,.0f})"
+            )
+        except Exception as e:
+            logger.error(f"Failed to dispatch rebalance task from circuit breaker: {e}")
 
     # ── Internal helpers ─────────────────────────────────────────────────
 
@@ -261,9 +325,10 @@ class PaymentCircuitBreaker:
         float_balance: Optional[Decimal],
     ) -> None:
         """Log state transitions to both Python logger and Django audit log."""
+        float_str = f"KES {float_balance:,.0f}" if float_balance is not None else "unknown"
         msg = (
             f"Circuit breaker: {old_state} -> {new_state} | "
-            f"Float: KES {float_balance:,.0f if float_balance else 'unknown'} | "
+            f"Float: {float_str} | "
             f"Reason: {reason}"
         )
 

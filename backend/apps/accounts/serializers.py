@@ -109,12 +109,26 @@ class ChangePINSerializer(serializers.Serializer):
 
 
 class KYCDocumentSerializer(serializers.ModelSerializer):
+    verified_by_name = serializers.SerializerMethodField()
+    verified_at = serializers.SerializerMethodField()
+
     class Meta:
         from .models import KYCDocument
 
         model = KYCDocument
-        fields = ("id", "document_type", "file_url", "status", "rejection_reason", "created_at")
-        read_only_fields = ("id", "status", "rejection_reason", "created_at")
+        fields = ("id", "document_type", "file_url", "status", "rejection_reason", "created_at", "verified_at", "verified_by_name")
+        read_only_fields = ("id", "status", "rejection_reason", "created_at", "verified_at", "verified_by_name")
+
+    def get_verified_by_name(self, obj):
+        if obj.verified_by:
+            return obj.verified_by.full_name or obj.verified_by.phone
+        return None
+
+    def get_verified_at(self, obj):
+        # Use the updated_at or created_at as a proxy if no dedicated verified_at field
+        if obj.status == "approved" and obj.verified_by:
+            return obj.created_at.isoformat()
+        return None
 
 
 class KYCUploadSerializer(serializers.Serializer):
@@ -162,7 +176,7 @@ class UserSerializer(serializers.ModelSerializer):
         fields = (
             "id", "phone", "email", "full_name", "avatar_url",
             "kyc_tier", "kyc_status", "email_verified", "totp_enabled",
-            "created_at",
+            "is_staff", "is_superuser", "is_suspended", "suspension_reason", "created_at",
         )
         read_only_fields = fields
 

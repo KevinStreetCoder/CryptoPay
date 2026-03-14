@@ -13,7 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useState, useCallback, useEffect, useRef } from "react";
-import { useRouter } from "expo-router";
+import { useRouter, useNavigation } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -52,7 +52,8 @@ function useRates() {
       );
       return results.filter(Boolean) as Rate[];
     },
-    refetchInterval: 30000,
+    refetchInterval: 15000,
+    staleTime: 0,
   });
 }
 
@@ -270,6 +271,16 @@ export default function WalletScreen() {
     },
     [wallets, handleReceive]
   );
+
+  // Refetch wallet balances when this tab gains focus (e.g., after payment)
+  const navigation = useNavigation();
+  useEffect(() => {
+    const unsubscribe = navigation.addListener("focus", () => {
+      refetchWallets();
+      refetchTx();
+    });
+    return unsubscribe;
+  }, [navigation, refetchWallets, refetchTx]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -940,7 +951,7 @@ export default function WalletScreen() {
               <View>
                 <Text
                   style={{
-                    color: "#FFFFFF",
+                    color: tc.textPrimary,
                     fontSize: isDesktop ? 16 : 15,
                     fontFamily: "DMSans_600SemiBold",
                     marginBottom: 2,
@@ -963,7 +974,7 @@ export default function WalletScreen() {
             <View style={{ alignItems: "flex-end" }}>
               <Text
                 style={{
-                  color: "#FFFFFF",
+                  color: tc.textPrimary,
                   fontSize: isDesktop ? 18 : 16,
                   fontFamily: "DMSans_700Bold",
                   marginBottom: 2,
@@ -971,21 +982,19 @@ export default function WalletScreen() {
               >
                 {formatCrypto(balance, info?.decimals ?? 4)}
               </Text>
-              {kesValue > 0 && (
-                <Text
-                  style={{
-                    color: tc.textSecondary,
-                    fontSize: 13,
-                    fontFamily: "DMSans_500Medium",
-                  }}
-                >
-                  {balanceHidden
-                    ? "~KSh ****"
-                    : `~KSh ${kesValue.toLocaleString("en-KE", {
-                        maximumFractionDigits: 0,
-                      })}`}
-                </Text>
-              )}
+              <Text
+                style={{
+                  color: tc.textSecondary,
+                  fontSize: 13,
+                  fontFamily: "DMSans_500Medium",
+                }}
+              >
+                {balanceHidden
+                  ? "~KSh ****"
+                  : `~KSh ${kesValue.toLocaleString("en-KE", {
+                      maximumFractionDigits: 0,
+                    })}`}
+              </Text>
               {locked > 0 && (
                 <View
                   style={{
@@ -1196,7 +1205,7 @@ export default function WalletScreen() {
         <View style={{ width: "18%", minWidth: 120, alignItems: "flex-end" }}>
           <Text
             style={{
-              color: "#FFFFFF",
+              color: tc.textPrimary,
               fontSize: 14,
               fontFamily: "DMSans_700Bold",
             }}
@@ -1337,7 +1346,7 @@ export default function WalletScreen() {
                   </View>
                   <Text
                     style={{
-                      color: "#FFFFFF",
+                      color: tc.textPrimary,
                       fontSize: 40,
                       fontFamily: "DMSans_700Bold",
                       letterSpacing: -1,
@@ -1458,8 +1467,8 @@ export default function WalletScreen() {
                       alignItems: "center",
                       justifyContent: "center",
                       backgroundColor: hoverSend
-                        ? tc.dark.border
-                        : tc.dark.elevated,
+                        ? (isDark ? tc.dark.border : "#E2E8F0")
+                        : (isDark ? tc.dark.elevated : "#0F172A"),
                       borderRadius: 14,
                       height: 48,
                       width: 170,
@@ -1468,7 +1477,7 @@ export default function WalletScreen() {
                       borderWidth: 1,
                       borderColor: hoverSend
                         ? tc.glass.borderStrong
-                        : tc.glass.border,
+                        : (isDark ? tc.glass.border : "transparent"),
                       opacity: pressed ? 0.85 : 1,
                       transform: [{ scale: pressed ? 0.97 : 1 }],
                       ...ts.sm,
@@ -1479,21 +1488,21 @@ export default function WalletScreen() {
                         width: 28,
                         height: 28,
                         borderRadius: 14,
-                        backgroundColor: "rgba(255,255,255,0.1)",
+                        backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.2)",
                         alignItems: "center",
                         justifyContent: "center",
                       }}
                     >
-                      <Ionicons name="arrow-up" size={14} color="#FFFFFF" />
+                      <Ionicons name="arrow-up" size={14} color={isDark ? "#FFFFFF" : "#FFFFFF"} />
                     </View>
                     <Text
                       style={{
-                        color: "#FFFFFF",
+                        color: isDark ? "#FFFFFF" : "#FFFFFF",
                         fontSize: 14,
                         fontFamily: "DMSans_600SemiBold",
                       }}
                     >
-                      Send
+                      {t("wallet.send")}
                     </Text>
                   </Pressable>
                 </View>
@@ -1552,13 +1561,13 @@ export default function WalletScreen() {
                   </View>
                   <Text
                     style={{
-                      color: "#FFFFFF",
+                      color: tc.textPrimary,
                       fontSize: 18,
                       fontFamily: "DMSans_600SemiBold",
                       marginBottom: 8,
                     }}
                   >
-                    No crypto yet
+                    {t("wallet.noAssets")}
                   </Text>
                   <Text
                     style={{
@@ -1822,7 +1831,7 @@ export default function WalletScreen() {
           </View>
           <Text
             style={{
-              color: "#FFFFFF",
+              color: tc.textPrimary,
               fontSize: 38,
               fontFamily: "DMSans_700Bold",
               letterSpacing: -1,
@@ -1906,12 +1915,12 @@ export default function WalletScreen() {
                 flexDirection: "row",
                 alignItems: "center",
                 justifyContent: "center",
-                backgroundColor: tc.dark.elevated,
+                backgroundColor: isDark ? tc.dark.elevated : "#0F172A",
                 borderRadius: 16,
                 height: 52,
                 gap: 8,
                 borderWidth: 1,
-                borderColor: tc.glass.border,
+                borderColor: isDark ? tc.glass.border : "transparent",
                 opacity: pressed ? 0.85 : 1,
                 transform: [{ scale: pressed ? 0.98 : 1 }],
               })}
@@ -1935,7 +1944,7 @@ export default function WalletScreen() {
                   fontFamily: "DMSans_600SemiBold",
                 }}
               >
-                Send
+                {t("wallet.send")}
               </Text>
             </Pressable>
           </View>

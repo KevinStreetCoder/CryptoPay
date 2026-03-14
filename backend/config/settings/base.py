@@ -29,6 +29,7 @@ THIRD_PARTY_APPS = [
     "django_filters",
     "django_celery_beat",
     "drf_spectacular",
+    "django_prometheus",
 ]
 
 LOCAL_APPS = [
@@ -45,6 +46,7 @@ INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
 # --- Middleware ---
 MIDDLEWARE = [
+    "django_prometheus.middleware.PrometheusBeforeMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -55,6 +57,7 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "apps.core.middleware.AuditMiddleware",
     "apps.mpesa.middleware.MpesaIPWhitelistMiddleware",
+    "django_prometheus.middleware.PrometheusAfterMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -81,6 +84,7 @@ WSGI_APPLICATION = "config.wsgi.application"
 DATABASES = {
     "default": env.db("DATABASE_URL", default="postgres://cryptopay:cryptopay@localhost:5432/cryptopay"),
 }
+DATABASES["default"]["ENGINE"] = "django_prometheus.db.backends.postgresql"
 
 # --- Auth ---
 AUTH_USER_MODEL = "accounts.User"
@@ -125,6 +129,8 @@ CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = "Africa/Nairobi"
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
+CELERY_WORKER_SEND_TASK_EVENTS = True
+CELERY_TASK_SEND_SENT_EVENT = True
 CELERY_BEAT_SCHEDULE = {
     "refresh-exchange-rates": {
         "task": "apps.rates.tasks.refresh_rates",
@@ -170,6 +176,55 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.blockchain.sol_listener.update_sol_confirmations",
         "schedule": 10.0,  # Every 10 seconds
     },
+    # Stuck payment reconciliation
+    "check-pending-mpesa-payments": {
+        "task": "apps.payments.tasks.check_pending_mpesa_payments",
+        "schedule": 30.0,  # Every 30 seconds — catches stuck CONFIRMING txns
+    },
+    # Rebalancing
+    "check-and-trigger-rebalance": {
+        "task": "apps.wallets.tasks.check_and_trigger_rebalance",
+        "schedule": 300.0,  # Every 5 minutes
+    },
+    "check-stale-rebalance-orders": {
+        "task": "apps.wallets.tasks.check_stale_orders",
+        "schedule": 3600.0,  # Every hour
+    },
+    # Sweep / consolidation tasks
+    "scan-and-create-sweep-orders": {
+        "task": "apps.blockchain.sweep_tasks.scan_and_create_sweep_orders",
+        "schedule": 900.0,  # Every 15 minutes
+    },
+    "process-pending-sweeps": {
+        "task": "apps.blockchain.sweep_tasks.process_pending_sweeps",
+        "schedule": 300.0,  # Every 5 minutes
+    },
+    "verify-submitted-sweeps": {
+        "task": "apps.blockchain.sweep_tasks.verify_submitted_sweeps",
+        "schedule": 180.0,  # Every 3 minutes
+    },
+    "credit-confirmed-sweeps": {
+        "task": "apps.blockchain.sweep_tasks.credit_confirmed_sweeps",
+        "schedule": 300.0,  # Every 5 minutes
+    },
+    # Reconciliation
+    "reconcile-balances": {
+        "task": "apps.blockchain.sweep_tasks.reconcile_balances",
+        "schedule": 900.0,  # Every 15 minutes
+    },
+    # Custody tier management
+    "check-custody-thresholds": {
+        "task": "apps.wallets.tasks.check_custody_thresholds",
+        "schedule": 900.0,  # Every 15 minutes
+    },
+    "generate-custody-report": {
+        "task": "apps.wallets.tasks.generate_custody_report",
+        "schedule": 86400.0,  # Every 24 hours
+    },
+    "reconcile-wallet-balances": {
+        "task": "apps.wallets.tasks.reconcile_wallet_balances",
+        "schedule": 3600.0,  # Every hour
+    },
 }
 
 # --- DRF ---
@@ -213,13 +268,31 @@ SPECTACULAR_SETTINGS = {
     ],
 }
 
-# --- JWT ---
+# --- JWT (RS256 asymmetric signing) ---
+_jwt_private_key_path = env("JWT_PRIVATE_KEY_PATH", default="")
+_jwt_public_key_path = env("JWT_PUBLIC_KEY_PATH", default="")
+
+if _jwt_private_key_path and _jwt_public_key_path:
+    # Production: RS256 with separate key pair
+    with open(_jwt_private_key_path) as f:
+        _JWT_SIGNING_KEY = f.read()
+    with open(_jwt_public_key_path) as f:
+        _JWT_VERIFYING_KEY = f.read()
+    _JWT_ALGORITHM = "RS256"
+else:
+    # Development fallback: HS256 with dedicated signing key (NOT SECRET_KEY)
+    _JWT_SIGNING_KEY = env("JWT_SIGNING_KEY", default=SECRET_KEY)
+    _JWT_VERIFYING_KEY = ""
+    _JWT_ALGORITHM = "HS256"
+
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
-    "ALGORITHM": "HS256",
+    "ALGORITHM": _JWT_ALGORITHM,
+    "SIGNING_KEY": _JWT_SIGNING_KEY,
+    "VERIFYING_KEY": _JWT_VERIFYING_KEY,
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
@@ -254,6 +327,17 @@ FLOAT_CRITICAL_KES = env.int("FLOAT_CRITICAL_KES", default=500_000)
 FLOAT_RESUME_KES = env.int("FLOAT_RESUME_KES", default=800_000)
 FLOAT_HEALTHY_KES = env.int("FLOAT_HEALTHY_KES", default=1_500_000)
 FLOAT_LARGE_PAYMENT_KES = env.int("FLOAT_LARGE_PAYMENT_KES", default=50_000)
+
+# --- Rebalancing ---
+REBALANCE_MIN_KES = env.int("REBALANCE_MIN_KES", default=50_000)
+REBALANCE_MAX_KES = env.int("REBALANCE_MAX_KES", default=2_000_000)
+REBALANCE_COOLDOWN_SECONDS = env.int("REBALANCE_COOLDOWN_SECONDS", default=300)
+REBALANCE_EXECUTION_MODE = env("REBALANCE_EXECUTION_MODE", default="manual")  # "manual" or "api"
+
+# --- Yellow Card (future API integration) ---
+YELLOW_CARD_API_KEY = env("YELLOW_CARD_API_KEY", default="")
+YELLOW_CARD_SECRET_KEY = env("YELLOW_CARD_SECRET_KEY", default="")
+YELLOW_CARD_BASE_URL = env("YELLOW_CARD_BASE_URL", default="https://sandbox.api.yellowcard.io/business")
 MPESA_ALLOWED_IPS = env.list("MPESA_ALLOWED_IPS", default=[
     "196.201.214.0/24",
     "196.201.213.0/24",
@@ -283,6 +367,17 @@ PLATFORM_SPREAD_PERCENT = 1.5
 FLAT_FEE_KES = 10
 EXCISE_DUTY_PERCENT = 10  # 10% excise duty on VASP fees/commissions (VASP Act 2025)
 
+# --- KES Deposit Configuration ---
+DEPOSIT_FEE_PERCENTAGE = 1.5         # 1.5% deposit fee on KES→crypto
+DEPOSIT_MIN_KES = 100                # Minimum KES deposit
+DEPOSIT_MAX_KES = 300_000            # Maximum single deposit
+DEPOSIT_QUOTE_TTL_SECONDS = 30       # Rate lock duration for deposit quotes
+DEPOSIT_SLIPPAGE_TOLERANCE = 2.0     # Max 2% slippage from quoted rate
+
+# --- C2B Configuration ---
+MPESA_C2B_RESPONSE_TYPE = "Completed"  # "Completed" auto-accepts; "Cancelled" requires validation
+MPESA_C2B_ACCOUNT_PREFIX = "CP"        # Account reference prefix for C2B deposits
+
 # --- Blockchain ---
 TRON_API_KEY = env("TRON_API_KEY", default="")
 TRON_NETWORK = env("TRON_NETWORK", default="shasta")
@@ -307,6 +402,14 @@ WALLET_MNEMONIC = env("WALLET_MNEMONIC", default="")
 #
 # Option 2: Hex-encoded seed (64 bytes / 128 hex chars, for KMS/HSM storage)
 WALLET_MASTER_SEED = env("WALLET_MASTER_SEED", default="")
+
+# Platform hot wallet addresses (destination for on-chain sweeps).
+# Derived from WALLET_MNEMONIC at index 0, but explicitly set here for
+# safety — prevents funds being sent to a derivation mismatch address.
+HOT_WALLET_TRON = env("HOT_WALLET_TRON", default="")
+HOT_WALLET_ETH = env("HOT_WALLET_ETH", default="")
+HOT_WALLET_BTC = env("HOT_WALLET_BTC", default="")
+HOT_WALLET_SOL = env("HOT_WALLET_SOL", default="")
 
 REQUIRED_CONFIRMATIONS = {
     "tron": 19,         # ~1 min (3s blocks) — 1 solidified block = finality
@@ -467,6 +570,11 @@ LOGGING = {
             "level": "INFO",
             "propagate": False,
         },
+        "apps.wallets": {
+            "handlers": ["console", "file_payments", "file_error"],
+            "level": "INFO",
+            "propagate": False,
+        },
         "celery": {
             "handlers": ["console", "file_app"],
             "level": "INFO",
@@ -492,3 +600,6 @@ KYC_DAILY_LIMITS = {
     2: 250_000,     # KES - KRA PIN
     3: 1_000_000,   # KES - enhanced DD
 }
+
+# --- Prometheus ---
+PROMETHEUS_MULTIPROC_DIR = env("PROMETHEUS_MULTIPROC_DIR", default="")

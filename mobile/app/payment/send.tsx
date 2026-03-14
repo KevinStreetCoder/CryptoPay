@@ -56,8 +56,19 @@ export default function SendMpesaScreen() {
       toast.warning(t("payment.missingFields"), t("payment.fillAllFields"));
       return;
     }
-    if (phone.length < 9) {
-      toast.warning(t("payment.invalidPhone"), t("payment.enterValidPhone"));
+    // Strip leading 0 or +254 prefix for validation
+    const rawDigits = phone.replace(/^(\+?254|0)/, "");
+    if (rawDigits.length !== 9 || !/^[17]/.test(rawDigits)) {
+      toast.warning(t("payment.invalidPhone"), t("payment.invalidPhoneFormat"));
+      return;
+    }
+    const numAmount = parseFloat(amount);
+    if (isNaN(numAmount) || numAmount < 10) {
+      toast.warning(t("payment.invalidAmount"), t("payment.minimumAmount"));
+      return;
+    }
+    if (numAmount > 999999) {
+      toast.warning(t("payment.invalidAmount"), t("payment.maximumAmount"));
       return;
     }
     setLoading(true);

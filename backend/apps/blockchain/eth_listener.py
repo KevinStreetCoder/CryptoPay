@@ -110,11 +110,21 @@ def monitor_eth_deposits():
         return
 
     # High-water mark: last scanned block
+    # Priority: 1) Redis cache, 2) MAX block_number from DB, 3) current - 100
     last_scanned = cache.get("eth:last_scanned_block")
     if last_scanned:
         from_block = int(last_scanned) + 1
     else:
-        from_block = current_block - 100  # Start 100 blocks back on first run
+        # Fall back to the latest block we have on record for this chain,
+        # so a Redis restart doesn't cause re-scanning from scratch.
+        from django.db.models import Max
+        db_max = BlockchainDeposit.objects.filter(chain="ethereum").aggregate(
+            max_block=Max("block_number")
+        )["max_block"]
+        if db_max:
+            from_block = db_max + 1
+        else:
+            from_block = current_block - 100  # Start 100 blocks back on first run
 
     if from_block > current_block:
         return

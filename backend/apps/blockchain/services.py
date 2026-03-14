@@ -250,11 +250,17 @@ def _get_master_seed() -> bytes:
         return seed
 
     # Option 3: Fallback — derive from SECRET_KEY (development only)
+    if not settings.DEBUG:
+        raise RuntimeError(
+            "CRITICAL: WALLET_MNEMONIC or WALLET_MASTER_SEED must be set in production. "
+            "Refusing to derive wallet seed from SECRET_KEY. "
+            "Generate with: python manage.py generate_wallet_seed"
+        )
+
     secret = getattr(settings, "SECRET_KEY", "dev-secret-key")
     logger.warning(
-        "Using SECRET_KEY for wallet seed derivation. "
-        "Set WALLET_MNEMONIC or WALLET_MASTER_SEED for production use. "
-        "Generate with: python manage.py generate_wallet_seed"
+        "DEV ONLY: Using SECRET_KEY for wallet seed derivation. "
+        "Set WALLET_MNEMONIC or WALLET_MASTER_SEED for production use."
     )
     return hashlib.pbkdf2_hmac(
         "sha512",

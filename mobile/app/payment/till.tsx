@@ -58,6 +58,19 @@ export default function PayTillScreen() {
       toast.warning(t("payment.missingFields"), t("payment.fillAllFields"));
       return;
     }
+    const numAmount = parseFloat(amount);
+    if (isNaN(numAmount) || numAmount < 10) {
+      toast.warning(t("payment.invalidAmount"), t("payment.minimumAmount"));
+      return;
+    }
+    if (numAmount > 999999) {
+      toast.warning(t("payment.invalidAmount"), t("payment.maximumAmount"));
+      return;
+    }
+    if (tillNumber.length < 5 || tillNumber.length > 7) {
+      toast.warning(t("payment.invalidTill"), t("payment.invalidTillFormat"));
+      return;
+    }
     setLoading(true);
     try {
       const { data } = await ratesApi.lockRate({
@@ -239,6 +252,7 @@ export default function PayTillScreen() {
                 placeholder="e.g. 5678901"
                 placeholderTextColor={tc.dark.muted}
                 keyboardType="number-pad"
+                maxLength={7}
                 onFocus={() => setFocusedField("till")}
                 onBlur={() => setFocusedField(null)}
                 style={{

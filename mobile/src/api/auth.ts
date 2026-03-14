@@ -39,6 +39,10 @@ export interface User {
   kyc_status: string;
   email_verified?: boolean;
   totp_enabled?: boolean;
+  is_staff?: boolean;
+  is_superuser?: boolean;
+  is_suspended?: boolean;
+  suspension_reason?: string;
   created_at: string;
 }
 
@@ -59,6 +63,8 @@ export interface KYCDocument {
   status: "pending" | "approved" | "rejected";
   rejection_reason: string;
   created_at: string;
+  verified_at?: string;
+  verified_by_name?: string;
 }
 
 export const authApi = {
@@ -152,6 +158,16 @@ export const authApi = {
   getDevices: () => api.get("/auth/devices/"),
 
   removeDevice: (deviceId: string) => api.delete(`/auth/devices/${deviceId}/`),
+
+  // Forgot PIN recovery (3-step flow)
+  forgotPin: (phone: string) =>
+    api.post<{ message: string; dev_otp?: string }>("/auth/forgot-pin/", { phone }),
+
+  verifyPinResetOTP: (phone: string, otp: string) =>
+    api.post<{ token: string }>("/auth/forgot-pin/verify/", { phone, otp }),
+
+  resetPin: (token: string, new_pin: string) =>
+    api.post("/auth/reset-pin/", { token, new_pin }),
 
   // Transaction receipt
   downloadReceipt: (transactionId: string) =>

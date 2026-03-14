@@ -73,14 +73,15 @@ class PaymentSaga:
         """Step 1: Lock the crypto amount in the user's wallet."""
         wallet = self.tx.user.wallets.get(currency=self.tx.source_currency)
 
-        try:
-            WalletService.lock_funds(wallet.id, self.tx.source_amount)
-        except InsufficientBalanceError:
-            raise SagaError("Insufficient crypto balance")
+        with db_transaction.atomic():
+            try:
+                WalletService.lock_funds(wallet.id, self.tx.source_amount)
+            except InsufficientBalanceError:
+                raise SagaError("Insufficient crypto balance")
 
-        self.tx.saga_data["locked_wallet_id"] = str(wallet.id)
-        self.tx.saga_data["locked_amount"] = str(self.tx.source_amount)
-        self.tx.save(update_fields=["saga_data"])
+            self.tx.saga_data["locked_wallet_id"] = str(wallet.id)
+            self.tx.saga_data["locked_amount"] = str(self.tx.source_amount)
+            self.tx.save(update_fields=["saga_data"])
 
     def compensate_lock_crypto(self):
         """Reverse Step 1: Unlock the crypto."""
@@ -105,11 +106,11 @@ class PaymentSaga:
                 wallet_id,
                 amount,
                 self.tx.id,
-                f"Crypto conversion for {self.tx.type} - {self.tx.mpesa_paybill or self.tx.mpesa_till}",
+                f"Crypto conversion for {self.tx.type} - {self.tx.mpesa_paybill or self.tx.mpesa_till or self.tx.mpesa_phone}",
             )
-
-        self.tx.saga_data["conversion_completed"] = True
-        self.tx.save(update_fields=["saga_data"])
+            # Write saga checkpoint inside the same atomic block
+            self.tx.saga_data["conversion_completed"] = True
+            self.tx.save(update_fields=["saga_data"])
 
     def compensate_convert(self):
         """Reverse Step 2: Credit back the crypto."""
@@ -171,6 +172,17 @@ class PaymentSaga:
         self.tx.status = Transaction.Status.CONFIRMING
         self.tx.save(update_fields=["saga_data", "status", "updated_at"])
 
+        # Sandbox auto-complete: Safaricom sandbox callbacks are unreliable,
+        # so auto-complete after successful API submission to test the full flow.
+        # In production, the real callback will handle completion.
+        if getattr(django_settings, "MPESA_ENVIRONMENT", "") == "sandbox":
+            conv_id = result.get("ConversationID", "")
+            logger.info(
+                f"[SANDBOX] Auto-completing tx {self.tx.id} "
+                f"(ConversationID={conv_id}) — sandbox callbacks unreliable"
+            )
+            self.complete(mpesa_receipt=f"SANDBOX-{conv_id[:12]}")
+
     def compensate_mpesa(self):
         """Reverse Step 3: Request M-Pesa reversal if payment went through."""
         mpesa_receipt = self.tx.mpesa_receipt
@@ -192,7 +204,16 @@ class PaymentSaga:
                 )
 
     def complete(self, mpesa_receipt: str):
-        """Called when M-Pesa callback confirms success."""
+        """Called when M-Pesa callback confirms success. Idempotent."""
+        # Guard: only transition from PROCESSING/CONFIRMING to COMPLETED
+        self.tx.refresh_from_db(fields=["status"])
+        if self.tx.status == Transaction.Status.COMPLETED:
+            logger.info(f"Payment already completed: tx {self.tx.id} (duplicate callback)")
+            return
+        if self.tx.status == Transaction.Status.FAILED:
+            logger.warning(f"Cannot complete already-failed tx {self.tx.id}")
+            return
+
         self.tx.mpesa_receipt = mpesa_receipt
         self.tx.status = Transaction.Status.COMPLETED
         self.tx.completed_at = timezone.now()

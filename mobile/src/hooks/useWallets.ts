@@ -37,7 +37,9 @@ export function useWallets() {
       }
       return sortWallets(wallets);
     },
-    refetchInterval: 30000,
+    refetchInterval: 10000,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
 }
 

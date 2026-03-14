@@ -30,8 +30,8 @@ def send_transaction_receipt(user, transaction):
 
     Args:
         user: User model instance.
-        transaction: Transaction-like object with amount, currency, tx_type,
-                     status, reference, and created_at attributes.
+        transaction: Transaction model instance with dest_amount, dest_currency,
+                     type, status, id, and created_at attributes.
     """
     if not user.email:
         logger.warning(f"Cannot send receipt: user {user.phone} has no email.")
@@ -39,17 +39,18 @@ def send_transaction_receipt(user, transaction):
 
     from apps.core.tasks import send_transaction_receipt_task
 
+    ref = str(transaction.id)[:8].upper()
     send_transaction_receipt_task.delay(
         user_email=user.email,
         user_full_name=user.full_name or user.phone,
-        amount=str(transaction.amount),
-        currency=getattr(transaction, "currency", "KES"),
-        tx_type=getattr(transaction, "tx_type", "payment"),
+        amount=str(transaction.dest_amount),
+        currency=transaction.dest_currency,
+        tx_type=transaction.type,
         status=str(transaction.status),
-        reference=str(transaction.reference),
+        reference=ref,
         timestamp=transaction.created_at.isoformat(),
     )
-    logger.info(f"Queued transaction receipt for {user.email} — ref {transaction.reference}")
+    logger.info(f"Queued transaction receipt for {user.email} — ref {ref}")
 
 
 def send_kyc_status_email(user, document_type, status, rejection_reason=None):

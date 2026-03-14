@@ -22,6 +22,14 @@ export default function SettingsLayout() {
       <Stack.Screen name="help" />
       <Stack.Screen name="notifications-inbox" />
       <Stack.Screen name="edit-profile" />
+      <Stack.Screen name="terms" />
+      <Stack.Screen name="security" />
+      <Stack.Screen name="devices" />
+      <Stack.Screen name="totp-setup" />
+      <Stack.Screen name="admin-rebalance" />
+      <Stack.Screen name="admin-users" />
+      <Stack.Screen name="admin-user-detail" />
+      <Stack.Screen name="currency" />
     </Stack>
   );
 }

@@ -101,7 +101,13 @@ class PaymentSagaTest(TestCase):
         saga.execute()
 
         self.tx.refresh_from_db()
-        self.assertEqual(self.tx.status, Transaction.Status.CONFIRMING)
+        # In sandbox mode, auto-complete fires immediately after M-Pesa API success
+        # In production, status would be CONFIRMING until callback arrives
+        from django.conf import settings as django_settings
+        if getattr(django_settings, "MPESA_ENVIRONMENT", "") == "sandbox":
+            self.assertEqual(self.tx.status, Transaction.Status.COMPLETED)
+        else:
+            self.assertEqual(self.tx.status, Transaction.Status.CONFIRMING)
         self.wallet.refresh_from_db()
         self.assertEqual(self.wallet.balance, Decimal("80.00000000"))
 

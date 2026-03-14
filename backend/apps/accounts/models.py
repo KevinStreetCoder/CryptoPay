@@ -28,6 +28,11 @@ class User(AbstractBaseUser, PermissionsMixin):
     )
     is_active = models.BooleanField(default=True)
     is_suspended = models.BooleanField(default=False)
+    suspension_reason = models.TextField(blank=True, default="")
+    suspended_at = models.DateTimeField(null=True, blank=True)
+    suspended_by = models.ForeignKey(
+        "self", on_delete=models.SET_NULL, null=True, blank=True, related_name="suspended_users"
+    )
     is_staff = models.BooleanField(default=False)
     pin_attempts = models.SmallIntegerField(default=0)
     pin_locked_until = models.DateTimeField(null=True, blank=True)
@@ -155,12 +160,13 @@ class PushToken(models.Model):
 
 
 class EmailVerificationToken(models.Model):
-    """Token for email verification (24-hour expiry)."""
+    """Token for email verification with 6-digit OTP code."""
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="email_tokens")
     email = models.EmailField()
     token = models.CharField(max_length=64, unique=True, db_index=True)
+    otp_code = models.CharField(max_length=6, db_index=True, default="")
     is_used = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField()
@@ -173,15 +179,22 @@ class EmailVerificationToken(models.Model):
 
     @classmethod
     def create_for_user(cls, user, email):
-        from django.utils import timezone
+        import random
         from datetime import timedelta
 
+        from django.utils import timezone
+
+        # Invalidate any existing unused tokens for this user+email
+        cls.objects.filter(user=user, email=email, is_used=False).update(is_used=True)
+
         token = secrets.token_urlsafe(48)
+        otp_code = f"{random.randint(100000, 999999)}"
         return cls.objects.create(
             user=user,
             email=email,
             token=token,
-            expires_at=timezone.now() + timedelta(hours=24),
+            otp_code=otp_code,
+            expires_at=timezone.now() + timedelta(minutes=10),
         )
 
     @property

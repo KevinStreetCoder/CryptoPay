@@ -1,5 +1,5 @@
 import logging
-import random
+import secrets
 
 from django.conf import settings
 from django.core.cache import cache
@@ -70,7 +70,7 @@ class RequestOTPView(APIView):
             )
 
         # Generate 6-digit OTP
-        otp = f"{random.randint(100000, 999999)}"
+        otp = f"{secrets.randbelow(900000) + 100000}"
         cache.set(f"otp:{phone}", otp, timeout=300)  # Valid for 5 minutes
         cache.set(rate_key, attempts + 1, timeout=600)
 
@@ -95,10 +95,10 @@ class RequestOTPView(APIView):
             # Dev mode — log OTP to console
             logger.info(f"[DEV] OTP for {phone}: {otp}")
 
-        # In DEBUG mode, include OTP in response for easy development testing
+        # Log OTP server-side only — NEVER include in API response
         response_data = {"message": "OTP sent successfully"}
         if settings.DEBUG:
-            response_data["dev_otp"] = otp
+            logger.info(f"[DEV] OTP for {phone}: {otp}")
         return Response(response_data)
 
 
@@ -161,7 +161,7 @@ class RegisterView(APIView):
 
         return Response(
             {
-                "user": UserSerializer(user).data,
+                "user": UserSerializer(user, context={"request": request}).data,
                 "tokens": {
                     "refresh": str(refresh),
                     "access": str(refresh.access_token),
@@ -255,8 +255,6 @@ class LoginView(APIView):
             if user.otp_challenge_required:
                 response_data["otp_required"] = True
                 response_data["message"] = "Too many failed attempts. An OTP has been sent to your phone."
-                if settings.DEBUG and hasattr(self, "_last_challenge_otp"):
-                    response_data["dev_otp"] = self._last_challenge_otp
 
             return Response(response_data, status=status.HTTP_401_UNAUTHORIZED)
 
@@ -324,8 +322,6 @@ class LoginView(APIView):
                     "security_challenge": True,
                     "message": "New device or location detected. Enter the OTP sent to your phone.",
                 }
-                if settings.DEBUG and hasattr(self, "_last_challenge_otp"):
-                    response_data["dev_otp"] = self._last_challenge_otp
                 return Response(response_data, status=status.HTTP_403_FORBIDDEN)
             # Verify the OTP for security challenge
             stored_otp = cache.get(f"otp:{phone}")
@@ -381,7 +377,7 @@ class LoginView(APIView):
         )
 
         return Response({
-            "user": UserSerializer(user).data,
+            "user": UserSerializer(user, context={"request": request}).data,
             "tokens": {
                 "refresh": str(refresh),
                 "access": str(refresh.access_token),
@@ -390,7 +386,7 @@ class LoginView(APIView):
 
     def _send_otp_challenge(self, phone):
         """Auto-send an OTP when challenge is triggered."""
-        otp = f"{random.randint(100000, 999999)}"
+        otp = f"{secrets.randbelow(900000) + 100000}"
         cache.set(f"otp:{phone}", otp, timeout=300)
         # Store on instance so the view can include it in dev responses
         self._last_challenge_otp = otp
@@ -437,6 +433,27 @@ class ProfileView(APIView):
     def patch(self, request):
         user = request.user
 
+        if getattr(user, "is_suspended", False):
+            return Response(
+                {"detail": "Your account is suspended. Contact support for assistance."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # PIN verification required when changing name or email (not avatar-only)
+        has_text_changes = "full_name" in request.data or "email" in request.data
+        pin = request.data.get("pin", "")
+        if has_text_changes:
+            if not pin:
+                return Response(
+                    {"error": "PIN is required to update your profile"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if not user.check_pin(pin):
+                return Response(
+                    {"error": "Incorrect PIN"},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
         # Handle avatar upload
         if "avatar" in request.FILES:
             avatar = request.FILES["avatar"]
@@ -466,9 +483,21 @@ class ProfileView(APIView):
         if "full_name" in serializer.validated_data:
             user.full_name = serializer.validated_data["full_name"]
             update_fields.append("full_name")
-        if "email" in serializer.validated_data:
-            user.email = serializer.validated_data["email"] or None
-            update_fields.append("email")
+
+        email_changed = False
+        new_email = serializer.validated_data.get("email")
+        if new_email is not None:
+            old_email = user.email or ""
+            if new_email and new_email != old_email:
+                user.email = new_email
+                user.email_verified = False
+                update_fields.extend(["email", "email_verified"])
+                email_changed = True
+            elif not new_email and old_email:
+                user.email = None
+                user.email_verified = False
+                update_fields.extend(["email", "email_verified"])
+
         if "avatar" in request.FILES:
             update_fields.append("avatar")
 
@@ -480,9 +509,43 @@ class ProfileView(APIView):
                 entity_type="user",
                 entity_id=str(user.id),
                 details={"fields": update_fields},
+                ip_address=self._get_client_ip(request),
             )
 
-        return Response(UserSerializer(user, context={"request": request}).data)
+        # Auto-send email verification if email changed
+        verification_sent = False
+        if email_changed and new_email:
+            try:
+                token_obj = EmailVerificationToken.create_for_user(user, new_email)
+                from apps.core.tasks import send_email_task
+                from django.template.loader import render_to_string
+
+                verify_url = f"{settings.FRONTEND_URL}/verify-email?token={token_obj.token}"
+                html_content = render_to_string("email/email_verification.html", {
+                    "full_name": user.full_name or user.phone,
+                    "verify_url": verify_url,
+                    "verification_code": token_obj.otp_code,
+                })
+                send_email_task.delay(
+                    subject="CryptoPay — Verify Your Email",
+                    html_content=html_content,
+                    recipient_email=new_email,
+                )
+                verification_sent = True
+            except Exception:
+                import logging
+                logging.getLogger("accounts").exception("Failed to send verification email")
+
+        response_data = UserSerializer(user, context={"request": request}).data
+        if verification_sent:
+            response_data["email_verification_sent"] = True
+        return Response(response_data)
+
+    def _get_client_ip(self, request):
+        xff = request.META.get("HTTP_X_FORWARDED_FOR")
+        if xff:
+            return xff.split(",")[0].strip()
+        return request.META.get("REMOTE_ADDR", "")
 
 
 def _register_device(user, device_data: dict, ip_address: str) -> tuple[Device, bool]:
@@ -585,7 +648,7 @@ class GoogleLoginView(APIView):
 
         return Response(
             {
-                "user": UserSerializer(user).data,
+                "user": UserSerializer(user, context={"request": request}).data,
                 "tokens": {
                     "refresh": str(refresh),
                     "access": str(refresh.access_token),
@@ -669,6 +732,12 @@ class ChangePINView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        if getattr(request.user, "is_suspended", False):
+            return Response(
+                {"detail": "Your account is suspended. Contact support for assistance."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         serializer = ChangePINSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -844,7 +913,7 @@ class SendEmailVerificationView(APIView):
         html_content = render_to_string("email/email_verification.html", {
             "full_name": request.user.full_name or request.user.phone,
             "verify_url": verify_url,
-            "verification_code": token_obj.token[:6].upper(),
+            "verification_code": token_obj.otp_code,
         })
         send_email_task.delay(
             subject="CryptoPay — Verify Your Email",
@@ -862,7 +931,10 @@ class SendEmailVerificationView(APIView):
             ip_address=self._get_client_ip(request),
         )
 
-        return Response({"message": "Verification email sent", "verification_code": token_obj.token[:6].upper()})
+        data = {"message": "Verification email sent"}
+        if settings.DEBUG:
+            logger.info(f"[DEV] Email verification OTP: {token_obj.otp_code}")
+        return Response(data)
 
     def _get_client_ip(self, request):
         xff = request.META.get("HTTP_X_FORWARDED_FOR")
@@ -882,26 +954,44 @@ class ConfirmEmailVerificationView(APIView):
 
         token = serializer.validated_data["token"]
 
-        # Try full token first, then code (first 6 chars)
+        # Brute force protection: max 5 failed attempts per IP per 15 minutes
+        xff = request.META.get("HTTP_X_FORWARDED_FOR")
+        client_ip = xff.split(",")[0].strip() if xff else request.META.get("REMOTE_ADDR", "")
+        attempt_key = f"email_verify_attempts:{client_ip}"
+        attempts = cache.get(attempt_key, 0)
+        if attempts >= 5:
+            return Response(
+                {"error": "Too many attempts. Please wait and try again."},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+
+        # Try full token first
         token_obj = EmailVerificationToken.objects.filter(
             token=token, is_used=False
         ).first()
 
         if not token_obj:
-            # Try matching by first 6 chars (code-based verification)
+            # Try matching by 6-digit OTP code
+            token_obj = EmailVerificationToken.objects.filter(
+                otp_code=token.strip(), is_used=False
+            ).order_by("-created_at").first()
+
+        if not token_obj:
+            # Legacy: try matching by first 6 chars of token
             token_obj = EmailVerificationToken.objects.filter(
                 token__istartswith=token[:6], is_used=False
             ).first()
 
         if not token_obj:
+            cache.set(attempt_key, attempts + 1, timeout=900)  # 15-min window
             return Response(
-                {"error": "Invalid or expired verification token"},
+                {"error": "Invalid or expired verification code"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         if token_obj.is_expired:
             return Response(
-                {"error": "Verification token has expired. Request a new one."},
+                {"error": "Verification code has expired. Request a new one."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -1259,7 +1349,7 @@ class TOTPVerifyView(APIView):
         )
 
         return Response({
-            "user": UserSerializer(user).data,
+            "user": UserSerializer(user, context={"request": request}).data,
             "tokens": {
                 "refresh": str(refresh),
                 "access": str(refresh.access_token),
@@ -1395,7 +1485,7 @@ class ForgotPINView(APIView):
             return Response(response_data)
 
         # Generate OTP and store with pin_reset prefix
-        otp = f"{random.randint(100000, 999999)}"
+        otp = f"{secrets.randbelow(900000) + 100000}"
         cache.set(f"pin_reset_otp:{phone}", otp, timeout=300)
         cache.set(rate_key, attempts + 1, timeout=1800)
 
@@ -1416,9 +1506,6 @@ class ForgotPINView(APIView):
                     logger.info(f"PIN reset OTP for {phone}: {otp}")
         else:
             logger.info(f"[DEV] PIN reset OTP for {phone}: {otp}")
-
-        if settings.DEBUG:
-            response_data["dev_otp"] = otp
 
         AuditLog.objects.create(
             user=user,
@@ -1584,3 +1671,590 @@ class KYCCallbackView(APIView):
         if xff:
             return xff.split(",")[0].strip()
         return request.META.get("REMOTE_ADDR")
+
+
+# ── Admin Notification Helpers ────────────────────────────────────────────────
+
+
+def _notify_kyc_review(user, document_type, action, reason=""):
+    """Send email + SMS + push notification for KYC document review result."""
+    from apps.core.email import send_kyc_status_email
+    from apps.core.tasks import send_push_task, send_transaction_sms_task
+
+    status_str = "approved" if action == "approve" else "rejected"
+    doc_label = document_type.replace("_", " ").title()
+
+    # Email notification
+    send_kyc_status_email(user, document_type, status_str, rejection_reason=reason if action == "reject" else None)
+
+    # SMS notification
+    if user.phone:
+        if action == "approve":
+            sms_msg = f"CryptoPay: Your {doc_label} has been verified. Your account limits have been upgraded. Thank you!"
+        else:
+            sms_msg = f"CryptoPay: Your {doc_label} was not approved. Reason: {reason}. Please re-upload a valid document."
+
+        _send_admin_sms(user.phone, sms_msg)
+
+    # Push notification
+    if action == "approve":
+        send_push_task.delay(
+            user_id=str(user.id),
+            title="Document Verified",
+            body=f"Your {doc_label} has been approved. Your account limits have been upgraded.",
+            data={"type": "kyc_approved", "document_type": document_type},
+        )
+    else:
+        send_push_task.delay(
+            user_id=str(user.id),
+            title="Document Review Update",
+            body=f"Your {doc_label} was not approved: {reason}",
+            data={"type": "kyc_rejected", "document_type": document_type},
+        )
+
+
+def _notify_suspension(user, action, reason=""):
+    """Send email + SMS + push notification for account suspension/unsuspension."""
+    from apps.core.tasks import send_push_task, send_security_alert_task
+
+    if action == "suspend":
+        # Email via security alert
+        if user.email:
+            send_security_alert_task.delay(
+                user_email=user.email,
+                user_full_name=user.full_name or user.phone,
+                event_type="account_suspended",
+                ip_address="N/A",
+                device_info=f"Reason: {reason}",
+            )
+
+        # SMS
+        _send_admin_sms(user.phone, f"CryptoPay: Your account has been suspended. Reason: {reason}. Contact support@cryptopay.co.ke for assistance.")
+
+        # Push
+        send_push_task.delay(
+            user_id=str(user.id),
+            title="Account Suspended",
+            body=f"Your account has been suspended. Reason: {reason}",
+            data={"type": "account_suspended"},
+        )
+    else:
+        # Unsuspend
+        if user.email:
+            send_security_alert_task.delay(
+                user_email=user.email,
+                user_full_name=user.full_name or user.phone,
+                event_type="account_unsuspended",
+                ip_address="N/A",
+                device_info="Your account access has been restored.",
+            )
+
+        _send_admin_sms(user.phone, "CryptoPay: Your account has been reactivated. You can now use all platform features. Thank you for your patience.")
+
+        send_push_task.delay(
+            user_id=str(user.id),
+            title="Account Reactivated",
+            body="Your account has been reactivated. All features are now available.",
+            data={"type": "account_unsuspended"},
+        )
+
+
+def _notify_tier_upgrade(user, old_tier, new_tier):
+    """Send notifications when KYC tier changes."""
+    from apps.core.tasks import send_push_task
+    from apps.core.email import send_kyc_status_email
+
+    tier_labels = {0: "Phone Only", 1: "ID Verified", 2: "KRA PIN", 3: "Enhanced DD"}
+    tier_limits = {0: "KSh 5,000/day", 1: "KSh 50,000/day", 2: "KSh 250,000/day", 3: "KSh 1,000,000/day"}
+
+    if new_tier > old_tier:
+        # Upgrade
+        send_push_task.delay(
+            user_id=str(user.id),
+            title="Account Upgraded",
+            body=f"Your account has been upgraded to Tier {new_tier} ({tier_labels.get(new_tier, '')}). New limit: {tier_limits.get(new_tier, '')}",
+            data={"type": "kyc_tier_upgraded", "new_tier": new_tier},
+        )
+
+        if user.email:
+            send_kyc_status_email(user, f"Account Tier {new_tier}", "approved")
+
+        _send_admin_sms(user.phone, f"CryptoPay: Your account has been upgraded to Tier {new_tier} ({tier_labels.get(new_tier, '')}). New daily limit: {tier_limits.get(new_tier, '')}. Thank you!")
+    elif new_tier < old_tier:
+        # Downgrade
+        send_push_task.delay(
+            user_id=str(user.id),
+            title="Account Tier Updated",
+            body=f"Your account tier has been changed to Tier {new_tier} ({tier_labels.get(new_tier, '')}). Limit: {tier_limits.get(new_tier, '')}",
+            data={"type": "kyc_tier_changed", "new_tier": new_tier},
+        )
+
+
+def _send_admin_sms(phone, message):
+    """Send an SMS via Africa's Talking (or log in dev mode)."""
+    from django.conf import settings as _settings
+
+    if not phone:
+        return
+
+    if _settings.AT_API_KEY:
+        try:
+            import africastalking
+            africastalking.initialize(_settings.AT_USERNAME, _settings.AT_API_KEY)
+            sms = africastalking.SMS
+            sms.send(message, [phone], sender_id=_settings.AT_SENDER_ID)
+            logger.info(f"Admin SMS sent to {phone}")
+        except Exception as exc:
+            logger.error(f"Admin SMS failed for {phone}: {exc}")
+    else:
+        logger.info(f"[DEV] Admin SMS to {phone}: {message}")
+
+
+# ── Admin API Views ──────────────────────────────────────────────────────────
+
+from django.db import models as db_models
+
+
+class IsStaffUser(IsAuthenticated):
+    """Permission that requires staff status."""
+
+    def has_permission(self, request, view):
+        return super().has_permission(request, view) and request.user.is_staff
+
+
+class AdminUserListView(APIView):
+    """List users with KYC distribution stats. Staff only."""
+
+    permission_classes = [IsStaffUser]
+
+    def get(self, request):
+        from django.db.models import Count
+
+        # KYC distribution
+        kyc_distribution = list(
+            User.objects.values("kyc_tier")
+            .annotate(count=Count("id"))
+            .order_by("kyc_tier")
+        )
+        tier_labels = {
+            0: "Phone Only",
+            1: "ID Verified",
+            2: "KRA PIN",
+            3: "Enhanced DD",
+        }
+        distribution = [
+            {
+                "tier": row["kyc_tier"],
+                "label": tier_labels.get(row["kyc_tier"], f"Tier {row['kyc_tier']}"),
+                "count": row["count"],
+            }
+            for row in kyc_distribution
+        ]
+
+        # User list (paginated)
+        page = int(request.query_params.get("page", 1))
+        page_size = int(request.query_params.get("page_size", 20))
+        search = request.query_params.get("search", "").strip()
+        tier_filter = request.query_params.get("tier")
+
+        qs = User.objects.all().order_by("-created_at")
+
+        if search:
+            qs = qs.filter(
+                db_models.Q(phone__icontains=search)
+                | db_models.Q(full_name__icontains=search)
+                | db_models.Q(email__icontains=search)
+            )
+        if tier_filter is not None and tier_filter != "":
+            qs = qs.filter(kyc_tier=int(tier_filter))
+
+        total = qs.count()
+        start = (page - 1) * page_size
+        users = qs[start : start + page_size]
+
+        user_list = [
+            {
+                "id": str(u.id),
+                "phone": u.phone,
+                "full_name": u.full_name,
+                "email": u.email or "",
+                "kyc_tier": u.kyc_tier,
+                "kyc_status": u.kyc_status,
+                "is_active": u.is_active,
+                "is_suspended": u.is_suspended,
+                "created_at": u.created_at.isoformat(),
+            }
+            for u in users
+        ]
+
+        return Response(
+            {
+                "distribution": distribution,
+                "users": user_list,
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+            }
+        )
+
+
+class AdminVerifyUserView(APIView):
+    """Verify a user's KYC tier. Staff only."""
+
+    permission_classes = [IsStaffUser]
+
+    def post(self, request, user_id):
+        try:
+            target_user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response(
+                {"detail": "User not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        new_tier = request.data.get("kyc_tier")
+        if new_tier is None:
+            return Response(
+                {"detail": "kyc_tier is required"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        new_tier = int(new_tier)
+        if new_tier not in (0, 1, 2, 3):
+            return Response(
+                {"detail": "Invalid tier. Must be 0-3."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        old_tier = target_user.kyc_tier
+        target_user.kyc_tier = new_tier
+        target_user.kyc_status = "verified" if new_tier > 0 else "pending"
+        target_user.save(update_fields=["kyc_tier", "kyc_status", "updated_at"])
+
+        # Audit log
+        AuditLog.objects.create(
+            user=request.user,
+            action="admin_verify_user",
+            entity_type="user",
+            entity_id=str(target_user.id),
+            details={
+                "target_phone": target_user.phone,
+                "old_tier": old_tier,
+                "new_tier": new_tier,
+            },
+        )
+
+        # Send notifications for tier change
+        _notify_tier_upgrade(target_user, old_tier, new_tier)
+
+        logger.info(
+            "Admin %s verified user %s: tier %d → %d",
+            request.user.phone,
+            target_user.phone,
+            old_tier,
+            new_tier,
+        )
+
+        return Response(
+            {
+                "detail": f"User {target_user.phone} updated to tier {new_tier}",
+                "user": {
+                    "id": str(target_user.id),
+                    "phone": target_user.phone,
+                    "full_name": target_user.full_name,
+                    "kyc_tier": target_user.kyc_tier,
+                    "kyc_status": target_user.kyc_status,
+                },
+            }
+        )
+
+
+class AdminSuspendUserView(APIView):
+    """Suspend or unsuspend a user account. Staff only."""
+
+    permission_classes = [IsStaffUser]
+
+    def post(self, request, user_id):
+        try:
+            target_user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response({"detail": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        if target_user.is_staff:
+            return Response({"detail": "Cannot suspend staff accounts"}, status=status.HTTP_403_FORBIDDEN)
+
+        action = request.data.get("action")  # "suspend" or "unsuspend"
+        reason = request.data.get("reason", "")
+
+        if action not in ("suspend", "unsuspend"):
+            return Response({"detail": "action must be 'suspend' or 'unsuspend'"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if action == "suspend":
+            if not reason:
+                return Response({"detail": "Suspension reason is required"}, status=status.HTTP_400_BAD_REQUEST)
+            target_user.is_suspended = True
+            target_user.suspension_reason = reason
+            target_user.suspended_at = timezone.now()
+            target_user.suspended_by = request.user
+            target_user.save(update_fields=["is_suspended", "suspension_reason", "suspended_at", "suspended_by", "updated_at"])
+        else:
+            target_user.is_suspended = False
+            target_user.suspension_reason = ""
+            target_user.suspended_at = None
+            target_user.suspended_by = None
+            target_user.save(update_fields=["is_suspended", "suspension_reason", "suspended_at", "suspended_by", "updated_at"])
+
+        AuditLog.objects.create(
+            user=request.user,
+            action=f"admin_{action}_user",
+            entity_type="user",
+            entity_id=str(target_user.id),
+            details={
+                "target_phone": target_user.phone,
+                "action": action,
+                "reason": reason,
+            },
+        )
+
+        # Send notifications
+        _notify_suspension(target_user, action, reason)
+
+        logger.info("Admin %s %sed user %s: %s", request.user.phone, action, target_user.phone, reason)
+
+        return Response({
+            "detail": f"User {target_user.phone} {action}ed",
+            "user": {
+                "id": str(target_user.id),
+                "phone": target_user.phone,
+                "full_name": target_user.full_name,
+                "is_suspended": target_user.is_suspended,
+                "suspension_reason": target_user.suspension_reason,
+                "suspended_at": target_user.suspended_at.isoformat() if target_user.suspended_at else None,
+            },
+        })
+
+
+class AdminUserDetailView(APIView):
+    """Get detailed user info including activity and audit trail. Staff only."""
+
+    permission_classes = [IsStaffUser]
+
+    def get(self, request, user_id):
+        try:
+            target_user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response({"detail": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        # Recent transactions
+        from apps.payments.models import Transaction
+        recent_txns = Transaction.objects.filter(user=target_user).order_by("-created_at")[:20]
+        transactions = [
+            {
+                "id": str(tx.id)[:8],
+                "type": tx.type,
+                "status": tx.status,
+                "source_amount": str(tx.source_amount),
+                "source_currency": tx.source_currency,
+                "dest_amount": str(tx.dest_amount),
+                "dest_currency": tx.dest_currency,
+                "created_at": tx.created_at.isoformat(),
+            }
+            for tx in recent_txns
+        ]
+
+        # Wallet balances
+        from apps.wallets.models import Wallet
+        wallets = Wallet.objects.filter(user=target_user)
+        wallet_data = [
+            {
+                "currency": w.currency,
+                "balance": str(w.balance),
+                "locked_balance": str(w.locked_balance),
+                "available_balance": str(w.available_balance),
+            }
+            for w in wallets
+        ]
+
+        # Devices
+        devices = target_user.devices.all().order_by("-last_seen")[:10]
+        device_data = [
+            {
+                "device_name": d.device_name,
+                "platform": d.platform,
+                "ip_address": d.ip_address,
+                "is_trusted": d.is_trusted,
+                "last_seen": d.last_seen.isoformat(),
+            }
+            for d in devices
+        ]
+
+        # Audit log for this user (actions ON this user by admins)
+        audit_logs = AuditLog.objects.filter(
+            entity_type="user",
+            entity_id=str(target_user.id),
+        ).order_by("-created_at")[:20]
+        audit_data = [
+            {
+                "action": log.action,
+                "details": log.details,
+                "admin": log.user.phone if log.user else None,
+                "created_at": log.created_at.isoformat(),
+            }
+            for log in audit_logs
+        ]
+
+        # KYC documents
+        kyc_docs = target_user.kyc_documents.all().order_by("-created_at")
+        kyc_data = [
+            {
+                "id": str(doc.id),
+                "document_type": doc.document_type,
+                "file_url": doc.file_url,
+                "status": doc.status,
+                "rejection_reason": doc.rejection_reason,
+                "created_at": doc.created_at.isoformat(),
+            }
+            for doc in kyc_docs
+        ]
+
+        return Response({
+            "user": {
+                "id": str(target_user.id),
+                "phone": target_user.phone,
+                "full_name": target_user.full_name,
+                "email": target_user.email,
+                "email_verified": target_user.email_verified,
+                "kyc_tier": target_user.kyc_tier,
+                "kyc_status": target_user.kyc_status,
+                "is_active": target_user.is_active,
+                "is_suspended": target_user.is_suspended,
+                "suspension_reason": target_user.suspension_reason,
+                "suspended_at": target_user.suspended_at.isoformat() if target_user.suspended_at else None,
+                "suspended_by": target_user.suspended_by.phone if target_user.suspended_by else None,
+                "totp_enabled": target_user.totp_enabled,
+                "last_login_ip": target_user.last_login_ip,
+                "created_at": target_user.created_at.isoformat(),
+                "updated_at": target_user.updated_at.isoformat(),
+            },
+            "wallets": wallet_data,
+            "recent_transactions": transactions,
+            "devices": device_data,
+            "audit_log": audit_data,
+            "kyc_documents": kyc_data,
+        })
+
+
+class IsSuperUser(IsAuthenticated):
+    """Permission that requires superuser status (Django super admin)."""
+
+    def has_permission(self, request, view):
+        return super().has_permission(request, view) and request.user.is_superuser
+
+
+class AdminPromoteStaffView(APIView):
+    """Promote or demote a user to/from staff. Superuser only.
+
+    This is the only way to grant admin access. Protected by Django's
+    is_superuser flag — only the original super admin can promote others.
+    """
+
+    permission_classes = [IsSuperUser]
+
+    def post(self, request, user_id):
+        try:
+            target_user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response({"detail": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        if target_user.is_superuser:
+            return Response({"detail": "Cannot modify superuser accounts"}, status=status.HTTP_403_FORBIDDEN)
+
+        action = request.data.get("action")  # "promote" or "demote"
+        if action not in ("promote", "demote"):
+            return Response({"detail": "action must be 'promote' or 'demote'"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if action == "promote":
+            target_user.is_staff = True
+        else:
+            target_user.is_staff = False
+
+        target_user.save(update_fields=["is_staff", "updated_at"])
+
+        AuditLog.objects.create(
+            user=request.user,
+            action=f"admin_{action}_staff",
+            entity_type="user",
+            entity_id=str(target_user.id),
+            details={
+                "target_phone": target_user.phone,
+                "action": action,
+                "new_is_staff": target_user.is_staff,
+            },
+        )
+
+        logger.info("Superuser %s %sd staff for %s", request.user.phone, action, target_user.phone)
+
+        return Response({
+            "detail": f"User {target_user.phone} {'promoted to' if action == 'promote' else 'demoted from'} staff",
+            "user": {
+                "id": str(target_user.id),
+                "phone": target_user.phone,
+                "full_name": target_user.full_name,
+                "is_staff": target_user.is_staff,
+            },
+        })
+
+
+class AdminReviewKYCView(APIView):
+    """Approve or reject a KYC document. Staff only."""
+
+    permission_classes = [IsStaffUser]
+
+    def post(self, request, doc_id):
+        try:
+            doc = KYCDocument.objects.select_related("user").get(id=doc_id)
+        except KYCDocument.DoesNotExist:
+            return Response({"detail": "Document not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        action = request.data.get("action")  # "approve" or "reject"
+        reason = request.data.get("reason", "")
+
+        if action not in ("approve", "reject"):
+            return Response({"detail": "action must be 'approve' or 'reject'"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if action == "reject" and not reason:
+            return Response({"detail": "Rejection reason is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        doc.status = "approved" if action == "approve" else "rejected"
+        doc.rejection_reason = reason if action == "reject" else ""
+        doc.verified_by = request.user
+        doc.save(update_fields=["status", "rejection_reason", "verified_by"])
+
+        target_user = doc.user
+
+        # Audit log
+        AuditLog.objects.create(
+            user=request.user,
+            action=f"admin_{action}_kyc",
+            entity_type="kyc_document",
+            entity_id=str(doc.id),
+            details={
+                "target_phone": target_user.phone,
+                "document_type": doc.document_type,
+                "action": action,
+                "reason": reason,
+            },
+        )
+
+        # Send notifications (email + SMS + push)
+        _notify_kyc_review(target_user, doc.document_type, action, reason)
+
+        logger.info("Admin %s %sd KYC doc %s for user %s", request.user.phone, action, doc.document_type, target_user.phone)
+
+        return Response({
+            "detail": f"Document {action}d",
+            "document": {
+                "id": str(doc.id),
+                "document_type": doc.document_type,
+                "status": doc.status,
+                "rejection_reason": doc.rejection_reason,
+            },
+        })

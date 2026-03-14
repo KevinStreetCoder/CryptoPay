@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CryptoPay — Analytics Dashboard</title>
     <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
@@ -273,7 +274,13 @@
         .milestone:hover { border-color: var(--border); }
         .milestone.achieved { border-color: rgba(16, 185, 129, 0.3); }
         .milestone.achieved::after { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--primary); border-radius: var(--radius) var(--radius) 0 0; }
-        .milestone-icon { font-size: 24px; margin-bottom: 10px; }
+        .kpi-icon svg, .milestone-icon svg, .health-icon svg { width: 20px; height: 20px; }
+        .milestone-icon { display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 10px; margin-bottom: 10px; }
+        .milestone-icon.green { background: var(--primary-dim); color: var(--primary); }
+        .milestone-icon.amber { background: var(--accent-dim); color: var(--accent); }
+        .milestone-icon.blue { background: var(--info-dim); color: var(--info); }
+        .milestone-icon.purple { background: var(--purple-dim); color: var(--purple); }
+        .milestone-icon.red { background: var(--danger-dim); color: var(--danger); }
         .milestone-name { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
         .milestone-desc { font-size: 11px; color: var(--text-muted); line-height: 1.5; }
         .milestone-check { position: absolute; top: 12px; right: 12px; width: 20px; height: 20px; border-radius: 50%; background: var(--primary-dim); display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--primary); }
@@ -310,7 +317,7 @@
     <!-- ═══ HEADER ═══════════════════════════════════════════════ -->
     <div class="header">
         <div class="header-left">
-            <div class="logo">&#x26A1;</div>
+            <div class="logo"><i data-lucide="zap" style="width:22px;height:22px;color:#fff"></i></div>
             <div>
                 <h1><span>Crypto</span>Pay Analytics</h1>
                 <div class="header-sub">Business Intelligence &amp; Platform Metrics</div>
@@ -321,7 +328,7 @@
                 <div class="label">Last Updated</div>
                 <div class="time">{{ last_refresh }}</div>
             </div>
-            <a href="/admin/" class="admin-link">&#x2190; Admin Panel</a>
+            <a href="/admin/" class="admin-link"><i data-lucide="arrow-left" style="width:14px;height:14px"></i> Admin Panel</a>
         </div>
     </div>
 
@@ -329,7 +336,7 @@
     <div class="kpi-grid">
         <div class="kpi green">
             <div class="kpi-header">
-                <div class="kpi-icon">&#x1F465;</div>
+                <div class="kpi-icon"><i data-lucide="users" style="color:var(--primary)"></i></div>
                 <span class="trend {% if new_users_today > 0 %}up{% else %}flat{% endif %}">
                     {% if new_users_today > 0 %}&#x2191;{% else %}—{% endif %} +{{ new_users_today }} today
                 </span>
@@ -341,7 +348,7 @@
 
         <div class="kpi amber">
             <div class="kpi-header">
-                <div class="kpi-icon">&#x1F4B1;</div>
+                <div class="kpi-icon"><i data-lucide="arrow-left-right" style="color:var(--accent)"></i></div>
                 <span class="trend {% if success_rate >= 90 %}up{% elif success_rate >= 50 %}flat{% else %}down{% endif %}">
                     {{ success_rate }}% success
                 </span>
@@ -353,7 +360,7 @@
 
         <div class="kpi green">
             <div class="kpi-header">
-                <div class="kpi-icon">&#x1F4B0;</div>
+                <div class="kpi-icon"><i data-lucide="banknote" style="color:var(--primary)"></i></div>
             </div>
             <div class="kpi-value" style="font-size:22px">KES {{ total_revenue|floatformat:0 }}</div>
             <div class="kpi-label">Total Revenue (Fees)</div>
@@ -362,7 +369,7 @@
 
         <div class="kpi red">
             <div class="kpi-header">
-                <div class="kpi-icon">&#x26A0;</div>
+                <div class="kpi-icon"><i data-lucide="alert-triangle" style="color:var(--danger)"></i></div>
             </div>
             <div class="kpi-value">{{ failed_transactions }}</div>
             <div class="kpi-label">Failed Transactions</div>
@@ -371,7 +378,7 @@
 
         <div class="kpi purple">
             <div class="kpi-header">
-                <div class="kpi-icon">&#x1F4BC;</div>
+                <div class="kpi-icon"><i data-lucide="wallet" style="color:var(--purple)"></i></div>
             </div>
             <div class="kpi-value">{{ active_wallets }}</div>
             <div class="kpi-label">Active Wallets</div>
@@ -412,7 +419,7 @@
 
     <!-- ═══ MILESTONE STORY ═══════════════════════════════════ -->
     <div class="milestone-section">
-        <div class="milestone-title"><span style="font-size:16px">&#x1F3AF;</span> Growth Milestones</div>
+        <div class="milestone-title"><i data-lucide="target" style="width:18px;height:18px;color:var(--primary)"></i> Growth Milestones</div>
         <div class="milestone-grid" id="milestones"></div>
     </div>
 
@@ -459,22 +466,22 @@
     <!-- ═══ SYSTEM HEALTH ══════════════════════════════════════ -->
     <div class="health-grid">
         <div class="kpi green">
-            <div class="kpi-header"><div class="kpi-icon">&#x1F49A;</div></div>
+            <div class="kpi-header"><div class="kpi-icon"><i data-lucide="server" style="color:var(--primary)"></i></div></div>
             <div class="kpi-value" style="font-size:18px;color:var(--primary)">Healthy</div>
             <div class="kpi-label">API Server</div>
         </div>
         <div class="kpi blue">
-            <div class="kpi-header"><div class="kpi-icon">&#x1F4E6;</div></div>
+            <div class="kpi-header"><div class="kpi-icon"><i data-lucide="package" style="color:var(--info)"></i></div></div>
             <div class="kpi-value" style="font-size:18px">{{ celery_tasks_24h|default:"0" }}</div>
             <div class="kpi-label">Celery Tasks (24h)</div>
         </div>
         <div class="kpi amber">
-            <div class="kpi-header"><div class="kpi-icon">&#x23F1;</div></div>
+            <div class="kpi-header"><div class="kpi-icon"><i data-lucide="timer" style="color:var(--accent)"></i></div></div>
             <div class="kpi-value" style="font-size:18px" id="uptime-val">60s</div>
             <div class="kpi-label">Auto-refresh</div>
         </div>
         <div class="kpi blue">
-            <div class="kpi-header"><div class="kpi-icon">&#x1F195;</div></div>
+            <div class="kpi-header"><div class="kpi-icon"><i data-lucide="user-plus" style="color:var(--info)"></i></div></div>
             <div class="kpi-value" style="font-size:18px">{{ new_users_7d }}</div>
             <div class="kpi-label">New Users (7d)</div>
             <div class="kpi-sub">30d: {{ new_users_30d }}</div>
@@ -551,14 +558,14 @@ renderTrend('trend-30d', trends30d, '30d');
 // ── Milestones ────────────────────────────────────────────────────────
 (function() {
     const milestones = [
-        { icon: '&#x1F680;', name: 'First User', desc: 'Platform registered its first user', threshold: 1, metric: totalUsers },
-        { icon: '&#x1F389;', name: '10 Users', desc: 'Early adopter community formed', threshold: 10, metric: totalUsers },
-        { icon: '&#x1F4B3;', name: 'First Transaction', desc: 'First successful payment processed', threshold: 1, metric: totalTransactions },
-        { icon: '&#x2B50;', name: '100 Transactions', desc: 'Platform gaining real traction', threshold: 100, metric: totalTransactions },
-        { icon: '&#x1F4B5;', name: 'KES 1K Revenue', desc: 'First thousand in fee revenue', threshold: 1000, metric: totalRevenue },
-        { icon: '&#x1F31F;', name: '50 Users', desc: 'Growing user base milestone', threshold: 50, metric: totalUsers },
-        { icon: '&#x1F3C6;', name: '1K Transactions', desc: 'Proven product-market fit signal', threshold: 1000, metric: totalTransactions },
-        { icon: '&#x1F4B0;', name: 'KES 100K Revenue', desc: 'Significant revenue milestone', threshold: 100000, metric: totalRevenue },
+        { icon: 'rocket', colorClass: 'green', name: 'First User', desc: 'Platform registered its first user', threshold: 1, metric: totalUsers },
+        { icon: 'party-popper', colorClass: 'amber', name: '10 Users', desc: 'Early adopter community formed', threshold: 10, metric: totalUsers },
+        { icon: 'credit-card', colorClass: 'blue', name: 'First Transaction', desc: 'First successful payment processed', threshold: 1, metric: totalTransactions },
+        { icon: 'star', colorClass: 'amber', name: '100 Transactions', desc: 'Platform gaining real traction', threshold: 100, metric: totalTransactions },
+        { icon: 'banknote', colorClass: 'green', name: 'KES 1K Revenue', desc: 'First thousand in fee revenue', threshold: 1000, metric: totalRevenue },
+        { icon: 'sparkles', colorClass: 'purple', name: '50 Users', desc: 'Growing user base milestone', threshold: 50, metric: totalUsers },
+        { icon: 'trophy', colorClass: 'amber', name: '1K Transactions', desc: 'Proven product-market fit signal', threshold: 1000, metric: totalTransactions },
+        { icon: 'circle-dollar-sign', colorClass: 'green', name: 'KES 100K Revenue', desc: 'Significant revenue milestone', threshold: 100000, metric: totalRevenue },
     ];
 
     const grid = document.getElementById('milestones');
@@ -567,14 +574,15 @@ renderTrend('trend-30d', trends30d, '30d');
         const progress = Math.min(m.metric / m.threshold * 100, 100);
         grid.innerHTML += `
             <div class="milestone ${achieved ? 'achieved' : ''}">
-                ${achieved ? '<div class="milestone-check">&#x2713;</div>' : ''}
-                <div class="milestone-icon">${m.icon}</div>
+                ${achieved ? '<div class="milestone-check"><i data-lucide="check" style="width:12px;height:12px"></i></div>' : ''}
+                <div class="milestone-icon ${m.colorClass}"><i data-lucide="${m.icon}"></i></div>
                 <div class="milestone-name">${m.name}</div>
                 <div class="milestone-desc">${achieved ? 'Achieved!' : Math.round(progress) + '% — ' + m.desc}</div>
                 ${!achieved ? '<div class="trend-card-bar" style="margin-top:10px"><div class="trend-card-bar-fill" style="width:'+progress+'%;background:var(--primary)"></div></div>' : ''}
             </div>
         `;
     });
+    if (typeof lucide !== 'undefined') lucide.createIcons();
 })();
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -591,7 +599,7 @@ renderTrend('trend-30d', trends30d, '30d');
         const filtered = dailyVolume.filter(d => new Date(d.date) >= cutoff);
 
         if (!filtered.length) {
-            container.html('<div class="no-data"><div style="font-size:36px;margin-bottom:10px;opacity:0.3">&#x1F4C8;</div><div style="font-weight:600">No data for this period</div></div>');
+            container.html('<div class="no-data"><div style="margin-bottom:10px"><i data-lucide="bar-chart-2" style="width:36px;height:36px;opacity:0.3"></i></div><div style="font-weight:600">No data for this period</div></div>');
             return;
         }
 
@@ -631,6 +639,7 @@ renderTrend('trend-30d', trends30d, '30d');
 
         svg.append('g').attr('class','axis').attr('transform',`translate(0,${height})`).call(d3.axisBottom(x).ticks(Math.min(data.length, 8)).tickFormat(d3.timeFormat('%b %d')));
         svg.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(5).tickFormat(d=>fmtShort(d)));
+        if (typeof lucide !== 'undefined') lucide.createIcons();
     }
 
     drawVolume(30);
@@ -799,6 +808,8 @@ renderTrend('trend-30d', trends30d, '30d');
     function tick() { el.textContent = cd + 's'; if (cd <= 0) { window.location.reload(); return; } cd--; setTimeout(tick, 1000); }
     tick();
 })();
+
+lucide.createIcons();
 </script>
 </body>
 </html>

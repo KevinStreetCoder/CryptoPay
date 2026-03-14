@@ -109,9 +109,9 @@ export default function TransactionDetailScreen() {
         }}
       >
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
-          {iconName && (
+          {iconName ? (
             <Ionicons name={iconName as any} size={16} color={tc.textMuted} />
-          )}
+          ) : null}
           <Text
             style={{
               color: tc.textMuted,
