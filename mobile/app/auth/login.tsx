@@ -85,27 +85,29 @@ function BrandPanel({ tc }: { tc: ReturnType<typeof getThemeColors> }) {
       <View style={{ alignItems: "center", marginBottom: 32 }}>
         <View
           style={{
-            width: 80,
-            height: 80,
-            borderRadius: 24,
+            width: 56,
+            height: 56,
+            borderRadius: 16,
             backgroundColor: tc.primary[500],
             alignItems: "center",
             justifyContent: "center",
-            marginBottom: 24,
-            shadowColor: tc.primary[500],
-            shadowOffset: { width: 0, height: 8 },
-            shadowOpacity: 0.4,
-            shadowRadius: 24,
+            marginBottom: 20,
+            ...(Platform.OS === "web" ? { boxShadow: `0 8px 24px ${tc.primary[500]}40` } as any : {
+              shadowColor: tc.primary[500],
+              shadowOffset: { width: 0, height: 6 },
+              shadowOpacity: 0.35,
+              shadowRadius: 16,
+            }),
           }}
         >
-          <Ionicons name="flash" size={40} color="#FFFFFF" />
+          <Ionicons name="flash" size={28} color="#FFFFFF" />
         </View>
         <Text
           style={{
             color: tc.textPrimary,
-            fontSize: 36,
+            fontSize: 32,
             fontFamily: "DMSans_700Bold",
-            letterSpacing: -1,
+            letterSpacing: -0.8,
             marginBottom: 12,
           }}
         >
@@ -337,50 +339,34 @@ export default function LoginScreen() {
           >
             <View
               style={{
-                position: "relative",
                 alignItems: "center",
                 justifyContent: "center",
                 marginBottom: 16,
-                width: 96,
-                height: 96,
               }}
             >
               <View
                 style={{
-                  position: "absolute",
-                  width: 96,
-                  height: 96,
-                  borderRadius: 48,
-                  backgroundColor: "rgba(16, 185, 129, 0.10)",
-                }}
-              />
-              <View
-                style={{
-                  position: "absolute",
-                  width: 76,
-                  height: 76,
-                  borderRadius: 38,
-                  backgroundColor: "rgba(16, 185, 129, 0.18)",
-                }}
-              />
-              <View
-                style={{
-                  width: 64,
-                  height: 64,
-                  borderRadius: 20,
+                  width: 52,
+                  height: 52,
+                  borderRadius: 16,
                   backgroundColor: tc.primary[500],
                   alignItems: "center",
                   justifyContent: "center",
+                  shadowColor: tc.primary[500],
+                  shadowOffset: { width: 0, height: 6 },
+                  shadowOpacity: 0.35,
+                  shadowRadius: 14,
+                  elevation: 8,
                 }}
               >
-                <Ionicons name="flash" size={32} color="#FFFFFF" />
+                <Ionicons name="flash" size={26} color="#FFFFFF" />
               </View>
             </View>
 
             <Text
               style={{
                 color: tc.textPrimary,
-                fontSize: 30,
+                fontSize: 26,
                 fontFamily: "DMSans_700Bold",
                 letterSpacing: -0.5,
               }}

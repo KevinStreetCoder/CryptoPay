@@ -128,6 +128,8 @@
       "name": "CryptoPay"
     },
     "extra": {
+      "API_URL": "https://cpay.co.ke/api/v1",
+      "APP_ENV": "production",
       "privacyPolicyUrl": "https://cpay.co.ke/privacy",
       "termsOfServiceUrl": "https://cpay.co.ke/terms",
       "supportEmail": "support@cpay.co.ke",
