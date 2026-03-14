@@ -124,7 +124,7 @@ class STKCallbackView(APIView):
                             tx.completed_at = timezone.now()
                             tx.save(update_fields=["mpesa_receipt", "status", "completed_at", "updated_at"])
 
-                            wallet = Wallet.objects.get(
+                            wallet, _ = Wallet.objects.get_or_create(
                                 user=tx.user, currency=tx.dest_currency,
                             )
                             # Deterministic tx_id to prevent double-credit on retry
@@ -437,7 +437,7 @@ def _parse_c2b_account_ref(bill_ref: str, phone: str):
         lookup_phone = phone
 
     # Normalize phone to +254 format
-    lookup_phone = lookup_phone.strip().replace(" ", "")
+    lookup_phone = lookup_phone.strip().replace(" ", "").replace("-", "")
     if lookup_phone.startswith("0"):
         lookup_phone = "+254" + lookup_phone[1:]
     elif lookup_phone.startswith("254"):

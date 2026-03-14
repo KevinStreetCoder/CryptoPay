@@ -18,6 +18,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from django.utils import timezone
+
 from apps.accounts.models import AuditLog
 
 from .circuit_breaker import PaymentCircuitBreaker, PaymentsPaused
@@ -27,6 +29,35 @@ from .serializers import BuyCryptoSerializer, DepositQuoteSerializer, PayBillSer
 from .services import DailyLimitExceededError, check_daily_limit
 
 logger = logging.getLogger(__name__)
+
+
+def _verify_pin_with_lockout(user, pin: str):
+    """Verify PIN with progressive lockout tracking. Returns None on success, or a Response on failure."""
+    if user.pin_locked_until and user.pin_locked_until > timezone.now():
+        return Response(
+            {"error": "Account temporarily locked. Try again later."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    if not user.check_pin(pin):
+        user.pin_attempts += 1
+        lockout_thresholds = {5: 60, 10: 300, 15: 3600}
+        lockout_seconds = lockout_thresholds.get(user.pin_attempts)
+        if lockout_seconds:
+            from datetime import timedelta
+            user.pin_locked_until = timezone.now() + timedelta(seconds=lockout_seconds)
+        if user.pin_attempts >= 3 and not user.otp_challenge_required:
+            user.otp_challenge_required = True
+        user.save(update_fields=["pin_attempts", "pin_locked_until", "otp_challenge_required"])
+        return Response({"error": "Invalid PIN"}, status=status.HTTP_401_UNAUTHORIZED)
+
+    # Success — reset attempts
+    if user.pin_attempts > 0:
+        user.pin_attempts = 0
+        user.otp_challenge_required = False
+        user.save(update_fields=["pin_attempts", "otp_challenge_required"])
+
+    return None
 
 
 class IsNotSuspended(IsAuthenticated):
@@ -52,9 +83,10 @@ class PayBillView(APIView):
         user = request.user
         data = serializer.validated_data
 
-        # Verify PIN
-        if not user.check_pin(data["pin"]):
-            return Response({"error": "Invalid PIN"}, status=status.HTTP_401_UNAUTHORIZED)
+        # Verify PIN with lockout tracking
+        pin_error = _verify_pin_with_lockout(user, data["pin"])
+        if pin_error:
+            return pin_error
 
         # Check idempotency — Layer 2 (Redis)
         idem_key = data["idempotency_key"]
@@ -190,8 +222,9 @@ class PayTillView(APIView):
         user = request.user
         data = serializer.validated_data
 
-        if not user.check_pin(data["pin"]):
-            return Response({"error": "Invalid PIN"}, status=status.HTTP_401_UNAUTHORIZED)
+        pin_error = _verify_pin_with_lockout(user, data["pin"])
+        if pin_error:
+            return pin_error
 
         idem_key = data["idempotency_key"]
         redis_key = f"payment:{idem_key}"
@@ -284,8 +317,9 @@ class SendMpesaView(APIView):
         user = request.user
         data = serializer.validated_data
 
-        if not user.check_pin(data["pin"]):
-            return Response({"error": "Invalid PIN"}, status=status.HTTP_401_UNAUTHORIZED)
+        pin_error = _verify_pin_with_lockout(user, data["pin"])
+        if pin_error:
+            return pin_error
 
         idem_key = data["idempotency_key"]
         redis_key = f"payment:{idem_key}"
@@ -392,8 +426,9 @@ class BuyCryptoView(APIView):
         user = request.user
         data = serializer.validated_data
 
-        if not user.check_pin(data["pin"]):
-            return Response({"error": "Invalid PIN"}, status=status.HTTP_401_UNAUTHORIZED)
+        pin_error = _verify_pin_with_lockout(user, data["pin"])
+        if pin_error:
+            return pin_error
 
         # Idempotency check
         idem_key = data["idempotency_key"]
@@ -614,6 +649,11 @@ class C2BInstructionsView(APIView):
                     "description": "Deposit and receive USDT (Tether)",
                 },
                 {
+                    "currency": "USDC",
+                    "account_number": f"USDC-{phone}",
+                    "description": "Deposit and receive USDC (USD Coin)",
+                },
+                {
                     "currency": "BTC",
                     "account_number": f"BTC-{phone}",
                     "description": "Deposit and receive Bitcoin",
@@ -710,8 +750,11 @@ class TransactionReceiptView(APIView):
             # Ensure CORS headers are present (FileResponse may bypass middleware)
             origin = request.META.get("HTTP_ORIGIN", "")
             if origin:
-                response["Access-Control-Allow-Origin"] = origin
-                response["Access-Control-Allow-Credentials"] = "true"
+                from django.conf import settings as _cors_settings
+                allowed = getattr(_cors_settings, "CORS_ALLOWED_ORIGINS", [])
+                if origin in allowed or getattr(_cors_settings, "CORS_ALLOW_ALL_ORIGINS", False):
+                    response["Access-Control-Allow-Origin"] = origin
+                    response["Access-Control-Allow-Credentials"] = "true"
             return response
 
         return Response(

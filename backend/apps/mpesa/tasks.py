@@ -235,27 +235,44 @@ def process_c2b_deposit(trans_id: str, amount_str: str, phone: str, bill_ref: st
             f"C2B deposit {trans_id}: could not find user for "
             f"ref='{bill_ref}' phone='{phone}'. MANUAL INTERVENTION REQUIRED."
         )
+        _send_c2b_admin_alert(trans_id, amount, phone, bill_ref,
+                              "Orphaned deposit — no matching user found")
         return
 
+    # Enforce min/max limits (validation may be bypassed when ResponseType="Completed")
+    min_kes = Decimal(str(getattr(settings, "DEPOSIT_MIN_KES", 100)))
+    max_kes = Decimal(str(getattr(settings, "DEPOSIT_MAX_KES", 300_000)))
+    if amount < min_kes or amount > max_kes:
+        logger.error(
+            f"C2B deposit {trans_id}: amount KES {amount} outside limits "
+            f"({min_kes}-{max_kes}). Flagged for manual review."
+        )
+        # Still process — money is already received. Flag for ops team.
+        _send_c2b_admin_alert(trans_id, amount, phone, bill_ref,
+                              f"Amount KES {amount} outside limits ({min_kes}-{max_kes})")
+
     # Get current live rate (no pre-locked quote for C2B)
+    # Use raw_rate (no spread) since we charge an explicit deposit fee
     try:
         from apps.rates.services import RateService
 
         rate_info = RateService.get_crypto_kes_rate(currency)
-        final_rate = Decimal(rate_info["final_rate"])
+        raw_rate = Decimal(rate_info["raw_rate"])
     except Exception as e:
         logger.critical(
             f"C2B deposit {trans_id}: rate fetch failed: {e}. "
             f"KES {amount} from {phone} NOT credited. MANUAL INTERVENTION REQUIRED."
         )
+        _send_c2b_admin_alert(trans_id, amount, phone, bill_ref,
+                              f"Rate fetch failed: {e}")
         return
 
-    # Calculate deposit: apply spread in reverse (user gets MORE crypto per KES for deposits)
-    # For deposits, spread works in our favor on the buy side
+    # Calculate deposit fee and crypto amount
+    # Use raw_rate (without spread) to avoid double-charging (spread + explicit fee)
     fee_pct = Decimal(str(getattr(settings, "DEPOSIT_FEE_PERCENTAGE", "1.5")))
-    fee_kes = (amount * fee_pct / Decimal("100")).quantize(Decimal("0.01"))
+    fee_kes = (amount * fee_pct / Decimal("100")).quantize(Decimal("1"))  # Round to whole KES
     net_kes = amount - fee_kes
-    crypto_amount = (net_kes / final_rate).quantize(Decimal("0.00000001"))
+    crypto_amount = (net_kes / raw_rate).quantize(Decimal("0.00000001"))
 
     try:
         with db_transaction.atomic():
@@ -268,7 +285,7 @@ def process_c2b_deposit(trans_id: str, amount_str: str, phone: str, bill_ref: st
                 source_amount=amount,
                 dest_currency=currency,
                 dest_amount=crypto_amount,
-                exchange_rate=final_rate,
+                exchange_rate=raw_rate,
                 fee_amount=fee_kes,
                 fee_currency="KES",
                 mpesa_receipt=trans_id,
@@ -368,7 +385,7 @@ def poll_stk_status(checkout_request_id: str, transaction_id: str, attempt: int 
                         from apps.wallets.models import Wallet
                         from apps.wallets.services import WalletService
 
-                        wallet = Wallet.objects.get(
+                        wallet, _ = Wallet.objects.get_or_create(
                             user=tx.user, currency=tx.dest_currency,
                         )
                         # Deterministic tx_id — same as callback handler, so
@@ -430,3 +447,34 @@ def poll_stk_status(checkout_request_id: str, transaction_id: str, attempt: int 
                 args=[checkout_request_id, transaction_id, attempt + 1],
                 countdown=30,
             )
+
+
+def _send_c2b_admin_alert(trans_id: str, amount, phone: str, bill_ref: str, reason: str):
+    """Send admin alert for C2B deposit issues requiring manual attention."""
+    try:
+        from django.core.mail import mail_admins
+        mail_admins(
+            subject=f"[CryptoPay ALERT] C2B Deposit Issue - {trans_id}",
+            message=(
+                f"C2B Deposit Alert\n"
+                f"{'=' * 40}\n"
+                f"M-Pesa Receipt: {trans_id}\n"
+                f"Amount: KES {amount}\n"
+                f"Phone: {phone}\n"
+                f"Account Ref: {bill_ref}\n"
+                f"Issue: {reason}\n\n"
+                f"Action required: Review and resolve manually.\n"
+            ),
+            fail_silently=True,
+        )
+    except Exception as e:
+        logger.error(f"Failed to send C2B admin alert: {e}")
+
+    try:
+        from apps.core.push import send_admin_alert
+        send_admin_alert(
+            title="C2B Deposit Alert",
+            body=f"{reason} — KES {amount} from {phone} (Receipt: {trans_id})",
+        )
+    except Exception:
+        pass

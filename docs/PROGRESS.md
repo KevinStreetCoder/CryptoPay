@@ -4,6 +4,8 @@
 
 > See also: [ROADMAP.md](./ROADMAP.md) for strategic vision, fundraising, and expansion plans.
 > See also: [SYSTEM-DESIGN.md](./SYSTEM-DESIGN.md) for technical architecture and liquidity engine design.
+> See also: [KES-DEPOSIT-RESEARCH.md](./KES-DEPOSIT-RESEARCH.md) for M-Pesa C2B/STK Push research, sandbox testing, and go-live checklist.
+> See also: [SECURITY-AUDIT.md](./SECURITY-AUDIT.md) for full security audit report with findings and fixes.
 
 ---
 
@@ -953,6 +955,45 @@ POST /api/v1/mpesa/callback/c2b/confirm/       # Safaricom C2B confirmation call
 
 ---
 
+## Security Audit & Hardening — Session 2026-03-14 ✅
+
+Full backend security audit covering OTP, PIN, M-Pesa, payments, wallets, and deposits. See [SECURITY-AUDIT.md](./SECURITY-AUDIT.md) for the full report.
+
+| # | Finding | Severity | Fix |
+|---|---------|----------|-----|
+| C1 | `random.randint` for Email Verification OTP | CRITICAL | Replaced with `secrets.randbelow` (CSPRNG) |
+| H1 | No OTP brute-force protection on verification | HIGH | Added 5-attempt limit on all OTP verification paths |
+| H2 | Payment endpoints bypass PIN lockout | HIGH | Created `_verify_pin_with_lockout()` helper for all payment views |
+| H3 | Insecure email verification fallback (`istartswith`) | HIGH | Removed `token__istartswith` legacy fallback |
+| H4 | M-Pesa IP whitelist includes private ranges | HIGH | Documented production override requirement in go-live checklist |
+| H5 | STK callback crashes on missing wallet | HIGH | Changed `Wallet.objects.get()` → `get_or_create()` |
+| H6 | C2B double-fee charging (spread + explicit fee) | HIGH | C2B now uses `raw_rate` (no spread); explicit fee is the only cost |
+| H7 | Security credential falls back to raw password | HIGH | Now raises `MpesaError` — no silent fallback |
+| M4 | Receipt CORS echoes any origin | MEDIUM | Validates against `CORS_ALLOWED_ORIGINS` |
+| M6 | C2B min/max bypassed when ResponseType=Completed | MEDIUM | Added min/max check in `process_c2b_deposit` with admin alerts |
+| M7 | USDC missing from C2B instructions | MEDIUM | Added USDC to `C2BInstructionsView` |
+| L2 | M-Pesa timestamp missing timezone | LOW | Uses `ZoneInfo("Africa/Nairobi")` explicitly |
+| L4 | Phone dashes not stripped in C2B parsing | LOW | Added `.replace("-", "")` to normalization |
+| — | `useState` misuse in `currency.tsx` | — | Fixed to `useEffect` with `[]` dependency array |
+| — | Orphaned C2B deposits no admin alert | — | Added `_send_c2b_admin_alert()` for unmatched deposits |
+
+---
+
+## KES Deposit Research — Session 2026-03-14 ✅
+
+Deep research on M-Pesa C2B/STK Push best practices, sandbox testing, and production readiness. See [KES-DEPOSIT-RESEARCH.md](./KES-DEPOSIT-RESEARCH.md) for the full report.
+
+Key findings applied:
+- **ResponseType "Completed"** is correct default (accept payments even if validation URL unreachable)
+- **Sandbox callbacks unreliable (~40%)** — manual testing + `poll_stk_status` fallback covers this
+- **AccountReference max 12 chars** from Safaricom — our longest format works in practice
+- **STK Push amounts must be whole numbers** — no decimals
+- **Production requires C2B URL v2** (`/mpesa/c2b/v2/registerurl`) vs sandbox v1
+- **Callback URLs must NOT contain "mpesa" or "safaricom"** in path
+- **Complete STK Push ResultCode table** documented with actions for each code
+
+---
+
 ## Documentation Index
 
 | Document | Purpose | Last Updated |
@@ -960,6 +1001,8 @@ POST /api/v1/mpesa/callback/c2b/confirm/       # Safaricom C2B confirmation call
 | [PROGRESS.md](./PROGRESS.md) | This file — development status and test results | 2026-03-14 |
 | [ROADMAP.md](./ROADMAP.md) | Strategic roadmap, fundraising, go-to-market, expansion plans, competitive landscape | 2026-03-09 |
 | [SYSTEM-DESIGN.md](./SYSTEM-DESIGN.md) | Technical architecture, liquidity engine, payment saga, security, regulatory compliance, monitoring, custody | 2026-03-14 |
+| [KES-DEPOSIT-RESEARCH.md](./KES-DEPOSIT-RESEARCH.md) | M-Pesa C2B/STK Push research, fee structure, sandbox testing, go-live checklist | 2026-03-14 |
+| [SECURITY-AUDIT.md](./SECURITY-AUDIT.md) | Full security audit — OTP, PIN, M-Pesa, payments, wallets, deposits | 2026-03-14 |
 | [STARTUP-CHECKLIST.md](./STARTUP-CHECKLIST.md) | Legal, regulatory, financial checklists — updated with VASP Act 2025 requirements | 2026-03-09 |
 | [research/IMPLEMENTATION-RESEARCH-2026-03-09.md](./research/IMPLEMENTATION-RESEARCH-2026-03-09.md) | **Comprehensive research:** playbook verification, all APIs/tools/pricing, regulatory deep-dive, competitor analysis | 2026-03-09 |
 | [research/](./research/) | All research files: competitor analysis, API research, security audit, regulations | Ongoing |

@@ -115,13 +115,24 @@ class RegisterView(APIView):
         pin = serializer.validated_data["pin"]
         otp = serializer.validated_data["otp"]
 
-        # Verify OTP
+        # Verify OTP with brute-force protection
+        otp_attempt_key = f"otp_verify_attempts:{phone}"
+        otp_attempts = cache.get(otp_attempt_key, 0)
+        if otp_attempts >= 5:
+            cache.delete(f"otp:{phone}")  # Invalidate OTP after too many attempts
+            return Response(
+                {"error": "Too many failed attempts. Request a new OTP."},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+
         stored_otp = cache.get(f"otp:{phone}")
         if not stored_otp or stored_otp != otp:
+            cache.set(otp_attempt_key, otp_attempts + 1, timeout=300)
             return Response(
                 {"error": "Invalid or expired OTP"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        cache.delete(otp_attempt_key)  # Clear attempts on success
 
         full_name = serializer.validated_data.get("full_name", "")
 
@@ -216,15 +227,26 @@ class LoginView(APIView):
                     },
                     status=status.HTTP_403_FORBIDDEN,
                 )
-            # Verify the OTP
+            # Verify the OTP with brute-force protection
+            otp_attempt_key = f"otp_verify_attempts:{phone}"
+            otp_attempts = cache.get(otp_attempt_key, 0)
+            if otp_attempts >= 5:
+                cache.delete(f"otp:{phone}")
+                return Response(
+                    {"error": "Too many failed OTP attempts. Request a new OTP.", "otp_required": True},
+                    status=status.HTTP_429_TOO_MANY_REQUESTS,
+                )
+
             stored_otp = cache.get(f"otp:{phone}")
             if not stored_otp or stored_otp != otp:
+                cache.set(otp_attempt_key, otp_attempts + 1, timeout=300)
                 return Response(
                     {"error": "Invalid or expired OTP", "otp_required": True},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            # OTP verified — clear the challenge flag
+            # OTP verified — clear the challenge flag and attempts
             cache.delete(f"otp:{phone}")
+            cache.delete(otp_attempt_key)
 
         if not user.check_pin(pin):
             user.pin_attempts += 1
@@ -977,12 +999,6 @@ class ConfirmEmailVerificationView(APIView):
             ).order_by("-created_at").first()
 
         if not token_obj:
-            # Legacy: try matching by first 6 chars of token
-            token_obj = EmailVerificationToken.objects.filter(
-                token__istartswith=token[:6], is_used=False
-            ).first()
-
-        if not token_obj:
             cache.set(attempt_key, attempts + 1, timeout=900)  # 15-min window
             return Response(
                 {"error": "Invalid or expired verification code"},
@@ -1535,8 +1551,19 @@ class VerifyPINResetOTPView(APIView):
         phone = serializer.validated_data["phone"]
         otp = serializer.validated_data["otp"]
 
+        # Brute-force protection on PIN reset OTP
+        otp_attempt_key = f"pin_reset_verify_attempts:{phone}"
+        otp_attempts = cache.get(otp_attempt_key, 0)
+        if otp_attempts >= 5:
+            cache.delete(f"pin_reset_otp:{phone}")
+            return Response(
+                {"error": "Too many failed attempts. Request a new code."},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+
         stored_otp = cache.get(f"pin_reset_otp:{phone}")
         if not stored_otp or stored_otp != otp:
+            cache.set(otp_attempt_key, otp_attempts + 1, timeout=300)
             return Response(
                 {"error": "Invalid or expired code"},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -1550,8 +1577,9 @@ class VerifyPINResetOTPView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Invalidate OTP after successful verification
+        # Invalidate OTP and attempt counter after successful verification
         cache.delete(f"pin_reset_otp:{phone}")
+        cache.delete(otp_attempt_key)
 
         # Invalidate any previous unused tokens for this user
         PINResetToken.objects.filter(user=user, is_used=False).update(is_used=True)
