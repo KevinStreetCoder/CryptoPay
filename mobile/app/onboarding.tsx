@@ -16,6 +16,7 @@ import { storage } from "../src/utils/storage";
 import { colors, getThemeColors } from "../src/constants/theme";
 import { useThemeMode } from "../src/stores/theme";
 import { GlassCard } from "../src/components/GlassCard";
+import { useLocale } from "../src/hooks/useLocale";
 
 const isWeb = Platform.OS === "web";
 
@@ -39,44 +40,25 @@ interface Slide {
   description: string;
 }
 
-const slides: Slide[] = [
-  {
-    id: "1",
-    icon: "wallet",
-    iconColor: "#10B981",
-    iconBg: "rgba(16, 185, 129, 0.15)",
-    title: "Pay Bills with Crypto",
-    description:
-      "Convert USDT, BTC, or ETH and pay any M-Pesa bill instantly. No bank account needed.",
-  },
-  {
-    id: "2",
-    icon: "flash",
-    iconColor: "#F59E0B",
-    iconBg: "rgba(245, 158, 11, 0.15)",
-    title: "Instant M-Pesa",
-    description:
-      "Pay Safaricom Paybill and Till numbers directly from crypto. Settlements in seconds.",
-  },
-  {
-    id: "3",
-    icon: "shield-checkmark",
-    iconColor: "#3B82F6",
-    iconBg: "rgba(59, 130, 246, 0.15)",
-    title: "Bank-Grade Security",
-    description:
-      "PIN authentication, biometric verification, and end-to-end encryption protect your funds.",
-  },
-  {
-    id: "4",
-    icon: "rocket",
-    iconColor: "#A78BFA",
-    iconBg: "rgba(167, 139, 250, 0.15)",
-    title: "You're All Set!",
-    description:
-      "Start paying bills, sending money, and managing crypto — all from one app.",
-  },
+// Slide visual config (icons/colors) — text comes from i18n
+const SLIDE_CONFIG = [
+  { id: "1", icon: "wallet" as const, iconColor: "#10B981", iconBg: "rgba(16, 185, 129, 0.15)", titleKey: "tour.slide1Title", descKey: "tour.slide1Desc" },
+  { id: "2", icon: "arrow-down-circle" as const, iconColor: "#F59E0B", iconBg: "rgba(245, 158, 11, 0.15)", titleKey: "tour.slide2Title", descKey: "tour.slide2Desc" },
+  { id: "3", icon: "send" as const, iconColor: "#3B82F6", iconBg: "rgba(59, 130, 246, 0.15)", titleKey: "tour.slide3Title", descKey: "tour.slide3Desc" },
+  { id: "4", icon: "shield-checkmark" as const, iconColor: "#8B5CF6", iconBg: "rgba(139, 92, 246, 0.15)", titleKey: "tour.slide4Title", descKey: "tour.slide4Desc" },
+  { id: "5", icon: "rocket" as const, iconColor: "#EC4899", iconBg: "rgba(236, 72, 153, 0.15)", titleKey: "tour.slide5Title", descKey: "tour.slide5Desc" },
 ];
+
+function getSlides(t: (key: string) => string): Slide[] {
+  return SLIDE_CONFIG.map((s) => ({
+    id: s.id,
+    icon: s.icon,
+    iconColor: s.iconColor,
+    iconBg: s.iconBg,
+    title: t(s.titleKey),
+    description: t(s.descKey),
+  }));
+}
 
 // ── Pagination dot ───────────────────────────────────────────────────────────
 function Dot({
@@ -177,6 +159,8 @@ export function OnboardingModal({
   const scrollX = useRef(new Animated.Value(0)).current;
   const flatListRef = useRef<FlatList>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const { locale, setLocale, t } = useLocale();
+  const slides = getSlides(t);
   const backdropAnim = useRef(new Animated.Value(0)).current;
   const cardAnim = useRef(new Animated.Value(0)).current;
 
@@ -261,16 +245,38 @@ export function OnboardingModal({
             } as any,
           ]}
         >
-          {/* Step indicator */}
+          {/* Step indicator + language toggle */}
           <View style={s.webStepRow}>
             <Text style={[s.webStepLabel, { color: tc.textMuted }]}>
               {currentIndex + 1} of {slides.length}
             </Text>
-            {!isLast && (
-              <Pressable onPress={handleFinish} hitSlop={12}>
-                <Text style={[s.webSkipText, { color: tc.textSecondary }]}>Skip</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+              {/* Language toggle */}
+              <Pressable
+                onPress={() => setLocale(locale === "en" ? "sw" : "en")}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 4,
+                  backgroundColor: tc.dark.elevated,
+                  borderRadius: 8,
+                  paddingHorizontal: 8,
+                  paddingVertical: 4,
+                  borderWidth: 1,
+                  borderColor: tc.glass.border,
+                }}
+              >
+                <Ionicons name="language-outline" size={14} color={tc.textSecondary} />
+                <Text style={{ color: tc.textSecondary, fontSize: 11, fontFamily: "DMSans_500Medium" }}>
+                  {locale === "en" ? "SW" : "EN"}
+                </Text>
               </Pressable>
-            )}
+              {!isLast && (
+                <Pressable onPress={handleFinish} hitSlop={12}>
+                  <Text style={[s.webSkipText, { color: tc.textSecondary }]}>{t("tour.skip")}</Text>
+                </Pressable>
+              )}
+            </View>
           </View>
 
           {/* Slide content */}
@@ -302,7 +308,7 @@ export function OnboardingModal({
             ]}
           >
             <Text style={s.webButtonText}>
-              {isLast ? "Let's Go!" : "Next"}
+              {isLast ? t("tour.letsGo") : t("tour.next")}
             </Text>
             <Ionicons
               name={isLast ? "checkmark-circle" : "arrow-forward"}
@@ -341,7 +347,7 @@ export function OnboardingModal({
                 pressed && { opacity: 0.6 },
               ]}
             >
-              <Text style={[s.mobileSkipText, { color: tc.textSecondary }]}>Skip</Text>
+              <Text style={[s.mobileSkipText, { color: tc.textSecondary }]}>{t("tour.skip")}</Text>
               <Ionicons name="chevron-forward" size={14} color={tc.textSecondary} />
             </Pressable>
           )}
@@ -390,7 +396,7 @@ export function OnboardingModal({
             ]}
           >
             <Text style={s.mobileNextText}>
-              {isLast ? "Let's Go!" : "Next"}
+              {isLast ? t("tour.letsGo") : t("tour.next")}
             </Text>
             <Ionicons
               name={isLast ? "checkmark-circle" : "arrow-forward"}

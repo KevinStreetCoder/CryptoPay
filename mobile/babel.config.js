@@ -9,7 +9,7 @@ module.exports = function (api) {
   }
 
   return {
-    presets: ["babel-preset-expo"],
+    presets: [["babel-preset-expo", { unstable_transformImportMeta: true }]],
     plugins,
   };
 };

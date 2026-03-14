@@ -51,8 +51,8 @@ export interface Quote {
 export const ratesApi = {
   getRate: (currency: string) =>
     api.get<RateApiResponse>("/rates/", { params: { currency } }),
-  getQuote: (amount: string, from: string, to: string) =>
-    api.get<Quote>("/rates/quote/", { params: { amount, from, to } }),
+  getQuote: (amount: string, _from: string, to: string) =>
+    api.post<Quote>("/rates/quote/", { kes_amount: amount, currency: to }),
   lockRate: (data: { currency: string; kes_amount: string }) =>
     api.post<Quote>("/rates/quote/", data),
   getRateHistory: (currency: string, period: string = "7d") =>

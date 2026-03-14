@@ -12,7 +12,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -24,11 +24,13 @@ import { paymentsApi } from "../../src/api/payments";
 import { ratesApi, Quote } from "../../src/api/rates";
 import { normalizeError } from "../../src/utils/apiErrors";
 import { useScreenSecurity } from "../../src/hooks/useScreenSecurity";
+import { useTransactionPoller } from "../../src/hooks/useTransactionPoller";
 import { useAuth } from "../../src/stores/auth";
 import { colors, shadows, CURRENCIES, getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
 import { PaymentStepper } from "../../src/components/PaymentStepper";
 import { GlassCard } from "../../src/components/GlassCard";
+import { useLocale } from "../../src/hooks/useLocale";
 
 type CryptoOption = "USDT" | "USDC" | "BTC" | "ETH" | "SOL";
 
@@ -89,6 +91,7 @@ function generateIdempotencyKey(): string {
 
 export default function BuyCryptoScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ preset_amount?: string; preset_currency?: string }>();
   const queryClient = useQueryClient();
   const toast = useToast();
   const { user } = useAuth();
@@ -98,21 +101,47 @@ export default function BuyCryptoScreen() {
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
   const ts = getThemeShadows(isDark);
+  const { t } = useLocale();
 
   const [step, setStep] = useState<"form" | "preview" | "pin">("form");
-  const [selectedCrypto, setSelectedCrypto] = useState<CryptoOption>("USDT");
-  const [amountKES, setAmountKES] = useState("");
+  const [selectedCrypto, setSelectedCrypto] = useState<CryptoOption>(
+    (params.preset_currency as CryptoOption) || "USDT"
+  );
+  const [amountKES, setAmountKES] = useState(params.preset_amount || "");
   const [phone, setPhone] = useState(user?.phone || "");
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteError, setQuoteError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [pinError, setPinError] = useState(false);
+  const [pollingStatus, setPollingStatus] = useState<string | null>(null);
+  const { pollTransaction, cancel: cancelPoll } = useTransactionPoller();
+  const [liveRates, setLiveRates] = useState<Record<string, string>>({});
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const amountInputRef = useRef<TextInput>(null);
 
   useScreenSecurity(step === "pin");
+
+  // Fetch live rates for all cryptos
+  useEffect(() => {
+    Promise.all(
+      CRYPTO_OPTIONS.map(async (opt) => {
+        try {
+          const { data } = await ratesApi.getRate(opt.id);
+          return [opt.id, data.final_rate] as const;
+        } catch {
+          return [opt.id, ""] as const;
+        }
+      })
+    ).then((results) => {
+      const rates: Record<string, string> = {};
+      for (const [id, rate] of results) {
+        if (rate) rates[id] = rate;
+      }
+      setLiveRates(rates);
+    });
+  }, []);
 
   // Pre-fill phone from user profile when available
   useEffect(() => {
@@ -205,27 +234,52 @@ export default function BuyCryptoScreen() {
     const idempotencyKey = generateIdempotencyKey();
 
     try {
-      await paymentsApi.buyCrypto({
+      const txResponse = await paymentsApi.buyCrypto({
         phone,
         quote_id: quote.quote_id,
         pin,
         idempotency_key: idempotencyKey,
       });
 
-      // Invalidate wallet balances immediately
+      const transactionId = txResponse?.data?.id || "";
+
+      // Poll for backend confirmation (waits for M-Pesa PIN entry + callback)
+      setPollingStatus("processing");
+
+      const { status: finalStatus } = await pollTransaction(
+        transactionId,
+        (s) => setPollingStatus(s)
+      );
+
       queryClient.invalidateQueries({ queryKey: ["wallets"] });
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
 
+      if (finalStatus === "failed") {
+        if (Platform.OS !== "web") {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        }
+        toast.error("Deposit Failed", "The M-Pesa transaction was not completed.");
+        setPollingStatus(null);
+        setStep("form");
+        return;
+      }
+
       if (Platform.OS !== "web") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Haptics.notificationAsync(
+          finalStatus === "completed"
+            ? Haptics.NotificationFeedbackType.Success
+            : Haptics.NotificationFeedbackType.Warning
+        );
       }
       router.replace({
         pathname: "/payment/success",
         params: {
-          amount_kes: quote.kes_amount || amountKES,
+          amount_kes: quote.total_kes || quote.kes_amount || amountKES,
           crypto_amount: quote.crypto_amount,
           crypto_currency: selectedCrypto,
           recipient: phone,
+          tx_status: finalStatus,
+          transaction_id: transactionId,
         },
       });
     } catch (err: unknown) {
@@ -323,10 +377,13 @@ export default function BuyCryptoScreen() {
           >
             Select Crypto
           </Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: 8, marginBottom: 24, paddingVertical: 2 }}
+          <View
+            style={{
+              flexDirection: "row",
+              flexWrap: "wrap",
+              gap: 8,
+              marginBottom: 24,
+            }}
             accessibilityRole="radiogroup"
             accessibilityLabel="Select cryptocurrency"
             testID="crypto-selector"
@@ -338,70 +395,63 @@ export default function BuyCryptoScreen() {
                   key={crypto.id}
                   onPress={() => handleCryptoSelect(crypto.id)}
                   style={({ pressed }) => ({
-                    minWidth: 72,
+                    flexDirection: "row" as const,
+                    alignItems: "center" as const,
+                    alignSelf: "flex-start" as const,
+                    gap: 8,
                     backgroundColor: isSelected
                       ? crypto.color + "1A"
                       : tc.dark.card,
-                    borderRadius: 16,
-                    paddingVertical: 14,
-                    paddingHorizontal: 12,
-                    alignItems: "center",
+                    borderRadius: 14,
+                    paddingVertical: 10,
+                    paddingHorizontal: 14,
                     borderWidth: 1.5,
                     borderColor: isSelected
                       ? crypto.color + "60"
                       : tc.glass.border,
                     opacity: pressed ? 0.85 : 1,
                     transform: [{ scale: pressed ? 0.97 : 1 }],
+                    ...(isWeb ? ({ cursor: "pointer", transition: "all 0.15s ease" } as any) : {}),
                   })}
                   accessibilityRole="radio"
                   accessibilityState={{ selected: isSelected }}
                   accessibilityLabel={`${crypto.name} (${crypto.id})`}
                   testID={`crypto-pill-${crypto.id}`}
                 >
-                  <View
-                    style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: 14,
-                      backgroundColor: crypto.color + "20",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      marginBottom: 8,
-                      borderWidth: 1,
-                      borderColor: crypto.color + "30",
-                    }}
-                  >
-                    <CryptoLogo
-                      currency={crypto.id}
-                      size={24}
-                      fallbackColor={crypto.color}
-                    />
+                  <CryptoLogo
+                    currency={crypto.id}
+                    size={24}
+                    fallbackColor={crypto.color}
+                  />
+                  <View>
+                    <Text
+                      style={{
+                        color: isSelected ? tc.textPrimary : tc.textSecondary,
+                        fontSize: 14,
+                        fontFamily: isSelected ? "DMSans_700Bold" : "DMSans_500Medium",
+                      }}
+                      maxFontSizeMultiplier={1.3}
+                    >
+                      {crypto.id}
+                    </Text>
+                    {liveRates[crypto.id] ? (
+                      <Text
+                        style={{
+                          color: tc.textMuted,
+                          fontSize: 10,
+                          fontFamily: "DMSans_400Regular",
+                          marginTop: 1,
+                        }}
+                        maxFontSizeMultiplier={1.3}
+                      >
+                        KSh {parseFloat(liveRates[crypto.id]).toLocaleString("en-KE", { maximumFractionDigits: 0 })}
+                      </Text>
+                    ) : null}
                   </View>
-                  <Text
-                    style={{
-                      color: isSelected ? tc.textPrimary : tc.textSecondary,
-                      fontSize: 14,
-                      fontFamily: "DMSans_600SemiBold",
-                    }}
-                    maxFontSizeMultiplier={1.3}
-                  >
-                    {crypto.id}
-                  </Text>
-                  <Text
-                    style={{
-                      color: tc.textMuted,
-                      fontSize: 11,
-                      fontFamily: "DMSans_400Regular",
-                      marginTop: 2,
-                    }}
-                    maxFontSizeMultiplier={1.3}
-                  >
-                    {crypto.name}
-                  </Text>
                 </Pressable>
               );
             })}
-          </ScrollView>
+          </View>
 
           {/* Amount Input */}
           <Text
@@ -470,40 +520,71 @@ export default function BuyCryptoScreen() {
             )}
           </View>
 
-          {/* Rate Quote Display */}
+          {/* Rate Quote & Fee Breakdown */}
           {quote && !quoteLoading && parsedAmount >= 10 && (
             <View
               style={{
-                backgroundColor: tc.primary[500] + "0D",
-                borderRadius: 12,
-                paddingHorizontal: 14,
-                paddingVertical: 10,
-                flexDirection: "row",
-                alignItems: "center",
+                backgroundColor: tc.dark.card,
+                borderRadius: 14,
+                padding: 14,
                 gap: 8,
-                marginBottom: 24,
+                marginBottom: 16,
                 borderWidth: 1,
-                borderColor: tc.primary[500] + "1A",
+                borderColor: tc.glass.border,
               }}
               accessibilityRole="text"
-              accessibilityLabel={`You will receive approximately ${quote.crypto_amount} ${selectedCrypto}`}
               testID="rate-preview"
             >
-              <Ionicons name="swap-horizontal" size={16} color={tc.primary[400]} />
-              <Text
-                style={{
-                  color: tc.primary[400],
-                  fontSize: 14,
-                  fontFamily: "DMSans_500Medium",
-                  flex: 1,
-                }}
-                maxFontSizeMultiplier={1.3}
-              >
-                You'll get{" "}
-                <Text style={{ fontFamily: "DMSans_700Bold", color: tc.textPrimary }}>
+              {/* You'll get */}
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <Ionicons name="swap-horizontal" size={14} color={tc.primary[400]} />
+                <Text style={{ color: tc.primary[400], fontSize: 13, fontFamily: "DMSans_500Medium", flex: 1 }}>
+                  You'll receive
+                </Text>
+                <Text style={{ color: tc.textPrimary, fontSize: 15, fontFamily: "DMSans_700Bold" }}>
                   {quote.crypto_amount} {selectedCrypto}
                 </Text>
-              </Text>
+              </View>
+              {/* Rate */}
+              <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_400Regular" }}>
+                  Rate (1 {selectedCrypto})
+                </Text>
+                <Text style={{ color: tc.textSecondary, fontSize: 12, fontFamily: "DMSans_500Medium" }}>
+                  KSh {parseFloat(quote.exchange_rate).toLocaleString("en-KE", { maximumFractionDigits: 2 })}
+                </Text>
+              </View>
+              {/* Service fee */}
+              <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_400Regular" }}>
+                  Service fee
+                </Text>
+                <Text style={{ color: tc.textSecondary, fontSize: 12, fontFamily: "DMSans_500Medium" }}>
+                  KSh {parseFloat(quote.fee_kes).toLocaleString("en-KE")}
+                </Text>
+              </View>
+              {/* Excise duty */}
+              {parseFloat(quote.excise_duty_kes || "0") > 0 && (
+                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                  <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_400Regular" }}>
+                    Excise duty ({quote.excise_duty_percent || 10}%)
+                  </Text>
+                  <Text style={{ color: tc.textSecondary, fontSize: 12, fontFamily: "DMSans_500Medium" }}>
+                    KSh {parseFloat(quote.excise_duty_kes).toLocaleString("en-KE")}
+                  </Text>
+                </View>
+              )}
+              {/* Divider */}
+              <View style={{ height: 1, backgroundColor: tc.glass.border, marginVertical: 2 }} />
+              {/* Total */}
+              <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                <Text style={{ color: tc.textPrimary, fontSize: 13, fontFamily: "DMSans_600SemiBold" }}>
+                  Total M-Pesa charge
+                </Text>
+                <Text style={{ color: tc.textPrimary, fontSize: 14, fontFamily: "DMSans_700Bold" }}>
+                  KSh {parseFloat(quote.total_kes).toLocaleString("en-KE")}
+                </Text>
+              </View>
             </View>
           )}
 
@@ -1182,23 +1263,41 @@ export default function BuyCryptoScreen() {
           {loading && (
             <View
               style={{
-                flexDirection: "row",
                 alignItems: "center",
                 justifyContent: "center",
                 gap: 10,
                 marginTop: 32,
               }}
             >
-              <PulsingDot />
-              <Text
-                style={{
-                  color: tc.primary[400],
-                  fontSize: 14,
-                  fontFamily: "DMSans_500Medium",
-                }}
-              >
-                Processing purchase...
-              </Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                <PulsingDot />
+                <Text
+                  style={{
+                    color: tc.primary[400],
+                    fontSize: 14,
+                    fontFamily: "DMSans_500Medium",
+                  }}
+                >
+                  {pollingStatus === "confirming"
+                    ? t("payment.waitingMpesaConfirmation")
+                    : pollingStatus === "processing"
+                      ? t("payment.enterMpesaPin")
+                      : t("payment.processingPayment")}
+                </Text>
+              </View>
+              {pollingStatus && (
+                <Text
+                  style={{
+                    color: tc.textMuted,
+                    fontSize: 12,
+                    fontFamily: "DMSans_400Regular",
+                    textAlign: "center",
+                    marginTop: 4,
+                  }}
+                >
+                  {t("payment.completeMpesaPrompt")}
+                </Text>
+              )}
             </View>
           )}
 

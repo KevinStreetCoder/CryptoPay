@@ -80,13 +80,13 @@ def check_and_trigger_rebalance(self):
             f"creating rebalance order"
         )
 
-        order = create_rebalance_order(
+        order, _reason = create_rebalance_order(
             trigger=RebalanceOrder.TriggerType.SCHEDULED,
             reason=f"Periodic check: float at KES {current_float:,.0f}",
         )
 
         if not order:
-            return "skipped:preconditions_not_met"
+            return f"skipped:{_reason}"
 
         # Immediately submit (notifies admin in manual mode)
         submit_rebalance_order(str(order.id))
@@ -224,7 +224,7 @@ def trigger_rebalance_from_breaker(self, float_balance_kes: str, breaker_state: 
 
     try:
         float_kes = Decimal(float_balance_kes)
-        order = create_rebalance_order(
+        order, _reason = create_rebalance_order(
             trigger=RebalanceOrder.TriggerType.AUTO,
             reason=(
                 f"Circuit breaker triggered ({breaker_state}): "

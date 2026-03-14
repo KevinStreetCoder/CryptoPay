@@ -1040,11 +1040,12 @@ export default function RegisterScreen() {
                 />
                 <TextInput
                   value={fullName}
-                  onChangeText={setFullName}
+                  onChangeText={(text) => setFullName(text.replace(/[^a-zA-Z\u00C0-\u024F\s'\-\.]/g, ""))}
                   placeholder="Enter your full name"
                   placeholderTextColor={tc.textMuted}
                   autoFocus
                   autoCapitalize="words"
+                  maxLength={50}
                   onFocus={() => setNameFocused(true)}
                   onBlur={() => setNameFocused(false)}
                   onSubmitEditing={handleNameSubmit}

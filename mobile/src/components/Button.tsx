@@ -8,6 +8,7 @@ import {
   ViewStyle,
   Platform,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { colors, getThemeShadows } from "../constants/theme";
 import { useThemeMode } from "../stores/theme";
 import { BrandedSpinner } from "./BrandedSpinner";
@@ -22,7 +23,7 @@ interface ButtonProps {
   size?: "sm" | "md" | "lg";
   loading?: boolean;
   disabled?: boolean;
-  icon?: React.ReactNode;
+  icon?: React.ReactNode | string;
   testID?: string;
   style?: ViewStyle;
 }
@@ -229,7 +230,15 @@ export function Button({
           />
         ) : (
           <View style={styles.content}>
-            {icon}
+            {typeof icon === "string" ? (
+              <Ionicons
+                name={icon as any}
+                size={sizeConfig.fontSize + 2}
+                color={variantStyle.text}
+              />
+            ) : (
+              icon
+            )}
             <Text
               style={[
                 styles.text,

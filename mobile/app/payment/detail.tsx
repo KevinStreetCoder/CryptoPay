@@ -17,6 +17,7 @@ import { useToast } from "../../src/components/Toast";
 import { colors, shadows, CURRENCIES, CurrencyCode, getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
 import { usePhonePrivacy } from "../../src/utils/privacy";
+import { useLocale } from "../../src/hooks/useLocale";
 
 const isWeb = Platform.OS === "web";
 
@@ -33,12 +34,22 @@ const TYPE_CONFIG: Record<string, { icon: string; label: string; color: string }
   KES_DEPOSIT_C2B: { icon: "arrow-down-circle-outline", label: "KES Deposit (Paybill)", color: colors.success },
 };
 
-const STATUS_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
-  completed: { color: colors.success, bg: colors.success + "1F", label: "Completed" },
-  pending: { color: colors.warning, bg: colors.warning + "1F", label: "Pending" },
-  processing: { color: colors.info, bg: colors.info + "1F", label: "Processing" },
-  failed: { color: colors.error, bg: colors.error + "1F", label: "Failed" },
-  reversed: { color: colors.dark.muted, bg: colors.dark.muted + "1F", label: "Reversed" },
+const STATUS_CONFIG: Record<string, { color: string; bg: string }> = {
+  completed: { color: colors.success, bg: colors.success + "1F" },
+  pending: { color: colors.warning, bg: colors.warning + "1F" },
+  processing: { color: colors.info, bg: colors.info + "1F" },
+  confirming: { color: colors.info, bg: colors.info + "1F" },
+  failed: { color: colors.error, bg: colors.error + "1F" },
+  reversed: { color: colors.dark.muted, bg: colors.dark.muted + "1F" },
+};
+
+const STATUS_I18N_KEY: Record<string, string> = {
+  completed: "payment.completed",
+  pending: "payment.pending",
+  processing: "payment.processing",
+  confirming: "payment.confirming",
+  failed: "payment.failed",
+  reversed: "payment.reversed",
 };
 
 export default function TransactionDetailScreen() {
@@ -51,6 +62,7 @@ export default function TransactionDetailScreen() {
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
   const ts = getThemeShadows(isDark);
+  const { t } = useLocale();
 
   const { data: txData, isLoading } = useQuery({
     queryKey: ["transaction-detail", id],
@@ -332,7 +344,7 @@ export default function TransactionDetailScreen() {
                     textTransform: "capitalize",
                   }}
                 >
-                  {statusConfig!.label}
+                  {t(STATUS_I18N_KEY[tx.status] || "payment.processing")}
                 </Text>
               </View>
             </View>

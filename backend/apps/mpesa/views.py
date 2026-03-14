@@ -11,6 +11,7 @@ replay prevention (one-time token consumption via Redis).
 import logging
 from decimal import Decimal, InvalidOperation
 
+from django.db import transaction as db_tx
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import AllowAny
@@ -95,30 +96,30 @@ class STKCallbackView(APIView):
             raw_payload=payload,
         )
 
-        # Link to transaction and update status
-        tx = Transaction.objects.filter(
-            saga_data__mpesa_checkout_request_id=checkout_request_id,
-        ).first()
+        # Link to transaction and update status — use select_for_update to prevent
+        # duplicate callback race condition
+        with db_tx.atomic():
+            tx = Transaction.objects.select_for_update().filter(
+                saga_data__mpesa_checkout_request_id=checkout_request_id,
+            ).first()
 
-        if tx:
-            callback.transaction = tx
-            callback.save(update_fields=["transaction"])
+            if tx:
+                callback.transaction = tx
+                callback.save(update_fields=["transaction"])
 
-            # Guard: skip if already in a terminal state (duplicate callback)
-            if tx.status in (Transaction.Status.COMPLETED, Transaction.Status.FAILED, Transaction.Status.REVERSED):
-                logger.info(f"STK callback for already-{tx.status} tx {tx.id}, skipping")
-                return Response({"ResultCode": 0, "ResultDesc": "Accepted"}, status=status.HTTP_200_OK)
+                # Guard: skip if already in a terminal state (duplicate callback)
+                if tx.status in (Transaction.Status.COMPLETED, Transaction.Status.FAILED, Transaction.Status.REVERSED):
+                    logger.info(f"STK callback for already-{tx.status} tx {tx.id}, skipping")
+                    return Response({"ResultCode": 0, "ResultDesc": "Accepted"}, status=status.HTTP_200_OK)
 
-            if result_code == 0:
-                # BUY flow: credit crypto + mark COMPLETED atomically
-                if tx.type == Transaction.Type.BUY and tx.dest_currency and tx.dest_amount:
-                    try:
-                        import uuid as _uuid
-                        from django.db import transaction as db_transaction
-                        from apps.wallets.models import Wallet
-                        from apps.wallets.services import WalletService
+                if result_code == 0:
+                    # BUY flow: credit crypto + mark COMPLETED atomically
+                    if tx.type == Transaction.Type.BUY and tx.dest_currency and tx.dest_amount:
+                        try:
+                            import uuid as _uuid
+                            from apps.wallets.models import Wallet
+                            from apps.wallets.services import WalletService
 
-                        with db_transaction.atomic():
                             tx.mpesa_receipt = mpesa_receipt
                             tx.status = Transaction.Status.COMPLETED
                             tx.completed_at = timezone.now()
@@ -138,32 +139,32 @@ class STKCallbackView(APIView):
                                 credit_tx_id,
                                 f"Buy {tx.dest_currency}: M-Pesa receipt {mpesa_receipt}",
                             )
-                        logger.info(
-                            f"Credited {tx.dest_amount} {tx.dest_currency} to "
-                            f"user {tx.user_id} for BUY tx {tx.id}"
-                        )
-                    except Exception as e:
-                        logger.critical(
-                            f"FAILED to credit crypto for BUY tx {tx.id}: {e}. "
-                            f"MANUAL INTERVENTION REQUIRED.",
-                        exc_info=True,
-                        )
-                else:
-                    tx.mpesa_receipt = mpesa_receipt
-                    tx.status = Transaction.Status.COMPLETED
-                    tx.completed_at = timezone.now()
-                    tx.save(update_fields=["mpesa_receipt", "status", "completed_at", "updated_at"])
+                            logger.info(
+                                f"Credited {tx.dest_amount} {tx.dest_currency} to "
+                                f"user {tx.user_id} for BUY tx {tx.id}"
+                            )
+                        except Exception as e:
+                            logger.critical(
+                                f"FAILED to credit crypto for BUY tx {tx.id}: {e}. "
+                                f"MANUAL INTERVENTION REQUIRED.",
+                            exc_info=True,
+                            )
+                    else:
+                        tx.mpesa_receipt = mpesa_receipt
+                        tx.status = Transaction.Status.COMPLETED
+                        tx.completed_at = timezone.now()
+                        tx.save(update_fields=["mpesa_receipt", "status", "completed_at", "updated_at"])
 
-                # Send notifications for completed transactions
-                try:
-                    from apps.core.email import send_transaction_notifications
-                    send_transaction_notifications(tx.user, tx)
-                except Exception as e:
-                    logger.error(f"Notification dispatch failed for tx {tx.id}: {e}")
-            else:
-                tx.failure_reason = result_desc
-                tx.status = Transaction.Status.FAILED
-                tx.save(update_fields=["failure_reason", "status", "updated_at"])
+                    # Send notifications for completed transactions
+                    try:
+                        from apps.core.email import send_transaction_notifications
+                        send_transaction_notifications(tx.user, tx)
+                    except Exception as e:
+                        logger.error(f"Notification dispatch failed for tx {tx.id}: {e}")
+                else:
+                    tx.failure_reason = result_desc
+                    tx.status = Transaction.Status.FAILED
+                    tx.save(update_fields=["failure_reason", "status", "updated_at"])
 
         return Response({"ResultCode": 0, "ResultDesc": "Accepted"}, status=status.HTTP_200_OK)
 
@@ -205,41 +206,43 @@ class B2BCallbackView(APIView):
             raw_payload=payload,
         )
 
-        # Find the transaction by conversation ID stored in saga_data
-        tx = Transaction.objects.filter(
-            saga_data__mpesa_conversation_id=conversation_id,
-        ).first() or Transaction.objects.filter(
-            saga_data__mpesa_originator_id=originator_id,
-        ).first()
+        # Find the transaction by conversation ID — use select_for_update to prevent
+        # duplicate callback race condition
+        with db_tx.atomic():
+            tx = Transaction.objects.select_for_update().filter(
+                saga_data__mpesa_conversation_id=conversation_id,
+            ).first() or Transaction.objects.select_for_update().filter(
+                saga_data__mpesa_originator_id=originator_id,
+            ).first()
 
-        if tx:
-            callback.transaction = tx
-            callback.save(update_fields=["transaction"])
+            if tx:
+                callback.transaction = tx
+                callback.save(update_fields=["transaction"])
 
-            # Guard: skip if already in a terminal state (duplicate callback)
-            if tx.status in (Transaction.Status.COMPLETED, Transaction.Status.FAILED, Transaction.Status.REVERSED):
-                logger.info(f"B2B callback for already-{tx.status} tx {tx.id}, skipping")
-                return Response({"ResultCode": 0, "ResultDesc": "Accepted"}, status=status.HTTP_200_OK)
+                # Guard: skip if already in a terminal state (duplicate callback)
+                if tx.status in (Transaction.Status.COMPLETED, Transaction.Status.FAILED, Transaction.Status.REVERSED):
+                    logger.info(f"B2B callback for already-{tx.status} tx {tx.id}, skipping")
+                    return Response({"ResultCode": 0, "ResultDesc": "Accepted"}, status=status.HTTP_200_OK)
 
-            if result_code == 0:
-                from apps.payments.saga import PaymentSaga
-                saga = PaymentSaga(tx)
-                saga.complete(mpesa_receipt)
-            else:
-                tx.failure_reason = result_desc
-                tx.status = Transaction.Status.FAILED
-                tx.save(update_fields=["failure_reason", "status", "updated_at"])
-                # Trigger compensation
-                from apps.payments.saga import PaymentSaga
-                saga = PaymentSaga(tx)
-                try:
-                    saga.compensate_convert()
-                    logger.info(f"B2B failed, compensated crypto for tx {tx.id}")
-                except Exception as comp_err:
-                    logger.critical(
-                        f"B2B compensation failed for tx {tx.id}: {comp_err}. "
-                        f"MANUAL INTERVENTION REQUIRED."
-                    )
+                if result_code == 0:
+                    from apps.payments.saga import PaymentSaga
+                    saga = PaymentSaga(tx)
+                    saga.complete(mpesa_receipt)
+                else:
+                    tx.failure_reason = result_desc
+                    tx.status = Transaction.Status.FAILED
+                    tx.save(update_fields=["failure_reason", "status", "updated_at"])
+                    # Trigger compensation
+                    from apps.payments.saga import PaymentSaga
+                    saga = PaymentSaga(tx)
+                    try:
+                        saga.compensate_convert()
+                        logger.info(f"B2B failed, compensated crypto for tx {tx.id}")
+                    except Exception as comp_err:
+                        logger.critical(
+                            f"B2B compensation failed for tx {tx.id}: {comp_err}. "
+                            f"MANUAL INTERVENTION REQUIRED."
+                        )
 
         return Response({"ResultCode": 0, "ResultDesc": "Accepted"}, status=status.HTTP_200_OK)
 
@@ -279,39 +282,41 @@ class B2CCallbackView(APIView):
             raw_payload=payload,
         )
 
-        tx = Transaction.objects.filter(
-            saga_data__mpesa_conversation_id=conversation_id,
-        ).first()
+        # Use select_for_update to prevent duplicate callback race condition
+        with db_tx.atomic():
+            tx = Transaction.objects.select_for_update().filter(
+                saga_data__mpesa_conversation_id=conversation_id,
+            ).first()
 
-        if tx:
-            # Link callback to transaction (was missing for B2C)
-            callback.transaction = tx
-            callback.save(update_fields=["transaction"])
+            if tx:
+                # Link callback to transaction (was missing for B2C)
+                callback.transaction = tx
+                callback.save(update_fields=["transaction"])
 
-            # Guard: skip if already in a terminal state (duplicate callback)
-            if tx.status in (Transaction.Status.COMPLETED, Transaction.Status.FAILED, Transaction.Status.REVERSED):
-                logger.info(f"B2C callback for already-{tx.status} tx {tx.id}, skipping")
-                return Response({"ResultCode": 0, "ResultDesc": "Accepted"}, status=status.HTTP_200_OK)
+                # Guard: skip if already in a terminal state (duplicate callback)
+                if tx.status in (Transaction.Status.COMPLETED, Transaction.Status.FAILED, Transaction.Status.REVERSED):
+                    logger.info(f"B2C callback for already-{tx.status} tx {tx.id}, skipping")
+                    return Response({"ResultCode": 0, "ResultDesc": "Accepted"}, status=status.HTTP_200_OK)
 
-            if result_code == 0:
-                from apps.payments.saga import PaymentSaga
-                saga = PaymentSaga(tx)
-                saga.complete(mpesa_receipt=mpesa_receipt)
-            else:
-                # B2C failed — compensate: credit crypto back to user
-                from apps.payments.saga import PaymentSaga
-                saga = PaymentSaga(tx)
-                tx.failure_reason = result_desc
-                tx.status = Transaction.Status.FAILED
-                tx.save(update_fields=["failure_reason", "status", "updated_at"])
-                try:
-                    saga.compensate_convert()
-                    logger.info(f"B2C failed, compensated crypto for tx {tx.id}")
-                except Exception as comp_err:
-                    logger.critical(
-                        f"B2C compensation failed for tx {tx.id}: {comp_err}. "
-                        f"MANUAL INTERVENTION REQUIRED."
-                    )
+                if result_code == 0:
+                    from apps.payments.saga import PaymentSaga
+                    saga = PaymentSaga(tx)
+                    saga.complete(mpesa_receipt=mpesa_receipt)
+                else:
+                    # B2C failed — compensate: credit crypto back to user
+                    from apps.payments.saga import PaymentSaga
+                    saga = PaymentSaga(tx)
+                    tx.failure_reason = result_desc
+                    tx.status = Transaction.Status.FAILED
+                    tx.save(update_fields=["failure_reason", "status", "updated_at"])
+                    try:
+                        saga.compensate_convert()
+                        logger.info(f"B2C failed, compensated crypto for tx {tx.id}")
+                    except Exception as comp_err:
+                        logger.critical(
+                            f"B2C compensation failed for tx {tx.id}: {comp_err}. "
+                            f"MANUAL INTERVENTION REQUIRED."
+                        )
 
         return Response({"ResultCode": 0, "ResultDesc": "Accepted"}, status=status.HTTP_200_OK)
 
@@ -357,6 +362,15 @@ class C2BValidationView(APIView):
         # Check if user is suspended
         if getattr(user, "is_suspended", False):
             return Response({"ResultCode": "C2B00014", "ResultDesc": "Account suspended"})
+
+        # Check daily limit
+        try:
+            from apps.payments.services import check_daily_limit, DailyLimitExceededError
+            check_daily_limit(user, kes_amount)
+        except DailyLimitExceededError:
+            return Response({"ResultCode": "C2B00013", "ResultDesc": "Daily transaction limit exceeded"})
+        except Exception:
+            pass  # Don't reject on check failure — let it through
 
         # Accept
         logger.info(f"C2B validation accepted: {kes_amount} KES from {phone} -> {currency} for user {user.id}")

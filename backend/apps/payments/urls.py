@@ -11,6 +11,7 @@ urlpatterns = [
     path("buy-crypto/", views.BuyCryptoView.as_view(), name="buy-crypto"),
     path("deposit/quote/", views.DepositQuoteView.as_view(), name="deposit-quote"),
     path("deposit/<uuid:transaction_id>/status/", views.DepositStatusView.as_view(), name="deposit-status"),
+    path("<uuid:transaction_id>/status/", views.DepositStatusView.as_view(), name="transaction-status"),
     path("deposit/c2b-instructions/", views.C2BInstructionsView.as_view(), name="c2b-instructions"),
     path("history/", views.TransactionHistoryView.as_view(), name="history"),
     path("<uuid:transaction_id>/receipt/", views.TransactionReceiptView.as_view(), name="transaction-receipt"),

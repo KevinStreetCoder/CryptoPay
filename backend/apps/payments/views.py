@@ -10,6 +10,7 @@ The core flow:
 import logging
 from decimal import Decimal
 
+from django.conf import settings as app_settings
 from django.core.cache import cache
 from django.db import IntegrityError
 from rest_framework import status
@@ -57,6 +58,29 @@ def _verify_pin_with_lockout(user, pin: str):
         user.otp_challenge_required = False
         user.save(update_fields=["pin_attempts", "otp_challenge_required"])
 
+    return None
+
+
+def _check_rate_slippage(quote: dict) -> str | None:
+    """
+    Compare the quote's locked rate against the current live rate.
+    Returns an error message if slippage exceeds DEPOSIT_SLIPPAGE_TOLERANCE, else None.
+    """
+    from apps.rates.services import RateService
+
+    try:
+        currency = quote["currency"]
+        quote_rate = Decimal(quote["exchange_rate"])
+        live_info = RateService.get_crypto_kes_rate(currency)
+        live_rate = Decimal(str(live_info["final_rate"]))
+        slippage_pct = abs(live_rate - quote_rate) / quote_rate * 100
+        if slippage_pct > Decimal(str(app_settings.DEPOSIT_SLIPPAGE_TOLERANCE)):
+            return (
+                f"Rate moved {slippage_pct:.1f}% since quote was locked "
+                f"(max {app_settings.DEPOSIT_SLIPPAGE_TOLERANCE}%). Please request a new quote."
+            )
+    except Exception as e:
+        logger.warning(f"Slippage check failed (allowing through): {e}")
     return None
 
 
@@ -143,6 +167,12 @@ class PayBillView(APIView):
                 {"error": "Quote expired or was already used. Please request a new quote."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        # Check rate slippage against live rate
+        slippage_err = _check_rate_slippage(quote)
+        if slippage_err:
+            cache.delete(redis_key)
+            return Response({"error": slippage_err}, status=status.HTTP_409_CONFLICT)
 
         # Create the transaction — Layer 3 (PostgreSQL unique constraint)
         try:
@@ -264,6 +294,12 @@ class PayTillView(APIView):
             cache.delete(redis_key)
             return Response({"error": "Quote expired or was already used"}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Check rate slippage against live rate
+        slippage_err = _check_rate_slippage(quote)
+        if slippage_err:
+            cache.delete(redis_key)
+            return Response({"error": slippage_err}, status=status.HTTP_409_CONFLICT)
+
         try:
             tx = Transaction.objects.create(
                 idempotency_key=idem_key,
@@ -358,6 +394,12 @@ class SendMpesaView(APIView):
         if not quote:
             cache.delete(redis_key)
             return Response({"error": "Quote expired or was already used"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Check rate slippage against live rate
+        slippage_err = _check_rate_slippage(quote)
+        if slippage_err:
+            cache.delete(redis_key)
+            return Response({"error": slippage_err}, status=status.HTTP_409_CONFLICT)
 
         try:
             tx = Transaction.objects.create(

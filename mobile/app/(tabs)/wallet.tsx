@@ -164,6 +164,7 @@ export default function WalletScreen() {
   const [hoverSend, setHoverSend] = useState(false);
   const [hoverClose, setHoverClose] = useState(false);
   const [generatingAddress, setGeneratingAddress] = useState<string | null>(null);
+  const [showSendPicker, setShowSendPicker] = useState(false);
   const { balanceHidden, toggleBalance, formatAmount, formatCrypto } = useBalanceVisibility();
   const [modalCurrency, setModalCurrency] = useState<CurrencyCode>("USDT");
   const queryClient = useQueryClient();
@@ -612,6 +613,174 @@ export default function WalletScreen() {
       </View>
     );
   };
+
+  // ── Send Payment Picker ──
+  const SEND_OPTIONS = [
+    {
+      id: "send",
+      icon: "send-outline" as const,
+      label: t("home.sendMoney"),
+      subtitle: "Send money to a phone number",
+      route: "/payment/send" as const,
+      color: colors.primary[400],
+    },
+    {
+      id: "paybill",
+      icon: "receipt-outline" as const,
+      label: t("payment.payBill"),
+      subtitle: "Pay a business via Paybill number",
+      route: "/payment/paybill" as const,
+      color: "#F59E0B",
+    },
+    {
+      id: "till",
+      icon: "cart-outline" as const,
+      label: t("payment.payTill"),
+      subtitle: "Pay a merchant via Till number",
+      route: "/payment/till" as const,
+      color: "#8B5CF6",
+    },
+  ];
+
+  const renderSendPicker = () => (
+    <Modal
+      visible={showSendPicker}
+      animationType="fade"
+      transparent
+      onRequestClose={() => setShowSendPicker(false)}
+    >
+      <Pressable
+        style={{
+          flex: 1,
+          backgroundColor: "rgba(0,0,0,0.6)",
+          justifyContent: "center",
+          alignItems: "center",
+          padding: 24,
+        }}
+        onPress={() => setShowSendPicker(false)}
+      >
+        <Pressable
+          style={{
+            backgroundColor: tc.dark.card,
+            borderRadius: 24,
+            padding: 24,
+            width: "100%",
+            maxWidth: 380,
+            borderWidth: 1,
+            borderColor: tc.glass.border,
+            ...ts.lg,
+          }}
+          onPress={(e) => e.stopPropagation()}
+        >
+          <Text
+            style={{
+              color: tc.textPrimary,
+              fontSize: 20,
+              fontFamily: "DMSans_700Bold",
+              marginBottom: 4,
+            }}
+          >
+            {t("wallet.send")}
+          </Text>
+          <Text
+            style={{
+              color: tc.textMuted,
+              fontSize: 13,
+              fontFamily: "DMSans_400Regular",
+              marginBottom: 20,
+            }}
+          >
+            Choose how you want to pay
+          </Text>
+
+          <View style={{ gap: 10 }}>
+            {SEND_OPTIONS.map((opt) => (
+              <Pressable
+                key={opt.id}
+                onPress={() => {
+                  setShowSendPicker(false);
+                  router.push(opt.route);
+                }}
+                style={({ pressed, hovered }: any) => ({
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 14,
+                  padding: 16,
+                  borderRadius: 16,
+                  backgroundColor: hovered
+                    ? tc.glass.highlight
+                    : pressed
+                      ? tc.dark.elevated
+                      : tc.dark.bg,
+                  borderWidth: 1,
+                  borderColor: tc.glass.border,
+                  ...(isWeb ? { cursor: "pointer", transition: "all 0.15s ease" } as any : {}),
+                })}
+              >
+                <View
+                  style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: 14,
+                    backgroundColor: opt.color + "15",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Ionicons name={opt.icon} size={22} color={opt.color} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={{
+                      color: tc.textPrimary,
+                      fontSize: 15,
+                      fontFamily: "DMSans_600SemiBold",
+                    }}
+                  >
+                    {opt.label}
+                  </Text>
+                  <Text
+                    style={{
+                      color: tc.textMuted,
+                      fontSize: 12,
+                      fontFamily: "DMSans_400Regular",
+                      marginTop: 2,
+                    }}
+                  >
+                    {opt.subtitle}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={tc.textMuted} />
+              </Pressable>
+            ))}
+          </View>
+
+          <Pressable
+            onPress={() => setShowSendPicker(false)}
+            style={({ pressed }) => ({
+              marginTop: 16,
+              paddingVertical: 14,
+              borderRadius: 14,
+              backgroundColor: pressed ? tc.dark.elevated : tc.dark.bg,
+              borderWidth: 1,
+              borderColor: tc.glass.border,
+              alignItems: "center",
+            })}
+          >
+            <Text
+              style={{
+                color: tc.textSecondary,
+                fontSize: 14,
+                fontFamily: "DMSans_500Medium",
+              }}
+            >
+              {t("common.cancel")}
+            </Text>
+          </Pressable>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
 
   // ── Mobile Deposit Modal (bottom sheet with spring animation) ──
   const renderMobileDepositModal = () => (
@@ -1145,21 +1314,22 @@ export default function WalletScreen() {
     const timeStr = date.toLocaleTimeString("en-KE", { hour: "2-digit", minute: "2-digit" });
     const dateStr = date.toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" });
     const rawRecipient = getTxRecipient(tx);
-    const recipient = rawRecipient && tx.type === "SEND_MPESA"
-      ? formatPhone(rawRecipient)
-      : rawRecipient;
+    const recipient = rawRecipient ? formatPhone(rawRecipient) : "";
 
     return (
-      <View
+      <Pressable
         key={tx.id}
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
+        onPress={() => router.push(`/payment/detail?id=${tx.id}` as any)}
+        style={({ pressed, hovered }: any) => ({
+          flexDirection: "row" as const,
+          alignItems: "center" as const,
           paddingHorizontal: 20,
           paddingVertical: 14,
           borderBottomWidth: index < transactions.length - 1 ? 1 : 0,
           borderBottomColor: tc.glass.border,
-        }}
+          backgroundColor: hovered ? tc.glass.highlight : pressed ? tc.dark.elevated : "transparent",
+          ...(isWeb ? { cursor: "pointer", transition: "background-color 0.15s ease" } as any : {}),
+        })}
       >
         {/* Type */}
         <View style={{ flexDirection: "row", alignItems: "center", width: "22%", minWidth: 140 }}>
@@ -1272,7 +1442,7 @@ export default function WalletScreen() {
             {timeStr}
           </Text>
         </View>
-      </View>
+      </Pressable>
     );
   };
 
@@ -1459,7 +1629,7 @@ export default function WalletScreen() {
 
                   {/* Send Button */}
                   <Pressable
-                    onPress={() => router.push("/payment/send")}
+                    onPress={() => setShowSendPicker(true)}
                     onHoverIn={() => setHoverSend(true)}
                     onHoverOut={() => setHoverSend(false)}
                     style={({ pressed }) => ({
@@ -1775,6 +1945,7 @@ export default function WalletScreen() {
 
         {/* Desktop Deposit Dialog */}
         {renderDesktopDepositDialog()}
+        {renderSendPicker()}
       </SafeAreaView>
     );
   }
@@ -1909,7 +2080,7 @@ export default function WalletScreen() {
             </Pressable>
 
             <Pressable
-              onPress={() => router.push("/payment/send")}
+              onPress={() => setShowSendPicker(true)}
               style={({ pressed }) => ({
                 flex: 1,
                 flexDirection: "row",
@@ -2095,6 +2266,7 @@ export default function WalletScreen() {
 
       {/* Mobile Deposit Modal */}
       {renderMobileDepositModal()}
+      {renderSendPicker()}
     </SafeAreaView>
   );
 }

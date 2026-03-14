@@ -207,8 +207,12 @@ export default function LoginScreen() {
   const handleGoogleLogin = async (idToken: string) => {
     setGoogleLoading(true);
     try {
-      await googleLogin(idToken);
-      router.replace("/(tabs)");
+      const data = await googleLogin(idToken);
+      if (data.pin_required) {
+        router.replace("/auth/set-initial-pin" as any);
+      } else {
+        router.replace("/(tabs)");
+      }
     } catch (err: unknown) {
       const appError = normalizeError(err);
       toast.error(appError.title, appError.message);

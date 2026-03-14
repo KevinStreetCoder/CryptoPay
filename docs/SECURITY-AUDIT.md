@@ -31,6 +31,7 @@
 - **Files:** `backend/apps/accounts/views.py` (RegisterView, LoginView, VerifyPINResetOTPView)
 - **Issue:** OTP verification had no attempt limiting. 6-digit OTP = 1M possibilities. Rate limiting only applied to _sending_ OTPs, not _verifying_ them.
 - **Fix:** Added attempt counter per phone (`otp_verify_attempts:{phone}`). After 5 failed attempts: OTP invalidated, 429 response returned. Counter cleared on success.
+- **Additional fix (2026-03-14):** Device/IP change security challenge OTP (`otp_verify_attempts:sec:{phone}`) was also missing brute-force protection. Now covered with separate 5-attempt counter.
 
 ### H2: Payment Endpoints Bypass PIN Lockout — FIXED ✅
 - **File:** `backend/apps/payments/views.py` (PayBillView, PayTillView, SendMpesaView, BuyCryptoView)

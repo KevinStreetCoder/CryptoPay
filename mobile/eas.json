@@ -15,7 +15,8 @@
       },
       "env": {
         "APP_ENV": "development",
-        "API_URL": "http://localhost:8000/api/v1"
+        "API_URL": "http://localhost:8000/api/v1",
+        "EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID": "34724557aafaf3b437889ff0a053cba9"
       }
     },
     "preview": {
@@ -28,7 +29,8 @@
       },
       "env": {
         "APP_ENV": "preview",
-        "API_URL": "https://staging-api.cryptopay.co.ke/api/v1"
+        "API_URL": "https://staging-api.cryptopay.co.ke/api/v1",
+        "EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID": "34724557aafaf3b437889ff0a053cba9"
       }
     },
     "production": {
@@ -42,7 +44,8 @@
       },
       "env": {
         "APP_ENV": "production",
-        "API_URL": "https://api.cryptopay.co.ke/api/v1"
+        "API_URL": "https://api.cryptopay.co.ke/api/v1",
+        "EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID": "34724557aafaf3b437889ff0a053cba9"
       }
     }
   },
@@ -55,7 +58,9 @@
       },
       "android": {
         "serviceAccountKeyPath": "./google-service-account.json",
-        "track": "internal"
+        "track": "internal",
+        "releaseStatus": "draft",
+        "changesNotSentForReview": true
       }
     }
   }

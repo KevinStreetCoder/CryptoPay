@@ -90,15 +90,15 @@ class RequestOTPView(APIView):
                 logger.error(f"SMS send failed: {e}")
                 # In sandbox/dev, log the OTP
                 if settings.DEBUG:
-                    logger.info(f"OTP for {phone}: {otp}")
+                    logger.debug(f"OTP for {phone}: {otp}")
         else:
             # Dev mode — log OTP to console
-            logger.info(f"[DEV] OTP for {phone}: {otp}")
+            logger.debug(f"[DEV] OTP for {phone}: {otp}")
 
         # Log OTP server-side only — NEVER include in API response
         response_data = {"message": "OTP sent successfully"}
         if settings.DEBUG:
-            logger.info(f"[DEV] OTP for {phone}: {otp}")
+            logger.debug(f"[DEV] OTP for {phone}: {otp}")
         return Response(response_data)
 
 
@@ -257,7 +257,7 @@ class LoginView(APIView):
                 # Auto-send OTP for the challenge
                 self._send_otp_challenge(phone)
 
-            # Progressive lockout: 5 attempts → 1min, 10 → 5min, 15 → 1hr
+            # Progressive lockout: 5 attempts -> 1min, 10 -> 5min, 15 -> 1hr
             lockout_thresholds = {5: 60, 10: 300, 15: 3600}
             lockout_seconds = lockout_thresholds.get(user.pin_attempts)
             if lockout_seconds:
@@ -345,14 +345,25 @@ class LoginView(APIView):
                     "message": "New device or location detected. Enter the OTP sent to your phone.",
                 }
                 return Response(response_data, status=status.HTTP_403_FORBIDDEN)
-            # Verify the OTP for security challenge
+            # Verify the OTP for security challenge with brute-force protection
+            sec_attempt_key = f"otp_verify_attempts:sec:{phone}"
+            sec_attempts = cache.get(sec_attempt_key, 0)
+            if sec_attempts >= 5:
+                cache.delete(f"otp:{phone}")
+                return Response(
+                    {"error": "Too many failed OTP attempts. Request a new OTP.", "otp_required": True, "security_challenge": True},
+                    status=status.HTTP_429_TOO_MANY_REQUESTS,
+                )
+
             stored_otp = cache.get(f"otp:{phone}")
             if not stored_otp or stored_otp != otp:
+                cache.set(sec_attempt_key, sec_attempts + 1, timeout=300)
                 return Response(
                     {"error": "Invalid or expired OTP", "otp_required": True, "security_challenge": True},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             cache.delete(f"otp:{phone}")
+            cache.delete(sec_attempt_key)
 
         # Check TOTP if user has authenticator enabled
         if user.totp_enabled:
@@ -428,11 +439,11 @@ class LoginView(APIView):
             except Exception as e:
                 logger.error(f"OTP challenge SMS failed: {e}")
         else:
-            logger.info(f"[DEV] OTP challenge for {phone}: {otp}")
+            logger.debug(f"[DEV] OTP challenge for {phone}: {otp}")
 
     def _verify_totp(self, user, code):
         """Verify TOTP code or backup code using the TOTP service."""
-        if verify_totp(user.totp_secret, code):
+        if verify_totp(user.totp_secret_decrypted, code):
             return True
         return verify_backup_code(user, code)
 
@@ -619,7 +630,7 @@ class GoogleLoginView(APIView):
         email = google_info["email"]
 
         # Find or create user
-        user = User.objects.filter(email=email).first()
+        user = User.objects.filter(email__iexact=email).first()
         created = False
         if not user:
             user = User.objects.create_user(
@@ -676,9 +687,50 @@ class GoogleLoginView(APIView):
                     "access": str(refresh.access_token),
                 },
                 "created": created,
+                "pin_required": not bool(user.pin_hash),
             },
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
+
+    def _get_client_ip(self, request):
+        xff = request.META.get("HTTP_X_FORWARDED_FOR")
+        if xff:
+            return xff.split(",")[0].strip()
+        return request.META.get("REMOTE_ADDR")
+
+
+class SetInitialPINView(APIView):
+    """POST /api/v1/auth/set-initial-pin/ — Set PIN for Google OAuth users who have no PIN yet."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        pin = request.data.get("pin", "").strip()
+        if not pin or len(pin) != 6 or not pin.isdigit():
+            return Response(
+                {"error": "PIN must be exactly 6 digits."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user = request.user
+        if user.pin_hash:
+            return Response(
+                {"error": "PIN is already set. Use change-pin to update it."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user.set_pin(pin)
+        user.save(update_fields=["pin_hash"])
+
+        AuditLog.objects.create(
+            user=user,
+            action="INITIAL_PIN_SET",
+            entity_type="user",
+            entity_id=str(user.id),
+            ip_address=self._get_client_ip(request),
+        )
+
+        return Response({"message": "PIN set successfully"})
 
     def _get_client_ip(self, request):
         xff = request.META.get("HTTP_X_FORWARDED_FOR")
@@ -955,7 +1007,7 @@ class SendEmailVerificationView(APIView):
 
         data = {"message": "Verification email sent"}
         if settings.DEBUG:
-            logger.info(f"[DEV] Email verification OTP: {token_obj.otp_code}")
+            logger.debug(f"[DEV] Email verification OTP: {token_obj.otp_code}")
         return Response(data)
 
     def _get_client_ip(self, request):
@@ -1083,8 +1135,8 @@ class SetupTOTPView(APIView):
         raw_backup_codes = generate_backup_codes(count=10)
         hashed_codes = hash_backup_codes(raw_backup_codes)
 
-        # Save TOTP
-        user.totp_secret = secret
+        # Save TOTP (encrypted at rest)
+        user.set_totp_secret(secret)
         user.totp_enabled = True
         user.totp_backup_codes = hashed_codes
         user.save(update_fields=["totp_secret", "totp_enabled", "totp_backup_codes"])
@@ -1114,7 +1166,7 @@ class SetupTOTPView(APIView):
             )
 
         user = request.user
-        user.totp_secret = ""
+        user.set_totp_secret("")
         user.totp_enabled = False
         user.totp_backup_codes = []
         user.save(update_fields=["totp_secret", "totp_enabled", "totp_backup_codes"])
@@ -1202,8 +1254,8 @@ class TOTPConfirmView(APIView):
         raw_backup_codes = generate_backup_codes(count=8)
         hashed_codes = hash_backup_codes(raw_backup_codes)
 
-        # Enable TOTP on the user
-        user.totp_secret = secret
+        # Enable TOTP on the user (encrypted at rest)
+        user.set_totp_secret(secret)
         user.totp_enabled = True
         user.totp_backup_codes = hashed_codes
         user.save(update_fields=["totp_secret", "totp_enabled", "totp_backup_codes"])
@@ -1255,7 +1307,7 @@ class TOTPDisableView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        user.totp_secret = ""
+        user.set_totp_secret("")
         user.totp_enabled = False
         user.totp_backup_codes = []
         user.save(update_fields=["totp_secret", "totp_enabled", "totp_backup_codes"])
@@ -1313,7 +1365,7 @@ class TOTPVerifyView(APIView):
                 status=status.HTTP_401_UNAUTHORIZED,
             )
 
-        if not user.totp_enabled or not user.totp_secret:
+        if not user.totp_enabled or not user.totp_secret_decrypted:
             return Response(
                 {"error": "TOTP is not enabled for this account."},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -1341,7 +1393,7 @@ class TOTPVerifyView(APIView):
             )
 
         # Verify TOTP code or backup code
-        is_valid = verify_totp(user.totp_secret, code) or verify_backup_code(user, code)
+        is_valid = verify_totp(user.totp_secret_decrypted, code) or verify_backup_code(user, code)
 
         if not is_valid:
             cache.set(rate_key, attempts + 1, timeout=300)
@@ -1519,9 +1571,9 @@ class ForgotPINView(APIView):
             except Exception as e:
                 logger.error(f"PIN reset SMS failed: {e}")
                 if settings.DEBUG:
-                    logger.info(f"PIN reset OTP for {phone}: {otp}")
+                    logger.debug(f"PIN reset OTP for {phone}: {otp}")
         else:
-            logger.info(f"[DEV] PIN reset OTP for {phone}: {otp}")
+            logger.debug(f"[DEV] PIN reset OTP for {phone}: {otp}")
 
         AuditLog.objects.create(
             user=user,
@@ -1886,7 +1938,6 @@ class AdminUserListView(APIView):
         tier_filter = request.query_params.get("tier")
 
         qs = User.objects.all().order_by("-created_at")
-
         if search:
             qs = qs.filter(
                 db_models.Q(phone__icontains=search)

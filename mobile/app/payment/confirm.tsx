@@ -14,6 +14,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { paymentsApi } from "../../src/api/payments";
 import { normalizeError } from "../../src/utils/apiErrors";
 import { useScreenSecurity } from "../../src/hooks/useScreenSecurity";
+import { useTransactionPoller } from "../../src/hooks/useTransactionPoller";
 import { CURRENCIES, CurrencyCode, colors } from "../../src/constants/theme";
 import { getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
@@ -226,6 +227,8 @@ export default function ConfirmPaymentScreen() {
 
   const [step, setStep] = useState<"review" | "pin">("review");
   const [loading, setLoading] = useState(false);
+  const [pollingStatus, setPollingStatus] = useState<string | null>(null);
+  const { pollTransaction, cancel: cancelPoll } = useTransactionPoller();
   const [pinError, setPinError] = useState(false);
   const [quoteExpired, setQuoteExpired] = useState(false);
 
@@ -281,11 +284,27 @@ export default function ConfirmPaymentScreen() {
 
       const txData = txResponse?.data;
       const transactionId = txData?.id || "";
-      const txStatus = txData?.status || "processing";
 
-      // Immediately invalidate wallet balances so they refresh on next screen
+      // Poll for backend confirmation before showing success
+      setPollingStatus("confirming");
+
+      const { status: finalStatus } = await pollTransaction(
+        transactionId,
+        (s) => setPollingStatus(s)
+      );
+
       queryClient.invalidateQueries({ queryKey: ["wallets"] });
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
+
+      if (finalStatus === "failed") {
+        if (Platform.OS !== "web") {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        }
+        toast.error("Payment Failed", "The transaction was not completed. Please try again.");
+        setPollingStatus(null);
+        setStep("review");
+        return;
+      }
 
       if (Platform.OS !== "web") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -298,7 +317,7 @@ export default function ConfirmPaymentScreen() {
           crypto_currency: params.crypto_currency,
           recipient: params.paybill_number || params.till_number || params.phone || "",
           transaction_id: transactionId,
-          tx_status: txStatus,
+          tx_status: finalStatus,
         },
       });
     } catch (err: unknown) {
@@ -882,23 +901,41 @@ export default function ConfirmPaymentScreen() {
             {loading && (
               <View
                 style={{
-                  flexDirection: "row",
                   alignItems: "center",
                   justifyContent: "center",
                   gap: 10,
                   marginTop: 32,
                 }}
               >
-                <PulsingDot />
-                <Text
-                  style={{
-                    color: tc.primary[400],
-                    fontSize: 14,
-                    fontFamily: "DMSans_500Medium",
-                  }}
-                >
-                  {t("payment.processingPayment")}
-                </Text>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                  <PulsingDot />
+                  <Text
+                    style={{
+                      color: tc.primary[400],
+                      fontSize: 14,
+                      fontFamily: "DMSans_500Medium",
+                    }}
+                  >
+                    {pollingStatus === "confirming"
+                      ? t("payment.waitingMpesaConfirmation")
+                      : pollingStatus === "processing"
+                        ? t("payment.processingPayment")
+                        : t("payment.processingPayment")}
+                  </Text>
+                </View>
+                {pollingStatus && (
+                  <Text
+                    style={{
+                      color: tc.textMuted,
+                      fontSize: 12,
+                      fontFamily: "DMSans_400Regular",
+                      textAlign: "center",
+                      marginTop: 4,
+                    }}
+                  >
+                    {t("payment.completeMpesaPrompt")}
+                  </Text>
+                )}
               </View>
             )}
 

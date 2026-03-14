@@ -60,10 +60,11 @@ def _eth_rpc_call(method: str, params: list) -> dict:
         "params": params,
     }
     response = requests.post(url, json=payload, timeout=15)
-    response.raise_for_status()
     result = response.json()
     if "error" in result:
         raise Exception(f"RPC error: {result['error']}")
+    if response.status_code != 200:
+        response.raise_for_status()
     return result.get("result")
 
 
@@ -124,13 +125,14 @@ def monitor_eth_deposits():
         if db_max:
             from_block = db_max + 1
         else:
-            from_block = current_block - 100  # Start 100 blocks back on first run
+            from_block = current_block - 5  # Start 5 blocks back on first run
 
     if from_block > current_block:
         return
 
-    # Cap scan range to avoid huge queries
-    to_block = min(from_block + 2000, current_block)
+    # Cap scan range — Alchemy free tier limits eth_getLogs to 10 blocks
+    max_range = int(getattr(settings, "ETH_LOG_SCAN_RANGE", 10))
+    to_block = min(from_block + max_range, current_block)
 
     required_confirmations = settings.REQUIRED_CONFIRMATIONS.get("ethereum", 12)
     addresses_lower = {addr.lower(): addr for addr in eth_wallets.keys()}

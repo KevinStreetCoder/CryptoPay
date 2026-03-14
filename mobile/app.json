@@ -14,16 +14,113 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.cryptopay.app"
+      "bundleIdentifier": "ke.co.cryptopay.app",
+      "infoPlist": {
+        "LSApplicationQueriesSchemes": [
+          "metamask",
+          "trust",
+          "safe",
+          "rainbow",
+          "phantom",
+          "uniswap",
+          "zerion"
+        ],
+        "NSCameraUsageDescription": "CryptoPay needs camera access for KYC identity verification.",
+        "NSFaceIDUsageDescription": "CryptoPay uses Face ID for secure authentication."
+      },
+      "privacyManifests": {
+        "NSPrivacyAccessedAPITypes": [
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
+            "NSPrivacyAccessedAPITypeReasons": ["CA92.1"]
+          }
+        ],
+        "NSPrivacyCollectedDataTypes": [
+          {
+            "NSPrivacyCollectedDataType": "NSPrivacyCollectedDataTypePhoneNumber",
+            "NSPrivacyCollectedDataTypeLinked": true,
+            "NSPrivacyCollectedDataTypeTracking": false,
+            "NSPrivacyCollectedDataTypePurposes": ["NSPrivacyCollectedDataTypePurposeAppFunctionality"]
+          },
+          {
+            "NSPrivacyCollectedDataType": "NSPrivacyCollectedDataTypeName",
+            "NSPrivacyCollectedDataTypeLinked": true,
+            "NSPrivacyCollectedDataTypeTracking": false,
+            "NSPrivacyCollectedDataTypePurposes": ["NSPrivacyCollectedDataTypePurposeAppFunctionality"]
+          },
+          {
+            "NSPrivacyCollectedDataType": "NSPrivacyCollectedDataTypeEmailAddress",
+            "NSPrivacyCollectedDataTypeLinked": true,
+            "NSPrivacyCollectedDataTypeTracking": false,
+            "NSPrivacyCollectedDataTypePurposes": ["NSPrivacyCollectedDataTypePurposeAppFunctionality"]
+          }
+        ]
+      }
     },
     "android": {
-      "package": "com.cryptopay.app",
+      "package": "ke.co.cryptopay.app",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#060E1F",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
-      }
+      },
+      "permissions": [
+        "INTERNET",
+        "CAMERA",
+        "VIBRATE",
+        "USE_BIOMETRIC",
+        "USE_FINGERPRINT",
+        "RECEIVE_BOOT_COMPLETED",
+        "POST_NOTIFICATIONS"
+      ],
+      "blockedPermissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "READ_CONTACTS",
+        "WRITE_CONTACTS",
+        "READ_CALENDAR",
+        "WRITE_CALENDAR",
+        "READ_CALL_LOG",
+        "WRITE_CALL_LOG",
+        "READ_PHONE_STATE",
+        "CALL_PHONE",
+        "READ_SMS",
+        "SEND_SMS",
+        "RECEIVE_SMS",
+        "RECORD_AUDIO",
+        "BLUETOOTH",
+        "BLUETOOTH_ADMIN",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ],
+      "allowBackup": false,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "cryptopay"
+            }
+          ],
+          "category": ["DEFAULT", "BROWSABLE"]
+        },
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "app.cryptopay.co.ke",
+              "pathPrefix": "/"
+            }
+          ],
+          "category": ["DEFAULT", "BROWSABLE"]
+        }
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -31,6 +128,9 @@
       "name": "CryptoPay"
     },
     "extra": {
+      "privacyPolicyUrl": "https://cryptopay.co.ke/privacy",
+      "termsOfServiceUrl": "https://cryptopay.co.ke/terms",
+      "supportEmail": "support@cryptopay.co.ke",
       "googleWebClientId": "",
       "googleAndroidClientId": "",
       "googleIosClientId": "",
@@ -43,7 +143,8 @@
       "expo-secure-store",
       "expo-local-authentication",
       "expo-web-browser",
-      "expo-notifications"
+      "expo-notifications",
+      "./queries.js"
     ]
   }
 }
