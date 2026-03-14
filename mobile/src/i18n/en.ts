@@ -186,6 +186,8 @@ const en = {
     payingWith: "Paying with",
     payWith: "Pay with",
     paymentMethods: "Payment Methods",
+    depositKes: "Deposit KES",
+    depositKesSubtitle: "Buy crypto with M-Pesa or Paybill",
     payBillSubtitle: "Utilities, subscriptions & more",
     buyGoodsSubtitle: "Pay merchants via Till number",
     sendMpesaSubtitle: "Send money to any phone number",

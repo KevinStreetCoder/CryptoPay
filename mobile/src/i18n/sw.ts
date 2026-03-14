@@ -188,6 +188,8 @@ const sw: Translations = {
     payingWith: "Unalipa na",
     payWith: "Lipa na",
     paymentMethods: "Njia za Malipo",
+    depositKes: "Weka KES",
+    depositKesSubtitle: "Nunua crypto kupitia M-Pesa au Paybill",
     payBillSubtitle: "Huduma, usajili na mengineyo",
     buyGoodsSubtitle: "Lipa wafanyabiashara kupitia nambari ya Till",
     sendMpesaSubtitle: "Tuma pesa kwa nambari yoyote ya simu",

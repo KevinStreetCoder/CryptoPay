@@ -164,6 +164,15 @@ const POPULAR_SERVICES: ServiceProvider[] = [
 
 const PAYMENT_OPTIONS = [
   {
+    id: "deposit",
+    titleKey: "payment.depositKes",
+    subtitleKey: "payment.depositKesSubtitle",
+    icon: "arrow-down-circle-outline" as const,
+    accent: "#A78BFA",
+    accentBg: "rgba(167, 139, 250, 0.12)",
+    route: "/payment/deposit" as const,
+  },
+  {
     id: "paybill",
     titleKey: "payment.payBill",
     subtitleKey: "payment.payBillSubtitle",
