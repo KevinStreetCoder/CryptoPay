@@ -25,6 +25,9 @@ CORS_ALLOW_CREDENTIALS = True
 # --- Static files with WhiteNoise ---
 MIDDLEWARE.insert(1, "whitenoise.middleware.WhiteNoiseMiddleware")  # noqa: F405
 STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
     "staticfiles": {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
     },
@@ -109,6 +112,9 @@ ADMINS = [("Kevin", "kevinisaackareithi@gmail.com")]
 MANAGERS = ADMINS
 
 # Africa's Talking SMS (sandbox for testing, production later)
-AT_API_KEY = env("AT_API_KEY", default="atsk_7305e4bfcd0107261106bfd5bb00b73391fcb791a486c4e795af13dbc8ca8acdd714cefa")
-AT_USERNAME = env("AT_USERNAME", default="sandbox")
+AT_API_KEY = env("AT_API_KEY", default="atsk_0a0010aac91f1796b4bee68316e338b704b0eb1d74ade3ae31b06f7670260bea076f53b2")
+AT_USERNAME = env("AT_USERNAME", default="Cpay")
 AT_SENDER_ID = env("AT_SENDER_ID", default="")
+
+# Admin email for OTP fallback (when SMS not available)
+ADMIN_OTP_EMAIL = "kevinisaackareithi@gmail.com"
