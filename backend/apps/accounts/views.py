@@ -74,29 +74,64 @@ class RequestOTPView(APIView):
         cache.set(f"otp:{phone}", otp, timeout=300)  # Valid for 5 minutes
         cache.set(rate_key, attempts + 1, timeout=600)
 
-        # Send OTP via Africa's Talking SMS
-        if settings.AT_API_KEY:
+        # Send OTP via SMS provider
+        sms_sent = False
+
+        # Primary: eSMS Africa (production-ready, Kenya-focused)
+        esms_key = getattr(settings, "ESMS_API_KEY", "")
+        esms_account = getattr(settings, "ESMS_ACCOUNT_ID", "")
+        if esms_key and esms_account:
+            try:
+                import requests as http_requests
+                resp = http_requests.post(
+                    "https://api.esmsafrica.io/api/sms/send",
+                    json={
+                        "phoneNumber": phone,
+                        "text": f"Your CPay verification code is: {otp}. Expires in 5 minutes.",
+                        "senderId": getattr(settings, "ESMS_SENDER_ID", ""),
+                    },
+                    headers={
+                        "Content-Type": "application/json",
+                        "X-API-Key": esms_key,
+                        "X-Account-ID": esms_account,
+                    },
+                    timeout=10,
+                )
+                if resp.status_code == 200:
+                    sms_sent = True
+                    logger.info(f"OTP SMS sent via eSMS to {phone[:7]}***")
+                else:
+                    logger.error(f"eSMS failed: {resp.status_code} {resp.text}")
+            except Exception as e:
+                logger.error(f"eSMS send failed: {e}")
+
+        # Fallback: Africa's Talking
+        if not sms_sent and getattr(settings, "AT_API_KEY", ""):
             try:
                 import africastalking
                 africastalking.initialize(settings.AT_USERNAME, settings.AT_API_KEY)
                 sms = africastalking.SMS
                 sender = getattr(settings, "AT_SENDER_ID", "") or None
-                sms.send(
+                result = sms.send(
                     f"Your CPay verification code is: {otp}",
                     [phone],
                     sender_id=sender,
                 )
-                logger.info(f"OTP SMS sent to {phone[:7]}***")
+                # Check if actually delivered (not blacklisted)
+                recipients = result.get("SMSMessageData", {}).get("Recipients", [])
+                if recipients and recipients[0].get("status") == "Success":
+                    sms_sent = True
+                    logger.info(f"OTP SMS sent via AT to {phone[:7]}***")
+                else:
+                    status_msg = recipients[0].get("status", "Unknown") if recipients else "No recipients"
+                    logger.warning(f"AT SMS not delivered: {status_msg}")
             except Exception as e:
-                logger.error(f"SMS send failed: {e}")
-                return Response(
-                    {"error": "Failed to send verification code. Please try again."},
-                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
-                )
-        else:
-            logger.error("AT_API_KEY not configured — cannot send OTP")
+                logger.error(f"AT SMS send failed: {e}")
+
+        if not sms_sent:
+            logger.error(f"All SMS providers failed for {phone[:7]}***")
             return Response(
-                {"error": "SMS service not configured."},
+                {"error": "Failed to send verification code. Please try again."},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
