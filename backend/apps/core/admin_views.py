@@ -293,6 +293,30 @@ def admin_stats_dashboard(request):
         for row in type_breakdown_qs
     ]
 
+    # ── Recent Blockchain Deposits ──────────────────────────────────────
+    recent_deposits_qs = BlockchainDeposit.objects.order_by("-created_at")[:10]
+    # Build address → user phone lookup
+    deposit_addresses = [d.to_address for d in recent_deposits_qs]
+    address_to_phone = dict(
+        Wallet.objects.filter(deposit_address__in=deposit_addresses)
+        .select_related("user")
+        .values_list("deposit_address", "user__phone")
+    )
+    recent_deposits = []
+    for dep in recent_deposits_qs:
+        recent_deposits.append({
+            "id": dep.tx_hash[:8] if dep.tx_hash else str(dep.id)[:8],
+            "user_phone": address_to_phone.get(dep.to_address, "N/A"),
+            "type": "CRYPTO_DEPOSIT",
+            "status": dep.status,
+            "amount": str(dep.amount),
+            "currency": dep.currency,
+            "chain": dep.chain,
+            "confirmations": dep.confirmations,
+            "required_confirmations": dep.required_confirmations,
+            "created_at": dep.created_at.strftime("%Y-%m-%d %H:%M"),
+        })
+
     # ── Celery task count (24h) ─────────────────────────────────────────
     # Count transactions processed in last 24h as proxy for Celery activity
     celery_tasks_24h = Transaction.objects.filter(
@@ -337,6 +361,7 @@ def admin_stats_dashboard(request):
         "pending_deposits": pending_deposits,
         "deposit_by_currency_json": json.dumps(deposit_by_currency, cls=DecimalEncoder),
         "deposit_by_chain_json": json.dumps(deposit_by_chain, cls=DecimalEncoder),
+        "recent_deposits_json": json.dumps(recent_deposits, cls=DecimalEncoder),
         # Transaction type breakdown
         "type_breakdown_json": json.dumps(type_breakdown, cls=DecimalEncoder),
         # System stats
