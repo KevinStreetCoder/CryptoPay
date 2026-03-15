@@ -121,11 +121,16 @@ export function useAuth() {
 
   const googleLogin = useCallback(async (idToken: string) => {
     const { data } = await authApi.googleLogin(idToken);
-    await storage.setItemAsync("access_token", data.tokens.access);
-    await storage.setItemAsync("refresh_token", data.tokens.refresh);
-    resetSessionExpired();
-    // Don't set _user if phone_required — user is incomplete
-    if (!data.phone_required) {
+    if (data.phone_required) {
+      // Store tokens separately — don't put in main token storage
+      // This prevents the auth gate from thinking user is logged in
+      // which would trigger dashboard queries that 401 and poison session
+      await storage.setItemAsync("google_temp_access", data.tokens.access);
+      await storage.setItemAsync("google_temp_refresh", data.tokens.refresh);
+    } else {
+      await storage.setItemAsync("access_token", data.tokens.access);
+      await storage.setItemAsync("refresh_token", data.tokens.refresh);
+      resetSessionExpired();
       _user = data.user;
       notify();
     }
@@ -133,10 +138,19 @@ export function useAuth() {
   }, []);
 
   const googleCompleteProfile = useCallback(async (data: { phone: string; otp: string; pin: string; full_name?: string }) => {
-    // Force reset session expired — the Google temp token may have triggered 401s
-    // on background queries (wallets, rates) which poisoned the session flag
+    // Move temp Google tokens to main storage so the API call includes them
     const { forceResetSessionExpired } = require("../api/client");
     forceResetSessionExpired();
+    const tempAccess = await storage.getItemAsync("google_temp_access");
+    const tempRefresh = await storage.getItemAsync("google_temp_refresh");
+    if (tempAccess) {
+      await storage.setItemAsync("access_token", tempAccess);
+      await storage.deleteItemAsync("google_temp_access");
+    }
+    if (tempRefresh) {
+      await storage.setItemAsync("refresh_token", tempRefresh);
+      await storage.deleteItemAsync("google_temp_refresh");
+    }
     const { data: responseData } = await authApi.googleCompleteProfile(data);
     await storage.setItemAsync("access_token", responseData.tokens.access);
     await storage.setItemAsync("refresh_token", responseData.tokens.refresh);
