@@ -39,17 +39,22 @@ export const api = axios.create({
 });
 
 // Auth endpoints that should work even after session expiry
-const AUTH_ENDPOINTS = ["/auth/login/", "/auth/register/", "/auth/otp/", "/auth/google/", "/auth/google/complete-profile/", "/auth/token/refresh/", "/auth/forgot-pin/", "/auth/reset-pin/"];
+// Endpoints that bypass session-expired check AND don't send auth token
+const AUTH_ENDPOINTS = ["/auth/login/", "/auth/register/", "/auth/otp/", "/auth/google/", "/auth/token/refresh/", "/auth/forgot-pin/", "/auth/reset-pin/", "/auth/verify-pin-reset-otp/"];
+
+// Endpoints that bypass session-expired check but DO send auth token
+const AUTH_WITH_TOKEN = ["/auth/google/complete-profile/", "/auth/set-initial-pin/", "/auth/profile/"];
 
 api.interceptors.request.use(async (cfg) => {
-  const isAuthEndpoint = AUTH_ENDPOINTS.some((ep) => cfg.url?.includes(ep));
+  const isPublicAuth = AUTH_ENDPOINTS.some((ep) => cfg.url?.includes(ep));
+  const isAuthWithToken = AUTH_WITH_TOKEN.some((ep) => cfg.url?.includes(ep));
 
   // If session already expired, reject immediately — but allow auth endpoints through
-  if (_sessionExpired && !isAuthEndpoint) {
+  if (_sessionExpired && !isPublicAuth && !isAuthWithToken) {
     return Promise.reject(new SessionExpiredError());
   }
   const token = await storage.getItemAsync("access_token");
-  if (token && !isAuthEndpoint) {
+  if (token && !isPublicAuth) {
     cfg.headers.Authorization = `Bearer ${token}`;
   }
   return cfg;
@@ -59,7 +64,8 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
-    const isAuthEndpoint = AUTH_ENDPOINTS.some((ep) => originalRequest?.url?.includes(ep));
+    const isAuthEndpoint = AUTH_ENDPOINTS.some((ep) => originalRequest?.url?.includes(ep)) ||
+      AUTH_WITH_TOKEN.some((ep) => originalRequest?.url?.includes(ep));
 
     // Auth endpoints (login, register, etc.) — always pass errors through as-is
     if (isAuthEndpoint) {

@@ -17,7 +17,13 @@ from rest_framework import status
 from rest_framework.generics import ListAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
+
+
+class PaymentRateThrottle(UserRateThrottle):
+    """Limit payment transactions to 10 per hour per user."""
+    rate = "10/hour"
 
 from django.utils import timezone
 
@@ -99,6 +105,7 @@ class PayBillView(APIView):
     """Pay a Paybill number with crypto."""
 
     permission_classes = [IsNotSuspended]
+    throttle_classes = [PaymentRateThrottle]
 
     def post(self, request):
         serializer = PayBillSerializer(data=request.data)
@@ -244,6 +251,7 @@ class PayTillView(APIView):
     """Pay a Till number with crypto."""
 
     permission_classes = [IsNotSuspended]
+    throttle_classes = [PaymentRateThrottle]
 
     def post(self, request):
         serializer = PayTillSerializer(data=request.data)
