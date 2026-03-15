@@ -777,11 +777,11 @@ class GoogleCompleteProfileView(APIView):
     """
     POST /api/v1/auth/google/complete-profile/
     Complete profile for Google OAuth users who need to set phone + PIN.
-    Requires authentication (temp JWT from GoogleLoginView).
-    Accepts: {phone, otp, pin, full_name}
+    No auth required — uses email to find the user (avoids token expiry issues).
+    Accepts: {email, phone, otp, pin, full_name}
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def post(self, request):
         serializer = GoogleCompleteProfileSerializer(data=request.data)
@@ -791,8 +791,15 @@ class GoogleCompleteProfileView(APIView):
         otp = serializer.validated_data["otp"]
         pin = serializer.validated_data["pin"]
         full_name = serializer.validated_data.get("full_name", "")
+        email = request.data.get("email", "").strip().lower()
 
-        user = request.user
+        if not email:
+            return Response({"error": "Email is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Find user by email (created during Google login)
+        user = User.objects.filter(email__iexact=email).first()
+        if not user:
+            return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
 
         # Ensure user actually needs profile completion (has placeholder phone)
         if user.phone and not user.phone.startswith("+000"):
