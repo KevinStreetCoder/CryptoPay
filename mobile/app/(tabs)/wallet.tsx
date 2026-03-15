@@ -19,7 +19,7 @@ import * as Haptics from "expo-haptics";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import QRCode from "react-native-qrcode-svg";
 import { useWallets } from "../../src/hooks/useWallets";
-import { useTransactions } from "../../src/hooks/useTransactions";
+import { useTransactions, useActivity } from "../../src/hooks/useTransactions";
 import { TransactionItem } from "../../src/components/TransactionItem";
 import { WalletCardSkeleton, TransactionSkeleton } from "../../src/components/Skeleton";
 import { useToast } from "../../src/components/Toast";
@@ -155,7 +155,7 @@ export default function WalletScreen() {
   const ts = getThemeShadows(isDark);
   const { formatPhone } = usePhonePrivacy();
   const { data: wallets, isLoading: walletsLoading, refetch: refetchWallets } = useWallets();
-  const { data: txData, isLoading: txLoading, refetch: refetchTx } = useTransactions();
+  const { data: txData, isLoading: txLoading, refetch: refetchTx } = useActivity();
   const { data: rates } = useRates();
   const [refreshing, setRefreshing] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
