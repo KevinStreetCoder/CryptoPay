@@ -8,19 +8,21 @@ import {
   useWindowDimensions,
   Animated,
   RefreshControl,
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { paymentsApi, Transaction, getTxKesAmount, getTxRecipient } from "../../src/api/payments";
+import { notificationsApi, ServerNotification } from "../../src/api/notifications";
 import * as NotifStore from "../../src/stores/notifications";
 import { useToast } from "../../src/components/Toast";
 import { normalizeError } from "../../src/utils/apiErrors";
 import { colors, getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
 
-/* ─── Types ─── */
-type NotificationType = "transaction" | "deposit" | "security" | "system";
+/* --- Types --- */
+type NotificationType = "transaction" | "deposit" | "security" | "system" | "update" | "promotion" | "maintenance";
 type FilterTab = "all" | "transaction" | "security" | "system";
 
 interface Notification {
@@ -31,13 +33,13 @@ interface Notification {
   timestamp: Date;
   read: boolean;
   amount?: string;
+  isServer?: boolean; // true for server-side admin notifications
+  serverCategory?: string;
 }
 
-/* ─── Convert real transactions to notification items ─── */
+/* --- Convert transactions to notification items --- */
 function txToNotificationType(type: string): NotificationType {
   if (type === "DEPOSIT") return "deposit";
-  if (type === "PAYBILL_PAYMENT" || type === "TILL_PAYMENT" || type === "SEND_MPESA" || type === "BUY" || type === "SELL")
-    return "transaction";
   return "transaction";
 }
 
@@ -57,7 +59,6 @@ function txToNotificationBody(tx: Transaction): string {
   const kes = getTxKesAmount(tx);
   const recipient = getTxRecipient(tx);
   const kesStr = `KSh ${kes.toLocaleString("en-KE")}`;
-
   switch (tx.type) {
     case "PAYBILL_PAYMENT": return `${kesStr} sent to Paybill ${recipient || ""}.`;
     case "TILL_PAYMENT": return `${kesStr} paid to Till ${recipient || ""}.`;
@@ -85,10 +86,44 @@ function transactionsToNotifications(transactions: Transaction[]): Notification[
     timestamp: new Date(tx.created_at),
     read: NotifStore.isRead(tx.id),
     amount: txToNotificationAmount(tx),
+    isServer: false,
   }));
 }
 
-/* ─── Filter tabs config ─── */
+/* --- Convert server notifications to unified format --- */
+function serverCategoryToType(category: string): NotificationType {
+  switch (category) {
+    case "security": return "security";
+    case "update": return "update";
+    case "promotion": return "promotion";
+    case "maintenance": return "maintenance";
+    default: return "system";
+  }
+}
+
+function serverToNotifications(items: ServerNotification[]): Notification[] {
+  return items.map((n) => ({
+    id: n.id,
+    type: serverCategoryToType(n.category),
+    title: n.title,
+    body: n.body,
+    timestamp: new Date(n.created_at),
+    read: n.read,
+    isServer: true,
+    serverCategory: n.category,
+  }));
+}
+
+/* --- Filter tab mapping --- */
+function matchesFilter(n: Notification, filter: FilterTab): boolean {
+  if (filter === "all") return true;
+  if (filter === "transaction") return n.type === "transaction" || n.type === "deposit";
+  if (filter === "security") return n.type === "security";
+  if (filter === "system") return n.type === "system" || n.type === "update" || n.type === "promotion" || n.type === "maintenance";
+  return true;
+}
+
+/* --- Filter tabs config --- */
 const FILTER_TABS: { key: FilterTab; label: string }[] = [
   { key: "all", label: "All" },
   { key: "transaction", label: "Transactions" },
@@ -96,7 +131,7 @@ const FILTER_TABS: { key: FilterTab; label: string }[] = [
   { key: "system", label: "System" },
 ];
 
-/* ─── Icon map by notification type ─── */
+/* --- Icon map by notification type --- */
 function getTypeIcon(type: NotificationType): {
   name: keyof typeof Ionicons.glyphMap;
   color: string;
@@ -109,27 +144,27 @@ function getTypeIcon(type: NotificationType): {
       return { name: "download-outline", color: colors.info, bg: "rgba(59, 130, 246, 0.12)" };
     case "security":
       return { name: "shield-checkmark-outline", color: colors.warning, bg: "rgba(245, 158, 11, 0.12)" };
+    case "update":
+      return { name: "megaphone-outline", color: colors.info, bg: "rgba(59, 130, 246, 0.12)" };
+    case "promotion":
+      return { name: "gift-outline", color: colors.primary[400], bg: "rgba(16, 185, 129, 0.12)" };
+    case "maintenance":
+      return { name: "construct-outline", color: colors.warning, bg: "rgba(245, 158, 11, 0.12)" };
     case "system":
-      return { name: "megaphone-outline", color: colors.textSecondary, bg: "rgba(136, 153, 170, 0.12)" };
     default:
-      return { name: "notifications-outline", color: colors.textSecondary, bg: "rgba(136, 153, 170, 0.12)" };
+      return { name: "megaphone-outline", color: colors.textSecondary, bg: "rgba(136, 153, 170, 0.12)" };
   }
 }
 
-/* ─── Date grouping helpers ─── */
+/* --- Date grouping helpers --- */
 function isSameDay(d1: Date, d2: Date): boolean {
-  return (
-    d1.getFullYear() === d2.getFullYear() &&
-    d1.getMonth() === d2.getMonth() &&
-    d1.getDate() === d2.getDate()
-  );
+  return d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth() && d1.getDate() === d2.getDate();
 }
 
 function getDateLabel(date: Date): string {
   const today = new Date();
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
-
   if (isSameDay(date, today)) return "Today";
   if (isSameDay(date, yesterday)) return "Yesterday";
   return "Earlier";
@@ -139,13 +174,10 @@ function formatTime(date: Date): string {
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffMin = Math.floor(diffMs / 60000);
-
   if (diffMin < 1) return "Just now";
   if (diffMin < 60) return `${diffMin}m ago`;
-
   const diffHours = Math.floor(diffMin / 60);
   if (isSameDay(date, now) && diffHours < 24) return `${diffHours}h ago`;
-
   return date.toLocaleDateString("en-KE", { month: "short", day: "numeric" });
 }
 
@@ -154,7 +186,6 @@ type GroupedNotifications = { label: string; items: Notification[] }[];
 function groupByDate(notifications: Notification[]): GroupedNotifications {
   const groups: Record<string, Notification[]> = {};
   const order: string[] = [];
-
   for (const n of notifications) {
     const label = getDateLabel(n.timestamp);
     if (!groups[label]) {
@@ -163,15 +194,14 @@ function groupByDate(notifications: Notification[]): GroupedNotifications {
     }
     groups[label].push(n);
   }
-
   return order.map((label) => ({ label, items: groups[label] }));
 }
 
 const isWeb = Platform.OS === "web";
 
-/* ═══════════════════════════════════════════════════════════════════════════════
+/* ================================================================
    Main Screen
-   ═══════════════════════════════════════════════════════════════════════════════ */
+   ================================================================ */
 export default function NotificationsInboxScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
@@ -190,9 +220,32 @@ export default function NotificationsInboxScreen() {
   const loadNotifications = useCallback(async () => {
     try {
       await NotifStore.loadReadIds();
-      const { data } = await paymentsApi.history();
-      const txs = Array.isArray(data) ? data : data.results || [];
-      setNotifications(transactionsToNotifications(txs));
+
+      // Fetch both transaction-based and server-side notifications in parallel
+      const [txResult, serverResult] = await Promise.allSettled([
+        paymentsApi.history(),
+        notificationsApi.list(1),
+      ]);
+
+      let txNotifs: Notification[] = [];
+      if (txResult.status === "fulfilled") {
+        const txData = txResult.value.data;
+        const txs = Array.isArray(txData) ? txData : txData.results || [];
+        txNotifs = transactionsToNotifications(txs);
+      }
+
+      let serverNotifs: Notification[] = [];
+      if (serverResult.status === "fulfilled") {
+        const sData = serverResult.value.data;
+        const items = Array.isArray(sData) ? sData : sData.results || [];
+        serverNotifs = serverToNotifications(items);
+      }
+
+      // Merge and sort by timestamp descending
+      const merged = [...txNotifs, ...serverNotifs].sort(
+        (a, b) => b.timestamp.getTime() - a.timestamp.getTime()
+      );
+      setNotifications(merged);
     } catch (err) {
       const appError = normalizeError(err);
       toast.error(appError.title, appError.message);
@@ -205,12 +258,13 @@ export default function NotificationsInboxScreen() {
     loadNotifications();
   }, [loadNotifications]);
 
-  // Subscribe to store changes so we re-render when read state changes
+  // Subscribe to local store changes
   useEffect(() => {
     return NotifStore.subscribe(() => {
-      // Rebuild notifications with fresh read state
       setNotifications((prev) =>
-        prev.map((n) => ({ ...n, read: NotifStore.isRead(n.id) }))
+        prev.map((n) =>
+          n.isServer ? n : { ...n, read: NotifStore.isRead(n.id) }
+        )
       );
       forceUpdate((c) => c + 1);
     });
@@ -220,28 +274,45 @@ export default function NotificationsInboxScreen() {
   const isDesktop = isWeb && width >= 900;
   const hPad = isDesktop ? 48 : 20;
 
-  // Filter notifications
+  // Filter
   const filteredNotifications = notifications.filter((n) => {
     if (deletedIds.has(n.id)) return false;
-    if (activeFilter === "all") return true;
-    if (activeFilter === "transaction") return n.type === "transaction" || n.type === "deposit";
-    return n.type === activeFilter;
+    return matchesFilter(n, activeFilter);
   });
 
   const grouped = groupByDate(filteredNotifications);
 
-  const markAllRead = useCallback(() => {
-    const allIds = notifications.map((n) => n.id);
-    NotifStore.markAllRead(allIds);
+  const markAllRead = useCallback(async () => {
+    // Mark local (transaction) notifications
+    const localIds = notifications.filter((n) => !n.isServer).map((n) => n.id);
+    NotifStore.markAllRead(localIds);
+
+    // Mark server notifications
+    try {
+      await notificationsApi.markAllRead();
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    } catch {
+      // best-effort
+    }
   }, [notifications]);
 
-  const markRead = useCallback((id: string) => {
-    NotifStore.markRead(id);
+  const markRead = useCallback(async (id: string, isServer: boolean) => {
+    if (isServer) {
+      try {
+        await notificationsApi.markRead(id);
+        setNotifications((prev) =>
+          prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+        );
+      } catch {
+        // best-effort
+      }
+    } else {
+      NotifStore.markRead(id);
+    }
   }, []);
 
-  const deleteNotification = useCallback((id: string) => {
-    // Also mark as read when deleting
-    NotifStore.markRead(id);
+  const deleteNotification = useCallback((id: string, isServer: boolean) => {
+    if (!isServer) NotifStore.markRead(id);
     setDeletedIds((prev) => new Set(prev).add(id));
   }, []);
 
@@ -253,15 +324,13 @@ export default function NotificationsInboxScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
-      {/* ── Header ── */}
+      {/* Header */}
       <View
         style={{
           paddingHorizontal: hPad,
           paddingTop: isWeb ? 16 : 8,
           paddingBottom: 0,
-          ...(isDesktop
-            ? { width: "100%" }
-            : {}),
+          ...(isDesktop ? { width: "100%" } : {}),
         }}
       >
         <View
@@ -273,7 +342,6 @@ export default function NotificationsInboxScreen() {
           }}
         >
           <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-            {/* Back button */}
             <Pressable
               onPress={() => {
                 if (router.canGoBack()) router.back();
@@ -291,9 +359,7 @@ export default function NotificationsInboxScreen() {
                 borderWidth: 1,
                 borderColor: isWeb && hovered ? tc.glass.borderStrong : tc.glass.border,
                 opacity: pressed ? 0.85 : 1,
-                ...(isWeb
-                  ? ({ cursor: "pointer", transition: "all 0.15s ease" } as any)
-                  : {}),
+                ...(isWeb ? ({ cursor: "pointer", transition: "all 0.15s ease" } as any) : {}),
               })}
             >
               <Ionicons name="arrow-back" size={20} color={tc.textPrimary} />
@@ -334,7 +400,6 @@ export default function NotificationsInboxScreen() {
             )}
           </View>
 
-          {/* Mark all as read */}
           {unreadCount > 0 && (
             <Pressable
               onPress={markAllRead}
@@ -348,9 +413,7 @@ export default function NotificationsInboxScreen() {
                 borderWidth: 1,
                 borderColor: colors.primary[700],
                 opacity: pressed ? 0.85 : 1,
-                ...(isWeb
-                  ? ({ cursor: "pointer", transition: "all 0.15s ease" } as any)
-                  : {}),
+                ...(isWeb ? ({ cursor: "pointer", transition: "all 0.15s ease" } as any) : {}),
               })}
             >
               <Text
@@ -366,16 +429,10 @@ export default function NotificationsInboxScreen() {
           )}
         </View>
 
-        {/* ── Filter Tabs ── */}
-        <FilterTabs
-          active={activeFilter}
-          onChange={setActiveFilter}
-          isDesktop={isDesktop}
-          tc={tc}
-        />
+        <FilterTabs active={activeFilter} onChange={setActiveFilter} isDesktop={isDesktop} tc={tc} />
       </View>
 
-      {/* ── Notification list ── */}
+      {/* Notification list */}
       <ScrollView
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -391,24 +448,29 @@ export default function NotificationsInboxScreen() {
         contentContainerStyle={{
           paddingTop: 8,
           paddingBottom: 40,
-          ...(isDesktop
-            ? { width: "100%" }
-            : {}),
+          ...(isDesktop ? { width: "100%" } : {}),
         }}
       >
-        {filteredNotifications.length === 0 ? (
+        {loading ? (
+          <View style={{ alignItems: "center", paddingTop: 60 }}>
+            <ActivityIndicator size="large" color={colors.primary[400]} />
+            <Text
+              style={{
+                color: tc.textMuted,
+                fontSize: 14,
+                fontFamily: "DMSans_400Regular",
+                marginTop: 12,
+              }}
+            >
+              Loading notifications...
+            </Text>
+          </View>
+        ) : filteredNotifications.length === 0 ? (
           <EmptyState filter={activeFilter} tc={tc} />
         ) : (
           grouped.map((group) => (
             <View key={group.label}>
-              {/* Date group header */}
-              <View
-                style={{
-                  paddingHorizontal: hPad,
-                  paddingTop: 20,
-                  paddingBottom: 8,
-                }}
-              >
+              <View style={{ paddingHorizontal: hPad, paddingTop: 20, paddingBottom: 8 }}>
                 <Text
                   style={{
                     color: tc.textMuted,
@@ -422,17 +484,18 @@ export default function NotificationsInboxScreen() {
                 </Text>
               </View>
 
-              {/* Notification rows */}
               {group.items.map((notification, index) => (
                 <AnimatedNotificationRow
                   key={notification.id}
                   notification={notification}
                   index={index}
                   onPress={() => {
-                    markRead(notification.id);
-                    router.push({ pathname: "/payment/detail", params: { id: notification.id } });
+                    markRead(notification.id, !!notification.isServer);
+                    if (!notification.isServer) {
+                      router.push({ pathname: "/payment/detail", params: { id: notification.id } });
+                    }
                   }}
-                  onDelete={() => deleteNotification(notification.id)}
+                  onDelete={() => deleteNotification(notification.id, !!notification.isServer)}
                   isDesktop={isDesktop}
                   hPad={hPad}
                   tc={tc}
@@ -447,9 +510,9 @@ export default function NotificationsInboxScreen() {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════════
+/* ================================================================
    Filter Tabs with animated underline
-   ═══════════════════════════════════════════════════════════════════════════════ */
+   ================================================================ */
 function FilterTabs({
   active,
   onChange,
@@ -464,7 +527,6 @@ function FilterTabs({
   const underlineAnim = useRef(new Animated.Value(0)).current;
   const tabWidths = useRef<number[]>([]).current;
   const tabPositions = useRef<number[]>([]).current;
-
   const activeIndex = FILTER_TABS.findIndex((t) => t.key === active);
 
   useEffect(() => {
@@ -504,9 +566,7 @@ function FilterTabs({
               paddingHorizontal: isDesktop ? 20 : 14,
               marginRight: isDesktop ? 8 : 2,
               opacity: pressed ? 0.7 : 1,
-              ...(isWeb
-                ? ({ cursor: "pointer", transition: "all 0.15s ease" } as any)
-                : {}),
+              ...(isWeb ? ({ cursor: "pointer", transition: "all 0.15s ease" } as any) : {}),
             })}
           >
             <Text
@@ -523,7 +583,6 @@ function FilterTabs({
         );
       })}
 
-      {/* Animated underline */}
       {tabWidths[activeIndex] != null && (
         <Animated.View
           style={{
@@ -542,9 +601,9 @@ function FilterTabs({
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════════
-   Animated Notification Row – staggered entrance + swipe/hover delete
-   ═══════════════════════════════════════════════════════════════════════════════ */
+/* ================================================================
+   Animated Notification Row
+   ================================================================ */
 function AnimatedNotificationRow({
   notification,
   index,
@@ -587,7 +646,6 @@ function AnimatedNotificationRow({
     ]).start();
   }, []);
 
-  // Mobile swipe to delete
   const handleSwipeStart = useCallback(() => {
     if (isWeb) return;
     if (!swiped) {
@@ -609,6 +667,14 @@ function AnimatedNotificationRow({
     }
   }, [swiped]);
 
+  // Priority indicator color
+  const priorityColor =
+    notification.isServer && notification.serverCategory === "security"
+      ? colors.warning
+      : notification.isServer && notification.serverCategory === "maintenance"
+        ? colors.warning
+        : null;
+
   return (
     <Animated.View
       style={{
@@ -618,7 +684,6 @@ function AnimatedNotificationRow({
         overflow: "hidden",
       }}
     >
-      {/* Delete background (mobile swipe) */}
       {!isWeb && (
         <View
           style={{
@@ -665,15 +730,9 @@ function AnimatedNotificationRow({
             borderLeftWidth: 3,
             borderLeftColor: !notification.read ? colors.primary[400] : "transparent",
             opacity: pressed ? 0.85 : 1,
-            ...(isWeb
-              ? ({
-                  cursor: "pointer",
-                  transition: "background-color 0.2s ease",
-                } as any)
-              : {}),
+            ...(isWeb ? ({ cursor: "pointer", transition: "background-color 0.2s ease" } as any) : {}),
           })}
         >
-
           {/* Type icon */}
           <View style={{ opacity: notification.read ? 0.5 : 1 }}>
             <NotificationIcon type={notification.type} isDesktop={isDesktop} />
@@ -724,6 +783,41 @@ function AnimatedNotificationRow({
                     </Text>
                   </View>
                 )}
+                {/* Server notification category badge */}
+                {notification.isServer && notification.serverCategory && (
+                  <View
+                    style={{
+                      backgroundColor:
+                        notification.serverCategory === "security"
+                          ? "rgba(245, 158, 11, 0.15)"
+                          : notification.serverCategory === "maintenance"
+                            ? "rgba(245, 158, 11, 0.15)"
+                            : notification.serverCategory === "promotion"
+                              ? "rgba(16, 185, 129, 0.15)"
+                              : "rgba(59, 130, 246, 0.15)",
+                      borderRadius: 4,
+                      paddingHorizontal: 6,
+                      paddingVertical: 1,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color:
+                          notification.serverCategory === "security" || notification.serverCategory === "maintenance"
+                            ? colors.warning
+                            : notification.serverCategory === "promotion"
+                              ? colors.primary[400]
+                              : colors.info,
+                        fontSize: 9,
+                        fontFamily: "DMSans_600SemiBold",
+                        letterSpacing: 0.3,
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      {notification.serverCategory}
+                    </Text>
+                  </View>
+                )}
               </View>
 
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -737,10 +831,9 @@ function AnimatedNotificationRow({
                   {formatTime(notification.timestamp)}
                 </Text>
 
-                {/* Desktop hover delete button — uses View+onClick to avoid nested <button> */}
                 {isWeb && (
                   <View
-                    // @ts-ignore — web-only onClick
+                    // @ts-ignore web-only onClick
                     onClick={(e: any) => {
                       e.stopPropagation();
                       onDelete();
@@ -773,7 +866,6 @@ function AnimatedNotificationRow({
               {notification.body}
             </Text>
 
-            {/* Amount badge */}
             {notification.amount ? (
               <View
                 style={{
@@ -789,9 +881,7 @@ function AnimatedNotificationRow({
               >
                 <Text
                   style={{
-                    color: notification.amount.startsWith("+")
-                      ? colors.success
-                      : colors.error,
+                    color: notification.amount.startsWith("+") ? colors.success : colors.error,
                     fontSize: 12,
                     fontFamily: "DMSans_600SemiBold",
                     letterSpacing: -0.2,
@@ -808,16 +898,10 @@ function AnimatedNotificationRow({
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════════
+/* ================================================================
    Notification Icon
-   ═══════════════════════════════════════════════════════════════════════════════ */
-function NotificationIcon({
-  type,
-  isDesktop,
-}: {
-  type: NotificationType;
-  isDesktop: boolean;
-}) {
+   ================================================================ */
+function NotificationIcon({ type, isDesktop }: { type: NotificationType; isDesktop: boolean }) {
   const { name, color, bg } = getTypeIcon(type);
   const size = isDesktop ? 46 : 42;
   const iconSize = isDesktop ? 22 : 20;
@@ -841,9 +925,9 @@ function NotificationIcon({
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════════
+/* ================================================================
    Empty State
-   ═══════════════════════════════════════════════════════════════════════════════ */
+   ================================================================ */
 function EmptyState({
   filter,
   tc,
@@ -890,7 +974,6 @@ function EmptyState({
         transform: [{ scale: scaleAnim }],
       }}
     >
-      {/* Decorative icon container */}
       <View
         style={{
           width: 96,
@@ -905,7 +988,6 @@ function EmptyState({
           position: "relative",
         }}
       >
-        {/* Outer glow ring */}
         <View
           style={{
             position: "absolute",
@@ -917,7 +999,6 @@ function EmptyState({
           }}
         />
         <Ionicons name="notifications-off-outline" size={38} color={tc.textMuted} />
-        {/* Small checkmark badge */}
         <View
           style={{
             position: "absolute",

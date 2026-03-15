@@ -1,0 +1,71 @@
+{% extends "email/base.html" %}
+
+{% block title %}CryptoPay — {{ title }}{% endblock %}
+
+{% block content %}
+<h2>{{ title }}</h2>
+
+{% if category == "security" %}
+<div class="alert-box" style="background-color: #1a1a2e; border-color: #f59e0b; margin-bottom: 20px;">
+  <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+    <tr>
+      <td style="width: 36px; vertical-align: top; padding-right: 12px;">
+        <span style="font-size: 24px;">&#128274;</span>
+      </td>
+      <td>
+        <p style="color: #fcd34d; margin: 0; font-weight: 600;">Security Notice</p>
+      </td>
+    </tr>
+  </table>
+</div>
+{% elif category == "maintenance" %}
+<div class="info-card" style="border-left-color: #f59e0b; margin-bottom: 20px;">
+  <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+    <tr>
+      <td style="width: 36px; vertical-align: top; padding-right: 12px;">
+        <span style="font-size: 24px;">&#128295;</span>
+      </td>
+      <td>
+        <p style="color: #fcd34d; margin: 0; font-weight: 600;">Scheduled Maintenance</p>
+      </td>
+    </tr>
+  </table>
+</div>
+{% elif category == "promotion" %}
+<div class="info-card" style="border-left-color: #10B981; margin-bottom: 20px;">
+  <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+    <tr>
+      <td style="width: 36px; vertical-align: top; padding-right: 12px;">
+        <span style="font-size: 24px;">&#127881;</span>
+      </td>
+      <td>
+        <p style="color: #10B981; margin: 0; font-weight: 600;">Special Offer</p>
+      </td>
+    </tr>
+  </table>
+</div>
+{% endif %}
+
+<p>Hi {{ full_name }},</p>
+
+<p style="white-space: pre-line;">{{ body }}</p>
+
+{% if priority == "critical" %}
+<div class="alert-box" style="margin-top: 20px;">
+  <p style="color: #fca5a5; font-weight: 600;">&#9888; This is a critical notification. Please take action immediately.</p>
+</div>
+{% elif priority == "high" %}
+<div class="info-card" style="border-left-color: #f59e0b; margin-top: 20px;">
+  <p style="color: #fcd34d; margin: 0; font-size: 13px;">This is a high-priority notification from CryptoPay.</p>
+</div>
+{% endif %}
+
+<p style="margin-top: 24px;">
+  If you have any questions, please contact our support team at
+  <a href="mailto:support@cpay.co.ke" style="color: #10B981;">support@cpay.co.ke</a>.
+</p>
+
+<p style="color: #64748b; font-size: 13px; margin-top: 24px;">
+  — The CryptoPay Team
+</p>
+{% endblock %}

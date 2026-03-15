@@ -9,19 +9,44 @@ import { usePhonePrivacy } from "../utils/privacy";
 
 const useNative = Platform.OS !== "web";
 
+const CHAIN_LABELS: Record<string, string> = {
+  tron: "TRC-20",
+  ethereum: "ERC-20",
+  bitcoin: "BTC",
+  solana: "SOL",
+  polygon: "Polygon",
+};
+
 const TYPE_CONFIG: Record<
   string,
-  { icon: string; label: string; color: string }
+  { icon: string; label: string; color: string; getSubtitle?: (tx: Transaction) => string }
 > = {
+  CRYPTO_DEPOSIT: {
+    icon: "arrow-down-circle",
+    label: "Received",
+    color: colors.success,
+    getSubtitle: (tx) => {
+      const amt = parseFloat(tx.source_amount || "0");
+      const chain = CHAIN_LABELS[tx.chain] || tx.chain;
+      return `${amt > 0 ? amt : ""} ${tx.source_currency}${chain ? ` (${chain})` : ""}`;
+    },
+  },
   PAYBILL_PAYMENT: {
     icon: "receipt-outline",
     label: "Pay Bill",
-    color: colors.primary[400],
+    color: colors.info,
+    getSubtitle: (tx) => {
+      const parts = [];
+      if (tx.mpesa_paybill) parts.push(`Paybill ${tx.mpesa_paybill}`);
+      if (tx.mpesa_account) parts.push(`Acc: ${tx.mpesa_account}`);
+      return parts.join(" - ") || "";
+    },
   },
   TILL_PAYMENT: {
     icon: "cart-outline",
     label: "Buy Goods",
-    color: colors.info,
+    color: "#8B5CF6",
+    getSubtitle: (tx) => tx.mpesa_till ? `Till ${tx.mpesa_till}` : "",
   },
   DEPOSIT: {
     icon: "arrow-down-circle-outline",
@@ -29,19 +54,27 @@ const TYPE_CONFIG: Record<
     color: colors.success,
   },
   WITHDRAWAL: {
-    icon: "arrow-up-circle-outline",
+    icon: "arrow-up-circle",
     label: "Withdraw",
-    color: colors.warning,
+    color: colors.error,
+    getSubtitle: (tx) => {
+      const amt = parseFloat(tx.source_amount || "0");
+      return `${amt > 0 ? amt : ""} ${tx.source_currency || ""}`.trim();
+    },
   },
   SEND_MPESA: {
-    icon: "phone-portrait-outline",
+    icon: "send-outline",
     label: "Send M-Pesa",
     color: colors.accent,
   },
   BUY: {
-    icon: "swap-horizontal-outline",
+    icon: "add-circle-outline",
     label: "Buy",
-    color: colors.primary[400],
+    color: "#10B981",
+    getSubtitle: (tx) => {
+      const amt = parseFloat(tx.dest_amount || "0");
+      return amt > 0 ? `Bought ${amt} ${tx.dest_currency}` : "";
+    },
   },
   SELL: {
     icon: "swap-vertical-outline",
@@ -75,7 +108,7 @@ export function TransactionItem({ transaction, onPress }: TransactionItemProps) 
     if (onPress) {
       onPress();
     } else {
-      router.push(`/payment/detail?id=${transaction.id}` as any);
+      router.push(`/payment/detail?id=${transaction.id}&type=${transaction.type}` as any);
     }
   };
 
@@ -101,6 +134,7 @@ export function TransactionItem({ transaction, onPress }: TransactionItemProps) 
     completed: { color: colors.success, bg: colors.success + "1F" },
     pending: { color: colors.warning, bg: colors.warning + "1F" },
     processing: { color: colors.info, bg: colors.info + "1F" },
+    confirming: { color: colors.info, bg: colors.info + "1F" },
     failed: { color: colors.error, bg: colors.error + "1F" },
     reversed: { color: tc.dark.muted, bg: tc.dark.muted + "1F" },
   };
@@ -121,11 +155,20 @@ export function TransactionItem({ transaction, onPress }: TransactionItemProps) 
     month: "short",
   });
 
-  const rawRecipient = getTxRecipient(transaction);
-  // Mask phone numbers based on privacy setting; leave paybill/till numbers unmasked
-  const recipient = rawRecipient && transaction.type === "SEND_MPESA"
-    ? formatPhone(rawRecipient)
-    : rawRecipient;
+  // Build subtitle: type-specific or recipient or date
+  let subtitle = "";
+  if (config.getSubtitle) {
+    subtitle = config.getSubtitle(transaction);
+  }
+  if (!subtitle) {
+    const rawRecipient = getTxRecipient(transaction);
+    subtitle = rawRecipient && transaction.type === "SEND_MPESA"
+      ? formatPhone(rawRecipient)
+      : rawRecipient || `${dateStr} ${timeStr}`;
+  }
+
+  // For crypto deposits, show chain badge
+  const showChainBadge = transaction.type === "CRYPTO_DEPOSIT" && transaction.chain;
 
   return (
     <Animated.View style={{ transform: [{ scale }] }}>
@@ -146,9 +189,7 @@ export function TransactionItem({ transaction, onPress }: TransactionItemProps) 
           pressed && { backgroundColor: tc.glass.bgLight },
         ]}
         accessibilityRole="button"
-        accessibilityLabel={`${config.label} ${
-          recipient || ""
-        } KSh ${kesAmount.toLocaleString("en-KE")} ${transaction.status}`}
+        accessibilityLabel={`${config.label} ${subtitle} KSh ${kesAmount.toLocaleString("en-KE")} ${transaction.status}`}
       >
         {/* Icon */}
         <View
@@ -163,6 +204,33 @@ export function TransactionItem({ transaction, onPress }: TransactionItemProps) 
           }}
         >
           <Ionicons name={config.icon as any} size={22} color={resolvedColor} />
+          {/* Chain badge for crypto deposits */}
+          {showChainBadge && (
+            <View
+              style={{
+                position: "absolute",
+                bottom: -2,
+                right: -2,
+                backgroundColor: tc.dark.card,
+                borderRadius: 6,
+                paddingHorizontal: 4,
+                paddingVertical: 1,
+                borderWidth: 1,
+                borderColor: tc.glass.border,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 8,
+                  fontFamily: "DMSans_600SemiBold",
+                  color: tc.textSecondary,
+                  textTransform: "uppercase",
+                }}
+              >
+                {CHAIN_LABELS[transaction.chain] || transaction.chain}
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Details */}
@@ -186,7 +254,7 @@ export function TransactionItem({ transaction, onPress }: TransactionItemProps) 
             }}
             numberOfLines={1}
           >
-            {recipient || `${dateStr} ${timeStr}`}
+            {subtitle}
           </Text>
         </View>
 

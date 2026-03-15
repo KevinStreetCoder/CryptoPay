@@ -7,11 +7,14 @@ import {
   Platform,
   useWindowDimensions,
   ActivityIndicator,
+  Linking,
+  Share,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
+import * as Clipboard from "expo-clipboard";
 import { paymentsApi, Transaction, getTxKesAmount, getTxCrypto, getTxRecipient } from "../../src/api/payments";
 import { useToast } from "../../src/components/Toast";
 import { colors, shadows, CURRENCIES, CurrencyCode, getThemeColors, getThemeShadows } from "../../src/constants/theme";
@@ -21,13 +24,38 @@ import { useLocale } from "../../src/hooks/useLocale";
 
 const isWeb = Platform.OS === "web";
 
+const CHAIN_LABELS: Record<string, string> = {
+  tron: "Tron (TRC-20)",
+  ethereum: "Ethereum (ERC-20)",
+  bitcoin: "Bitcoin",
+  solana: "Solana",
+  polygon: "Polygon",
+};
+
+const EXPLORER_TX: Record<string, string> = {
+  tron: "https://tronscan.org/#/transaction/",
+  ethereum: "https://etherscan.io/tx/",
+  bitcoin: "https://mempool.space/tx/",
+  solana: "https://solscan.io/tx/",
+  polygon: "https://polygonscan.com/tx/",
+};
+
+const EXPLORER_ADDR: Record<string, string> = {
+  tron: "https://tronscan.org/#/address/",
+  ethereum: "https://etherscan.io/address/",
+  bitcoin: "https://mempool.space/address/",
+  solana: "https://solscan.io/account/",
+  polygon: "https://polygonscan.com/address/",
+};
+
 const TYPE_CONFIG: Record<string, { icon: string; label: string; color: string }> = {
-  PAYBILL_PAYMENT: { icon: "receipt-outline", label: "Pay Bill", color: colors.primary[400] },
-  TILL_PAYMENT: { icon: "cart-outline", label: "Buy Goods", color: colors.info },
+  CRYPTO_DEPOSIT: { icon: "arrow-down-circle", label: "Crypto Deposit", color: colors.success },
+  PAYBILL_PAYMENT: { icon: "receipt-outline", label: "Pay Bill", color: colors.info },
+  TILL_PAYMENT: { icon: "cart-outline", label: "Buy Goods", color: "#8B5CF6" },
   DEPOSIT: { icon: "arrow-down-circle-outline", label: "Deposit", color: colors.success },
-  WITHDRAWAL: { icon: "arrow-up-circle-outline", label: "Withdraw", color: colors.warning },
-  SEND_MPESA: { icon: "phone-portrait-outline", label: "Send M-Pesa", color: colors.accent },
-  BUY: { icon: "swap-horizontal-outline", label: "Buy", color: colors.primary[400] },
+  WITHDRAWAL: { icon: "arrow-up-circle", label: "Withdrawal", color: colors.error },
+  SEND_MPESA: { icon: "send-outline", label: "Send M-Pesa", color: colors.accent },
+  BUY: { icon: "add-circle-outline", label: "Buy Crypto", color: "#10B981" },
   SELL: { icon: "swap-vertical-outline", label: "Sell", color: colors.accentDark },
   FEE: { icon: "pricetag-outline", label: "Fee", color: colors.dark.muted },
   KES_DEPOSIT: { icon: "arrow-down-circle-outline", label: "KES Deposit", color: colors.success },
@@ -52,9 +80,52 @@ const STATUS_I18N_KEY: Record<string, string> = {
   reversed: "payment.reversed",
 };
 
+// Timeline step definition
+interface TimelineStep {
+  label: string;
+  icon: string;
+  reached: boolean;
+  active: boolean;
+}
+
+function getTimelineSteps(tx: Transaction): TimelineStep[] {
+  const statusOrder = ["pending", "processing", "confirming", "completed"];
+  const idx = statusOrder.indexOf(tx.status);
+  const isFailed = tx.status === "failed" || tx.status === "reversed";
+
+  // For crypto deposits, use a different flow
+  if (tx.type === "CRYPTO_DEPOSIT") {
+    const depositSteps = [
+      { label: "Detected", icon: "search-outline", status: "pending" },
+      { label: "Confirming", icon: "hourglass-outline", status: "confirming" },
+      { label: "Credited", icon: "checkmark-circle-outline", status: "completed" },
+    ];
+    const depositIdx = tx.status === "completed" ? 2 : tx.status === "confirming" ? 1 : 0;
+    return depositSteps.map((s, i) => ({
+      label: s.label,
+      icon: s.icon,
+      reached: isFailed ? i === 0 : i <= depositIdx,
+      active: isFailed ? false : i === depositIdx,
+    }));
+  }
+
+  const steps = [
+    { label: "Created", icon: "add-circle-outline", status: "pending" },
+    { label: "Processing", icon: "hourglass-outline", status: "processing" },
+    { label: "Completed", icon: "checkmark-circle-outline", status: "completed" },
+  ];
+
+  return steps.map((s, i) => ({
+    label: s.label,
+    icon: s.icon,
+    reached: isFailed ? i === 0 : i <= Math.min(idx, steps.length - 1),
+    active: isFailed ? false : statusOrder[Math.min(idx, steps.length - 1)] === s.status,
+  }));
+}
+
 export default function TransactionDetailScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, type: txType } = useLocalSearchParams<{ id: string; type?: string }>();
   const { width } = useWindowDimensions();
   const isDesktop = isWeb && width >= 900;
   const [downloadingReceipt, setDownloadingReceipt] = useState(false);
@@ -67,17 +138,21 @@ export default function TransactionDetailScreen() {
   const { data: txData, isLoading } = useQuery({
     queryKey: ["transaction-detail", id],
     queryFn: async () => {
-      // Try to find from history first
-      const { data } = await paymentsApi.history();
+      // Use the unified activity endpoint to find the transaction
+      const { data } = await paymentsApi.activity({ page_size: 50 });
       const found = data.results.find((tx: Transaction) => tx.id === id);
-      return found || null;
+      if (found) return found;
+      // Fallback: try old history endpoint
+      const { data: historyData } = await paymentsApi.history();
+      const historyFound = historyData.results.find((tx: Transaction) => tx.id === id);
+      return historyFound || null;
     },
     enabled: !!id,
   });
 
   const tx = txData as Transaction | null;
   const typeConfig = tx ? TYPE_CONFIG[tx.type] || { icon: "ellipsis-horizontal", label: tx.type, color: tc.dark.muted } : null;
-  const statusConfig = tx ? STATUS_CONFIG[tx.status] || { color: tc.dark.muted, bg: tc.dark.muted + "1F", label: tx.status } : null;
+  const statusConfig = tx ? STATUS_CONFIG[tx.status] || { color: tc.dark.muted, bg: tc.dark.muted + "1F" } : null;
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -102,25 +177,72 @@ export default function TransactionDetailScreen() {
 
   const getRecipient = (tx: Transaction) => {
     const raw = getTxRecipient(tx);
-    // Mask phone numbers for SEND_MPESA based on privacy setting
     if (raw && tx.type === "SEND_MPESA") return formatPhone(raw);
     return raw;
   };
 
+  const truncateHash = (hash: string) => {
+    if (!hash || hash.length <= 16) return hash;
+    return `${hash.slice(0, 10)}...${hash.slice(-8)}`;
+  };
+
+  const copyToClipboard = async (text: string, label: string) => {
+    try {
+      await Clipboard.setStringAsync(text);
+      toast.success("Copied", `${label} copied to clipboard`);
+    } catch {
+      // Fallback: do nothing
+    }
+  };
+
+  const handleShare = async () => {
+    if (!tx) return;
+    const kesAmount = getTxKesAmount(tx);
+    const crypto = getTxCrypto(tx);
+    const message = [
+      `CryptoPay Transaction`,
+      `Type: ${typeConfig?.label || tx.type}`,
+      `Amount: KSh ${kesAmount.toLocaleString("en-KE")}`,
+      crypto.currency ? `Crypto: ${crypto.amount} ${crypto.currency}` : "",
+      `Status: ${tx.status}`,
+      `Date: ${formatDate(tx.created_at)}`,
+      tx.tx_hash ? `TX Hash: ${tx.tx_hash}` : "",
+      `ID: ${tx.id}`,
+    ].filter(Boolean).join("\n");
+
+    if (isWeb) {
+      try {
+        await Clipboard.setStringAsync(message);
+        toast.success("Copied", "Transaction details copied to clipboard");
+      } catch {}
+    } else {
+      try {
+        await Share.share({ message });
+      } catch {}
+    }
+  };
+
   const containerMaxWidth = isDesktop ? 560 : "100%";
 
-  const renderDetailRow = (label: string, value: string, iconName?: string) => {
+  const isCryptoDeposit = tx?.type === "CRYPTO_DEPOSIT";
+  const isWithdrawal = tx?.type === "WITHDRAWAL";
+  const isMpesaPayment = tx?.type === "PAYBILL_PAYMENT" || tx?.type === "TILL_PAYMENT" || tx?.type === "SEND_MPESA";
+
+  const renderDetailRow = (label: string, value: string | undefined | null, iconName?: string, options?: { copiable?: boolean; onPress?: () => void }) => {
     if (!value) return null;
     return (
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
+      <Pressable
+        onPress={options?.copiable ? () => copyToClipboard(value, label) : options?.onPress}
+        disabled={!options?.copiable && !options?.onPress}
+        style={({ pressed }) => ({
+          flexDirection: "row" as const,
+          alignItems: "center" as const,
+          justifyContent: "space-between" as const,
           paddingVertical: 14,
           borderBottomWidth: 1,
           borderBottomColor: tc.glass.border,
-        }}
+          opacity: pressed ? 0.7 : 1,
+        })}
       >
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
           {iconName ? (
@@ -136,19 +258,159 @@ export default function TransactionDetailScreen() {
             {label}
           </Text>
         </View>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flex: 1, justifyContent: "flex-end" }}>
+          <Text
+            style={{
+              color: tc.textPrimary,
+              fontSize: 14,
+              fontFamily: "DMSans_500Medium",
+              textAlign: "right",
+            }}
+            selectable
+            numberOfLines={1}
+          >
+            {value}
+          </Text>
+          {options?.copiable && (
+            <Ionicons name="copy-outline" size={14} color={tc.textMuted} />
+          )}
+          {options?.onPress && (
+            <Ionicons name="open-outline" size={14} color={colors.primary[400]} />
+          )}
+        </View>
+      </Pressable>
+    );
+  };
+
+  // Timeline component
+  const renderTimeline = (tx: Transaction) => {
+    const steps = getTimelineSteps(tx);
+    const isFailed = tx.status === "failed" || tx.status === "reversed";
+    return (
+      <View
+        style={{
+          backgroundColor: tc.dark.card,
+          borderRadius: 20,
+          paddingHorizontal: 20,
+          paddingVertical: 20,
+          borderWidth: 1,
+          borderColor: tc.glass.border,
+          marginBottom: 16,
+          ...(isDesktop ? shadows.sm : {}),
+        }}
+      >
         <Text
           style={{
             color: tc.textPrimary,
-            fontSize: 14,
-            fontFamily: "DMSans_500Medium",
-            textAlign: "right",
-            flex: 1,
-            marginLeft: 12,
+            fontSize: 15,
+            fontFamily: "DMSans_600SemiBold",
+            marginBottom: 16,
           }}
-          selectable
         >
-          {value}
+          Status Timeline
         </Text>
+        <View style={{ paddingLeft: 4 }}>
+          {steps.map((step, i) => (
+            <View key={i} style={{ flexDirection: "row", alignItems: "flex-start" }}>
+              {/* Connector + dot */}
+              <View style={{ alignItems: "center", width: 28, marginRight: 12 }}>
+                <View
+                  style={{
+                    width: 24,
+                    height: 24,
+                    borderRadius: 12,
+                    backgroundColor: step.reached
+                      ? (isFailed && i === 0 ? colors.error + "20" : colors.success + "20")
+                      : tc.dark.elevated,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderWidth: step.active ? 2 : 0,
+                    borderColor: step.active
+                      ? (isFailed ? colors.error : colors.success)
+                      : "transparent",
+                  }}
+                >
+                  <Ionicons
+                    name={(step.reached ? "checkmark" : step.icon) as any}
+                    size={12}
+                    color={step.reached
+                      ? (isFailed && i === 0 ? colors.error : colors.success)
+                      : tc.textMuted
+                    }
+                  />
+                </View>
+                {i < steps.length - 1 && (
+                  <View
+                    style={{
+                      width: 2,
+                      height: 24,
+                      backgroundColor: steps[i + 1]?.reached
+                        ? colors.success + "40"
+                        : tc.glass.border,
+                    }}
+                  />
+                )}
+              </View>
+              {/* Label */}
+              <View style={{ paddingTop: 2, paddingBottom: i < steps.length - 1 ? 14 : 0 }}>
+                <Text
+                  style={{
+                    color: step.reached ? tc.textPrimary : tc.textMuted,
+                    fontSize: 14,
+                    fontFamily: step.active ? "DMSans_600SemiBold" : "DMSans_400Regular",
+                  }}
+                >
+                  {step.label}
+                </Text>
+              </View>
+            </View>
+          ))}
+          {/* Failed step if applicable */}
+          {isFailed && (
+            <View style={{ flexDirection: "row", alignItems: "flex-start", marginTop: 8 }}>
+              <View style={{ alignItems: "center", width: 28, marginRight: 12 }}>
+                <View
+                  style={{
+                    width: 24,
+                    height: 24,
+                    borderRadius: 12,
+                    backgroundColor: colors.error + "20",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderWidth: 2,
+                    borderColor: colors.error,
+                  }}
+                >
+                  <Ionicons name="close" size={12} color={colors.error} />
+                </View>
+              </View>
+              <View style={{ paddingTop: 2 }}>
+                <Text
+                  style={{
+                    color: colors.error,
+                    fontSize: 14,
+                    fontFamily: "DMSans_600SemiBold",
+                    textTransform: "capitalize",
+                  }}
+                >
+                  {tx.status}
+                </Text>
+                {tx.failure_reason ? (
+                  <Text
+                    style={{
+                      color: tc.textMuted,
+                      fontSize: 12,
+                      fontFamily: "DMSans_400Regular",
+                      marginTop: 2,
+                    }}
+                  >
+                    {tx.failure_reason}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+          )}
+        </View>
       </View>
     );
   };
@@ -160,17 +422,47 @@ export default function TransactionDetailScreen() {
         style={{
           flexDirection: "row",
           alignItems: "center",
+          justifyContent: "space-between",
           paddingHorizontal: isDesktop ? 32 : 16,
           paddingVertical: 12,
           borderBottomWidth: 1,
           borderBottomColor: tc.glass.border,
         }}
       >
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <Pressable
+            onPress={() => {
+              if (router.canGoBack()) router.back();
+              else router.replace("/(tabs)" as any);
+            }}
+            style={({ pressed }) => ({
+              width: 40,
+              height: 40,
+              borderRadius: 12,
+              backgroundColor: pressed ? tc.dark.elevated : "transparent",
+              alignItems: "center",
+              justifyContent: "center",
+            })}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+          >
+            <Ionicons name="arrow-back" size={22} color={tc.textPrimary} />
+          </Pressable>
+          <Text
+            style={{
+              color: "#FFFFFF",
+              fontSize: 18,
+              fontFamily: "DMSans_600SemiBold",
+              marginLeft: 12,
+            }}
+          >
+            Transaction Details
+          </Text>
+        </View>
+
+        {/* Share button */}
         <Pressable
-          onPress={() => {
-            if (router.canGoBack()) router.back();
-            else router.replace("/(tabs)" as any);
-          }}
+          onPress={handleShare}
           style={({ pressed }) => ({
             width: 40,
             height: 40,
@@ -180,20 +472,10 @@ export default function TransactionDetailScreen() {
             justifyContent: "center",
           })}
           accessibilityRole="button"
-          accessibilityLabel="Go back"
+          accessibilityLabel="Share transaction"
         >
-          <Ionicons name="arrow-back" size={22} color={tc.textPrimary} />
+          <Ionicons name="share-outline" size={20} color={tc.textPrimary} />
         </Pressable>
-        <Text
-          style={{
-            color: "#FFFFFF",
-            fontSize: 18,
-            fontFamily: "DMSans_600SemiBold",
-            marginLeft: 12,
-          }}
-        >
-          Transaction Details
-        </Text>
       </View>
 
       <ScrollView
@@ -385,6 +667,9 @@ export default function TransactionDetailScreen() {
               })()}
             </View>
 
+            {/* Status Timeline */}
+            {renderTimeline(tx)}
+
             {/* Detail Card */}
             <View
               style={{
@@ -394,10 +679,12 @@ export default function TransactionDetailScreen() {
                 paddingVertical: 4,
                 borderWidth: 1,
                 borderColor: tc.glass.border,
+                marginBottom: 16,
                 ...(isDesktop ? shadows.sm : {}),
               }}
             >
-              {renderDetailRow(
+              {/* Common fields */}
+              {isMpesaPayment && renderDetailRow(
                 "Recipient",
                 getRecipient(tx),
                 "person-outline"
@@ -407,14 +694,43 @@ export default function TransactionDetailScreen() {
                 ? renderDetailRow(
                     "Account Number",
                     tx.mpesa_account,
-                    "document-text-outline"
+                    "document-text-outline",
+                    { copiable: true }
+                  )
+                : null}
+
+              {tx.mpesa_paybill
+                ? renderDetailRow(
+                    "Paybill Number",
+                    tx.mpesa_paybill,
+                    "business-outline",
+                    { copiable: true }
+                  )
+                : null}
+
+              {tx.mpesa_till
+                ? renderDetailRow(
+                    "Till Number",
+                    tx.mpesa_till,
+                    "storefront-outline",
+                    { copiable: true }
+                  )
+                : null}
+
+              {tx.mpesa_receipt
+                ? renderDetailRow(
+                    "M-Pesa Receipt",
+                    tx.mpesa_receipt,
+                    "receipt-outline",
+                    { copiable: true }
                   )
                 : null}
 
               {renderDetailRow(
                 "Transaction ID",
                 tx.id,
-                "finger-print-outline"
+                "finger-print-outline",
+                { copiable: true }
               )}
 
               {renderDetailRow(
@@ -429,17 +745,9 @@ export default function TransactionDetailScreen() {
                 "time-outline"
               )}
 
-              {tx.mpesa_receipt
-                ? renderDetailRow(
-                    "M-Pesa Receipt",
-                    tx.mpesa_receipt,
-                    "receipt-outline"
-                  )
-                : null}
-
               {tx.exchange_rate
                 ? renderDetailRow(
-                    "Rate Used",
+                    "Exchange Rate",
                     `1 ${getTxCrypto(tx).currency} = KSh ${parseFloat(tx.exchange_rate).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
                     "trending-up-outline"
                   )
@@ -470,16 +778,176 @@ export default function TransactionDetailScreen() {
                 : null}
             </View>
 
+            {/* Blockchain Details Card (for crypto deposits and withdrawals) */}
+            {(isCryptoDeposit || isWithdrawal || tx.tx_hash) && (
+              <View
+                style={{
+                  backgroundColor: tc.dark.card,
+                  borderRadius: 20,
+                  paddingHorizontal: 20,
+                  paddingVertical: 4,
+                  borderWidth: 1,
+                  borderColor: tc.glass.border,
+                  marginBottom: 16,
+                  ...(isDesktop ? shadows.sm : {}),
+                }}
+              >
+                {/* Section header */}
+                <View style={{ paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: tc.glass.border }}>
+                  <Text
+                    style={{
+                      color: tc.textPrimary,
+                      fontSize: 15,
+                      fontFamily: "DMSans_600SemiBold",
+                    }}
+                  >
+                    Blockchain Details
+                  </Text>
+                </View>
+
+                {tx.chain
+                  ? renderDetailRow(
+                      "Network",
+                      CHAIN_LABELS[tx.chain] || tx.chain,
+                      "globe-outline"
+                    )
+                  : null}
+
+                {tx.tx_hash
+                  ? renderDetailRow(
+                      "TX Hash",
+                      truncateHash(tx.tx_hash),
+                      "link-outline",
+                      {
+                        copiable: true,
+                        onPress: () => copyToClipboard(tx.tx_hash, "TX Hash"),
+                      }
+                    )
+                  : null}
+
+                {tx.block_number
+                  ? renderDetailRow(
+                      "Block Number",
+                      tx.block_number.toString(),
+                      "layers-outline"
+                    )
+                  : null}
+
+                {tx.confirmations !== undefined && tx.confirmations > 0
+                  ? renderDetailRow(
+                      "Confirmations",
+                      tx.required_confirmations
+                        ? `${tx.confirmations} / ${tx.required_confirmations}`
+                        : tx.confirmations.toString(),
+                      "shield-checkmark-outline"
+                    )
+                  : null}
+
+                {tx.from_address
+                  ? renderDetailRow(
+                      "From Address",
+                      truncateHash(tx.from_address),
+                      "arrow-forward-outline",
+                      { copiable: true, onPress: () => copyToClipboard(tx.from_address!, "From Address") }
+                    )
+                  : null}
+
+                {tx.to_address
+                  ? renderDetailRow(
+                      "To Address",
+                      truncateHash(tx.to_address),
+                      "arrow-down-outline",
+                      { copiable: true, onPress: () => copyToClipboard(tx.to_address!, "To Address") }
+                    )
+                  : null}
+
+                {tx.destination_address
+                  ? renderDetailRow(
+                      "Destination",
+                      truncateHash(tx.destination_address),
+                      "navigate-outline",
+                      { copiable: true, onPress: () => copyToClipboard(tx.destination_address!, "Destination") }
+                    )
+                  : null}
+
+                {/* View on Explorer button */}
+                {tx.tx_hash && tx.chain && EXPLORER_TX[tx.chain] && (
+                  <Pressable
+                    onPress={() => {
+                      const url = EXPLORER_TX[tx.chain] + tx.tx_hash;
+                      Linking.openURL(url);
+                    }}
+                    style={({ pressed }) => ({
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                      paddingVertical: 14,
+                      opacity: pressed ? 0.7 : 1,
+                    })}
+                  >
+                    <Ionicons name="open-outline" size={16} color={colors.primary[400]} />
+                    <Text
+                      style={{
+                        color: colors.primary[400],
+                        fontSize: 14,
+                        fontFamily: "DMSans_600SemiBold",
+                      }}
+                    >
+                      View on Explorer
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
+            )}
+
+            {/* Failure reason card */}
+            {tx.failure_reason ? (
+              <View
+                style={{
+                  backgroundColor: colors.error + "10",
+                  borderRadius: 16,
+                  padding: 16,
+                  borderWidth: 1,
+                  borderColor: colors.error + "20",
+                  marginBottom: 16,
+                  flexDirection: "row",
+                  gap: 12,
+                }}
+              >
+                <Ionicons name="alert-circle" size={20} color={colors.error} style={{ marginTop: 2 }} />
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={{
+                      color: colors.error,
+                      fontSize: 14,
+                      fontFamily: "DMSans_600SemiBold",
+                      marginBottom: 4,
+                    }}
+                  >
+                    Failure Reason
+                  </Text>
+                  <Text
+                    style={{
+                      color: tc.textSecondary,
+                      fontSize: 13,
+                      fontFamily: "DMSans_400Regular",
+                      lineHeight: 19,
+                    }}
+                  >
+                    {tx.failure_reason}
+                  </Text>
+                </View>
+              </View>
+            ) : null}
+
             {/* Action Buttons */}
-            {tx.status === "completed" && (
+            {tx.status === "completed" && !isCryptoDeposit && (
               <Pressable
                 onPress={async () => {
                   setDownloadingReceipt(true);
                   try {
                     if (isWeb) {
-                      // Open in new tab with token as query param.
-                      // This bypasses IDM browser extension (which intercepts fetch/XHR
-                      // and returns 204, breaking CORS). Direct navigation works fine.
                       const { storage } = require("../../src/utils/storage");
                       const { config } = require("../../src/constants/config");
                       const token = await storage.getItemAsync("access_token");
@@ -506,7 +974,7 @@ export default function TransactionDetailScreen() {
                   backgroundColor: colors.primary[500] + "15",
                   borderRadius: 16,
                   paddingVertical: 16,
-                  marginTop: 28,
+                  marginBottom: 12,
                   borderWidth: 1,
                   borderColor: colors.primary[500] + "30",
                   opacity: downloadingReceipt ? 0.6 : pressed ? 0.85 : 1,
@@ -526,6 +994,36 @@ export default function TransactionDetailScreen() {
               </Pressable>
             )}
 
+            {/* Share Button */}
+            <Pressable
+              onPress={handleShare}
+              style={({ pressed }) => ({
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+                backgroundColor: tc.dark.elevated,
+                borderRadius: 16,
+                paddingVertical: 16,
+                marginBottom: 12,
+                borderWidth: 1,
+                borderColor: tc.glass.border,
+                opacity: pressed ? 0.85 : 1,
+              })}
+            >
+              <Ionicons name="share-outline" size={20} color="#FFFFFF" />
+              <Text
+                style={{
+                  color: "#FFFFFF",
+                  fontSize: 16,
+                  fontFamily: "DMSans_600SemiBold",
+                }}
+              >
+                Share Details
+              </Text>
+            </Pressable>
+
+            {/* Back Button */}
             <Pressable
               onPress={() => {
                 if (router.canGoBack()) router.back();
@@ -539,7 +1037,6 @@ export default function TransactionDetailScreen() {
                 backgroundColor: pressed ? tc.dark.border : tc.dark.elevated,
                 borderRadius: 16,
                 paddingVertical: 16,
-                marginTop: tx.status === "completed" ? 12 : 28,
                 borderWidth: 1,
                 borderColor: tc.glass.border,
                 opacity: pressed ? 0.85 : 1,
