@@ -102,8 +102,15 @@ function RootNavigator() {
       return;
     }
 
-    if (!user && !inAuthGroup) {
-      router.replace("/auth/login");
+    const isLanding = segments[0] === "landing";
+
+    if (!user && !inAuthGroup && !isLanding) {
+      // Show landing page to unauthenticated visitors on web, login on native
+      if (Platform.OS === "web") {
+        router.replace("/landing");
+      } else {
+        router.replace("/auth/login");
+      }
     } else if (user && inAuthGroup) {
       router.replace("/(tabs)");
     }
@@ -120,7 +127,8 @@ function RootNavigator() {
   }
 
   const inAuthGroup = segments[0] === "auth";
-  const showDashboard = !!user && !inAuthGroup;
+  const isLandingPage = segments[0] === "landing";
+  const showDashboard = !!user && !inAuthGroup && !isLandingPage;
 
   const stackContent = (
     <Stack
@@ -130,6 +138,7 @@ function RootNavigator() {
         animation: "slide_from_right",
       }}
     >
+      <Stack.Screen name="landing" options={{ animation: "fade" }} />
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="onboarding" options={{ animation: "fade" }} />
       <Stack.Screen name="auth" options={{ animation: "slide_from_bottom" }} />
