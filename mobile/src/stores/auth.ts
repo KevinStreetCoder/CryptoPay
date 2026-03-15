@@ -122,11 +122,9 @@ export function useAuth() {
   const googleLogin = useCallback(async (idToken: string) => {
     const { data } = await authApi.googleLogin(idToken);
     if (data.phone_required) {
-      // Store tokens separately — don't put in main token storage
-      // This prevents the auth gate from thinking user is logged in
-      // which would trigger dashboard queries that 401 and poison session
-      await storage.setItemAsync("google_temp_access", data.tokens.access);
-      await storage.setItemAsync("google_temp_refresh", data.tokens.refresh);
+      // Don't store tokens or set user — profile is incomplete
+      // Store email for the complete-profile step
+      await storage.setItemAsync("google_pending_email", data.user?.email || "");
     } else {
       await storage.setItemAsync("access_token", data.tokens.access);
       await storage.setItemAsync("refresh_token", data.tokens.refresh);
@@ -138,20 +136,12 @@ export function useAuth() {
   }, []);
 
   const googleCompleteProfile = useCallback(async (data: { phone: string; otp: string; pin: string; full_name?: string }) => {
-    // Move temp Google tokens to main storage so the API call includes them
+    // Get the email stored during Google login
+    const email = await storage.getItemAsync("google_pending_email");
     const { forceResetSessionExpired } = require("../api/client");
     forceResetSessionExpired();
-    const tempAccess = await storage.getItemAsync("google_temp_access");
-    const tempRefresh = await storage.getItemAsync("google_temp_refresh");
-    if (tempAccess) {
-      await storage.setItemAsync("access_token", tempAccess);
-      await storage.deleteItemAsync("google_temp_access");
-    }
-    if (tempRefresh) {
-      await storage.setItemAsync("refresh_token", tempRefresh);
-      await storage.deleteItemAsync("google_temp_refresh");
-    }
-    const { data: responseData } = await authApi.googleCompleteProfile(data);
+    const { data: responseData } = await authApi.googleCompleteProfile({ ...data, email: email || "" });
+    await storage.deleteItemAsync("google_pending_email");
     await storage.setItemAsync("access_token", responseData.tokens.access);
     await storage.setItemAsync("refresh_token", responseData.tokens.refresh);
     resetSessionExpired();

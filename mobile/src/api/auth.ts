@@ -90,7 +90,7 @@ export const authApi = {
   setInitialPin: (pin: string) =>
     api.post<{ message: string }>("/auth/set-initial-pin/", { pin }),
 
-  googleCompleteProfile: async (data: { phone: string; otp: string; pin: string; full_name?: string }) => {
+  googleCompleteProfile: async (data: { phone: string; otp: string; pin: string; full_name?: string; email?: string }) => {
     const device = await getDeviceInfo();
     return api.post<LoginResponse>("/auth/google/complete-profile/", { ...data, ...device });
   },
