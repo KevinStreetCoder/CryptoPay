@@ -65,14 +65,12 @@ services:
       dockerfile: Dockerfile
     container_name: cryptopay_web
     command: >
-      gunicorn config.wsgi:application
-        --bind 0.0.0.0:8000
-        --workers ${GUNICORN_WORKERS:-3}
-        --timeout 120
-        --max-requests 1000
-        --max-requests-jitter 50
-        --access-logfile -
-        --error-logfile -
+      daphne
+        -b 0.0.0.0
+        -p 8000
+        --proxy-headers
+        --access-log -
+        config.asgi:application
     volumes:
       - cryptopay_static:/app/staticfiles
       - cryptopay_media:/app/media
@@ -163,6 +161,95 @@ services:
         limits:
           memory: 256M
 
+  # ── Monitoring Stack ──────────────────────────────────────
+
+  prometheus:
+    image: prom/prometheus:v2.51.2
+    container_name: cryptopay_prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.enable-lifecycle"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - cryptopay_prometheus:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    restart: always
+    depends_on:
+      - web
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: cryptopay_grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-changeme}
+      - GF_SERVER_ROOT_URL=http://localhost:3001
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - cryptopay_grafana:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3001:3000"
+    restart: always
+    depends_on:
+      - prometheus
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.58.0
+    container_name: cryptopay_redis_exporter
+    environment:
+      - REDIS_ADDR=redis://redis:6379
+    restart: always
+    depends_on:
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: cryptopay_postgres_exporter
+    environment:
+      - DATA_SOURCE_NAME=postgresql://${POSTGRES_USER:-cryptopay}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:-cryptopay}?sslmode=disable
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+
+  node-exporter:
+    image: prom/node-exporter:v1.7.0
+    container_name: cryptopay_node_exporter
+    command:
+      - "--path.rootfs=/host"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+    volumes:
+      - /:/host:ro,rslave
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+
 volumes:
   cryptopay_postgres:
     name: cryptopay_postgres
@@ -176,3 +263,7 @@ volumes:
     name: cryptopay_logs
   cryptopay_certs:
     name: cryptopay_certs
+  cryptopay_prometheus:
+    name: cryptopay_prometheus
+  cryptopay_grafana:
+    name: cryptopay_grafana

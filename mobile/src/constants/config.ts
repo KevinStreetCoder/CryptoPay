@@ -50,3 +50,24 @@ export const config: AppConfig = {
   appName: Constants.expoConfig?.name ?? "CryptoPay",
   appVersion: Constants.expoConfig?.version ?? "1.0.0",
 };
+
+// ── WalletConnect / Reown AppKit ────────────────────────────────────────────
+// Project ID from https://cloud.reown.com — required for WalletConnect v2.
+// Set via EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID env var or in app.json extra.
+export const WALLETCONNECT_PROJECT_ID =
+  process.env.EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID || "";
+
+// Supported EVM chains for WalletConnect deposits
+export const WALLETCONNECT_CHAINS = {
+  ethereum: { chainId: 1, name: "Ethereum", symbol: "ETH" },
+  polygon: { chainId: 137, name: "Polygon", symbol: "MATIC" },
+  bsc: { chainId: 56, name: "BNB Smart Chain", symbol: "BNB" },
+} as const;
+
+// Non-EVM chains — WalletConnect v2 does NOT support these natively.
+// Users must use manual deposit addresses for Tron, Bitcoin, Solana.
+export const MANUAL_DEPOSIT_CHAINS = {
+  tron: { name: "Tron (TRC-20)", tokens: ["USDT"] },
+  bitcoin: { name: "Bitcoin", tokens: ["BTC"] },
+  solana: { name: "Solana", tokens: ["SOL"] },
+} as const;

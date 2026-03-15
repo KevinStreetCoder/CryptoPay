@@ -1,0 +1,46 @@
+# ─────────────────────────────────────────────────────────────
+# CryptoPay — Prometheus Configuration
+# ─────────────────────────────────────────────────────────────
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  scrape_timeout: 10s
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  # Django application metrics (django-prometheus)
+  - job_name: "django"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["cryptopay_web:8000"]
+        labels:
+          service: "cryptopay-api"
+
+  # Redis metrics via redis-exporter
+  - job_name: "redis"
+    static_configs:
+      - targets: ["redis-exporter:9121"]
+        labels:
+          service: "cryptopay-redis"
+
+  # PostgreSQL metrics via postgres-exporter
+  - job_name: "postgresql"
+    static_configs:
+      - targets: ["postgres-exporter:9187"]
+        labels:
+          service: "cryptopay-db"
+
+  # Host metrics via node-exporter
+  - job_name: "node"
+    static_configs:
+      - targets: ["node-exporter:9100"]
+        labels:
+          service: "cryptopay-host"
+
+  # Prometheus self-monitoring
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]

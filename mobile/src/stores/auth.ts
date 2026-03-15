@@ -121,12 +121,33 @@ export function useAuth() {
 
   const googleLogin = useCallback(async (idToken: string) => {
     const { data } = await authApi.googleLogin(idToken);
-    await storage.setItemAsync("access_token", data.tokens.access);
-    await storage.setItemAsync("refresh_token", data.tokens.refresh);
-    resetSessionExpired();
-    _user = data.user;
-    notify();
+    if (data.phone_required) {
+      // Don't store tokens or set user — profile is incomplete
+      // Store email for the complete-profile step
+      await storage.setItemAsync("google_pending_email", data.user?.email || "");
+    } else {
+      await storage.setItemAsync("access_token", data.tokens.access);
+      await storage.setItemAsync("refresh_token", data.tokens.refresh);
+      resetSessionExpired();
+      _user = data.user;
+      notify();
+    }
     return data;
+  }, []);
+
+  const googleCompleteProfile = useCallback(async (data: { phone: string; otp: string; pin: string; full_name?: string }) => {
+    // Get the email stored during Google login
+    const email = await storage.getItemAsync("google_pending_email");
+    const { forceResetSessionExpired } = require("../api/client");
+    forceResetSessionExpired();
+    const { data: responseData } = await authApi.googleCompleteProfile({ ...data, email: email || "" });
+    await storage.deleteItemAsync("google_pending_email");
+    await storage.setItemAsync("access_token", responseData.tokens.access);
+    await storage.setItemAsync("refresh_token", responseData.tokens.refresh);
+    resetSessionExpired();
+    _user = responseData.user;
+    notify();
+    return responseData;
   }, []);
 
   const refreshProfile = useCallback(async () => {
@@ -147,5 +168,5 @@ export function useAuth() {
     notify();
   }, []);
 
-  return { user, loading, bootstrap, login, register, googleLogin, refreshProfile, logout };
+  return { user, loading, bootstrap, login, register, googleLogin, googleCompleteProfile, refreshProfile, logout };
 }

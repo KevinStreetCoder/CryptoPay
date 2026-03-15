@@ -403,3 +403,366 @@ def _credit_single_deposit(deposit_id: int):
         f"(user={wallet.user_id}, tx={deposit.tx_hash[:16]}...)"
     )
 
+    # Send deposit confirmed notification (email + push)
+    try:
+        from apps.core.email import send_deposit_confirmed_notification
+        send_deposit_confirmed_notification(wallet.user, deposit)
+    except Exception as e:
+        logger.error(f"Deposit notification failed for {deposit.id}: {e}")
+
+    # Broadcast updated balance via WebSocket
+    try:
+        from apps.core.broadcast import broadcast_user_balance
+        broadcast_user_balance(wallet.user_id)
+    except Exception as e:
+        logger.warning(f"Balance broadcast failed for deposit {deposit.id}: {e}")
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=30)
+def broadcast_withdrawal_task(self, transaction_id: str):
+    """
+    Broadcast a crypto withdrawal to the blockchain.
+
+    Steps:
+      1. Load the transaction and validate state
+      2. Debit the wallet (unlock + debit atomically)
+      3. Sign and broadcast the transaction
+      4. Update transaction with tx_hash
+      5. On failure: unlock funds (compensation)
+
+    Currently implements Tron (TRC-20 USDT) broadcast.
+    Other chains follow the same pattern — extend as needed.
+    """
+    from apps.payments.models import Transaction
+    from apps.wallets.services import WalletService
+
+    try:
+        tx = Transaction.objects.get(id=transaction_id)
+    except Transaction.DoesNotExist:
+        logger.error(f"Withdrawal task: transaction {transaction_id} not found")
+        return
+
+    # Guard: only process PROCESSING withdrawals
+    if tx.status != Transaction.Status.PROCESSING:
+        logger.warning(
+            f"Withdrawal task: tx {tx.id} is {tx.status}, expected PROCESSING. Skipping."
+        )
+        return
+
+    network = tx.saga_data.get("network", "")
+    destination_address = tx.saga_data.get("destination_address", "")
+    locked_wallet_id = tx.saga_data.get("locked_wallet_id")
+    locked_amount = Decimal(tx.saga_data.get("locked_amount", "0"))
+
+    if not destination_address or not network:
+        tx.status = Transaction.Status.FAILED
+        tx.failure_reason = "Missing destination address or network"
+        tx.save(update_fields=["status", "failure_reason", "updated_at"])
+        # Unlock funds
+        if locked_wallet_id and locked_amount > 0:
+            WalletService.unlock_funds(locked_wallet_id, locked_amount)
+        return
+
+    try:
+        # Step 1: Unlock and debit funds atomically
+        with db_transaction.atomic():
+            WalletService.unlock_funds(locked_wallet_id, locked_amount)
+            WalletService.debit(
+                locked_wallet_id,
+                locked_amount,
+                tx.id,
+                f"Withdrawal to {destination_address[:16]}... ({network})",
+            )
+            tx.saga_data["funds_debited"] = True
+            tx.save(update_fields=["saga_data"])
+
+        # Step 2: Broadcast to blockchain
+        tx_hash = _broadcast_to_chain(
+            network=network,
+            currency=tx.source_currency,
+            destination_address=destination_address,
+            amount=tx.source_amount,
+        )
+
+        # Step 3: Update transaction with tx_hash
+        tx.tx_hash = tx_hash
+        tx.status = Transaction.Status.CONFIRMING
+        tx.save(update_fields=["tx_hash", "status", "updated_at"])
+
+        logger.info(
+            f"Withdrawal broadcast: {tx.source_amount} {tx.source_currency} "
+            f"to {destination_address[:16]}... tx_hash={tx_hash[:24]}..."
+        )
+
+    except Exception as e:
+        logger.error(f"Withdrawal broadcast failed for tx {tx.id}: {e}")
+
+        # Compensation: if funds were debited, credit them back
+        if tx.saga_data.get("funds_debited"):
+            try:
+                import uuid as uuid_mod
+                reversal_tx_id = uuid_mod.uuid5(
+                    uuid_mod.NAMESPACE_URL,
+                    f"withdrawal-reversal:{tx.id}",
+                )
+                WalletService.credit(
+                    locked_wallet_id,
+                    locked_amount,
+                    reversal_tx_id,
+                    f"Reversal: failed withdrawal {tx.id}",
+                )
+                logger.info(f"Compensated: credited back {locked_amount} for failed withdrawal {tx.id}")
+            except Exception as comp_error:
+                logger.critical(
+                    f"CRITICAL: Withdrawal compensation failed for tx {tx.id}: {comp_error}. "
+                    f"MANUAL INTERVENTION REQUIRED."
+                )
+        else:
+            # Funds were only locked, not debited — just unlock
+            try:
+                WalletService.unlock_funds(locked_wallet_id, locked_amount)
+            except Exception as unlock_error:
+                logger.critical(
+                    f"CRITICAL: Failed to unlock funds for tx {tx.id}: {unlock_error}. "
+                    f"MANUAL INTERVENTION REQUIRED."
+                )
+
+        tx.status = Transaction.Status.FAILED
+        tx.failure_reason = str(e)[:500]
+        tx.save(update_fields=["status", "failure_reason", "updated_at"])
+
+        # Send failed transaction alert
+        try:
+            from apps.core.tasks import send_failed_transaction_alert_task
+            send_failed_transaction_alert_task.delay(transaction_id=str(tx.id))
+        except Exception:
+            pass
+
+        # Retry for transient errors (network timeouts, etc.)
+        if self.request.retries < self.max_retries and _is_retryable_error(e):
+            raise self.retry(exc=e)
+
+
+def _broadcast_to_chain(network: str, currency: str, destination_address: str, amount: Decimal) -> str:
+    """
+    Broadcast a withdrawal transaction to the appropriate blockchain.
+
+    Returns the transaction hash on success.
+    Raises an exception on failure.
+
+    Currently implements:
+      - Tron (TRC-20 USDT) via tronpy
+      - EVM (Ethereum/Polygon) via web3
+      - Other chains: DEV mode auto-generates a hash
+
+    Production: extend with real signing for each chain.
+    """
+    from django.conf import settings as django_settings
+
+    # Dev mode: skip actual broadcast and return a mock tx hash
+    if django_settings.DEBUG:
+        import hashlib
+        import time
+        mock_hash = hashlib.sha256(
+            f"{destination_address}{amount}{time.time()}".encode()
+        ).hexdigest()
+        logger.info(
+            f"[DEV] Mock withdrawal broadcast: {amount} {currency} "
+            f"to {destination_address[:16]}... on {network} -> hash={mock_hash[:24]}..."
+        )
+
+        # Auto-complete the withdrawal in dev mode
+        from apps.payments.models import Transaction
+        tx = Transaction.objects.filter(
+            saga_data__destination_address=destination_address,
+            status=Transaction.Status.CONFIRMING,
+        ).order_by("-created_at").first()
+        if tx:
+            tx.status = Transaction.Status.COMPLETED
+            tx.completed_at = timezone.now()
+            tx.save(update_fields=["status", "completed_at", "updated_at"])
+
+        return mock_hash
+
+    if network == "tron" and currency == "USDT":
+        return _broadcast_tron_trc20(destination_address, amount)
+    elif network in ("ethereum", "polygon"):
+        return _broadcast_evm(network, currency, destination_address, amount)
+    else:
+        raise NotImplementedError(
+            f"Withdrawal broadcast not yet implemented for {currency} on {network}. "
+            f"Contact support to process this withdrawal manually."
+        )
+
+
+def _broadcast_tron_trc20(destination_address: str, amount: Decimal) -> str:
+    """
+    Broadcast a TRC-20 USDT transfer on Tron using tronpy.
+
+    Requires TRON_HOT_WALLET_PRIVATE_KEY in settings.
+    """
+    from django.conf import settings as django_settings
+
+    private_key_hex = getattr(django_settings, "TRON_HOT_WALLET_PRIVATE_KEY", "")
+    if not private_key_hex:
+        raise RuntimeError(
+            "TRON_HOT_WALLET_PRIVATE_KEY not configured. "
+            "Cannot broadcast Tron withdrawals."
+        )
+
+    try:
+        from tronpy import Tron
+        from tronpy.keys import PrivateKey
+
+        network = getattr(django_settings, "TRON_NETWORK", "shasta")
+        if network == "mainnet":
+            client = Tron()
+        else:
+            client = Tron(network=network)
+
+        contract_address = _get_usdt_contract()
+        contract = client.get_contract(contract_address)
+
+        priv_key = PrivateKey(bytes.fromhex(private_key_hex))
+        from_address = priv_key.public_key.to_base58check_address()
+
+        # USDT has 6 decimals on TRC-20
+        raw_amount = int(amount * Decimal("1000000"))
+
+        txn = (
+            contract.functions.transfer(destination_address, raw_amount)
+            .with_owner(from_address)
+            .fee_limit(30_000_000)  # 30 TRX fee limit
+            .build()
+            .sign(priv_key)
+        )
+        result = txn.broadcast()
+
+        if result.get("result", False):
+            tx_hash = result.get("txid", "")
+            logger.info(f"Tron TRC-20 withdrawal broadcast: {tx_hash}")
+            return tx_hash
+        else:
+            raise RuntimeError(f"Tron broadcast failed: {result}")
+
+    except ImportError:
+        raise RuntimeError(
+            "tronpy is required for Tron withdrawals. Install with: pip install tronpy"
+        )
+
+
+def _broadcast_evm(network: str, currency: str, destination_address: str, amount: Decimal) -> str:
+    """
+    Broadcast an EVM (Ethereum/Polygon) withdrawal.
+
+    For ETH: native transfer.
+    For ERC-20 tokens (USDT, USDC): token transfer via contract.
+
+    Requires ETH_HOT_WALLET_PRIVATE_KEY or POLYGON_HOT_WALLET_PRIVATE_KEY in settings.
+    """
+    from django.conf import settings as django_settings
+
+    if network == "polygon":
+        rpc_url = getattr(django_settings, "POLYGON_RPC_URL", "")
+        private_key = getattr(django_settings, "POLYGON_HOT_WALLET_PRIVATE_KEY", "")
+    else:
+        rpc_url = getattr(django_settings, "ETH_RPC_URL", "")
+        private_key = getattr(django_settings, "ETH_HOT_WALLET_PRIVATE_KEY", "")
+
+    if not rpc_url or not private_key:
+        raise RuntimeError(
+            f"{network.upper()} RPC URL or hot wallet private key not configured. "
+            f"Cannot broadcast {network} withdrawals."
+        )
+
+    try:
+        from web3 import Web3
+
+        w3 = Web3(Web3.HTTPProvider(rpc_url))
+
+        if not w3.is_connected():
+            raise RuntimeError(f"Cannot connect to {network} RPC: {rpc_url[:30]}...")
+
+        account = w3.eth.account.from_key(private_key)
+
+        if currency in ("USDT", "USDC"):
+            # ERC-20 token transfer
+            token_contracts = {
+                "ethereum": {
+                    "USDT": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+                    "USDC": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+                },
+                "polygon": {
+                    "USDT": "0xc2132D05D31c914a87C6611C10748AEb04B58e8F",
+                    "USDC": "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+                },
+            }
+            contract_address = token_contracts.get(network, {}).get(currency)
+            if not contract_address:
+                raise RuntimeError(f"No contract address for {currency} on {network}")
+
+            # Standard ERC-20 ABI for transfer
+            erc20_abi = [
+                {
+                    "constant": False,
+                    "inputs": [
+                        {"name": "_to", "type": "address"},
+                        {"name": "_value", "type": "uint256"},
+                    ],
+                    "name": "transfer",
+                    "outputs": [{"name": "", "type": "bool"}],
+                    "type": "function",
+                }
+            ]
+            contract = w3.eth.contract(
+                address=Web3.to_checksum_address(contract_address),
+                abi=erc20_abi,
+            )
+            # Both USDT and USDC have 6 decimals
+            raw_amount = int(amount * Decimal("1000000"))
+            tx = contract.functions.transfer(
+                Web3.to_checksum_address(destination_address),
+                raw_amount,
+            ).build_transaction({
+                "from": account.address,
+                "nonce": w3.eth.get_transaction_count(account.address),
+                "gas": 100_000,
+                "gasPrice": w3.eth.gas_price,
+            })
+        else:
+            # Native ETH transfer
+            raw_amount = int(amount * Decimal("1000000000000000000"))  # 18 decimals
+            tx = {
+                "to": Web3.to_checksum_address(destination_address),
+                "value": raw_amount,
+                "gas": 21_000,
+                "gasPrice": w3.eth.gas_price,
+                "nonce": w3.eth.get_transaction_count(account.address),
+            }
+
+        signed_tx = w3.eth.account.sign_transaction(tx, private_key)
+        tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)
+        hex_hash = tx_hash.hex()
+
+        logger.info(f"EVM withdrawal broadcast on {network}: {hex_hash}")
+        return hex_hash
+
+    except ImportError:
+        raise RuntimeError(
+            "web3 is required for EVM withdrawals. Install with: pip install web3"
+        )
+
+
+def _is_retryable_error(error: Exception) -> bool:
+    """Check if an error is transient and worth retrying."""
+    retryable_messages = [
+        "timeout",
+        "connection",
+        "temporarily unavailable",
+        "rate limit",
+        "503",
+        "502",
+    ]
+    error_str = str(error).lower()
+    return any(msg in error_str for msg in retryable_messages)
+

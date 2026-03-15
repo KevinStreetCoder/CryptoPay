@@ -186,8 +186,8 @@ def build_callback_url(callback_type: str, transaction_id: str, include_token: b
         Full callback URL string
 
     Examples:
-        Without token: https://api.cryptopay.co.ke/api/v1/mpesa/callback/stk/
-        With token:    https://api.cryptopay.co.ke/api/v1/mpesa/callback/stk/a1b2c3d4e5f6.../
+        Without token: https://api.cpay.co.ke/api/v1/mpesa/callback/stk/
+        With token:    https://api.cpay.co.ke/api/v1/mpesa/callback/stk/a1b2c3d4e5f6.../
     """
     base = getattr(settings, "MPESA_CALLBACK_BASE_URL", "")
 

@@ -1,0 +1,18 @@
+# ─────────────────────────────────────────────────────────────
+# CryptoPay — Grafana Dashboard Provisioning
+# Auto-loads dashboard JSON files from /var/lib/grafana/dashboards
+# ─────────────────────────────────────────────────────────────
+
+apiVersion: 1
+
+providers:
+  - name: "CryptoPay"
+    orgId: 1
+    folder: "CryptoPay"
+    type: file
+    disableDeletion: false
+    editable: true
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

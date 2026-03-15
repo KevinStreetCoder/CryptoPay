@@ -17,7 +17,13 @@ from rest_framework import status
 from rest_framework.generics import ListAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
+
+
+class PaymentRateThrottle(UserRateThrottle):
+    """Limit payment transactions to 10 per hour per user."""
+    rate = "10/hour"
 
 from django.utils import timezone
 
@@ -26,7 +32,7 @@ from apps.accounts.models import AuditLog
 from .circuit_breaker import PaymentCircuitBreaker, PaymentsPaused
 from .models import Transaction
 from .saga import PaymentSaga, SagaError
-from .serializers import BuyCryptoSerializer, DepositQuoteSerializer, PayBillSerializer, PayTillSerializer, SendMpesaSerializer, TransactionSerializer
+from .serializers import BuyCryptoSerializer, DepositQuoteSerializer, PayBillSerializer, PayTillSerializer, SendMpesaSerializer, TransactionSerializer, WithdrawSerializer
 from .services import DailyLimitExceededError, check_daily_limit
 
 logger = logging.getLogger(__name__)
@@ -99,6 +105,7 @@ class PayBillView(APIView):
     """Pay a Paybill number with crypto."""
 
     permission_classes = [IsNotSuspended]
+    throttle_classes = [PaymentRateThrottle]
 
     def post(self, request):
         serializer = PayBillSerializer(data=request.data)
@@ -244,6 +251,7 @@ class PayTillView(APIView):
     """Pay a Till number with crypto."""
 
     permission_classes = [IsNotSuspended]
+    throttle_classes = [PaymentRateThrottle]
 
     def post(self, request):
         serializer = PayTillSerializer(data=request.data)
@@ -563,6 +571,11 @@ class BuyCryptoView(APIView):
             tx.status = Transaction.Status.FAILED
             tx.save(update_fields=["failure_reason", "status", "updated_at"])
             cache.delete(redis_key)
+            try:
+                from apps.core.tasks import send_failed_transaction_alert_task
+                send_failed_transaction_alert_task.delay(transaction_id=str(tx.id))
+            except Exception:
+                pass
             return Response(
                 {"error": "M-Pesa payment initiation failed. Please try again.", "transaction": TransactionSerializer(tx).data},
                 status=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -573,6 +586,11 @@ class BuyCryptoView(APIView):
             tx.status = Transaction.Status.FAILED
             tx.save(update_fields=["failure_reason", "status", "updated_at"])
             cache.delete(redis_key)
+            try:
+                from apps.core.tasks import send_failed_transaction_alert_task
+                send_failed_transaction_alert_task.delay(transaction_id=str(tx.id))
+            except Exception:
+                pass
             return Response(
                 {"error": "Payment initiation failed. Please try again."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -803,6 +821,231 @@ class TransactionReceiptView(APIView):
             {"error": "Receipt generation failed. Please try again."},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+
+
+class WithdrawView(APIView):
+    """Withdraw crypto to an external blockchain address."""
+
+    permission_classes = [IsNotSuspended]
+    throttle_classes = [PaymentRateThrottle]
+
+    def post(self, request):
+        serializer = WithdrawSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = request.user
+        data = serializer.validated_data
+
+        # Verify PIN with lockout tracking
+        pin_error = _verify_pin_with_lockout(user, data["pin"])
+        if pin_error:
+            return pin_error
+
+        # Check idempotency — Layer 2 (Redis)
+        idem_key = data["idempotency_key"]
+        redis_key = f"withdrawal:{idem_key}"
+        if not cache.add(redis_key, "processing", timeout=300):
+            existing = Transaction.objects.filter(idempotency_key=idem_key).first()
+            if existing:
+                return Response(
+                    TransactionSerializer(existing).data,
+                    status=status.HTTP_200_OK,
+                )
+            return Response(
+                {"error": "Withdrawal already in progress"},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        # Calculate network fee
+        network_fees = getattr(app_settings, "WITHDRAWAL_NETWORK_FEES", {
+            "tron": {"USDT": "1.00"},
+            "ethereum": {"USDT": "5.00", "USDC": "5.00", "ETH": "0.003"},
+            "polygon": {"USDT": "0.50", "USDC": "0.50"},
+            "bitcoin": {"BTC": "0.00005"},
+            "solana": {"SOL": "0.01"},
+        })
+        fee_str = network_fees.get(data["network"], {}).get(data["currency"], "0")
+        fee_amount = Decimal(fee_str)
+        total_deduct = data["amount"] + fee_amount
+
+        # Check sufficient balance
+        try:
+            wallet = user.wallets.get(currency=data["currency"])
+        except Exception:
+            cache.delete(redis_key)
+            return Response(
+                {"error": f"No {data['currency']} wallet found."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if wallet.available_balance < total_deduct:
+            cache.delete(redis_key)
+            return Response(
+                {"error": f"Insufficient balance. Available: {wallet.available_balance}, "
+                          f"required: {data['amount']} + {fee_amount} fee = {total_deduct}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Check daily transaction limit (convert crypto to KES estimate for limit check)
+        try:
+            from apps.rates.services import RateService
+            rate_info = RateService.get_crypto_kes_rate(data["currency"])
+            kes_estimate = data["amount"] * Decimal(str(rate_info["final_rate"]))
+            check_daily_limit(user, kes_estimate)
+        except DailyLimitExceededError as e:
+            cache.delete(redis_key)
+            return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
+        except Exception as e:
+            logger.warning(f"Daily limit check skipped for withdrawal (rate fetch failed): {e}")
+
+        # Create the transaction — Layer 3 (PostgreSQL unique constraint)
+        try:
+            tx = Transaction.objects.create(
+                idempotency_key=idem_key,
+                user=user,
+                type=Transaction.Type.WITHDRAWAL,
+                source_currency=data["currency"],
+                source_amount=data["amount"],
+                dest_currency=data["currency"],
+                dest_amount=data["amount"],
+                fee_amount=fee_amount,
+                fee_currency=data["currency"],
+                chain=data["network"],
+                ip_address=self._get_client_ip(request),
+                saga_data={
+                    "destination_address": data["destination_address"],
+                    "network": data["network"],
+                },
+            )
+        except IntegrityError:
+            cache.delete(redis_key)
+            existing = Transaction.objects.filter(idempotency_key=idem_key).first()
+            if existing:
+                return Response(TransactionSerializer(existing).data)
+            return Response(
+                {"error": "Duplicate withdrawal detected"},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        # Lock funds (amount + fee) in the wallet
+        from apps.wallets.services import InsufficientBalanceError, WalletService
+
+        try:
+            WalletService.lock_funds(wallet.id, total_deduct)
+            tx.saga_data["locked_wallet_id"] = str(wallet.id)
+            tx.saga_data["locked_amount"] = str(total_deduct)
+            tx.status = Transaction.Status.PROCESSING
+            tx.save(update_fields=["saga_data", "status", "updated_at"])
+        except InsufficientBalanceError:
+            tx.status = Transaction.Status.FAILED
+            tx.failure_reason = "Insufficient balance to lock funds"
+            tx.save(update_fields=["status", "failure_reason", "updated_at"])
+            cache.delete(redis_key)
+            return Response(
+                {"error": "Insufficient balance. Funds may be locked by another transaction."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Queue blockchain broadcast via Celery
+        from apps.blockchain.tasks import broadcast_withdrawal_task
+
+        broadcast_withdrawal_task.delay(str(tx.id))
+
+        AuditLog.objects.create(
+            user=user,
+            action="WITHDRAWAL",
+            entity_type="transaction",
+            entity_id=str(tx.id),
+            details={
+                "currency": data["currency"],
+                "amount": str(data["amount"]),
+                "network": data["network"],
+                "destination_address": data["destination_address"][:20] + "...",
+                "fee": str(fee_amount),
+            },
+            ip_address=self._get_client_ip(request),
+        )
+
+        return Response(
+            TransactionSerializer(tx).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    def _get_client_ip(self, request):
+        xff = request.META.get("HTTP_X_FORWARDED_FOR")
+        if xff:
+            return xff.split(",")[0].strip()
+        return request.META.get("REMOTE_ADDR", "0.0.0.0")
+
+
+class WithdrawStatusView(APIView):
+    """Check withdrawal status, tx_hash, and confirmations."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, transaction_id):
+        try:
+            tx = Transaction.objects.get(
+                id=transaction_id,
+                user=request.user,
+                type=Transaction.Type.WITHDRAWAL,
+            )
+        except Transaction.DoesNotExist:
+            return Response(
+                {"error": "Withdrawal not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        data = TransactionSerializer(tx).data
+
+        # Add human-readable summary
+        if tx.status == Transaction.Status.COMPLETED:
+            data["summary"] = f"Sent {tx.source_amount} {tx.source_currency} to {tx.saga_data.get('destination_address', 'external address')[:16]}..."
+        elif tx.status == Transaction.Status.PROCESSING:
+            data["summary"] = "Broadcasting transaction to the blockchain..."
+        elif tx.status == Transaction.Status.CONFIRMING:
+            data["summary"] = f"Waiting for confirmations ({tx.confirmations})..."
+        elif tx.status == Transaction.Status.FAILED:
+            data["summary"] = tx.failure_reason or "Withdrawal failed"
+
+        return Response(data)
+
+
+class WithdrawFeeView(APIView):
+    """Get estimated withdrawal network fee for a currency+network."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        currency = request.query_params.get("currency", "USDT")
+        network = request.query_params.get("network", "tron")
+
+        network_fees = getattr(app_settings, "WITHDRAWAL_NETWORK_FEES", {
+            "tron": {"USDT": "1.00"},
+            "ethereum": {"USDT": "5.00", "USDC": "5.00", "ETH": "0.003"},
+            "polygon": {"USDT": "0.50", "USDC": "0.50"},
+            "bitcoin": {"BTC": "0.00005"},
+            "solana": {"SOL": "0.01"},
+        })
+
+        min_amounts = getattr(app_settings, "MINIMUM_WITHDRAWAL_AMOUNTS", {
+            "USDT": "2.00",
+            "USDC": "2.00",
+            "BTC": "0.0001",
+            "ETH": "0.005",
+            "SOL": "0.1",
+        })
+
+        fee = network_fees.get(network, {}).get(currency, "0")
+        min_amount = min_amounts.get(currency, "0")
+
+        return Response({
+            "currency": currency,
+            "network": network,
+            "fee": fee,
+            "fee_currency": currency,
+            "minimum_amount": min_amount,
+        })
 
 
 class CircuitBreakerStatusView(APIView):

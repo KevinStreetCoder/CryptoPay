@@ -74,6 +74,10 @@ function WalletConnectFallback() {
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
 
+  // On web, AppKit uses a web modal that works without native modules
+  // However if AppKit was not initialized (no PROJECT_ID), show guidance
+  const isWebPlatform = Platform.OS === "web";
+
   return (
     <View
       style={{
@@ -96,7 +100,7 @@ function WalletConnectFallback() {
           textAlign: "center",
         }}
       >
-        WalletConnect Not Available
+        {isWebPlatform ? "External Wallet" : "WalletConnect Not Available"}
       </Text>
       <Text
         style={{
@@ -108,8 +112,9 @@ function WalletConnectFallback() {
           maxWidth: 300,
         }}
       >
-        Requires an EAS build (not Expo Go) to connect external wallets.
-        Use the manual deposit option below instead.
+        {isWebPlatform
+          ? "To deposit from MetaMask or other wallets, copy your deposit address from the Wallet tab and paste it in your wallet app."
+          : "Requires an EAS build (not Expo Go) to connect external wallets. Use the manual deposit option below instead."}
       </Text>
     </View>
   );

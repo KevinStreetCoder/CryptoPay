@@ -88,7 +88,7 @@ Complete this in Play Console > App content > Financial features.
 - [ ] App has terms of service accessible within the app
 - [ ] App complies with local financial regulations (Kenya VASP Act 2025)
 - [ ] App does not facilitate illegal financial activity
-- [ ] App provides customer support contact (support@cryptopay.co.ke)
+- [ ] App provides customer support contact (support@cpay.co.ke)
 - [ ] App clearly identifies the operating entity
 
 ---
@@ -98,7 +98,7 @@ Complete this in Play Console > App content > Financial features.
 - **Company**: CryptoPay Kenya Ltd (update with actual entity name)
 - **Jurisdiction**: Kenya
 - **Registered address**: [To be completed]
-- **Support email**: support@cryptopay.co.ke
-- **Website**: https://cryptopay.co.ke
-- **Privacy policy**: https://cryptopay.co.ke/privacy
-- **Terms of service**: https://cryptopay.co.ke/terms
+- **Support email**: support@cpay.co.ke
+- **Website**: https://cpay.co.ke
+- **Privacy policy**: https://cpay.co.ke/privacy
+- **Terms of service**: https://cpay.co.ke/terms

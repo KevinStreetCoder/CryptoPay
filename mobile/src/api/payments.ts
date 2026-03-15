@@ -83,6 +83,23 @@ export interface DepositQuoteData {
   dest_currency: string;
 }
 
+export interface WithdrawData {
+  currency: string;
+  amount: string;
+  destination_address: string;
+  network: string;
+  pin: string;
+  idempotency_key: string;
+}
+
+export interface WithdrawFeeInfo {
+  currency: string;
+  network: string;
+  fee: string;
+  fee_currency: string;
+  minimum_amount: string;
+}
+
 export interface C2BInstructions {
   paybill: string;
   account_formats: { currency: string; account_number: string; description: string }[];
@@ -103,4 +120,8 @@ export const paymentsApi = {
   depositStatus: (transactionId: string) => api.get<Transaction>(`/payments/deposit/${transactionId}/status/`),
   transactionStatus: (transactionId: string) => api.get<Transaction>(`/payments/${transactionId}/status/`),
   c2bInstructions: () => api.get<C2BInstructions>("/payments/deposit/c2b-instructions/"),
+  // Withdrawal endpoints
+  withdraw: (data: WithdrawData) => api.post<Transaction>("/payments/withdraw/", data),
+  withdrawStatus: (transactionId: string) => api.get<Transaction & { summary?: string }>(`/payments/withdraw/${transactionId}/status/`),
+  withdrawFee: (currency: string, network: string) => api.get<WithdrawFeeInfo>("/payments/withdraw/fee/", { params: { currency, network } }),
 };

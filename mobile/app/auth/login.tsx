@@ -210,7 +210,9 @@ export default function LoginScreen() {
     setGoogleLoading(true);
     try {
       const data = await googleLogin(idToken);
-      if (data.pin_required) {
+      if (data.phone_required) {
+        router.replace("/auth/google-complete-profile" as any);
+      } else if (data.pin_required) {
         router.replace("/auth/set-initial-pin" as any);
       } else {
         router.replace("/(tabs)");
