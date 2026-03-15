@@ -560,10 +560,13 @@ class ProfileView(APIView):
                     "verify_url": verify_url,
                     "verification_code": token_obj.otp_code,
                 })
-                send_email_task.delay(
-                    subject="CryptoPay — Verify Your Email",
-                    html_content=html_content,
-                    recipient_email=new_email,
+                send_mail(
+                    "CPay — Verify Your Email",
+                    "",
+                    settings.DEFAULT_FROM_EMAIL,
+                    [new_email],
+                    html_message=html_content,
+                    fail_silently=False,
                 )
                 verification_sent = True
             except Exception:
@@ -1133,22 +1136,29 @@ class SendEmailVerificationView(APIView):
         # Create verification token
         token_obj = EmailVerificationToken.create_for_user(request.user, email)
 
-        # Send verification email
-        from apps.core.tasks import send_email_task
-
-        verify_url = f"{settings.FRONTEND_URL}/verify-email?token={token_obj.token}"
+        # Send verification email (direct, not via Celery)
+        from django.core.mail import send_mail
         from django.template.loader import render_to_string
+
+        verify_url = f"https://cpay.co.ke/verify-email?token={token_obj.token}"
 
         html_content = render_to_string("email/email_verification.html", {
             "full_name": request.user.full_name or request.user.phone,
             "verify_url": verify_url,
             "verification_code": token_obj.otp_code,
         })
-        send_email_task.delay(
-            subject="CryptoPay — Verify Your Email",
-            html_content=html_content,
-            recipient_email=email,
-        )
+        try:
+            send_mail(
+                "CPay — Verify Your Email",
+                "",
+                settings.DEFAULT_FROM_EMAIL,
+                [email],
+                html_message=html_content,
+                fail_silently=False,
+            )
+            logger.info(f"Email verification sent to {email}")
+        except Exception as e:
+            logger.error(f"Failed to send verification email to {email}: {e}")
 
         cache.set(rate_key, attempts + 1, timeout=3600)
 
@@ -1235,19 +1245,22 @@ class ConfirmEmailVerificationView(APIView):
             details={"email": token_obj.email},
         )
 
-        # Send confirmation email
+        # Send confirmation email (direct)
         try:
-            from apps.core.tasks import send_email_task
+            from django.core.mail import send_mail
             from django.template.loader import render_to_string
 
             html_content = render_to_string("email/welcome.html", {
                 "full_name": user.full_name or user.phone,
                 "phone": user.phone,
             })
-            send_email_task.delay(
-                subject="CPay — Email Verified Successfully",
-                html_content=html_content,
-                recipient_email=token_obj.email,
+            send_mail(
+                "CPay — Email Verified Successfully",
+                "",
+                settings.DEFAULT_FROM_EMAIL,
+                [token_obj.email],
+                html_message=html_content,
+                fail_silently=True,
             )
         except Exception as e:
             logger.error(f"Email verification confirmation failed: {e}")
@@ -1634,20 +1647,23 @@ class RecoveryEmailView(APIView):
             user.recovery_email_verified = False
             update_fields.extend(["recovery_email", "recovery_email_verified"])
 
-            # Send verification to recovery email
+            # Send verification to recovery email (direct)
             token_obj = EmailVerificationToken.create_for_user(user, recovery_email)
-            from apps.core.tasks import send_email_task
+            from django.core.mail import send_mail
             from django.template.loader import render_to_string
 
             html_content = render_to_string("email/email_verification.html", {
                 "full_name": user.full_name or user.phone,
-                "verify_url": f"{settings.FRONTEND_URL}/verify-email?token={token_obj.token}&type=recovery",
+                "verify_url": f"https://cpay.co.ke/verify-email?token={token_obj.token}&type=recovery",
                 "verification_code": token_obj.token[:6].upper(),
             })
-            send_email_task.delay(
-                subject="CryptoPay — Verify Recovery Email",
-                html_content=html_content,
-                recipient_email=recovery_email,
+            send_mail(
+                "CPay — Verify Recovery Email",
+                "",
+                settings.DEFAULT_FROM_EMAIL,
+                [recovery_email],
+                html_message=html_content,
+                fail_silently=True,
             )
 
         if recovery_phone:
