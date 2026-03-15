@@ -286,8 +286,9 @@ class RecoveryEmailSerializer(serializers.Serializer):
 
 
 class ForgotPINSerializer(serializers.Serializer):
-    """Step 1: Initiate PIN reset — send OTP to user's phone."""
+    """Step 1: Initiate PIN reset — send OTP to user's phone or email."""
     phone = serializers.CharField(max_length=15)
+    email = serializers.BooleanField(required=False, default=False)
 
     def validate_phone(self, value):
         value = value.strip().replace(" ", "")

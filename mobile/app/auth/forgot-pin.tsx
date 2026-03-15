@@ -22,7 +22,7 @@ import { useThemeMode } from "../../src/stores/theme";
 import { BRAND_LOGOS } from "../../src/constants/logos";
 import { api } from "../../src/api/client";
 
-type Step = "phone" | "otp" | "new-pin" | "success";
+type Step = "phone" | "otp" | "new-pin" | "confirm-pin" | "success";
 
 function KenyaFlag() {
   return (
@@ -49,6 +49,8 @@ export default function ForgotPINScreen() {
   const [loading, setLoading] = useState(false);
   const [resetToken, setResetToken] = useState("");
   const [pinError, setPinError] = useState(false);
+  const [newPin, setNewPin] = useState("");
+  const [useEmail, setUseEmail] = useState(false);
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
@@ -82,8 +84,11 @@ export default function ForgotPINScreen() {
     }
     setLoading(true);
     try {
-      const res = await api.post("/auth/forgot-pin/", { phone: normalizedPhone() });
-      toast.success("Code Sent", res.data.message || "Check your phone for the OTP");
+      const payload: any = { phone: normalizedPhone() };
+      if (useEmail) payload.email = true;
+      const res = await api.post("/auth/forgot-pin/", payload);
+      const channel = res.data.channel === "email" ? "email" : "phone";
+      toast.success("Code Sent", `Check your ${channel} for the verification code`);
       if (res.data.dev_otp) {
         toast.info("Dev OTP", res.data.dev_otp);
       }
@@ -114,7 +119,18 @@ export default function ForgotPINScreen() {
     }
   };
 
-  const handleResetPIN = async (pin: string) => {
+  const handleNewPin = (pin: string) => {
+    setNewPin(pin);
+    setPinError(false);
+    animateTransition("confirm-pin");
+  };
+
+  const handleConfirmPin = async (pin: string) => {
+    if (pin !== newPin) {
+      setPinError(true);
+      toast.error("Mismatch", "PINs do not match. Try again.");
+      return;
+    }
     setLoading(true);
     setPinError(false);
     try {
@@ -143,12 +159,19 @@ export default function ForgotPINScreen() {
     otp: {
       icon: "shield-checkmark-outline",
       title: "Verify your identity",
-      subtitle: "Enter the 6-digit code sent to your phone.",
+      subtitle: useEmail
+        ? "Enter the 6-digit code sent to your email."
+        : "Enter the 6-digit code sent to your phone.",
     },
     "new-pin": {
       icon: "lock-closed-outline",
       title: "Create new PIN",
       subtitle: "Choose a new 6-digit PIN for your account.",
+    },
+    "confirm-pin": {
+      icon: "lock-closed-outline",
+      title: "Confirm new PIN",
+      subtitle: "Re-enter your new 6-digit PIN to confirm.",
     },
     success: {
       icon: "checkmark-circle",
@@ -303,6 +326,31 @@ export default function ForgotPINScreen() {
                 />
               </View>
 
+              {/* Use email instead toggle */}
+              <Pressable
+                onPress={() => setUseEmail(!useEmail)}
+                style={({ pressed, hovered }: any) => ({
+                  alignItems: "center",
+                  marginTop: 16,
+                  paddingVertical: 8,
+                  borderRadius: 10,
+                  backgroundColor: isWeb && hovered ? "rgba(16, 185, 129, 0.06)" : "transparent",
+                  opacity: pressed ? 0.7 : 1,
+                  ...(isWeb ? { cursor: "pointer", transition: "all 0.15s ease" } as any : {}),
+                })}
+                accessibilityRole="button"
+              >
+                <Text
+                  style={{
+                    color: tc.primary[300],
+                    fontSize: 14,
+                    fontFamily: "DMSans_500Medium",
+                  }}
+                >
+                  {useEmail ? "Use SMS instead" : "Verify via email"}
+                </Text>
+              </Pressable>
+
               {/* Send Code Button */}
               <Pressable
                 onPress={handleRequestOTP}
@@ -317,7 +365,7 @@ export default function ForgotPINScreen() {
                   justifyContent: "center",
                   flexDirection: "row",
                   gap: 8,
-                  marginTop: 24,
+                  marginTop: 16,
                   minHeight: 56,
                   opacity: !isPhoneValid || loading ? 0.6 : pressed ? 0.9 : 1,
                   ...(isWeb ? { cursor: isPhoneValid ? "pointer" : "default", transition: "all 0.2s ease" } as any : {}),
@@ -326,7 +374,7 @@ export default function ForgotPINScreen() {
                 accessibilityLabel="Send verification code"
                 testID="forgot-pin-send"
               >
-                <Ionicons name="send-outline" size={18} color="#FFFFFF" />
+                <Ionicons name={useEmail ? "mail-outline" : "send-outline"} size={18} color="#FFFFFF" />
                 <Text
                   style={{
                     color: "#FFFFFF",
@@ -335,7 +383,7 @@ export default function ForgotPINScreen() {
                   }}
                   maxFontSizeMultiplier={1.3}
                 >
-                  {loading ? "Sending..." : "Send Code"}
+                  {loading ? "Sending..." : useEmail ? "Send to Email" : "Send Code"}
                 </Text>
               </Pressable>
             </View>
@@ -384,9 +432,19 @@ export default function ForgotPINScreen() {
           {step === "new-pin" && (
             <View style={{ marginTop: 8 }}>
               <PinInput
-                onComplete={handleResetPIN}
+                onComplete={handleNewPin}
                 error={pinError}
                 testID="forgot-pin-new-pin"
+              />
+            </View>
+          )}
+
+          {step === "confirm-pin" && (
+            <View style={{ marginTop: 8 }}>
+              <PinInput
+                onComplete={handleConfirmPin}
+                error={pinError}
+                testID="forgot-pin-confirm-pin"
               />
               {loading && (
                 <Text
@@ -445,8 +503,14 @@ export default function ForgotPINScreen() {
             onPress={() => {
               if (step === "phone") {
                 router.back();
-              } else {
-                animateTransition(step === "otp" ? "phone" : "otp");
+              } else if (step === "otp") {
+                animateTransition("phone");
+              } else if (step === "new-pin") {
+                animateTransition("otp");
+              } else if (step === "confirm-pin") {
+                setNewPin("");
+                setPinError(false);
+                animateTransition("new-pin");
               }
             }}
             style={({ pressed, hovered }: any) => ({
@@ -492,7 +556,7 @@ export default function ForgotPINScreen() {
               marginTop: 20,
             }}
           >
-            {(["phone", "otp", "new-pin"] as Step[]).map((s, i) => (
+            {(["phone", "otp", "new-pin", "confirm-pin"] as Step[]).map((s, i) => (
               <View
                 key={s}
                 style={{
@@ -502,7 +566,7 @@ export default function ForgotPINScreen() {
                   backgroundColor:
                     step === s
                       ? tc.primary[400]
-                      : (["phone", "otp", "new-pin"] as Step[]).indexOf(step) > i
+                      : (["phone", "otp", "new-pin", "confirm-pin"] as Step[]).indexOf(step) > i
                       ? "rgba(16, 185, 129, 0.4)"
                       : "rgba(255, 255, 255, 0.1)",
                   ...(isWeb ? { transition: "all 0.3s ease" } as any : {}),

@@ -249,8 +249,8 @@ def send_security_alert_task(
     retry_backoff_max=300,
 )
 def send_transaction_sms_task(self, phone, tx_type, amount, currency, reference):
-    """Send SMS notification for completed transactions via Africa's Talking."""
-    from django.conf import settings as _settings
+    """Send SMS notification for completed transactions (eSMS primary, AT fallback)."""
+    from apps.core.email import send_sms
 
     label = TX_TYPE_LABELS.get(tx_type, tx_type.replace("_", " ").title())
 
@@ -259,19 +259,32 @@ def send_transaction_sms_task(self, phone, tx_type, amount, currency, reference)
         f"Ref: {reference}. Thank you for using CPay."
     )
 
-    if _settings.AT_API_KEY:
-        try:
-            import africastalking
-
-            africastalking.initialize(_settings.AT_USERNAME, _settings.AT_API_KEY)
-            sms = africastalking.SMS
-            sms.send(message, [phone], sender_id=_settings.AT_SENDER_ID)
-            logger.info(f"Transaction SMS sent to {phone}: ref {reference}")
-        except Exception as exc:
-            logger.error(f"Transaction SMS failed for {phone}: {exc}")
-            raise
+    sent = send_sms(phone, message)
+    if sent:
+        logger.info(f"Transaction SMS sent to {phone}: ref {reference}")
     else:
-        logger.info(f"[DEV] Transaction SMS to {phone}: {message}")
+        logger.warning(f"Transaction SMS delivery failed for {phone}: ref {reference}")
+
+
+# ---------------------------------------------------------------------------
+# Generic SMS Task (eSMS Africa + Africa's Talking)
+# ---------------------------------------------------------------------------
+
+@shared_task(
+    bind=True,
+    max_retries=3,
+    autoretry_for=_TRANSIENT_ERRORS,
+    retry_backoff=True,
+    retry_backoff_max=300,
+)
+def send_sms_task(self, phone, message):
+    """Send an SMS using the reusable send_sms helper (eSMS primary, AT fallback)."""
+    from apps.core.email import send_sms
+
+    sent = send_sms(phone, message)
+    if not sent:
+        logger.warning(f"SMS delivery failed for {phone[:7]}*** (all providers)")
+    return sent
 
 
 # ---------------------------------------------------------------------------
