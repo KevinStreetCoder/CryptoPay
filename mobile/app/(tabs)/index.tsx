@@ -11,7 +11,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useNavigation } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { BalanceCard } from "../../src/components/BalanceCard";
@@ -29,7 +29,7 @@ import {
   PortfolioChartSkeleton,
 } from "../../src/components/Skeleton";
 import { useWallets } from "../../src/hooks/useWallets";
-import { useTransactions } from "../../src/hooks/useTransactions";
+import { useTransactions, useActivity } from "../../src/hooks/useTransactions";
 import { useUnreadCount } from "../../src/hooks/useUnreadCount";
 import { useAuth } from "../../src/stores/auth";
 import { ratesApi, Rate, normalizeRate } from "../../src/api/rates";
@@ -327,27 +327,21 @@ function PortfolioChart({
       );
     });
 
-  // Touch/hover zones for interactivity
-  const hitZones = chartLabels.map((_, i) => {
-    const zoneWidth = chartWidth / chartLabels.length;
-    return (
-      <Pressable
-        key={`hit-${i}`}
-        onPressIn={() => setActiveIndex(i)}
-        onPressOut={() => setActiveIndex(null)}
-        onHoverIn={() => setActiveIndex(i)}
-        onHoverOut={() => setActiveIndex(null)}
-        style={{
-          position: "absolute",
-          left: i * zoneWidth,
-          top: 0,
-          width: zoneWidth,
-          height: chartHeight,
-          ...(isWeb ? { cursor: "crosshair" } as any : {}),
-        }}
-      />
-    );
-  });
+  // Single overlay for mouse tracking — no per-zone re-renders
+  const chartRef = useRef<View>(null);
+  const handleChartMouse = useCallback(
+    (e: any) => {
+      if (!isWeb) return;
+      const rect = e.currentTarget?.getBoundingClientRect?.();
+      if (!rect) return;
+      const x = e.clientX - rect.left;
+      const zoneWidth = chartWidth / chartLabels.length;
+      const idx = Math.min(Math.max(Math.floor(x / zoneWidth), 0), chartLabels.length - 1);
+      setActiveIndex(idx);
+    },
+    [chartWidth, chartLabels.length]
+  );
+  const handleChartLeave = useCallback(() => setActiveIndex(null), []);
 
   const totalDeposits = depositPoints.reduce((a, b) => a + b, 0);
   const totalPayments = paymentPoints.reduce((a, b) => a + b, 0);
@@ -568,8 +562,23 @@ function PortfolioChart({
           </View>
         )}
 
-        {/* Hit zones for interactivity */}
-        {hitZones}
+        {/* Single overlay for smooth mouse tracking — no flickering */}
+        {isWeb ? (
+          <View
+            ref={chartRef}
+            onMouseMove={handleChartMouse as any}
+            onMouseLeave={handleChartLeave as any}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: chartWidth,
+              height: chartHeight,
+              cursor: "crosshair",
+              zIndex: 10,
+            } as any}
+          />
+        ) : null}
       </View>
 
       {/* X-axis labels */}
@@ -1174,6 +1183,12 @@ function HomeScreenContent() {
     refetch: refetchTx,
     isLoading: txLoading,
   } = useTransactions();
+  // Unified activity feed (includes crypto deposits)
+  const {
+    data: activityData,
+    refetch: refetchActivity,
+    isLoading: activityLoading,
+  } = useActivity({ page_size: 10 });
   const { data: rates, isLoading: ratesLoading } = useRates();
   const [refreshing, setRefreshing] = useState(false);
 
@@ -1183,17 +1198,19 @@ function HomeScreenContent() {
     const unsubscribe = navigation.addListener("focus", () => {
       refetchWallets();
       refetchTx();
+      refetchActivity();
     });
     return unsubscribe;
-  }, [navigation, refetchWallets, refetchTx]);
+  }, [navigation, refetchWallets, refetchTx, refetchActivity]);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([refetchWallets(), refetchTx()]);
+    await Promise.all([refetchWallets(), refetchTx(), refetchActivity()]);
     setRefreshing(false);
   };
 
-  const recentTx = txData?.results?.slice(0, 5) || [];
+  // Use unified activity feed for recent items (includes crypto deposits)
+  const recentTx = activityData?.results?.slice(0, 5) || txData?.results?.slice(0, 5) || [];
   const allTx = txData?.results || [];
 
   // Merge blockchain deposits (credited) into transaction list for chart
@@ -1756,7 +1773,7 @@ function HomeScreenContent() {
                 borderColor: tc.glass.border,
               }}
             >
-              {txLoading ? (
+              {(txLoading && activityLoading) ? (
                 <TransactionSkeleton />
               ) : recentTx.length === 0 ? (
                 /* Empty State */
@@ -2394,7 +2411,7 @@ function HomeScreenContent() {
                 ...ts.md,
               }}
             >
-              {txLoading ? (
+              {(txLoading && activityLoading) ? (
                 <TransactionSkeleton />
               ) : recentTx.length === 0 ? (
                 <View
