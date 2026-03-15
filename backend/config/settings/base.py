@@ -370,7 +370,10 @@ AT_API_KEY = env("AT_API_KEY", default="")
 AT_USERNAME = env("AT_USERNAME", default="sandbox")
 AT_SENDER_ID = env("AT_SENDER_ID", default="")
 
-# eSMS Africa (primary SMS provider for Kenya)
+# Unimatrix SMS (primary SMS/OTP provider)
+UNIMTX_ACCESS_KEY = env("UNIMTX_ACCESS_KEY", default="")
+
+# eSMS Africa (secondary SMS provider for Kenya)
 ESMS_API_KEY = env("ESMS_API_KEY", default="")
 ESMS_ACCOUNT_ID = env("ESMS_ACCOUNT_ID", default="")
 ESMS_SENDER_ID = env("ESMS_SENDER_ID", default="")
