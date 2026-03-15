@@ -32,6 +32,9 @@ import { usePhonePrivacy } from "../../src/utils/privacy";
 import { useBalanceVisibility } from "../../src/stores/balance";
 import { SectionHeader } from "../../src/components/SectionHeader";
 import { CryptoLogo } from "../../src/components/CryptoLogo";
+import { DepositTracker, usePendingDeposits } from "../../src/components/DepositTracker";
+import { DepositStatusModal } from "../../src/components/DepositStatusModal";
+import { BlockchainDeposit } from "../../src/api/wallets";
 import { useLocale } from "../../src/hooks/useLocale";
 const SUPPORTED_CRYPTOS: CurrencyCode[] = ["USDC", "USDT", "BTC", "SOL", "ETH"];
 
@@ -167,6 +170,8 @@ export default function WalletScreen() {
   const [showSendPicker, setShowSendPicker] = useState(false);
   const { balanceHidden, toggleBalance, formatAmount, formatCrypto } = useBalanceVisibility();
   const [modalCurrency, setModalCurrency] = useState<CurrencyCode>("USDT");
+  const [depositStatusModal, setDepositStatusModal] = useState<BlockchainDeposit | null>(null);
+  const { hasPending: hasPendingDeposits } = usePendingDeposits();
   const queryClient = useQueryClient();
   const toast = useToast();
 
@@ -1782,6 +1787,18 @@ export default function WalletScreen() {
               )}
             </View>
 
+            {/* ── Pending Deposits Tracker (desktop) ── */}
+            {hasPendingDeposits && (
+              <View style={{ marginBottom: 8 }}>
+                <DepositTracker
+                  pendingOnly
+                  maxItems={3}
+                  hPad={hPad}
+                  onOpenModal={(d) => setDepositStatusModal(d)}
+                />
+              </View>
+            )}
+
             {/* ── Transaction History ── */}
             <View style={{ paddingHorizontal: hPad, marginBottom: 32 }}>
               <SectionHeader
@@ -1946,6 +1963,12 @@ export default function WalletScreen() {
         {/* Desktop Deposit Dialog */}
         {renderDesktopDepositDialog()}
         {renderSendPicker()}
+        {/* Deposit Status Tracking Modal */}
+        <DepositStatusModal
+          deposit={depositStatusModal}
+          visible={!!depositStatusModal}
+          onClose={() => setDepositStatusModal(null)}
+        />
       </SafeAreaView>
     );
   }
@@ -2192,6 +2215,18 @@ export default function WalletScreen() {
           </View>
         )}
 
+        {/* Pending Deposits Tracker */}
+        {hasPendingDeposits && (
+          <View style={{ marginTop: 16 }}>
+            <DepositTracker
+              pendingOnly
+              maxItems={3}
+              hPad={hPad}
+              onOpenModal={(d) => setDepositStatusModal(d)}
+            />
+          </View>
+        )}
+
         {/* Transaction History */}
         <View style={{ marginTop: 20 }}>
           <View style={{ paddingHorizontal: hPad }}>
@@ -2267,6 +2302,12 @@ export default function WalletScreen() {
       {/* Mobile Deposit Modal */}
       {renderMobileDepositModal()}
       {renderSendPicker()}
+      {/* Deposit Status Tracking Modal */}
+      <DepositStatusModal
+        deposit={depositStatusModal}
+        visible={!!depositStatusModal}
+        onClose={() => setDepositStatusModal(null)}
+      />
     </SafeAreaView>
   );
 }
