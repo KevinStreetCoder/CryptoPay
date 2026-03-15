@@ -21,6 +21,7 @@ from .serializers import (
     DeviceSerializer,
     EmailVerifySerializer,
     ForgotPINSerializer,
+    GoogleCompleteProfileSerializer,
     GoogleLoginSerializer,
     KYCDocumentSerializer,
     KYCUploadSerializer,
@@ -74,31 +75,20 @@ class RequestOTPView(APIView):
         cache.set(f"otp:{phone}", otp, timeout=300)  # Valid for 5 minutes
         cache.set(rate_key, attempts + 1, timeout=600)
 
-        # Send via Africa's Talking
-        if settings.AT_API_KEY:
-            try:
-                import africastalking
+        # Send OTP via SMS provider (Unimatrix primary, eSMS secondary, AT tertiary)
+        from apps.core.email import send_sms
 
-                africastalking.initialize(settings.AT_USERNAME, settings.AT_API_KEY)
-                sms = africastalking.SMS
-                sms.send(
-                    f"Your CryptoPay verification code is: {otp}",
-                    [phone],
-                    sender_id=settings.AT_SENDER_ID,
-                )
-            except Exception as e:
-                logger.error(f"SMS send failed: {e}")
-                # In sandbox/dev, log the OTP
-                if settings.DEBUG:
-                    logger.debug(f"OTP for {phone}: {otp}")
-        else:
-            # Dev mode — log OTP to console
-            logger.debug(f"[DEV] OTP for {phone}: {otp}")
+        otp_message = f"Your CPay verification code is: {otp}. Expires in 5 minutes."
+        sms_sent = send_sms(phone, otp_message)
 
-        # Log OTP server-side only — NEVER include in API response
+        if not sms_sent:
+            logger.error(f"All SMS providers failed for {phone[:7]}***")
+            return Response(
+                {"error": "Failed to send verification code. Please try again."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
         response_data = {"message": "OTP sent successfully"}
-        if settings.DEBUG:
-            logger.debug(f"[DEV] OTP for {phone}: {otp}")
         return Response(response_data)
 
 
@@ -169,6 +159,15 @@ class RegisterView(APIView):
             entity_id=str(user.id),
             ip_address=self._get_client_ip(request),
         )
+
+        # Send welcome email + welcome SMS + admin alert (non-blocking)
+        try:
+            from apps.core.email import send_welcome_email, send_welcome_sms, send_admin_new_user_alert
+            send_welcome_email(user)
+            send_welcome_sms(user)
+            send_admin_new_user_alert(user)
+        except Exception as e:
+            logger.error(f"Post-registration notification dispatch failed for {user.phone}: {e}")
 
         return Response(
             {
@@ -388,8 +387,9 @@ class LoginView(APIView):
         user.save(update_fields=update_fields)
 
         # Register device if provided
+        is_new_device = False
         if device_id:
-            Device.objects.update_or_create(
+            _, is_new_device = Device.objects.update_or_create(
                 user=user,
                 device_id=device_id,
                 defaults={
@@ -405,9 +405,20 @@ class LoginView(APIView):
         AuditLog.objects.create(
             user=user,
             action="LOGIN",
-            details={"device_id": device_id, "ip": client_ip},
+            details={"device_id": device_id, "ip": client_ip, "new_device": is_new_device},
             ip_address=client_ip,
         )
+
+        # Security alert: notify user of new device login
+        if is_new_device:
+            try:
+                from apps.core.email import send_security_alert
+                send_security_alert(
+                    user, "new_device", client_ip,
+                    device_name or device_id or "Unknown device",
+                )
+            except Exception as e:
+                logger.error(f"New device security alert failed: {e}")
 
         return Response({
             "user": UserSerializer(user, context={"request": request}).data,
@@ -424,22 +435,12 @@ class LoginView(APIView):
         # Store on instance so the view can include it in dev responses
         self._last_challenge_otp = otp
 
-        if settings.AT_API_KEY:
-            try:
-                import africastalking
-
-                africastalking.initialize(settings.AT_USERNAME, settings.AT_API_KEY)
-                sms = africastalking.SMS
-                sms.send(
-                    f"CryptoPay security: Your verification code is {otp}. "
-                    f"If you did not attempt to login, please change your PIN immediately.",
-                    [phone],
-                    sender_id=settings.AT_SENDER_ID,
-                )
-            except Exception as e:
-                logger.error(f"OTP challenge SMS failed: {e}")
-        else:
-            logger.debug(f"[DEV] OTP challenge for {phone}: {otp}")
+        from apps.core.email import send_sms
+        send_sms(
+            phone,
+            f"CPay security: Your verification code is {otp}. "
+            f"If you did not attempt to login, please change your PIN immediately.",
+        )
 
     def _verify_totp(self, user, code):
         """Verify TOTP code or backup code using the TOTP service."""
@@ -633,9 +634,13 @@ class GoogleLoginView(APIView):
         user = User.objects.filter(email__iexact=email).first()
         created = False
         if not user:
+            import uuid as _uuid
+            # Generate a temporary placeholder phone (unique per user)
+            temp_phone = f"+000{_uuid.uuid4().hex[:10]}"
             user = User.objects.create_user(
-                phone="",  # Google users may not have a phone yet
+                phone=temp_phone,
                 email=email,
+                full_name=google_info.get("name", ""),
             )
             # Create default wallets
             WalletService.create_user_wallets(user)
@@ -679,6 +684,24 @@ class GoogleLoginView(APIView):
             ip_address=self._get_client_ip(request),
         )
 
+        # Check if user has a real phone number (not a placeholder +000...)
+        has_real_phone = user.phone and not user.phone.startswith("+000")
+
+        if not has_real_phone:
+            # New Google user — needs to complete profile (phone + PIN)
+            return Response(
+                {
+                    "user": UserSerializer(user, context={"request": request}).data,
+                    "tokens": {
+                        "refresh": str(refresh),
+                        "access": str(refresh.access_token),
+                    },
+                    "created": created,
+                    "phone_required": True,
+                },
+                status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+            )
+
         return Response(
             {
                 "user": UserSerializer(user, context={"request": request}).data,
@@ -690,6 +713,121 @@ class GoogleLoginView(APIView):
                 "pin_required": not bool(user.pin_hash),
             },
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+    def _get_client_ip(self, request):
+        xff = request.META.get("HTTP_X_FORWARDED_FOR")
+        if xff:
+            return xff.split(",")[0].strip()
+        return request.META.get("REMOTE_ADDR")
+
+
+class GoogleCompleteProfileView(APIView):
+    """
+    POST /api/v1/auth/google/complete-profile/
+    Complete profile for Google OAuth users who need to set phone + PIN.
+    No auth required — uses email to find the user (avoids token expiry issues).
+    Accepts: {email, phone, otp, pin, full_name}
+    """
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = GoogleCompleteProfileSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        phone = serializer.validated_data["phone"]
+        otp = serializer.validated_data["otp"]
+        pin = serializer.validated_data["pin"]
+        full_name = serializer.validated_data.get("full_name", "")
+        email = request.data.get("email", "").strip().lower()
+
+        if not email:
+            return Response({"error": "Email is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Find user by email (created during Google login)
+        user = User.objects.filter(email__iexact=email).first()
+        if not user:
+            return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Ensure user actually needs profile completion (has placeholder phone)
+        if user.phone and not user.phone.startswith("+000"):
+            return Response(
+                {"error": "Profile already completed."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Verify OTP
+        cached_otp = cache.get(f"otp:{phone}")
+        if not cached_otp or cached_otp != otp:
+            return Response(
+                {"error": "Invalid or expired OTP."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Check phone not already used by another user
+        if User.objects.filter(phone=phone).exclude(id=user.id).exists():
+            return Response(
+                {"error": "Phone number already registered to another account."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        # Clear OTP after successful verification
+        cache.delete(f"otp:{phone}")
+
+        # Update user profile
+        user.phone = phone
+        if full_name:
+            user.full_name = full_name
+        user.set_pin(pin)
+        user.save(update_fields=["phone", "full_name", "pin_hash"])
+
+        # Register device if provided
+        device_id = request.data.get("device_id", "")
+        device_name = request.data.get("device_name", "")
+        platform = request.data.get("platform", "")
+        if device_id:
+            Device.objects.update_or_create(
+                user=user,
+                device_id=device_id,
+                defaults={
+                    "device_name": device_name,
+                    "platform": platform,
+                    "is_trusted": True,
+                    "ip_address": self._get_client_ip(request),
+                },
+            )
+
+        # Generate fresh tokens
+        refresh = RefreshToken.for_user(user)
+
+        AuditLog.objects.create(
+            user=user,
+            action="GOOGLE_COMPLETE_PROFILE",
+            entity_type="user",
+            entity_id=str(user.id),
+            ip_address=self._get_client_ip(request),
+        )
+
+        # Send welcome notifications (email + SMS + admin alert)
+        try:
+            from apps.core.email import send_welcome_email, send_welcome_sms, send_admin_new_user_alert
+            send_welcome_email(user)
+            send_welcome_sms(user)
+            send_admin_new_user_alert(user)
+        except Exception as e:
+            logger.error(f"Google profile completion notifications failed: {e}")
+
+        return Response(
+            {
+                "user": UserSerializer(user, context={"request": request}).data,
+                "tokens": {
+                    "refresh": str(refresh),
+                    "access": str(refresh.access_token),
+                },
+                "message": "Profile completed successfully.",
+            },
+            status=status.HTTP_200_OK,
         )
 
     def _get_client_ip(self, request):
@@ -828,13 +966,23 @@ class ChangePINView(APIView):
         user.set_pin(new_pin)
         user.save(update_fields=["pin_hash"])
 
+        client_ip = self._get_client_ip(request)
+
         AuditLog.objects.create(
             user=user,
             action="CHANGE_PIN",
             entity_type="user",
             entity_id=str(user.id),
-            ip_address=self._get_client_ip(request),
+            ip_address=client_ip,
         )
+
+        # Security alert: email + SMS notification for PIN change
+        try:
+            from apps.core.email import send_pin_change_alert
+            device_info = request.META.get("HTTP_USER_AGENT", "Unknown device")
+            send_pin_change_alert(user, ip_address=client_ip, device_info=device_info)
+        except Exception as e:
+            logger.error(f"PIN change security alert failed: {e}")
 
         return Response({"message": "PIN changed successfully"})
 
@@ -908,6 +1056,13 @@ class KYCDocumentListView(APIView):
             details={"document_type": doc_type},
             ip_address=self._get_client_ip(request),
         )
+
+        # Admin alert: notify admins of new KYC document for review
+        try:
+            from apps.core.email import send_admin_kyc_upload_alert
+            send_admin_kyc_upload_alert(request.user, doc_type)
+        except Exception as e:
+            logger.error(f"Admin KYC upload alert failed: {e}")
 
         return Response(
             KYCDocumentSerializer(doc).data,
@@ -1079,6 +1234,23 @@ class ConfirmEmailVerificationView(APIView):
             entity_type="email",
             details={"email": token_obj.email},
         )
+
+        # Send confirmation email
+        try:
+            from apps.core.tasks import send_email_task
+            from django.template.loader import render_to_string
+
+            html_content = render_to_string("email/welcome.html", {
+                "full_name": user.full_name or user.phone,
+                "phone": user.phone,
+            })
+            send_email_task.delay(
+                subject="CPay — Email Verified Successfully",
+                html_content=html_content,
+                recipient_email=token_obj.email,
+            )
+        except Exception as e:
+            logger.error(f"Email verification confirmation failed: {e}")
 
         return Response({"message": "Email verified successfully"})
 
@@ -1523,7 +1695,11 @@ class SecuritySettingsView(APIView):
 
 
 class ForgotPINView(APIView):
-    """Step 1: Initiate PIN reset — send OTP to user's registered phone."""
+    """Step 1: Initiate PIN reset — send OTP to user's phone (default) or email.
+
+    POST /auth/forgot-pin/
+    Body: { phone: "+254...", email: true }  ← optional email flag
+    """
 
     permission_classes = [AllowAny]
 
@@ -1531,8 +1707,9 @@ class ForgotPINView(APIView):
         serializer = ForgotPINSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         phone = serializer.validated_data["phone"]
+        use_email = request.data.get("email", False)
 
-        # Rate limit: max 3 reset requests per phone per 30 minutes
+        # Rate limit: max 3 reset requests per phone per hour
         rate_key = f"pin_reset_rate:{phone}"
         attempts = cache.get(rate_key, 0)
         if attempts >= 3:
@@ -1542,7 +1719,7 @@ class ForgotPINView(APIView):
             )
 
         # Always return success to prevent phone enumeration
-        response_data = {"message": "If this number is registered, an OTP has been sent."}
+        response_data = {"message": "If this number is registered, a verification code has been sent."}
 
         try:
             user = User.objects.get(phone=phone)
@@ -1552,34 +1729,39 @@ class ForgotPINView(APIView):
         if not user.is_active:
             return Response(response_data)
 
-        # Generate OTP and store with pin_reset prefix
+        # Generate OTP and store with pin_reset prefix (5-minute expiry)
         otp = f"{secrets.randbelow(900000) + 100000}"
         cache.set(f"pin_reset_otp:{phone}", otp, timeout=300)
-        cache.set(rate_key, attempts + 1, timeout=1800)
+        cache.set(rate_key, attempts + 1, timeout=3600)  # 1 hour window
 
-        # Send OTP via SMS
-        if settings.AT_API_KEY:
+        if use_email and user.email:
+            # Send OTP via email
             try:
-                import africastalking
-                africastalking.initialize(settings.AT_USERNAME, settings.AT_API_KEY)
-                sms = africastalking.SMS
-                sms.send(
-                    f"Your CryptoPay PIN reset code is: {otp}. Do not share this code.",
-                    [phone],
-                    sender_id=settings.AT_SENDER_ID,
-                )
+                from apps.core.email import send_otp_email
+                send_otp_email(user, otp)
+                response_data["channel"] = "email"
             except Exception as e:
-                logger.error(f"PIN reset SMS failed: {e}")
-                if settings.DEBUG:
-                    logger.debug(f"PIN reset OTP for {phone}: {otp}")
+                logger.error(f"PIN reset email failed: {e}")
         else:
-            logger.debug(f"[DEV] PIN reset OTP for {phone}: {otp}")
+            # Send OTP via SMS (eSMS Africa primary, AT fallback)
+            from apps.core.email import send_sms
+            sent = send_sms(
+                phone,
+                f"Your CPay PIN reset code is: {otp}. Do not share this code. Expires in 5 minutes.",
+            )
+            if not sent:
+                logger.error(f"PIN reset SMS failed for {phone[:7]}***")
+            response_data["channel"] = "sms"
+
+        if settings.DEBUG:
+            response_data["dev_otp"] = otp
 
         AuditLog.objects.create(
             user=user,
             action="PIN_RESET_REQUESTED",
             entity_type="user",
             entity_id=str(user.id),
+            details={"channel": "email" if use_email else "sms"},
             ip_address=self._get_client_ip(request),
         )
 
@@ -1694,13 +1876,22 @@ class ResetPINView(APIView):
         user.otp_challenge_required = False
         user.save(update_fields=["pin_hash", "pin_attempts", "pin_locked_until", "otp_challenge_required"])
 
+        client_ip = self._get_client_ip(request)
+
         AuditLog.objects.create(
             user=user,
             action="PIN_RESET_COMPLETED",
             entity_type="user",
             entity_id=str(user.id),
-            ip_address=self._get_client_ip(request),
+            ip_address=client_ip,
         )
+
+        # Security alert: notify user that their PIN was reset
+        try:
+            from apps.core.email import send_pin_reset_alert
+            send_pin_reset_alert(user, ip_address=client_ip)
+        except Exception as e:
+            logger.error(f"PIN reset security alert failed: {e}")
 
         return Response({"message": "PIN reset successfully. You can now sign in."})
 
@@ -1809,7 +2000,7 @@ def _notify_suspension(user, action, reason=""):
             )
 
         # SMS
-        _send_admin_sms(user.phone, f"CryptoPay: Your account has been suspended. Reason: {reason}. Contact support@cryptopay.co.ke for assistance.")
+        _send_admin_sms(user.phone, f"CryptoPay: Your account has been suspended. Reason: {reason}. Contact support@cpay.co.ke for assistance.")
 
         # Push
         send_push_task.delay(
@@ -1871,23 +2062,12 @@ def _notify_tier_upgrade(user, old_tier, new_tier):
 
 
 def _send_admin_sms(phone, message):
-    """Send an SMS via Africa's Talking (or log in dev mode)."""
-    from django.conf import settings as _settings
-
+    """Send an SMS using the reusable send_sms helper (eSMS primary, AT fallback)."""
     if not phone:
         return
 
-    if _settings.AT_API_KEY:
-        try:
-            import africastalking
-            africastalking.initialize(_settings.AT_USERNAME, _settings.AT_API_KEY)
-            sms = africastalking.SMS
-            sms.send(message, [phone], sender_id=_settings.AT_SENDER_ID)
-            logger.info(f"Admin SMS sent to {phone}")
-        except Exception as exc:
-            logger.error(f"Admin SMS failed for {phone}: {exc}")
-    else:
-        logger.info(f"[DEV] Admin SMS to {phone}: {message}")
+    from apps.core.email import send_sms
+    send_sms(phone, message)
 
 
 # ── Admin API Views ──────────────────────────────────────────────────────────

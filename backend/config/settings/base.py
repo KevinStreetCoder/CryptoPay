@@ -25,12 +25,14 @@ DJANGO_APPS = [
 ]
 
 THIRD_PARTY_APPS = [
+    "daphne",
     "rest_framework",
     "corsheaders",
     "django_filters",
     "django_celery_beat",
     "drf_spectacular",
     "django_prometheus",
+    "channels",
 ]
 
 LOCAL_APPS = [
@@ -80,6 +82,19 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "config.wsgi.application"
+ASGI_APPLICATION = "config.asgi.application"
+
+# --- Channel Layers (WebSocket) ---
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [env("REDIS_URL", default="redis://localhost:6379/0")],
+            "capacity": 1500,
+            "expiry": 60,
+        },
+    },
+}
 
 # --- Database ---
 DATABASES = {
@@ -239,6 +254,11 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.core.tasks.daily_database_backup",
         "schedule": crontab(hour=2, minute=0),
     },
+    # Daily operations summary email to admins (8:00 AM EAT)
+    "daily-summary-email": {
+        "task": "apps.core.tasks.daily_summary_email",
+        "schedule": crontab(hour=8, minute=0),
+    },
 }
 
 # --- DRF ---
@@ -363,6 +383,15 @@ MPESA_ALLOWED_IPS = env.list("MPESA_ALLOWED_IPS", default=[
 # --- Africa's Talking ---
 AT_API_KEY = env("AT_API_KEY", default="")
 AT_USERNAME = env("AT_USERNAME", default="sandbox")
+AT_SENDER_ID = env("AT_SENDER_ID", default="")
+
+# Unimatrix SMS (primary SMS/OTP provider)
+UNIMTX_ACCESS_KEY = env("UNIMTX_ACCESS_KEY", default="")
+
+# eSMS Africa (secondary SMS provider for Kenya)
+ESMS_API_KEY = env("ESMS_API_KEY", default="")
+ESMS_ACCOUNT_ID = env("ESMS_ACCOUNT_ID", default="")
+ESMS_SENDER_ID = env("ESMS_SENDER_ID", default="")
 AT_SENDER_ID = env("AT_SENDER_ID", default="CryptoPay")
 
 # --- Frontend URL (for email verification links) ---
@@ -428,6 +457,28 @@ HOT_WALLET_TRON = env("HOT_WALLET_TRON", default="")
 HOT_WALLET_ETH = env("HOT_WALLET_ETH", default="")
 HOT_WALLET_BTC = env("HOT_WALLET_BTC", default="")
 HOT_WALLET_SOL = env("HOT_WALLET_SOL", default="")
+
+# --- Withdrawal Configuration ---
+MINIMUM_WITHDRAWAL_AMOUNTS = {
+    "USDT": "2.00",
+    "USDC": "2.00",
+    "BTC": "0.0001",
+    "ETH": "0.005",
+    "SOL": "0.1",
+}
+
+WITHDRAWAL_NETWORK_FEES = {
+    "tron": {"USDT": "1.00"},
+    "ethereum": {"USDT": "5.00", "USDC": "5.00", "ETH": "0.003"},
+    "polygon": {"USDT": "0.50", "USDC": "0.50"},
+    "bitcoin": {"BTC": "0.00005"},
+    "solana": {"SOL": "0.01"},
+}
+
+# Hot wallet private keys for withdrawal broadcasting
+TRON_HOT_WALLET_PRIVATE_KEY = env("TRON_HOT_WALLET_PRIVATE_KEY", default="")
+ETH_HOT_WALLET_PRIVATE_KEY = env("ETH_HOT_WALLET_PRIVATE_KEY", default="")
+POLYGON_HOT_WALLET_PRIVATE_KEY = env("POLYGON_HOT_WALLET_PRIVATE_KEY", default="")
 
 REQUIRED_CONFIRMATIONS = {
     "tron": 19,         # ~1 min (3s blocks) — 1 solidified block = finality
@@ -608,8 +659,12 @@ LOGGING = {
 
 # --- Email ---
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
-DEFAULT_FROM_EMAIL = "CryptoPay <noreply@cryptopay.co.ke>"
-SERVER_EMAIL = "CryptoPay Alerts <alerts@cryptopay.co.ke>"
+DEFAULT_FROM_EMAIL = "CPay <noreply@cpay.co.ke>"
+SERVER_EMAIL = "CPay Alerts <alerts@cpay.co.ke>"
+
+# Admin email recipients (overridden in production.py)
+ADMINS = [("Admin", "admin@cpay.co.ke")]
+MANAGERS = ADMINS
 
 # --- Smile Identity KYC ---
 SMILE_IDENTITY_PARTNER_ID = env("SMILE_IDENTITY_PARTNER_ID", default="")
@@ -626,3 +681,15 @@ KYC_DAILY_LIMITS = {
 
 # --- Prometheus ---
 PROMETHEUS_MULTIPROC_DIR = env("PROMETHEUS_MULTIPROC_DIR", default="")
+
+# CSRF trusted origins (required for admin behind Cloudflare proxy)
+CSRF_TRUSTED_ORIGINS = [
+    "https://cpay.co.ke",
+    "https://www.cpay.co.ke",
+    "https://api.cpay.co.ke",
+    "http://localhost:8000",
+    "http://localhost:8081",
+]
+
+# Trust X-Forwarded-Proto from Cloudflare
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")

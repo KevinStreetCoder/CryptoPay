@@ -15,7 +15,8 @@ import { EthersAdapter } from "@reown/appkit-ethers-react-native";
 import { storage } from "../utils/storage";
 
 // Reown Project ID — get from https://cloud.reown.com
-// In production, move to env var via expo-constants
+// Set via EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID env var.
+// See also: mobile/src/constants/config.ts for the exported constant.
 const PROJECT_ID = process.env.EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID || "";
 
 // EVM networks we support for deposits

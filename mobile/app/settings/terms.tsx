@@ -8,7 +8,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
@@ -516,6 +516,7 @@ function PrivacyContent({
 // ── Main Screen ──────────────────────────────────────────────────────────────
 export default function TermsAndPrivacyScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ tab?: string }>();
   const { width } = useWindowDimensions();
   const isDesktop = isWeb && width >= 900;
   const isTablet = isWeb && width >= 600 && width < 900;
@@ -523,7 +524,8 @@ export default function TermsAndPrivacyScreen() {
   const tc = getThemeColors(isDark);
   const ts = getThemeShadows(isDark);
   const { t } = useLocale();
-  const [activeTab, setActiveTab] = useState<TabKey>("terms");
+  const initialTab: TabKey = params.tab === "privacy" ? "privacy" : "terms";
+  const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
 
   const horizontalPadding = isDesktop ? 48 : isTablet ? 32 : 20;
 

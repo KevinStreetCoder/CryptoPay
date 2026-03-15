@@ -20,6 +20,7 @@ export default function PaymentLayout() {
       <Stack.Screen name="detail" />
       <Stack.Screen name="buy-crypto" />
       <Stack.Screen name="deposit" />
+      <Stack.Screen name="withdraw" />
       <Stack.Screen name="confirm" />
       <Stack.Screen
         name="success"

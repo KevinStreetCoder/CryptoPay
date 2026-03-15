@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <title>{% block title %}CryptoPay{% endblock %}</title>
+  <title>{% block title %}CPay{% endblock %}</title>
   <!--[if mso]>
   <noscript>
     <xml>
@@ -21,35 +21,50 @@
     img { -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
     body { margin: 0; padding: 0; width: 100% !important; height: 100% !important; }
 
-    /* Dark theme */
-    body { background-color: #0f0f23; }
+    /* Dark theme — CPay brand */
+    body { background-color: #060E1F; }
 
-    .email-wrapper { background-color: #0f0f23; width: 100%; }
+    .email-wrapper { background-color: #060E1F; width: 100%; }
     .email-container { max-width: 600px; margin: 0 auto; }
 
     .header {
-      background-color: #1a1a2e;
+      background: linear-gradient(135deg, #0A1628 0%, #0E1D35 100%);
       padding: 30px 40px;
       text-align: center;
       border-bottom: 3px solid #10B981;
     }
+    .header-logo {
+      display: inline-block;
+      width: 44px;
+      height: 44px;
+      background-color: #10B981;
+      border-radius: 12px;
+      text-align: center;
+      line-height: 44px;
+      font-size: 22px;
+      vertical-align: middle;
+      margin-right: 10px;
+    }
     .header h1 {
+      display: inline-block;
       margin: 0;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
       font-size: 28px;
       font-weight: 700;
-      color: #10B981;
+      color: #f1f5f9;
       letter-spacing: -0.5px;
+      vertical-align: middle;
     }
+    .header h1 span { color: #10B981; }
     .header .tagline {
-      margin: 6px 0 0 0;
+      margin: 8px 0 0 0;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
       font-size: 13px;
       color: #94a3b8;
     }
 
     .content {
-      background-color: #16213e;
+      background-color: #0E1D35;
       padding: 36px 40px;
     }
     .content h2 {
@@ -68,7 +83,7 @@
     }
 
     .info-card {
-      background-color: #1a1a2e;
+      background-color: #0A1628;
       border-radius: 8px;
       padding: 20px 24px;
       margin: 20px 0;
@@ -95,6 +110,19 @@
       border-radius: 8px;
       margin: 8px 0;
     }
+    .btn:hover { background-color: #059669; }
+    .btn-danger {
+      display: inline-block;
+      background-color: #ef4444;
+      color: #ffffff !important;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      text-decoration: none;
+      padding: 12px 32px;
+      border-radius: 8px;
+      margin: 8px 0;
+    }
 
     .status-approved { color: #10B981; font-weight: 700; }
     .status-rejected { color: #ef4444; font-weight: 700; }
@@ -112,11 +140,28 @@
       margin: 0;
     }
 
+    .otp-code {
+      background: linear-gradient(135deg, #0A1628 0%, #132240 100%);
+      border: 2px solid #10B981;
+      border-radius: 12px;
+      padding: 24px;
+      margin: 24px 0;
+      text-align: center;
+    }
+    .otp-digits {
+      font-size: 42px;
+      font-weight: 700;
+      color: #10B981;
+      letter-spacing: 12px;
+      font-family: 'Courier New', Courier, monospace;
+      margin: 0;
+    }
+
     .footer {
-      background-color: #1a1a2e;
+      background-color: #0A1628;
       padding: 24px 40px;
       text-align: center;
-      border-top: 1px solid #2a2a4a;
+      border-top: 1px solid #1a2a4a;
     }
     .footer p {
       margin: 0 0 8px 0;
@@ -131,6 +176,7 @@
     @media only screen and (max-width: 620px) {
       .header, .content, .footer { padding-left: 20px !important; padding-right: 20px !important; }
       .content h2 { font-size: 20px !important; }
+      .otp-digits { font-size: 32px !important; letter-spacing: 8px !important; }
     }
   </style>
 </head>
@@ -142,7 +188,15 @@
           <!-- Header -->
           <tr>
             <td class="header">
-              <h1>CryptoPay</h1>
+              <div>
+                <!--[if mso]>
+                <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;"><tr><td style="background-color:#10B981;border-radius:12px;width:44px;height:44px;text-align:center;line-height:44px;font-size:22px;vertical-align:middle;">
+                <![endif]-->
+                <span class="header-logo" style="color:#FFFFFF;font-weight:bold;">C</span>
+                <!--[if mso]></td><td style="padding-left:10px;vertical-align:middle;"><![endif]-->
+                <h1><span>C</span>Pay</h1>
+                <!--[if mso]></td></tr></table><![endif]-->
+              </div>
               <p class="tagline">Crypto to M-Pesa, Instantly</p>
             </td>
           </tr>
@@ -157,14 +211,14 @@
           <!-- Footer -->
           <tr>
             <td class="footer">
-              <p>CryptoPay &mdash; Crypto-to-M-Pesa Payment Platform</p>
+              <p><strong style="color: #94a3b8;">CPay</strong> &mdash; Crypto-to-M-Pesa Payment Platform</p>
               <p>
-                <a href="https://cryptopay.co.ke/unsubscribe">Unsubscribe</a> &bull;
-                <a href="https://cryptopay.co.ke/privacy">Privacy Policy</a> &bull;
-                <a href="https://cryptopay.co.ke/support">Support</a>
+                <a href="https://cpay.co.ke/privacy">Privacy Policy</a> &bull;
+                <a href="https://cpay.co.ke/terms">Terms of Service</a> &bull;
+                <a href="mailto:support@cpay.co.ke">Support</a>
               </p>
-              <p>You received this email because you have an account with CryptoPay.<br>
-                 If you did not perform this action, please contact support immediately.</p>
+              <p>You received this email because you have an account with CPay.<br>
+                 &copy; {% now "Y" %} CPay. All rights reserved.</p>
             </td>
           </tr>
         </table>

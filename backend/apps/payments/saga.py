@@ -67,6 +67,14 @@ class PaymentSaga:
                         logger.critical(
                             f"Compensation failed for tx {self.tx.id}: {comp_error}"
                         )
+
+                # Alert admins about the failed transaction
+                try:
+                    from apps.core.tasks import send_failed_transaction_alert_task
+                    send_failed_transaction_alert_task.delay(transaction_id=str(self.tx.id))
+                except Exception:
+                    pass
+
                 raise SagaError(f"Payment saga failed at step {i + 1}: {e}") from e
 
     def step_lock_crypto(self):
@@ -228,3 +236,11 @@ class PaymentSaga:
         except Exception as e:
             # Notifications are non-critical — log but don't fail the payment
             logger.error(f"Notification dispatch failed for tx {self.tx.id}: {e}")
+
+        # Broadcast updated wallet balance via WebSocket
+        try:
+            from apps.core.broadcast import broadcast_user_balance
+
+            broadcast_user_balance(self.tx.user_id)
+        except Exception as e:
+            logger.warning(f"Balance broadcast failed for tx {self.tx.id}: {e}")

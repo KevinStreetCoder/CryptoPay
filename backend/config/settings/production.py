@@ -25,6 +25,9 @@ CORS_ALLOW_CREDENTIALS = True
 # --- Static files with WhiteNoise ---
 MIDDLEWARE.insert(1, "whitenoise.middleware.WhiteNoiseMiddleware")  # noqa: F405
 STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
     "staticfiles": {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
     },
@@ -63,10 +66,11 @@ if SENTRY_DSN:
 # SES:    EMAIL_HOST=email-smtp.eu-west-1.amazonaws.com, EMAIL_HOST_USER=AKIA..., EMAIL_HOST_PASSWORD=...
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 EMAIL_HOST = env("EMAIL_HOST", default="smtp.resend.com")  # noqa: F405
-EMAIL_PORT = env.int("EMAIL_PORT", default=587)  # noqa: F405
+EMAIL_PORT = env.int("EMAIL_PORT", default=465)  # noqa: F405
 EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="resend")  # noqa: F405
 EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")  # noqa: F405
-EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)  # noqa: F405
+EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=False)  # noqa: F405
+EMAIL_USE_SSL = env.bool("EMAIL_USE_SSL", default=True)  # noqa: F405
 
 # --- Production Logging Override ---
 # Use JSON formatter for all handlers in production (better for log aggregation)
@@ -88,3 +92,32 @@ MPESA_CERT_PATH = env(  # noqa: F405
 
 # --- Google OAuth ---
 GOOGLE_CLIENT_ID = env("GOOGLE_CLIENT_ID", default="")  # noqa: F405
+
+# Cloudflare proxy CSRF + SSL trust
+CSRF_TRUSTED_ORIGINS = [
+    "https://cpay.co.ke",
+    "https://www.cpay.co.ke",
+    "https://api.cpay.co.ke",
+    "http://localhost:8000",
+    "http://localhost:8081",
+]
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# Email branding
+DEFAULT_FROM_EMAIL = "CPay <noreply@cpay.co.ke>"
+SERVER_EMAIL = "CPay Alerts <admin@cpay.co.ke>"
+
+# Admin email notifications
+ADMINS = [("Kevin", "kevinisaackareithi@gmail.com")]
+MANAGERS = ADMINS
+
+# Africa's Talking SMS (sandbox for testing, production later)
+AT_API_KEY = env("AT_API_KEY", default="")
+AT_USERNAME = env("AT_USERNAME", default="Cpay")
+AT_SENDER_ID = env("AT_SENDER_ID", default="")
+
+# Admin email for OTP fallback (when SMS not available)
+ADMIN_OTP_EMAIL = "kevinisaackareithi@gmail.com"
+
+# Google OAuth
+GOOGLE_CLIENT_ID = env("GOOGLE_CLIENT_ID", default="")

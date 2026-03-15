@@ -54,6 +54,11 @@ weasyprint==68.1
 # Monitoring
 django-prometheus==2.3.1
 
+# WebSocket / ASGI
+channels==4.2.0
+channels-redis==4.2.1
+daphne==4.1.2
+
 # Production
 gunicorn==23.0.0
 whitenoise==6.8.2
