@@ -108,7 +108,7 @@ DEFAULT_FROM_EMAIL = "CryptoPay <noreply@cpay.co.ke>"
 SERVER_EMAIL = "CryptoPay Alerts <admin@cpay.co.ke>"
 
 # Admin email notifications
-ADMINS = [("Kevin", "kevinisaackareithi@gmail.com")]
+ADMINS = [("Kevin", "kevinisaackareithi001@gmail.com")]
 MANAGERS = ADMINS
 
 # Africa's Talking SMS (sandbox for testing, production later)
@@ -117,7 +117,7 @@ AT_USERNAME = env("AT_USERNAME", default="Cpay")
 AT_SENDER_ID = env("AT_SENDER_ID", default="")
 
 # Admin email for OTP fallback (when SMS not available)
-ADMIN_OTP_EMAIL = "kevinisaackareithi@gmail.com"
+ADMIN_OTP_EMAIL = "kevinisaackareithi001@gmail.com"
 
 # Google OAuth
 GOOGLE_CLIENT_ID = env("GOOGLE_CLIENT_ID", default="")
