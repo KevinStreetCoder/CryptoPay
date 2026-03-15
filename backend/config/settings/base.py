@@ -46,7 +46,8 @@ LOCAL_APPS = [
     "apps.notifications",
 ]
 
-INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
+# Daphne must come before django.contrib.staticfiles
+INSTALLED_APPS = ["daphne"] + DJANGO_APPS + [a for a in THIRD_PARTY_APPS if a != "daphne"] + LOCAL_APPS
 
 # --- Middleware ---
 MIDDLEWARE = [
