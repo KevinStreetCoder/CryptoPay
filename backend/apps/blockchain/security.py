@@ -245,10 +245,16 @@ def verify_block_hash(chain: str, deposit) -> bool:
     if not deposit.block_hash or not deposit.block_number:
         return True  # Can't verify without block_hash
 
-    if chain == "ethereum":
+    if chain in ("ethereum", "polygon"):
         try:
-            from apps.blockchain.eth_listener import _eth_rpc_call
-            block = _eth_rpc_call(
+            if chain == "ethereum":
+                from apps.blockchain.eth_listener import _eth_rpc_call
+                rpc_call = _eth_rpc_call
+            else:
+                from apps.blockchain.polygon_listener import _polygon_rpc_call
+                rpc_call = _polygon_rpc_call
+
+            block = rpc_call(
                 "eth_getBlockByNumber",
                 [hex(deposit.block_number), False],
             )

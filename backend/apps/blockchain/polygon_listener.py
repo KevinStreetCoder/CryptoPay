@@ -13,17 +13,17 @@ from decimal import Decimal
 import requests
 from celery import shared_task
 from django.conf import settings
-from django.utils import timezone
 
 from apps.wallets.models import Wallet
-from apps.wallets.services import WalletService
 
 from .models import BlockchainDeposit
 from .security import (
     check_confirmation_monotonicity,
+    check_deposit_velocity,
     estimate_usd_value,
     get_required_confirmations,
     is_dust_deposit,
+    validate_address,
 )
 
 logger = logging.getLogger(__name__)
@@ -153,10 +153,6 @@ def monitor_polygon_deposits():
                     if not tx_hash:
                         continue
 
-                    # Skip duplicates
-                    if BlockchainDeposit.objects.filter(chain="polygon", tx_hash=tx_hash).exists():
-                        continue
-
                     # Parse transfer: topic[1]=from, topic[2]=to, data=amount
                     topics = log.get("topics", [])
                     if len(topics) < 3:
@@ -168,6 +164,16 @@ def monitor_polygon_deposits():
                         continue
 
                     from_addr = "0x" + topics[1][-40:]
+                    log_index = log.get("logIndex", "0x0")
+                    log_index_int = int(log_index, 16) if isinstance(log_index, str) else log_index
+
+                    # Use tx_hash:logIndex as unique key to handle multiple
+                    # Transfer events within a single transaction.
+                    deposit_tx_key = f"{tx_hash}:{log_index_int}"
+
+                    # Skip duplicates
+                    if BlockchainDeposit.objects.filter(chain="polygon", tx_hash=deposit_tx_key).exists():
+                        continue
 
                     # Parse amount from data field
                     raw_amount = int(log.get("data", "0x0"), 16)
@@ -182,7 +188,17 @@ def monitor_polygon_deposits():
                     if is_dust_deposit(amount, token_symbol):
                         continue
 
+                    # Security: validate address format
+                    if not validate_address("polygon", to_addr):
+                        continue
+
+                    # Security: check deposit velocity
+                    if not check_deposit_velocity(to_addr, token_symbol):
+                        logger.critical(f"Deposit velocity exceeded for {to_addr[:10]}..., skipping")
+                        break
+
                     block_num = int(log.get("blockNumber", "0x0"), 16)
+                    block_hash = log.get("blockHash", "")
                     confirmations = max(0, current_block - block_num)
 
                     # Security: amount-based confirmation tier
@@ -197,7 +213,7 @@ def monitor_polygon_deposits():
 
                     BlockchainDeposit.objects.create(
                         chain="polygon",
-                        tx_hash=tx_hash,
+                        tx_hash=deposit_tx_key,
                         from_address=from_addr,
                         to_address=to_addr,
                         amount=amount,
@@ -206,11 +222,12 @@ def monitor_polygon_deposits():
                         required_confirmations=dynamic_confirmations,
                         status=status,
                         block_number=block_num,
+                        block_hash=block_hash,
                     )
 
                     logger.info(
                         f"Detected Polygon {token_symbol} deposit: {amount} to {to_addr[:10]}... "
-                        f"tx={tx_hash[:16]}... ({confirmations}/{dynamic_confirmations} confs)"
+                        f"tx={tx_hash[:16]}... log={log_index_int} ({confirmations}/{dynamic_confirmations} confs)"
                     )
 
         except Exception as e:
@@ -240,22 +257,38 @@ def update_polygon_confirmations():
         return
 
     for deposit in pending:
-        if deposit.block_number:
-            confirmations = max(0, current_block - deposit.block_number)
-
-            # Security: confirmation monotonicity check (re-org detection)
-            if not check_confirmation_monotonicity(deposit, confirmations):
-                deposit.status = BlockchainDeposit.Status.CONFIRMING
-                deposit.save(update_fields=["status"])
+        # If block_number is missing, try to resolve it from the tx receipt
+        if not deposit.block_number:
+            try:
+                # Extract the original tx hash (strip :logIndex suffix)
+                raw_tx_hash = deposit.tx_hash.split(":")[0]
+                receipt = _polygon_rpc_call("eth_getTransactionReceipt", [raw_tx_hash])
+                if receipt and receipt.get("blockNumber"):
+                    deposit.block_number = int(receipt["blockNumber"], 16)
+                    if not deposit.block_hash and receipt.get("blockHash"):
+                        deposit.block_hash = receipt["blockHash"]
+                    deposit.save(update_fields=["block_number", "block_hash"])
+                else:
+                    continue  # Still pending
+            except Exception as e:
+                logger.warning(f"Failed to resolve block for Polygon deposit {deposit.id}: {e}")
                 continue
 
-            deposit.confirmations = confirmations
+        confirmations = max(0, current_block - deposit.block_number)
 
-            if confirmations >= deposit.required_confirmations:
-                deposit.status = BlockchainDeposit.Status.CONFIRMED
-            else:
-                deposit.status = BlockchainDeposit.Status.CONFIRMING
+        # Security: confirmation monotonicity check (re-org detection)
+        if not check_confirmation_monotonicity(deposit, confirmations):
+            deposit.status = BlockchainDeposit.Status.CONFIRMING
+            deposit.save(update_fields=["status"])
+            continue
 
-            deposit.save(update_fields=["confirmations", "status"])
+        deposit.confirmations = confirmations
+
+        if confirmations >= deposit.required_confirmations:
+            deposit.status = BlockchainDeposit.Status.CONFIRMED
+        else:
+            deposit.status = BlockchainDeposit.Status.CONFIRMING
+
+        deposit.save(update_fields=["confirmations", "status"])
 
     logger.debug(f"Updated Polygon confirmations for {pending.count()} deposits")
