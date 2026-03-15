@@ -35,4 +35,6 @@ export const walletsApi = {
     api.get<{ results: BlockchainDeposit[]; count: number }>("/wallets/deposits/", {
       params: { page },
     }),
+  getDepositStatus: (id: number) =>
+    api.get<BlockchainDeposit>(`/wallets/deposits/${id}/`),
 };

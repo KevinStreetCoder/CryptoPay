@@ -4,20 +4,63 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRef, useEffect } from "react";
 import { colors, getThemeColors } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
+import { usePendingDeposits } from "../../src/components/DepositTracker";
 
 const isWeb = Platform.OS === "web";
 const useNative = Platform.OS !== "web";
+
+/** Pulsing indicator dot for pending deposits */
+function PendingBadge() {
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 0.4,
+          duration: 900,
+          useNativeDriver: useNative,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 900,
+          useNativeDriver: useNative,
+        }),
+      ])
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, [pulseAnim]);
+
+  return (
+    <Animated.View
+      style={{
+        position: "absolute",
+        top: 2,
+        right: 8,
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: "#F59E0B",
+        opacity: pulseAnim,
+        zIndex: 10,
+      }}
+    />
+  );
+}
 
 function TabIcon({
   name,
   label,
   color,
   focused,
+  showBadge,
 }: {
   name: keyof typeof Ionicons.glyphMap;
   label: string;
   color: string;
   focused: boolean;
+  showBadge?: boolean;
 }) {
   const scaleAnim = useRef(new Animated.Value(focused ? 1 : 0.95)).current;
   const bgOpacity = useRef(new Animated.Value(focused ? 1 : 0)).current;
@@ -49,6 +92,8 @@ function TabIcon({
         paddingVertical: 6,
       }}
     >
+      {/* Pulsing badge for pending deposits */}
+      {showBadge && <PendingBadge />}
       {/* Full pill background covering icon + label */}
       {focused && (
         <Animated.View
@@ -90,6 +135,7 @@ export default function TabLayout() {
   const isDesktop = useIsDesktop();
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
+  const { hasPending: hasPendingDeposits } = usePendingDeposits();
 
   return (
     <Tabs
@@ -172,6 +218,7 @@ export default function TabLayout() {
               label="Wallet"
               color={color}
               focused={focused}
+              showBadge={hasPendingDeposits}
             />
           ),
         }}
