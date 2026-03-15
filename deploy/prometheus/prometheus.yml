@@ -12,10 +12,12 @@ rule_files:
 
 scrape_configs:
   # Django application metrics (django-prometheus)
+  # Use Docker service name "web" (not container_name with underscore)
+  # because underscores are invalid in HTTP Host headers per RFC 1034
   - job_name: "django"
     metrics_path: /metrics
     static_configs:
-      - targets: ["cryptopay_web:8000"]
+      - targets: ["web:8000"]
         labels:
           service: "cryptopay-api"
 
