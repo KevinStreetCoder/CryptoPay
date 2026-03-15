@@ -9,14 +9,36 @@ from .models import CustodyTransfer, RebalanceOrder, Wallet
 
 class WalletSerializer(serializers.ModelSerializer):
     available_balance = serializers.DecimalField(max_digits=28, decimal_places=8, read_only=True)
+    kes_value = serializers.SerializerMethodField()
 
     class Meta:
         model = Wallet
         fields = (
             "id", "currency", "balance", "locked_balance",
             "available_balance", "deposit_address", "created_at",
+            "kes_value",
         )
         read_only_fields = fields
+
+    def get_kes_value(self, obj):
+        """Convert wallet balance to KES equivalent using cached rates."""
+        from decimal import Decimal
+        balance = obj.balance or Decimal("0")
+        if balance == 0 or obj.currency == "KES":
+            return str(balance)
+        try:
+            from django.core.cache import cache
+            rate = cache.get(f"rate:{obj.currency}:KES")
+            if rate:
+                return str((balance * Decimal(str(rate))).quantize(Decimal("0.01")))
+            # Fallback: try USD rate * USD/KES
+            usd_rate = cache.get(f"rate:{obj.currency}:USD")
+            usd_kes = cache.get("rate:USD:KES") or cache.get("rate:USDT:KES")
+            if usd_rate and usd_kes:
+                return str((balance * Decimal(str(usd_rate)) * Decimal(str(usd_kes))).quantize(Decimal("0.01")))
+        except Exception:
+            pass
+        return "0.00"
 
 
 class BlockchainDepositSerializer(serializers.ModelSerializer):

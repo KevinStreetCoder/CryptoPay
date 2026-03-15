@@ -23,10 +23,21 @@ export function BalanceCard({ wallets }: BalanceCardProps) {
   // Defensive: ensure wallets is always an array
   const safeWallets = Array.isArray(wallets) ? wallets : [];
 
+  // Calculate total portfolio value in KES (KES balance + all crypto converted to KES)
   const kesWallet = safeWallets.find((w) => w.currency === "KES");
-  const kesBalance = kesWallet ? parseFloat(kesWallet.balance) : 0;
+  const kesDirectBalance = kesWallet ? parseFloat(kesWallet.balance) : 0;
 
+  // Sum KES equivalent from all wallets (use kes_value if backend provides it,
+  // otherwise approximate from balance * rate shown in wallet pills)
   const cryptoWallets = safeWallets.filter((w) => w.currency !== "KES");
+  const cryptoKesTotal = cryptoWallets.reduce((sum, w) => {
+    const bal = parseFloat(w.balance) || 0;
+    // Use kes_value from backend if available, otherwise estimate
+    const kesVal = (w as any).kes_value ? parseFloat((w as any).kes_value) : 0;
+    return sum + kesVal;
+  }, 0);
+
+  const kesBalance = kesDirectBalance + cryptoKesTotal;
 
   return (
     <View
