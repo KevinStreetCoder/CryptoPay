@@ -761,35 +761,65 @@ Enterprise-level sweep pipeline that consolidates user deposit addresses into th
 
 **All 136 tests passing. 0 warnings. 11 Docker services healthy.**
 
-#### 🟡 HIGH PRIORITY — Remaining (Before Beta Launch)
+#### ✅ COMPLETED (March 15, 2026 Session 8 — Production Deployment + Real Deposit)
 
-| # | Task | Area | Details | Files |
-|---|------|------|---------|-------|
-| 1 | **VPS deployment + domain** | Infra | Deploy to Nairobi VPS (Lineserve/Truehost), configure Cloudflare DNS, domain cryptopay.co.ke. | `docker-compose.prod.yml`, `nginx/nginx.conf` |
-| 2 | **SSL certificate** | Infra | Certbot + Let's Encrypt with auto-renewal. NOTE: moving to 45-day certs May 2026. | `nginx/nginx.conf` |
-| 3 | ~~**Monitoring: Prometheus + Grafana**~~ | ✅ Done | `django-prometheus` middleware, custom metrics, Docker Compose overlay with Prometheus, Grafana, Alertmanager, exporters. 15+ alert rules. | `docker-compose.monitoring.yml`, `monitoring/`, `core/metrics.py` |
-| 4 | **M-Pesa environment switch** | Backend | Switch from sandbox to production credentials. Update callback URLs to production domain. Just swap API keys. | `backend/.env`, M-Pesa config |
-| 5 | **Configure all API credentials** | Backend | Fill empty env vars: Smile Identity, Africa's Talking, CoinGecko key, M-Pesa production keys, WALLET_MASTER_SEED. | `backend/.env` |
+| # | Task | Status | Details |
+|---|------|--------|---------|
+| 1 | **VPS Deployment** | ✅ Done | Contabo VPS (173.249.4.109), cpay.co.ke via Cloudflare, Nginx reverse proxy port 8080 |
+| 2 | **SSL Certificate** | ✅ Done | Cloudflare Flexible SSL, HSTS preload, CSRF trusted origins |
+| 3 | **Prometheus + Grafana** | ✅ Done | 5 targets (django/redis/postgres/node/prometheus), 7 alert rules, Grafana dashboards |
+| 4 | **Sentry Error Tracking** | ✅ Done | DSN configured, Django+Celery+Redis integrations, test error verified |
+| 5 | **Database Backups** | ✅ Done | Daily 2AM cron, 30-day retention, `/opt/cpay-backups/` |
+| 6 | **Wallet Seed Generated** | ✅ Done | 24-word BIP-39 mnemonic in production .env |
+| 7 | **Hot Wallet Addresses** | ✅ Done | TRON, ETH, BTC, SOL derived from mnemonic index 0 |
+| 8 | **Blockchain Networks → Mainnet** | ✅ Done | All chains: TRON=mainnet, ETH=mainnet, BTC=main, SOL=mainnet-beta |
+| 9 | **RPC URLs Configured** | ✅ Done | TronGrid API key, Alchemy (ETH/SOL/Polygon) URLs set |
+| 10 | **Withdrawal API** | ✅ Done | POST /withdraw/, GET /withdraw/{id}/status/, GET /withdraw/fee/ |
+| 11 | **WebSocket Real-Time** | ✅ Done | ws/rates/ (public), ws/wallets/ (auth), Daphne ASGI server |
+| 12 | **WalletConnect v2** | ✅ Done | Reown AppKit, MetaMask/Trust/Phantom, auto-fill withdrawal address |
+| 13 | **Deposit Tracking UI** | ✅ Done | Status timeline, confirmation progress bar, explorer links, pulsing badge |
+| 14 | **Unified Transaction History** | ✅ Done | Merges Transaction + BlockchainDeposit, activity API, type badges |
+| 15 | **Transaction Detail View** | ✅ Done | TX hash, explorer links, timeline stepper, receipt download, share |
+| 16 | **Admin Broadcast Notifications** | ✅ Done | Send email + SMS + in-app to all users, stats dashboard, history |
+| 17 | **Notifications Inbox** | ✅ Done | Server-side notifications, unread count, mark read |
+| 18 | **All Blockchain Listeners Fixed** | ✅ Done | TRC-20 confirmation, ETH/BTC/SOL/Polygon security hardened |
+| 19 | **Email Templates Rebranded** | ✅ Done | CryptoPay branding, dark theme, clickable buttons, no emojis |
+| 20 | **SMS Deposit Notifications** | ✅ Done | eSMS Africa primary, deposit confirmation SMS |
+| 21 | **Email Direct Send** | ✅ Done | All emails bypass Celery, direct send_mail() |
+| 22 | **Brand Icons (Flash Bolt)** | ✅ Done | Ionicons flash SVG path, favicon/icon/splash |
+| 23 | **Dashboard Balance Fix** | ✅ Done | Total portfolio KES (crypto converted via rates) |
+| 24 | **7-Day Trend Chart Fix** | ✅ Done | Includes blockchain deposits, smooth hover |
+| 25 | **Privacy/Terms Pages** | ✅ Done | Public routes /privacy and /terms |
+| 26 | **Admin Stats Dashboard** | ✅ Done | Deposit stats, transaction type breakdown, by-chain charts |
+| 27 | **First Real Deposit** | ✅ Done | 7.879728 USDT (TRC-20) detected, confirmed (352 confs), credited |
+| 28 | **Google OAuth** | ✅ Done | Client IDs configured, complete-profile flow working |
+| 29 | **Forgot PIN Flow** | ✅ Done | Phone/email OTP + PIN reset |
 
-#### 🟢 BEFORE PUBLIC LAUNCH
+**136 tests passing. 10 Docker containers healthy. First real USDT deposit credited.**
 
-| # | Task | Area | Details | Files |
-|---|------|------|---------|-------|
-| 13 | **Solana SPL deposit listener** | Backend | Helius API for SPL token monitoring ($49/mo when needed). "Finalized" commitment level. | New: `backend/apps/blockchain/sol_listener.py` |
-| 14 | ~~**WalletConnect (Reown AppKit)**~~ | ✅ Done | AppKit config, ethers adapter, ERC-20 transfer hook, deposit UI component, Android wallet detection plugin, graceful Expo Go degradation. | `src/config/appkit.ts`, `src/hooks/useWalletDeposit.ts`, `src/components/WalletConnectDeposit.tsx`, `queries.js` |
-| 15 | ~~**Hot/warm/cold wallet split**~~ | ✅ Done | `WalletTier` model, `CustodyService`, `CustodyTransfer` audit trail, Celery threshold checks (15min), admin API. Physical warm (multisig) + cold (hardware) setup needed at deployment. | `wallets/custody.py`, `wallets/models.py` |
-| 16 | **App Store + Play Store submission** | Launch | EAS production builds, store listings, screenshots, privacy policy. Apple review ~24h, financial apps may take longer. | `mobile/eas.json`, `mobile/app.json` |
-| 17 | **~~Compress app assets~~** | Frontend | ✅ Done — icon.png compressed 393KB → 207KB. | `mobile/assets/` |
-| 18 | **Google OAuth production setup** | Frontend | Fill OAuth client IDs in app.json extra config. Currently empty. | `mobile/app.json` |
-| 19 | **Off-ramp API (Yellow Card / Kotani Pay)** | Backend | ✅ PARTIAL — Manual mode implemented. Exchange provider interface, RebalanceOrder model, Celery tasks, admin API all done. Yellow Card API provider stub ready. Just needs API keys from `paymentsapi@yellowcard.io` to plug in automated mode. | `wallets/rebalance.py`, `wallets/tasks.py`, `wallets/views.py` |
+#### 🟡 REMAINING — Before Soft Launch (User Action Required)
 
-#### 🔵 FUTURE CONSIDERATION (Post-Launch)
+| # | Item | Status | Action |
+|---|------|--------|--------|
+| 1 | **Business Registration** | Submitted | BN-B8S6JP89, KES 950 paid, awaiting BRS approval (1-3 days) |
+| 2 | **M-Pesa Production Keys** | Needs business cert | Apply at developer.safaricom.co.ke after business approved |
+| 3 | **KYC Provider (Smile Identity)** | Needs signup | Sign up at usesmileid.com, get PARTNER_ID + API_KEY |
+| 4 | **SMS Delivery** | Needs eSMS call | 24 sent, 0 delivered to Safaricom — call eSMS Africa support |
+| 5 | **App Store Submission** | Ready to submit | EAS builds configured, store listing docs in mobile/store-listing/ |
+| 6 | **Google Play Console** | Needs $25 signup | play.google.com/console |
+| 7 | **Apple Developer** | Needs $99/year | developer.apple.com |
 
-| # | Task | Area | Details | Files |
-|---|------|------|---------|-------|
-| 20 | ~~**Account Abstraction (ERC-4337)**~~ | Evaluated ❌ | **NOT NEEDED** — CryptoPay is custodial, users don't send on-chain txs. TRON doesn't support ERC-4337. Sweep system already abstracts gas. Revisit only if switching to non-custodial (Phase 3+). | Research documented above |
-| 21 | **Dollar-denominated yield products** | Deferred 🟡 | **Regulatory block** — VASP Act 2025 law but no licenses issued, no regulations. Treasury yield on own float OK now. User-facing yield requires VA Manager license (CMA). Build behind feature flag, launch after VASP licensing (est. 2027). Sustainable rates: 4-7% APY via Aave/Compound. | Research documented above |
-| 22 | **Cross-Africa remittance** | Backend / Product | Expand beyond Kenya to support cross-border stablecoin transfers. Uganda, Tanzania, Nigeria corridors. Rift already supports this. Aligns with geographic expansion roadmap. | Existing expansion plan |
+#### 🟢 NICE TO HAVE (Post-Launch)
+
+| # | Task | Status | Details |
+|---|------|--------|---------|
+| 1 | **Solana SPL USDT Listener** | Code exists | Monitor SPL token transfers (not just native SOL) |
+| 2 | **Off-ramp API (Yellow Card)** | Stub ready | Email paymentsapi@yellowcard.io for API keys |
+| 3 | **Referral Program** | Not started | Growth loops, reward for referrer + referee |
+| 4 | **AWS KMS/HSM** | Not needed yet | Current wallet seed is secure in .env; KMS for enterprise scale |
+| 5 | **Dollar Yield Products** | Deferred | Regulatory block — VASP licensing est. 2027 |
+| 6 | **Cross-Africa Remittance** | Not started | Uganda, Tanzania, Nigeria corridors |
+| 7 | **USSD Interface** | Not started | Feature phone access for non-smartphone users |
 
 ---
 
