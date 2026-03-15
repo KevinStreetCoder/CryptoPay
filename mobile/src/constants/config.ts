@@ -55,7 +55,7 @@ export const config: AppConfig = {
 // Project ID from https://cloud.reown.com — required for WalletConnect v2.
 // Set via EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID env var or in app.json extra.
 export const WALLETCONNECT_PROJECT_ID =
-  process.env.EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID || "34724557aafaf3b437889ff0a053cba9";
+  process.env.EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID || "";
 
 // Supported EVM chains for WalletConnect deposits
 export const WALLETCONNECT_CHAINS = {
