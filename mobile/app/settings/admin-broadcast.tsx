@@ -73,7 +73,7 @@ export default function AdminBroadcastScreen() {
     setSending(true);
     setError("");
     try {
-      await api.post("/notifications/broadcast/", {
+      await api.post("/notifications/admin/broadcast/", {
         title: title.trim(),
         body: body.trim(),
         category,
