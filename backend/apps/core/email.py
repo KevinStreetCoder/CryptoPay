@@ -488,6 +488,16 @@ def send_deposit_confirmed_notification(user, deposit):
         except Exception as e:
             logger.error(f"Failed to send deposit confirmation email to {user.email}: {e}")
 
+    # SMS notification (direct)
+    if user.phone:
+        ref = deposit.tx_hash[:8].upper() if deposit.tx_hash else "N/A"
+        send_sms(
+            user.phone,
+            f"CPay: Deposit of {deposit.amount} {deposit.currency} confirmed "
+            f"and credited to your wallet. Ref: {ref}. Thank you for using CPay."
+        )
+        logger.info(f"Deposit SMS sent to {user.phone}")
+
     # Push notification (keep as Celery — external API)
     try:
         from apps.core.tasks import send_push_task
