@@ -1,20 +1,20 @@
 {% extends "email/base.html" %}
 
-{% block title %}Verify Your Email — CPay{% endblock %}
+{% block title %}Verify Your Email — CryptoPay{% endblock %}
 
 {% block content %}
 <h2>Verify Your Email</h2>
 <p>Hello {{ full_name }},</p>
 <p>Please verify your email address by entering the code below in the app, or clicking the button.</p>
 
-<div class="otp-code">
+<div class="info-card" style="text-align: center;">
   <p style="font-size: 13px; color: #94a3b8; margin: 0 0 12px 0;">Your verification code:</p>
-  <p class="otp-digits">{{ verification_code }}</p>
-  <p style="font-size: 12px; color: #64748b; margin: 12px 0 0 0;">Enter this code in the CPay app to verify your email.</p>
+  <p style="font-size: 36px; font-weight: 700; color: #10B981; letter-spacing: 10px; margin: 0; font-family: monospace;">{{ verification_code }}</p>
+  <p style="font-size: 12px; color: #64748b; margin: 12px 0 0 0;">Enter this code in the CryptoPay app to verify your email.</p>
 </div>
 
 <p style="text-align: center;">
-  <a href="{{ verify_url }}" style="display:inline-block;background-color:#10B981;color:#FFFFFF;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px;">Verify Email</a>
+  <a href="{{ verify_url }}" class="btn" style="color: #ffffff !important;">Verify Email</a>
 </p>
 
 <p style="font-size: 13px; color: #94a3b8; margin-top: 24px;">

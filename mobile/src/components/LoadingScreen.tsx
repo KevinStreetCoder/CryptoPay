@@ -60,22 +60,22 @@ export function LoadingScreen() {
       <Animated.View
         style={{
           position: "absolute",
-          width: 100,
-          height: 100,
-          borderRadius: 50,
+          width: 120,
+          height: 120,
+          borderRadius: 60,
           borderWidth: 2,
-          borderColor: "rgba(16, 185, 129, 0.1)",
+          borderColor: "rgba(16, 185, 129, 0.15)",
           borderTopColor: "rgba(16, 185, 129, 0.5)",
           transform: [{ rotate: spin }],
         }}
       />
 
-      {/* Logo — matches sidebar/login flash icon */}
+      {/* Logo container */}
       <Animated.View
         style={{
-          width: 56,
-          height: 56,
-          borderRadius: 16,
+          width: 80,
+          height: 80,
+          borderRadius: 24,
           backgroundColor: tc.primary[500],
           alignItems: "center",
           justifyContent: "center",
@@ -84,31 +84,31 @@ export function LoadingScreen() {
             {
               scale: pulseAnim.interpolate({
                 inputRange: [0.6, 1],
-                outputRange: [0.96, 1.04],
+                outputRange: [0.95, 1.05],
               }),
             },
           ],
           ...(Platform.OS === "web"
-            ? { boxShadow: "0 8px 24px rgba(16, 185, 129, 0.35)" }
+            ? { boxShadow: "0 0 20px rgba(16, 185, 129, 0.4)" }
             : {
                 shadowColor: "#10B981",
-                shadowOffset: { width: 0, height: 6 },
-                shadowOpacity: 0.35,
-                shadowRadius: 16,
-                elevation: 8,
+                shadowOffset: { width: 0, height: 0 },
+                shadowOpacity: 0.4,
+                shadowRadius: 20,
+                elevation: 10,
               }) as any,
         }}
       >
-        <Ionicons name="flash" size={28} color="#fff" />
+        <Ionicons name="wallet" size={40} color="#fff" />
       </Animated.View>
 
       {/* Brand name */}
       <Text
         style={{
           color: tc.textPrimary,
-          fontSize: 24,
+          fontSize: 28,
           fontFamily: "DMSans_700Bold",
-          marginTop: 20,
+          marginTop: 24,
           letterSpacing: -0.5,
         }}
       >
@@ -117,13 +117,13 @@ export function LoadingScreen() {
 
       <Text
         style={{
-          color: tc.textMuted,
-          fontSize: 13,
+          color: tc.textSecondary,
+          fontSize: 14,
           fontFamily: "DMSans_400Regular",
-          marginTop: 6,
+          marginTop: 8,
         }}
       >
-        Secure. Fast. Seamless.
+        Pay bills with crypto, instantly
       </Text>
     </View>
   );

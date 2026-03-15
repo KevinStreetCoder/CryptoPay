@@ -196,14 +196,8 @@ export default function RegisterScreen() {
         (async () => {
           setGoogleLoading(true);
           try {
-            const data = await googleLogin(idToken);
-            if (data.phone_required) {
-              router.replace("/auth/google-complete-profile" as any);
-            } else if (data.pin_required) {
-              router.replace("/auth/set-initial-pin" as any);
-            } else {
-              router.replace("/(tabs)");
-            }
+            await googleLogin(idToken);
+            router.replace("/(tabs)");
           } catch (err: unknown) {
             const appError = normalizeError(err);
             toast.error(appError.title, appError.message);
@@ -790,16 +784,62 @@ export default function RegisterScreen() {
                 </>
               )}
 
-              <View style={{ marginBottom: 28 }}>
-                <PinInput
-                  length={6}
-                  onComplete={(code) => {
-                    setOtp(code);
-                    setOtpDigits(code.split(""));
-                  }}
-                  error={false}
-                  testID="otp-input"
-                />
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "center",
+                  gap: 10,
+                  marginBottom: 28,
+                }}
+              >
+                {otpDigits.map((digit, i) => {
+                  const isFilled = !!digit;
+                  const isActive =
+                    !isFilled && i === otpDigits.findIndex((d) => d === "");
+
+                  return (
+                    <TextInput
+                      key={i}
+                      ref={(ref) => {
+                        otpRefs.current[i] = ref;
+                      }}
+                      value={digit}
+                      onChangeText={(val) => handleOtpDigitChange(i, val)}
+                      onKeyPress={({ nativeEvent }) =>
+                        handleOtpKeyPress(i, nativeEvent.key)
+                      }
+                      keyboardType="number-pad"
+                      maxLength={1}
+                      autoFocus={i === 0}
+                      style={{
+                        width: 50,
+                        height: 58,
+                        borderRadius: 14,
+                        borderWidth: 2,
+                        borderColor: isFilled
+                          ? tc.primary[500]
+                          : isActive
+                          ? tc.primary[500]
+                          : "rgba(255, 255, 255, 0.08)",
+                        backgroundColor: isFilled
+                          ? "rgba(16, 185, 129, 0.08)"
+                          : tc.dark.elevated,
+                        color: tc.textPrimary,
+                        fontSize: 22,
+                        fontFamily: "DMSans_700Bold",
+                        textAlign: "center",
+                        ...(Platform.OS === 'web' ? { transition: 'border-color 0.2s ease, box-shadow 0.2s ease' } as any : {}),
+                        ...((isFilled || isActive) && Platform.OS === 'web' ? { boxShadow: '0 0 0 3px rgba(16, 185, 129, 0.15)' } as any : {}),
+                        ...(isWeb
+                          ? ({ outlineStyle: "none" } as any)
+                          : {}),
+                      }}
+                      accessibilityLabel={`Digit ${i + 1} of verification code`}
+                      testID={`otp-digit-${i}`}
+                      maxFontSizeMultiplier={1.2}
+                    />
+                  );
+                })}
               </View>
 
               {otp.length === 6 && (
