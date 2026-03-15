@@ -299,23 +299,33 @@ function PortfolioChart({
     color: string,
     prefix: string
   ) =>
-    pts.map((point, i) => (
-      <View
-        key={`${prefix}-dot-${i}`}
-        style={{
-          position: "absolute",
-          left: point.x - 3.5,
-          top: point.y - 3.5,
-          width: 7,
-          height: 7,
-          borderRadius: 3.5,
-          backgroundColor: activeIndex === i ? color : color + "B0",
-          borderWidth: 2,
-          borderColor: tc.dark.card,
-          ...(activeIndex === i ? { width: 9, height: 9, borderRadius: 4.5, left: point.x - 4.5, top: point.y - 4.5 } : {}),
-        }}
-      />
-    ));
+    pts.map((point, i) => {
+      const isActive = activeIndex === i;
+      const dotSize = 7;
+      return (
+        <View
+          key={`${prefix}-dot-${i}`}
+          style={{
+            position: "absolute",
+            left: point.x - dotSize / 2,
+            top: point.y - dotSize / 2,
+            width: dotSize,
+            height: dotSize,
+            borderRadius: dotSize / 2,
+            backgroundColor: isActive ? color : color + "B0",
+            borderWidth: 2,
+            borderColor: tc.dark.card,
+            ...(Platform.OS === "web"
+              ? {
+                  transition: "transform 0.15s ease, box-shadow 0.15s ease",
+                  transform: isActive ? "scale(1.5)" : "scale(1)",
+                  boxShadow: isActive ? `0 0 8px ${color}80` : "none",
+                } as any
+              : {}),
+          }}
+        />
+      );
+    });
 
   // Touch/hover zones for interactivity
   const hitZones = chartLabels.map((_, i) => {
@@ -433,35 +443,47 @@ function PortfolioChart({
         </View>
       </View>
 
-      {/* Interactive tooltip */}
-      {activeIndex !== null && (
-        <View
-          style={{
-            backgroundColor: tc.dark.elevated,
-            borderRadius: 10,
-            paddingHorizontal: 12,
-            paddingVertical: 8,
-            marginBottom: 8,
-            borderWidth: 1,
-            borderColor: tc.glass.border,
-            flexDirection: "row",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
-        >
-          <Text style={{ color: tc.textSecondary, fontSize: 12, fontFamily: "DMSans_600SemiBold" }}>
-            {chartLabels[activeIndex]}
-          </Text>
-          <View style={{ flexDirection: "row", gap: 14 }}>
-            <Text style={{ color: DEPOSIT_COLOR, fontSize: 12, fontFamily: "DMSans_600SemiBold" }}>
-              +KSh {depositPoints[activeIndex]?.toLocaleString() || "0"}
+      {/* Interactive tooltip — fixed height to prevent layout shift */}
+      <View
+        style={{
+          height: 36,
+          marginBottom: 8,
+          justifyContent: "center",
+        }}
+      >
+        {activeIndex !== null ? (
+          <View
+            style={{
+              backgroundColor: tc.dark.elevated,
+              borderRadius: 10,
+              paddingHorizontal: 12,
+              paddingVertical: 8,
+              borderWidth: 1,
+              borderColor: tc.glass.border,
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+              ...(Platform.OS === "web" ? { transition: "opacity 0.15s ease" } as any : {}),
+            }}
+          >
+            <Text style={{ color: tc.textSecondary, fontSize: 12, fontFamily: "DMSans_600SemiBold" }}>
+              {chartLabels[activeIndex]}
             </Text>
-            <Text style={{ color: PAYMENT_COLOR, fontSize: 12, fontFamily: "DMSans_600SemiBold" }}>
-              -KSh {paymentPoints[activeIndex]?.toLocaleString() || "0"}
-            </Text>
+            <View style={{ flexDirection: "row", gap: 14 }}>
+              <Text style={{ color: DEPOSIT_COLOR, fontSize: 12, fontFamily: "DMSans_600SemiBold" }}>
+                +KSh {depositPoints[activeIndex]?.toLocaleString() || "0"}
+              </Text>
+              <Text style={{ color: PAYMENT_COLOR, fontSize: 12, fontFamily: "DMSans_600SemiBold" }}>
+                -KSh {paymentPoints[activeIndex]?.toLocaleString() || "0"}
+              </Text>
+            </View>
           </View>
-        </View>
-      )}
+        ) : (
+          <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_400Regular", textAlign: "center" }}>
+            Hover over chart for details
+          </Text>
+        )}
+      </View>
 
       {/* Chart area */}
       <View
