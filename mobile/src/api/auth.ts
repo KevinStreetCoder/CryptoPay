@@ -55,6 +55,7 @@ export interface LoginResponse {
   tokens: AuthTokens;
   user: User;
   pin_required?: boolean;
+  phone_required?: boolean;
 }
 
 export interface KYCDocument {
@@ -88,6 +89,11 @@ export const authApi = {
 
   setInitialPin: (pin: string) =>
     api.post<{ message: string }>("/auth/set-initial-pin/", { pin }),
+
+  googleCompleteProfile: async (data: { phone: string; otp: string; pin: string; full_name?: string }) => {
+    const device = await getDeviceInfo();
+    return api.post<LoginResponse>("/auth/google/complete-profile/", { ...data, ...device });
+  },
 
   refreshToken: (refresh: string) =>
     api.post<{ access: string }>("/auth/token/refresh/", { refresh }),

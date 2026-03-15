@@ -196,8 +196,14 @@ export default function RegisterScreen() {
         (async () => {
           setGoogleLoading(true);
           try {
-            await googleLogin(idToken);
-            router.replace("/(tabs)");
+            const data = await googleLogin(idToken);
+            if (data.phone_required) {
+              router.replace("/auth/google-complete-profile" as any);
+            } else if (data.pin_required) {
+              router.replace("/auth/set-initial-pin" as any);
+            } else {
+              router.replace("/(tabs)");
+            }
           } catch (err: unknown) {
             const appError = normalizeError(err);
             toast.error(appError.title, appError.message);

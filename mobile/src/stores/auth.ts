@@ -124,9 +124,22 @@ export function useAuth() {
     await storage.setItemAsync("access_token", data.tokens.access);
     await storage.setItemAsync("refresh_token", data.tokens.refresh);
     resetSessionExpired();
-    _user = data.user;
-    notify();
+    // Don't set _user if phone_required — user is incomplete
+    if (!data.phone_required) {
+      _user = data.user;
+      notify();
+    }
     return data;
+  }, []);
+
+  const googleCompleteProfile = useCallback(async (data: { phone: string; otp: string; pin: string; full_name?: string }) => {
+    const { data: responseData } = await authApi.googleCompleteProfile(data);
+    await storage.setItemAsync("access_token", responseData.tokens.access);
+    await storage.setItemAsync("refresh_token", responseData.tokens.refresh);
+    resetSessionExpired();
+    _user = responseData.user;
+    notify();
+    return responseData;
   }, []);
 
   const refreshProfile = useCallback(async () => {
@@ -147,5 +160,5 @@ export function useAuth() {
     notify();
   }, []);
 
-  return { user, loading, bootstrap, login, register, googleLogin, refreshProfile, logout };
+  return { user, loading, bootstrap, login, register, googleLogin, googleCompleteProfile, refreshProfile, logout };
 }
