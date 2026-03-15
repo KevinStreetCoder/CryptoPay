@@ -489,7 +489,7 @@ export default function WalletScreen() {
             }}
           >
             <QRCode
-              value={depositModal.address}
+              value={depositModal.address || "empty"}
               size={200}
               backgroundColor="#FFFFFF"
               color="#060E1F"
