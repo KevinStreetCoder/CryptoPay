@@ -133,6 +133,10 @@ export function useAuth() {
   }, []);
 
   const googleCompleteProfile = useCallback(async (data: { phone: string; otp: string; pin: string; full_name?: string }) => {
+    // Force reset session expired — the Google temp token may have triggered 401s
+    // on background queries (wallets, rates) which poisoned the session flag
+    const { forceResetSessionExpired } = require("../api/client");
+    forceResetSessionExpired();
     const { data: responseData } = await authApi.googleCompleteProfile(data);
     await storage.setItemAsync("access_token", responseData.tokens.access);
     await storage.setItemAsync("refresh_token", responseData.tokens.refresh);

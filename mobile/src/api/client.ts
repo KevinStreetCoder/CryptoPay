@@ -45,6 +45,11 @@ const AUTH_ENDPOINTS = ["/auth/login/", "/auth/register/", "/auth/otp/", "/auth/
 // Endpoints that bypass session-expired check but DO send auth token
 const AUTH_WITH_TOKEN = ["/auth/google/complete-profile/", "/auth/set-initial-pin/", "/auth/profile/"];
 
+// Force reset session expired flag — used after Google OAuth stores new tokens
+export function forceResetSessionExpired() {
+  _sessionExpired = false;
+}
+
 api.interceptors.request.use(async (cfg) => {
   const isPublicAuth = AUTH_ENDPOINTS.some((ep) => cfg.url?.includes(ep));
   const isAuthWithToken = AUTH_WITH_TOKEN.some((ep) => cfg.url?.includes(ep));
