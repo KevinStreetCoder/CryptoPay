@@ -610,6 +610,7 @@ export default function GoogleCompleteProfileScreen() {
             <View>
               <View style={{ marginBottom: 8 }}>
                 <PinInput
+                  key="create-pin"
                   onComplete={handleFirstPinComplete}
                   error={pinError}
                   testID="create-pin-input"
@@ -620,6 +621,7 @@ export default function GoogleCompleteProfileScreen() {
             <View>
               <View style={{ marginBottom: 8 }}>
                 <PinInput
+                  key={`confirm-pin-${firstPin}`}
                   onComplete={handleConfirmPinComplete}
                   error={pinError}
                   testID="confirm-pin-input"
