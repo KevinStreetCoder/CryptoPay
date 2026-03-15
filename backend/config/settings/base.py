@@ -43,6 +43,7 @@ LOCAL_APPS = [
     "apps.mpesa",
     "apps.blockchain",
     "apps.rates",
+    "apps.notifications",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS

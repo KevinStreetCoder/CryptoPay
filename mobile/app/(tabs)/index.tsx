@@ -43,6 +43,7 @@ import {
   ChartDataPoint,
 } from "../../src/components/CryptoChart";
 import { CryptoLogo } from "../../src/components/CryptoLogo";
+import { useDeposits } from "../../src/components/DepositTracker";
 import { useLocale } from "../../src/hooks/useLocale";
 import { cacheRates, getCachedRates, rateAge } from "../../src/utils/rateCache";
 import { config } from "../../src/constants/config";
@@ -132,7 +133,7 @@ function getLast7DayLabels(): string[] {
   return labels;
 }
 
-const DEPOSIT_TYPES = ["BUY", "KES_DEPOSIT", "KES_DEPOSIT_C2B"];
+const DEPOSIT_TYPES = ["BUY", "KES_DEPOSIT", "KES_DEPOSIT_C2B", "DEPOSIT"];
 const PAYMENT_TYPES = ["PAYBILL_PAYMENT", "TILL_PAYMENT", "SEND_MPESA"];
 
 function getLast7DayTotals(transactions: Transaction[]): number[] {
@@ -1173,11 +1174,38 @@ function HomeScreenContent() {
   const recentTx = txData?.results?.slice(0, 5) || [];
   const allTx = txData?.results || [];
 
-  /* ─── Derive chart data from real transactions ─── */
+  // Merge blockchain deposits (credited) into transaction list for chart
+  const { data: blockchainDeposits } = useDeposits();
+  const allTxWithDeposits = useMemo(() => {
+    const rateMap: Record<string, number> = {};
+    (rates || []).forEach((r: any) => {
+      rateMap[r.currency] = parseFloat(r.kes_rate) || 0;
+    });
+    const creditedDeposits = (blockchainDeposits || [])
+      .filter((d: any) => d.status === "credited" && d.credited_at)
+      .map((d: any) => {
+        const amt = parseFloat(d.amount) || 0;
+        const kesRate = rateMap[d.currency] || 0;
+        const kesValue = (amt * kesRate).toFixed(2);
+        return {
+          id: d.id,
+          type: "DEPOSIT" as const,
+          status: "completed",
+          source_currency: d.currency,
+          source_amount: d.amount,
+          dest_currency: "KES",
+          dest_amount: kesValue,
+          created_at: d.credited_at || d.created_at,
+        };
+      });
+    return [...allTx, ...creditedDeposits];
+  }, [allTx, blockchainDeposits, rates]);
+
+  /* ─── Derive chart data from real transactions + blockchain deposits ─── */
   const chartLabels = useMemo(() => getLast7DayLabels(), []);
-  const chartPoints = useMemo(() => getLast7DayTotals(allTx), [allTx]);
-  const chartSplit = useMemo(() => getLast7DaySplit(allTx), [allTx]);
-  const changePercent = useMemo(() => computeChangePercent(allTx), [allTx]);
+  const chartPoints = useMemo(() => getLast7DayTotals(allTxWithDeposits), [allTxWithDeposits]);
+  const chartSplit = useMemo(() => getLast7DaySplit(allTxWithDeposits), [allTxWithDeposits]);
+  const changePercent = useMemo(() => computeChangePercent(allTxWithDeposits), [allTxWithDeposits]);
 
   const tickerRates = (rates || [])
     .filter((r) => !isNaN(parseFloat(r.kes_rate)))

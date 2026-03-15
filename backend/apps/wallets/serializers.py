@@ -24,18 +24,22 @@ class WalletSerializer(serializers.ModelSerializer):
         """Convert wallet balance to KES equivalent using cached rates."""
         from decimal import Decimal
         balance = obj.balance or Decimal("0")
-        if balance == 0 or obj.currency == "KES":
-            return str(balance)
+        if balance == 0:
+            return "0.00"
+        if obj.currency == "KES":
+            return str(balance.quantize(Decimal("0.01")))
         try:
             from django.core.cache import cache
-            rate = cache.get(f"rate:{obj.currency}:KES")
-            if rate:
-                return str((balance * Decimal(str(rate))).quantize(Decimal("0.01")))
-            # Fallback: try USD rate * USD/KES
-            usd_rate = cache.get(f"rate:{obj.currency}:USD")
-            usd_kes = cache.get("rate:USD:KES") or cache.get("rate:USDT:KES")
+            # Cache keys: rate:crypto:USDT:usd and rate:forex:usd:kes
+            usd_rate = cache.get(f"rate:crypto:{obj.currency}:usd")
+            usd_kes = cache.get("rate:forex:usd:kes")
             if usd_rate and usd_kes:
-                return str((balance * Decimal(str(usd_rate)) * Decimal(str(usd_kes))).quantize(Decimal("0.01")))
+                kes = balance * Decimal(str(usd_rate)) * Decimal(str(usd_kes))
+                return str(kes.quantize(Decimal("0.01")))
+            # Fallback: if currency is a stablecoin (USDT/USDC), use forex rate directly
+            if obj.currency in ("USDT", "USDC") and usd_kes:
+                kes = balance * Decimal(str(usd_kes))
+                return str(kes.quantize(Decimal("0.01")))
         except Exception:
             pass
         return "0.00"
