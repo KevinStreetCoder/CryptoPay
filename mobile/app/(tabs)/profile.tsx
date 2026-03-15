@@ -287,10 +287,13 @@ function ProfileInfoChip({
           ) : null}
         </View>
         <Text
+          numberOfLines={1}
+          ellipsizeMode="tail"
           style={{
             color: tc.textPrimary,
             fontSize: 14,
             fontFamily: "DMSans_500Medium",
+            ...(Platform.OS === "web" ? { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } as any : {}),
           }}
         >
           {value}
