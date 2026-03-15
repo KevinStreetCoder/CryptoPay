@@ -754,6 +754,178 @@ class TransactionHistoryView(ListAPIView):
         return Transaction.objects.filter(user=self.request.user)
 
 
+class UnifiedActivityView(APIView):
+    """Unified activity feed merging Transaction + BlockchainDeposit records.
+
+    GET /api/v1/payments/activity/?type=deposit&status=completed&date_from=2024-01-01&date_to=2024-12-31&page=1
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from apps.blockchain.models import BlockchainDeposit
+        from apps.wallets.models import Wallet
+
+        user = request.user
+        page = int(request.query_params.get("page", 1))
+        page_size = int(request.query_params.get("page_size", 20))
+        type_filter = request.query_params.get("type", "")
+        status_filter = request.query_params.get("status", "")
+        date_from = request.query_params.get("date_from", "")
+        date_to = request.query_params.get("date_to", "")
+
+        # Clamp page_size
+        page_size = min(max(page_size, 1), 50)
+
+        # ── Build Transaction queryset ──
+        tx_qs = Transaction.objects.filter(user=user)
+        if type_filter:
+            type_map = {
+                "deposit": ["DEPOSIT", "KES_DEPOSIT", "KES_DEPOSIT_C2B"],
+                "paybill": ["PAYBILL_PAYMENT"],
+                "till": ["TILL_PAYMENT"],
+                "send": ["SEND_MPESA"],
+                "buy": ["BUY"],
+                "withdrawal": ["WITHDRAWAL"],
+            }
+            allowed_types = type_map.get(type_filter, [type_filter.upper()])
+            tx_qs = tx_qs.filter(type__in=allowed_types)
+        if status_filter:
+            tx_qs = tx_qs.filter(status=status_filter)
+        if date_from:
+            tx_qs = tx_qs.filter(created_at__date__gte=date_from)
+        if date_to:
+            tx_qs = tx_qs.filter(created_at__date__lte=date_to)
+
+        # ── Build BlockchainDeposit queryset ──
+        user_addresses = list(
+            Wallet.objects.filter(user=user, deposit_address__gt="")
+            .values_list("deposit_address", flat=True)
+        )
+        include_blockchain = (
+            not type_filter or type_filter in ("deposit", "crypto_deposit", "")
+        )
+
+        blockchain_items = []
+        if user_addresses and include_blockchain:
+            bd_qs = BlockchainDeposit.objects.filter(to_address__in=user_addresses)
+            if status_filter:
+                # Map unified statuses to BlockchainDeposit statuses
+                bd_status_map = {
+                    "completed": ["credited", "confirmed"],
+                    "confirming": ["confirming", "detecting"],
+                    "pending": ["detecting"],
+                }
+                bd_statuses = bd_status_map.get(status_filter, [status_filter])
+                bd_qs = bd_qs.filter(status__in=bd_statuses)
+            if date_from:
+                bd_qs = bd_qs.filter(created_at__date__gte=date_from)
+            if date_to:
+                bd_qs = bd_qs.filter(created_at__date__lte=date_to)
+
+            # Get KES rates for conversion
+            from django.core.cache import cache as django_cache
+
+            for bd in bd_qs:
+                # Map BD status to unified status
+                status_map = {
+                    "detecting": "pending",
+                    "confirming": "confirming",
+                    "confirmed": "confirming",
+                    "credited": "completed",
+                }
+                unified_status = status_map.get(bd.status, bd.status)
+
+                # Calculate KES equivalent
+                kes_equivalent = "0"
+                usd_rate = django_cache.get(f"rate:crypto:{bd.currency}:usd")
+                usd_kes = django_cache.get("rate:forex:usd:kes")
+                if usd_rate and usd_kes:
+                    from decimal import Decimal as D
+                    kes_val = bd.amount * D(str(usd_rate)) * D(str(usd_kes))
+                    kes_equivalent = str(kes_val.quantize(D("0.01")))
+
+                blockchain_items.append({
+                    "id": f"bd-{bd.id}",
+                    "type": "CRYPTO_DEPOSIT",
+                    "status": unified_status,
+                    "source_currency": bd.currency,
+                    "source_amount": str(bd.amount),
+                    "dest_currency": "KES",
+                    "dest_amount": kes_equivalent,
+                    "exchange_rate": None,
+                    "fee_amount": "0",
+                    "fee_currency": "",
+                    "excise_duty_amount": "0",
+                    "mpesa_paybill": "",
+                    "mpesa_till": "",
+                    "mpesa_account": "",
+                    "mpesa_phone": "",
+                    "mpesa_receipt": "",
+                    "chain": bd.chain,
+                    "tx_hash": bd.tx_hash,
+                    "confirmations": bd.confirmations,
+                    "required_confirmations": bd.required_confirmations,
+                    "block_number": bd.block_number,
+                    "from_address": bd.from_address,
+                    "to_address": bd.to_address,
+                    "destination_address": "",
+                    "failure_reason": "",
+                    "created_at": bd.created_at.isoformat(),
+                    "completed_at": bd.credited_at.isoformat() if bd.credited_at else None,
+                })
+
+        # ── Serialize Transaction records ──
+        tx_items = []
+        for tx in tx_qs:
+            tx_items.append({
+                "id": str(tx.id),
+                "type": tx.type,
+                "status": tx.status,
+                "source_currency": tx.source_currency,
+                "source_amount": str(tx.source_amount) if tx.source_amount else "0",
+                "dest_currency": tx.dest_currency,
+                "dest_amount": str(tx.dest_amount) if tx.dest_amount else "0",
+                "exchange_rate": str(tx.exchange_rate) if tx.exchange_rate else None,
+                "fee_amount": str(tx.fee_amount),
+                "fee_currency": tx.fee_currency,
+                "excise_duty_amount": str(tx.excise_duty_amount),
+                "mpesa_paybill": tx.mpesa_paybill,
+                "mpesa_till": tx.mpesa_till,
+                "mpesa_account": tx.mpesa_account,
+                "mpesa_phone": tx.mpesa_phone,
+                "mpesa_receipt": tx.mpesa_receipt,
+                "chain": tx.chain,
+                "tx_hash": tx.tx_hash,
+                "confirmations": tx.confirmations,
+                "required_confirmations": 0,
+                "block_number": None,
+                "from_address": "",
+                "to_address": "",
+                "destination_address": tx.saga_data.get("destination_address", "") if tx.saga_data else "",
+                "failure_reason": tx.failure_reason,
+                "created_at": tx.created_at.isoformat(),
+                "completed_at": tx.completed_at.isoformat() if tx.completed_at else None,
+            })
+
+        # ── Merge and sort by created_at descending ──
+        all_items = tx_items + blockchain_items
+        all_items.sort(key=lambda x: x["created_at"], reverse=True)
+
+        # ── Paginate ──
+        total = len(all_items)
+        start = (page - 1) * page_size
+        end = start + page_size
+        page_items = all_items[start:end]
+
+        return Response({
+            "count": total,
+            "page": page,
+            "page_size": page_size,
+            "results": page_items,
+        })
+
+
 class TransactionReceiptView(APIView):
     """Download PDF receipt for a completed transaction.
 

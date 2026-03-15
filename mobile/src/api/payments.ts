@@ -22,6 +22,13 @@ export interface Transaction {
   confirmations: number;
   created_at: string;
   completed_at: string | null;
+  // Unified activity fields (present when from activity endpoint)
+  required_confirmations?: number;
+  block_number?: number | null;
+  from_address?: string;
+  to_address?: string;
+  destination_address?: string;
+  failure_reason?: string;
 }
 
 /** Helper: get the KES amount from a transaction (dest for payments, source for deposits) */
@@ -109,12 +116,30 @@ export interface C2BInstructions {
   instructions: string[];
 }
 
+export interface ActivityParams {
+  page?: number;
+  page_size?: number;
+  type?: string;
+  status?: string;
+  date_from?: string;
+  date_to?: string;
+}
+
+export interface ActivityResponse {
+  count: number;
+  page: number;
+  page_size: number;
+  results: Transaction[];
+}
+
 export const paymentsApi = {
   payBill: (data: PayBillData) => api.post<Transaction>("/payments/pay-bill/", data),
   payTill: (data: PayTillData) => api.post<Transaction>("/payments/pay-till/", data),
   sendMpesa: (data: SendMpesaData) => api.post<Transaction>("/payments/send-mpesa/", data),
   buyCrypto: (data: BuyCryptoData) => api.post<Transaction>("/payments/buy-crypto/", data),
   history: (page = 1) => api.get<{ results: Transaction[]; count: number }>("/payments/history/", { params: { page } }),
+  activity: (params: ActivityParams = {}) =>
+    api.get<ActivityResponse>("/payments/activity/", { params: { page: 1, page_size: 20, ...params } }),
   // KES Deposit endpoints
   depositQuote: (data: DepositQuoteData) => api.post("/payments/deposit/quote/", data),
   depositStatus: (transactionId: string) => api.get<Transaction>(`/payments/deposit/${transactionId}/status/`),
