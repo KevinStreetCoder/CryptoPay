@@ -384,6 +384,20 @@
             <div class="kpi-label">Active Wallets</div>
             <div class="kpi-sub">{{ total_wallets }} total wallets</div>
         </div>
+
+        <div class="kpi blue">
+            <div class="kpi-header">
+                <div class="kpi-icon"><i data-lucide="download" style="color:var(--info)"></i></div>
+                {% if pending_deposits > 0 %}
+                <span class="trend down">{{ pending_deposits }} pending</span>
+                {% else %}
+                <span class="trend flat">0 pending</span>
+                {% endif %}
+            </div>
+            <div class="kpi-value">{{ total_deposits }}</div>
+            <div class="kpi-label">Blockchain Deposits</div>
+            <div class="kpi-sub">{{ credited_deposits }} credited · {{ pending_deposits }} pending</div>
+        </div>
     </div>
 
     <!-- ═══ TREND COMPARISON CARDS ═════════════════════════════ -->
@@ -463,6 +477,24 @@
         </div>
     </div>
 
+    <!-- ═══ BLOCKCHAIN DEPOSITS & TX BREAKDOWN ═════════════════ -->
+    <div class="charts-grid">
+        <div class="chart-card">
+            <div class="chart-title"><span class="dot blue"></span>Deposits by Chain</div>
+            <div class="chart-container" id="deposit-chain-chart"></div>
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-title"><span class="dot green"></span>Credited Deposits by Currency</div>
+            <div class="chart-container" id="deposit-currency-chart"></div>
+        </div>
+
+        <div class="chart-card full-width">
+            <div class="chart-title"><span class="dot amber"></span>Transaction Type Breakdown (Completed)</div>
+            <div class="table-wrap" id="type-breakdown-table"></div>
+        </div>
+    </div>
+
     <!-- ═══ SYSTEM HEALTH ══════════════════════════════════════ -->
     <div class="health-grid">
         <div class="kpi green">
@@ -513,6 +545,9 @@ const trends30d          = {{ trends_30d_json|safe }};
 const totalUsers         = {{ total_users }};
 const totalTransactions  = {{ total_transactions }};
 const totalRevenue       = {{ total_revenue }};
+const depositByChain     = {{ deposit_by_chain_json|safe }};
+const depositByCurrency  = {{ deposit_by_currency_json|safe }};
+const typeBreakdown      = {{ type_breakdown_json|safe }};
 
 // ── Colors ────────────────────────────────────────────────────────────
 const C = { primary: '#10B981', accent: '#F59E0B', danger: '#EF4444', info: '#3B82F6', purple: '#8B5CF6', teal: '#14B8A6', pink: '#EC4899', orange: '#F97316', cyan: '#06B6D4' };
@@ -780,7 +815,69 @@ renderTrend('trend-30d', trends30d, '30d');
     svg.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(5).tickFormat(d=>fmtShort(d)));
 })();
 
-// 7. RECENT TRANSACTIONS TABLE
+// 7. DEPOSIT BY CHAIN (horizontal bar chart)
+(function() {
+    const container = d3.select('#deposit-chain-chart');
+    if (!depositByChain.length) { container.html('<div class="no-data">No deposit data</div>'); return; }
+    const margin = { top:8,right:50,bottom:16,left:100 }, width = container.node().clientWidth-margin.left-margin.right, barH=40, height=depositByChain.length*barH;
+    const svg = container.append('svg').attr('viewBox',`0 0 ${width+margin.left+margin.right} ${height+margin.top+margin.bottom}`)
+        .append('g').attr('transform',`translate(${margin.left},${margin.top})`);
+    const chainColors = { tron:'#EF0027', ethereum:'#627EEA', bitcoin:'#F7931A', solana:'#9945FF', polygon:'#8247E5' };
+    const x = d3.scaleLinear().domain([0,d3.max(depositByChain,d=>d.count)*1.15||1]).range([0,width]);
+    const y = d3.scaleBand().domain(depositByChain.map(d=>d.chain)).range([0,height]).padding(0.3);
+    svg.selectAll('.bar').data(depositByChain).join('rect').attr('y',d=>y(d.chain)).attr('height',y.bandwidth()).attr('x',0).attr('width',0)
+        .attr('rx',4).attr('fill',d=>chainColors[d.chain]||C.info)
+        .on('mouseover',(e,d)=>showTip(e,`<div class="tooltip-label">${d.chain.toUpperCase()}</div><div class="tooltip-value">${fmt(d.count)} deposits</div><div style="color:var(--text-muted);font-size:12px">Volume: ${fmt(d.total_amount)}</div>`))
+        .on('mouseout',hideTip)
+        .transition().delay((d,i)=>i*100).duration(600).ease(d3.easeCubicOut).attr('width',d=>x(d.count));
+    svg.selectAll('.val').data(depositByChain).join('text').attr('x',d=>x(d.count)+6).attr('y',d=>y(d.chain)+y.bandwidth()/2)
+        .attr('dy','0.35em').attr('fill','var(--text-muted)').attr('font-size','12px').attr('font-weight','600').attr('font-family','var(--mono)')
+        .text(d=>fmt(d.count)).style('opacity',0).transition().delay((d,i)=>400+i*100).duration(300).style('opacity',1);
+    svg.append('g').attr('class','axis').call(d3.axisLeft(y)).select('.domain').remove();
+})();
+
+// 8. DEPOSIT BY CURRENCY (bar chart)
+(function() {
+    const container = d3.select('#deposit-currency-chart');
+    if (!depositByCurrency.length) { container.html('<div class="no-data">No credited deposits</div>'); return; }
+    const margin = { top:8,right:16,bottom:36,left:72 }, width = container.node().clientWidth-margin.left-margin.right, height=240-margin.top-margin.bottom;
+    const svg = container.append('svg').attr('viewBox',`0 0 ${width+margin.left+margin.right} ${height+margin.top+margin.bottom}`)
+        .append('g').attr('transform',`translate(${margin.left},${margin.top})`);
+    const cc = { BTC:'#F7931A',ETH:'#627EEA',USDT:'#26A17B',USDC:'#2775CA',SOL:'#9945FF',TRX:'#EF0027',MATIC:'#8247E5' };
+    const x = d3.scaleBand().domain(depositByCurrency.map(d=>d.currency)).range([0,width]).padding(0.35);
+    const y = d3.scaleLinear().domain([0,d3.max(depositByCurrency,d=>d.total_amount)*1.15||1]).nice().range([height,0]);
+    svg.append('g').attr('class','grid').call(d3.axisLeft(y).ticks(5).tickSize(-width).tickFormat(''));
+    svg.selectAll('.bar').data(depositByCurrency).join('rect').attr('x',d=>x(d.currency)).attr('width',x.bandwidth()).attr('y',height).attr('height',0)
+        .attr('rx',5).attr('fill',d=>cc[d.currency]||C.teal)
+        .on('mouseover',(e,d)=>showTip(e,`<div class="tooltip-label">${d.currency}</div><div class="tooltip-value">${fmt(d.total_amount)}</div><div style="color:var(--text-muted);font-size:12px">${d.count} deposits credited</div>`))
+        .on('mouseout',hideTip)
+        .transition().delay((d,i)=>i*80).duration(600).ease(d3.easeCubicOut).attr('y',d=>y(d.total_amount)).attr('height',d=>height-y(d.total_amount));
+    svg.append('g').attr('class','axis').attr('transform',`translate(0,${height})`).call(d3.axisBottom(x));
+    svg.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(5).tickFormat(d=>fmtShort(d)));
+})();
+
+// 9. TRANSACTION TYPE BREAKDOWN TABLE
+(function() {
+    const wrap = d3.select('#type-breakdown-table');
+    if (!typeBreakdown.length) { wrap.html('<div class="no-data">No completed transactions</div>'); return; }
+    const typeColors = { PAYBILL_PAYMENT:C.primary, TILL_PAYMENT:C.teal, SEND_MPESA:C.info, BUY:C.purple, SELL:C.accent, DEPOSIT:C.primary, WITHDRAWAL:C.danger, KES_DEPOSIT:C.accent, KES_DEPOSIT_C2B:C.orange, INTERNAL_TRANSFER:C.cyan, FEE:C.pink };
+    let html = '<table><thead><tr><th>Type</th><th style="text-align:right">Count</th><th style="text-align:right">Source Volume</th><th style="text-align:right">Dest Volume</th><th style="text-align:right">Fees</th><th>Distribution</th></tr></thead><tbody>';
+    const maxCount = Math.max(...typeBreakdown.map(d=>d.count));
+    typeBreakdown.forEach(row => {
+        const barWidth = Math.round(row.count / maxCount * 100);
+        const color = typeColors[row.type] || C.info;
+        html += `<tr><td><span class="type-badge" style="background:${color}20;color:${color}">${row.type}</span></td>`;
+        html += `<td style="text-align:right;font-weight:600;font-family:var(--mono)">${fmt(row.count)}</td>`;
+        html += `<td style="text-align:right;font-family:var(--mono)">${fmt(row.total_source)}</td>`;
+        html += `<td style="text-align:right;font-family:var(--mono)">${fmt(row.total_dest)}</td>`;
+        html += `<td style="text-align:right;color:var(--accent);font-family:var(--mono)">${fmt(row.total_fees)}</td>`;
+        html += `<td style="min-width:120px"><div style="background:var(--border-subtle);border-radius:3px;height:6px;overflow:hidden"><div style="width:${barWidth}%;height:100%;background:${color};border-radius:3px"></div></div></td></tr>`;
+    });
+    html += '</tbody></table>';
+    wrap.html(html);
+})();
+
+// 10. RECENT TRANSACTIONS TABLE
 (function() {
     const wrap = d3.select('#recent-table');
     if (!recentTransactions.length) { wrap.html('<div class="no-data">No transactions yet</div>'); return; }
@@ -801,7 +898,7 @@ renderTrend('trend-30d', trends30d, '30d');
     wrap.html(html);
 })();
 
-// 8. AUTO-REFRESH
+// 11. AUTO-REFRESH
 (function() {
     let cd = 60; const el = document.getElementById('uptime-val');
     if (!el) return;

@@ -4,7 +4,8 @@ import logging
 
 from django.conf import settings
 from django.core.mail import send_mail
-from django.db.models import Q
+from django.db.models import Q, Count, Sum, Case, When, FloatField, Value
+from django.db.models.functions import Coalesce
 from django.template.loader import render_to_string
 from django.utils import timezone
 from rest_framework import status
@@ -19,6 +20,7 @@ from apps.core.email import send_sms
 from .models import AdminNotification, UserNotification
 from .serializers import (
     AdminNotificationSerializer,
+    AdminNotificationDetailSerializer,
     BroadcastSerializer,
     UserNotificationSerializer,
 )
@@ -137,11 +139,74 @@ class AdminBroadcastView(APIView):
 
 
 class AdminNotificationListView(ListAPIView):
-    """GET /api/v1/admin/notifications/ — List all broadcasts (admin only)."""
+    """GET /api/v1/notifications/admin/ — List all broadcasts (admin only)."""
 
     permission_classes = [IsAdminUser]
     serializer_class = AdminNotificationSerializer
     queryset = AdminNotification.objects.select_related("created_by").all()
+
+
+class AdminNotificationDetailListView(ListAPIView):
+    """GET /api/v1/notifications/admin/list/ — List broadcasts with delivery/read stats."""
+
+    permission_classes = [IsAdminUser]
+    serializer_class = AdminNotificationDetailSerializer
+
+    def get_queryset(self):
+        return (
+            AdminNotification.objects.select_related("created_by")
+            .annotate(
+                total_recipients=Count("deliveries", distinct=True),
+                read_count=Count(
+                    "deliveries",
+                    filter=Q(deliveries__read=True),
+                    distinct=True,
+                ),
+            )
+            .order_by("-created_at")
+        )
+
+
+class AdminNotificationStatsView(APIView):
+    """GET /api/v1/notifications/admin/stats/ — Aggregate broadcast stats."""
+
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        total_broadcasts = AdminNotification.objects.count()
+        total_recipients = UserNotification.objects.count()
+        total_read = UserNotification.objects.filter(read=True).count()
+        read_rate = round(total_read / total_recipients * 100, 1) if total_recipients else 0
+
+        # Unique users reached
+        unique_users = UserNotification.objects.values("user").distinct().count()
+
+        # Channel breakdown across all notifications
+        channel_counts = (
+            UserNotification.objects.values("delivered_via")
+            .annotate(count=Count("id"))
+        )
+        channels = {row["delivered_via"]: row["count"] for row in channel_counts}
+
+        # By-category breakdown
+        by_category = list(
+            AdminNotification.objects.values("category")
+            .annotate(
+                count=Count("id"),
+                recipients=Coalesce(Sum("recipient_count"), 0),
+            )
+            .order_by("-count")
+        )
+
+        return Response({
+            "total_broadcasts": total_broadcasts,
+            "total_recipients": total_recipients,
+            "total_read": total_read,
+            "read_rate_percent": read_rate,
+            "unique_users_reached": unique_users,
+            "channels": channels,
+            "by_category": by_category,
+        })
 
 
 # ---------------------------------------------------------------------------

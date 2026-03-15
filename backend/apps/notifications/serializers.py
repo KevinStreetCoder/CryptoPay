@@ -57,6 +57,55 @@ class AdminNotificationSerializer(serializers.ModelSerializer):
         return "System"
 
 
+class AdminNotificationDetailSerializer(serializers.ModelSerializer):
+    """Read-only serializer with delivery/read stats for admin list."""
+
+    created_by_name = serializers.SerializerMethodField()
+    total_recipients = serializers.IntegerField(read_only=True)
+    read_count = serializers.IntegerField(read_only=True)
+    read_percentage = serializers.SerializerMethodField()
+    channel_breakdown = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AdminNotification
+        fields = [
+            "id",
+            "title",
+            "body",
+            "category",
+            "priority",
+            "channels",
+            "target",
+            "recipient_count",
+            "total_recipients",
+            "read_count",
+            "read_percentage",
+            "channel_breakdown",
+            "created_by_name",
+            "created_at",
+        ]
+
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return obj.created_by.full_name or obj.created_by.phone
+        return "System"
+
+    def get_read_percentage(self, obj):
+        total = getattr(obj, "total_recipients", 0) or 0
+        read = getattr(obj, "read_count", 0) or 0
+        if total == 0:
+            return 0
+        return round(read / total * 100, 1)
+
+    def get_channel_breakdown(self, obj):
+        """Return channel counts from the channels JSON field + recipient_count."""
+        channels = obj.channels or []
+        # Approximate: recipient_count is the total users targeted.
+        # Each channel in the list was sent to roughly that many users.
+        count = obj.recipient_count or 0
+        return {ch: count for ch in channels}
+
+
 class UserNotificationSerializer(serializers.ModelSerializer):
     """Serializer for user-facing notification list."""
 

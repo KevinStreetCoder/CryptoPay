@@ -9,6 +9,7 @@ from django.shortcuts import render
 from django.utils import timezone
 
 from apps.accounts.models import User
+from apps.blockchain.models import BlockchainDeposit
 from apps.payments.models import Transaction
 from apps.wallets.models import Wallet
 
@@ -228,6 +229,70 @@ def admin_stats_dashboard(request):
         for tx in recent_transactions_qs
     ]
 
+    # ── Blockchain Deposit Stats ─────────────────────────────────────────
+    total_deposits = BlockchainDeposit.objects.count()
+    credited_deposits = BlockchainDeposit.objects.filter(status="credited").count()
+    pending_deposits = BlockchainDeposit.objects.filter(
+        status__in=["detecting", "confirming", "confirmed"]
+    ).count()
+
+    # Credited amount per currency
+    deposit_by_currency_qs = (
+        BlockchainDeposit.objects.filter(status="credited")
+        .values("currency")
+        .annotate(
+            total_amount=Sum("amount"),
+            count=Count("id"),
+        )
+        .order_by("currency")
+    )
+    deposit_by_currency = [
+        {
+            "currency": row["currency"],
+            "total_amount": row["total_amount"] or Decimal("0"),
+            "count": row["count"],
+        }
+        for row in deposit_by_currency_qs
+    ]
+
+    # Deposits by chain
+    deposit_by_chain_qs = (
+        BlockchainDeposit.objects.values("chain")
+        .annotate(count=Count("id"), total_amount=Sum("amount"))
+        .order_by("-count")
+    )
+    deposit_by_chain = [
+        {
+            "chain": row["chain"],
+            "count": row["count"],
+            "total_amount": row["total_amount"] or Decimal("0"),
+        }
+        for row in deposit_by_chain_qs
+    ]
+
+    # ── Transaction Type Breakdown (detailed) ─────────────────────────────
+    type_breakdown_qs = (
+        Transaction.objects.filter(status="completed")
+        .values("type")
+        .annotate(
+            count=Count("id"),
+            total_source=Sum("source_amount"),
+            total_dest=Sum("dest_amount"),
+            total_fees=Sum("fee_amount"),
+        )
+        .order_by("-count")
+    )
+    type_breakdown = [
+        {
+            "type": row["type"],
+            "count": row["count"],
+            "total_source": row["total_source"] or Decimal("0"),
+            "total_dest": row["total_dest"] or Decimal("0"),
+            "total_fees": row["total_fees"] or Decimal("0"),
+        }
+        for row in type_breakdown_qs
+    ]
+
     # ── Celery task count (24h) ─────────────────────────────────────────
     # Count transactions processed in last 24h as proxy for Celery activity
     celery_tasks_24h = Transaction.objects.filter(
@@ -266,6 +331,14 @@ def admin_stats_dashboard(request):
         "region_distribution_json": json.dumps(region_distribution, cls=DecimalEncoder),
         "crypto_holdings_json": json.dumps(crypto_holdings, cls=DecimalEncoder),
         "recent_transactions_json": json.dumps(recent_transactions, cls=DecimalEncoder),
+        # Blockchain deposit stats
+        "total_deposits": total_deposits,
+        "credited_deposits": credited_deposits,
+        "pending_deposits": pending_deposits,
+        "deposit_by_currency_json": json.dumps(deposit_by_currency, cls=DecimalEncoder),
+        "deposit_by_chain_json": json.dumps(deposit_by_chain, cls=DecimalEncoder),
+        # Transaction type breakdown
+        "type_breakdown_json": json.dumps(type_breakdown, cls=DecimalEncoder),
         # System stats
         "celery_tasks_24h": celery_tasks_24h,
         # Metadata

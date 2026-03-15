@@ -12,5 +12,7 @@ urlpatterns = [
     path("unread-count/", views.UnreadCountView.as_view(), name="unread-count"),
     # Admin endpoints
     path("admin/broadcast/", views.AdminBroadcastView.as_view(), name="admin-broadcast"),
+    path("admin/list/", views.AdminNotificationDetailListView.as_view(), name="admin-detail-list"),
+    path("admin/stats/", views.AdminNotificationStatsView.as_view(), name="admin-stats"),
     path("admin/", views.AdminNotificationListView.as_view(), name="admin-list"),
 ]
