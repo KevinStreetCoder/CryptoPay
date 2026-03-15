@@ -14,13 +14,18 @@ from decimal import Decimal
 import requests
 from celery import shared_task
 from django.conf import settings
-from django.utils import timezone
 
 from apps.wallets.models import Wallet
-from apps.wallets.services import WalletService
 
 from .models import BlockchainDeposit
-from .security import is_dust_deposit, estimate_usd_value, get_required_confirmations
+from .security import (
+    check_confirmation_monotonicity,
+    check_deposit_velocity,
+    estimate_usd_value,
+    get_required_confirmations,
+    is_dust_deposit,
+    validate_address,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +83,16 @@ def monitor_btc_deposits():
 
             txs = response.json()
 
+            # Fetch tip height once per address (avoid redundant calls per tx)
+            tip_height = None
+            try:
+                tip_url = f"{base_url}/blocks/tip/height"
+                tip_resp = requests.get(tip_url, timeout=10)
+                if tip_resp.status_code == 200:
+                    tip_height = int(tip_resp.text.strip())
+            except Exception:
+                pass
+
             for tx in txs:
                 tx_hash = tx.get("txid", "")
                 if not tx_hash:
@@ -102,6 +117,15 @@ def monitor_btc_deposits():
                 if is_dust_deposit(total_received, "BTC"):
                     continue
 
+                # Security: validate address format
+                if not validate_address("bitcoin", address):
+                    continue
+
+                # Security: check deposit velocity
+                if not check_deposit_velocity(address, "BTC"):
+                    logger.critical(f"Deposit velocity exceeded for {address[:10]}..., skipping new deposits")
+                    break
+
                 # Get sender address (first input's prevout)
                 from_addr = ""
                 vin = tx.get("vin", [])
@@ -115,15 +139,10 @@ def monitor_btc_deposits():
 
                 # Calculate confirmations from tip
                 confirmations = 0
-                if is_confirmed and block_height:
-                    try:
-                        tip_url = f"{base_url}/blocks/tip/height"
-                        tip_resp = requests.get(tip_url, timeout=10)
-                        if tip_resp.status_code == 200:
-                            tip_height = int(tip_resp.text.strip())
-                            confirmations = max(0, tip_height - block_height + 1)
-                    except Exception:
-                        confirmations = 1 if is_confirmed else 0
+                if is_confirmed and block_height and tip_height:
+                    confirmations = max(0, tip_height - block_height + 1)
+                elif is_confirmed:
+                    confirmations = 1  # At least 1 if confirmed but tip unknown
 
                 # Security: amount-based confirmation tier
                 usd_value = estimate_usd_value(total_received, "BTC")
@@ -145,7 +164,7 @@ def monitor_btc_deposits():
                     confirmations=confirmations,
                     required_confirmations=dynamic_confirmations,
                     status=status,
-                    block_number=block_height or 0,
+                    block_number=block_height,  # None if unconfirmed (mempool)
                 )
 
                 logger.info(
@@ -161,7 +180,13 @@ def monitor_btc_deposits():
 
 @shared_task
 def update_btc_confirmations():
-    """Update confirmation counts for unconfirmed BTC deposits."""
+    """
+    Update confirmation counts for pending BTC deposits.
+
+    Does NOT credit wallets — that is handled by process_pending_deposits()
+    in tasks.py, which applies full security checks (select_for_update locking,
+    re-org detection, address ownership validation, stablecoin blacklist, etc.).
+    """
     pending = BlockchainDeposit.objects.filter(
         chain="bitcoin",
         status__in=[BlockchainDeposit.Status.DETECTING, BlockchainDeposit.Status.CONFIRMING],
@@ -182,49 +207,43 @@ def update_btc_confirmations():
 
     for deposit in pending:
         try:
-            # Query transaction status
-            url = f"{base_url}/tx/{deposit.tx_hash}"
-            resp = requests.get(url, timeout=10)
-            if resp.status_code != 200:
+            # If we don't have a block_number yet (mempool tx), look it up
+            if not deposit.block_number:
+                url = f"{base_url}/tx/{deposit.tx_hash}"
+                resp = requests.get(url, timeout=10)
+                if resp.status_code != 200:
+                    continue
+
+                tx = resp.json()
+                tx_status = tx.get("status", {})
+                is_confirmed = tx_status.get("confirmed", False)
+                block_height = tx_status.get("block_height")
+
+                if is_confirmed and block_height:
+                    deposit.block_number = block_height
+                    deposit.save(update_fields=["block_number"])
+                else:
+                    continue  # Still in mempool
+
+            # Calculate confirmations
+            confirmations = max(0, tip_height - deposit.block_number + 1)
+
+            # Security: confirmation monotonicity check (re-org detection)
+            if not check_confirmation_monotonicity(deposit, confirmations):
+                deposit.status = BlockchainDeposit.Status.CONFIRMING
+                deposit.save(update_fields=["status"])
                 continue
 
-            tx = resp.json()
-            tx_status = tx.get("status", {})
-            is_confirmed = tx_status.get("confirmed", False)
-            block_height = tx_status.get("block_height")
+            deposit.confirmations = confirmations
 
-            if is_confirmed and block_height:
-                confirmations = max(0, tip_height - block_height + 1)
-                deposit.confirmations = confirmations
-                deposit.block_number = block_height
+            if confirmations >= deposit.required_confirmations:
+                deposit.status = BlockchainDeposit.Status.CONFIRMED
+            else:
+                deposit.status = BlockchainDeposit.Status.CONFIRMING
 
-                if confirmations >= deposit.required_confirmations:
-                    deposit.status = BlockchainDeposit.Status.CONFIRMED
-                    deposit.save()
-
-                    # Credit wallet
-                    import uuid as _uuid
-                    wallet = Wallet.objects.filter(
-                        deposit_address=deposit.to_address, currency="BTC"
-                    ).first()
-                    if wallet:
-                        credit_tx_id = _uuid.uuid5(
-                            _uuid.NAMESPACE_URL, f"btc_deposit:{deposit.id}"
-                        )
-                        try:
-                            WalletService.credit(
-                                wallet.id, deposit.amount, credit_tx_id,
-                                f"BTC deposit: {deposit.tx_hash[:16]}..."
-                            )
-                            deposit.status = BlockchainDeposit.Status.CREDITED
-                            deposit.credited_at = timezone.now()
-                            logger.info(f"Credited {deposit.amount} BTC for deposit {deposit.id}")
-                        except Exception as e:
-                            logger.error(f"Failed to credit BTC deposit {deposit.id}: {e}")
-                else:
-                    deposit.status = BlockchainDeposit.Status.CONFIRMING
-
-                deposit.save()
+            deposit.save(update_fields=["confirmations", "status"])
 
         except Exception as e:
             logger.error(f"Error updating BTC deposit {deposit.id}: {e}")
+
+    logger.debug(f"Updated BTC confirmations for {pending.count()} deposits")

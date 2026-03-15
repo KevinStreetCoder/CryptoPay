@@ -20,7 +20,14 @@ from django.conf import settings
 from apps.wallets.models import Wallet
 
 from .models import BlockchainDeposit
-from .security import check_confirmation_monotonicity, is_dust_deposit, estimate_usd_value, get_required_confirmations
+from .security import (
+    check_confirmation_monotonicity,
+    check_deposit_velocity,
+    estimate_usd_value,
+    get_required_confirmations,
+    is_dust_deposit,
+    validate_address,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -249,6 +256,15 @@ def _check_sol_transfer(
     if is_dust_deposit(amount, "SOL"):
         return
 
+    # Security: validate address format
+    if not validate_address("solana", address):
+        return
+
+    # Security: check deposit velocity
+    if not check_deposit_velocity(address, "SOL"):
+        logger.critical(f"Deposit velocity exceeded for {address[:10]}..., skipping")
+        return
+
     # Determine sender (first signer that's not us)
     from_addr = ""
     for key_info in account_keys:
@@ -333,6 +349,15 @@ def _check_spl_transfer(
         if is_dust_deposit(received, "USDC"):
             continue
 
+        # Security: validate address format
+        if not validate_address("solana", address):
+            continue
+
+        # Security: check deposit velocity
+        if not check_deposit_velocity(address, "USDC"):
+            logger.critical(f"Deposit velocity exceeded for {address[:10]}..., skipping")
+            break
+
         # A single Solana tx can contain both SOL and USDC transfers.
         # The DB has unique_together = ("chain", "tx_hash"), so we suffix
         # with ":USDC:{accountIndex}" to ensure uniqueness per token
@@ -390,25 +415,47 @@ def update_sol_confirmations():
         logger.error(f"Failed to get Solana slot: {e}")
         return
 
-    required = settings.REQUIRED_CONFIRMATIONS.get("solana", 32)
-
     for deposit in pending:
-        if deposit.block_number:
-            confirmations = max(0, current_slot - deposit.block_number)
-
-            # Security: confirmation monotonicity check (re-org detection)
-            if not check_confirmation_monotonicity(deposit, confirmations):
-                deposit.status = BlockchainDeposit.Status.CONFIRMING
-                deposit.save(update_fields=["status"])
+        # If slot (block_number) is missing, try to resolve it
+        if not deposit.block_number:
+            try:
+                # Extract raw signature (strip :USDC:idx suffix for SPL deposits)
+                raw_sig = deposit.tx_hash.split(":")[0]
+                tx_data = _sol_rpc_call(
+                    "getTransaction",
+                    [
+                        raw_sig,
+                        {
+                            "encoding": "jsonParsed",
+                            "commitment": "finalized",
+                            "maxSupportedTransactionVersion": 0,
+                        },
+                    ],
+                )
+                if tx_data and tx_data.get("slot"):
+                    deposit.block_number = tx_data["slot"]
+                    deposit.save(update_fields=["block_number"])
+                else:
+                    continue  # Transaction not found or not finalized yet
+            except Exception as e:
+                logger.warning(f"Failed to resolve slot for SOL deposit {deposit.id}: {e}")
                 continue
 
-            deposit.confirmations = confirmations
+        confirmations = max(0, current_slot - deposit.block_number)
 
-            if confirmations >= deposit.required_confirmations:
-                deposit.status = BlockchainDeposit.Status.CONFIRMED
-            else:
-                deposit.status = BlockchainDeposit.Status.CONFIRMING
+        # Security: confirmation monotonicity check (re-org detection)
+        if not check_confirmation_monotonicity(deposit, confirmations):
+            deposit.status = BlockchainDeposit.Status.CONFIRMING
+            deposit.save(update_fields=["status"])
+            continue
 
-            deposit.save(update_fields=["confirmations", "status"])
+        deposit.confirmations = confirmations
+
+        if confirmations >= deposit.required_confirmations:
+            deposit.status = BlockchainDeposit.Status.CONFIRMED
+        else:
+            deposit.status = BlockchainDeposit.Status.CONFIRMING
+
+        deposit.save(update_fields=["confirmations", "status"])
 
     logger.debug(f"Updated SOL confirmations for {pending.count()} deposits")
