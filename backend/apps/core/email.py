@@ -112,14 +112,26 @@ def send_welcome_email(user):
         logger.warning(f"Cannot send welcome email: user {user.phone} has no email.")
         return
 
-    from apps.core.tasks import send_welcome_email_task
-
-    send_welcome_email_task.delay(
-        user_email=user.email,
-        user_full_name=user.full_name,
-        user_phone=user.phone,
-    )
-    logger.info(f"Queued welcome email for {user.email}")
+    # Send directly (Celery task processing unreliable in current setup)
+    try:
+        from django.core.mail import send_mail
+        from django.template.loader import render_to_string
+        from django.conf import settings
+        html = render_to_string("email/welcome.html", {
+            "user_name": user.full_name or "there",
+            "phone": user.phone,
+        })
+        send_mail(
+            "Welcome to CPay!",
+            f"Welcome to CPay, {user.full_name}!",
+            settings.DEFAULT_FROM_EMAIL,
+            [user.email],
+            html_message=html,
+            fail_silently=True,
+        )
+        logger.info(f"Welcome email sent to {user.email}")
+    except Exception as e:
+        logger.error(f"Failed to send welcome email to {user.email}: {e}")
 
 
 def send_transaction_receipt(user, transaction):
