@@ -21,6 +21,7 @@ from .serializers import (
     DeviceSerializer,
     EmailVerifySerializer,
     ForgotPINSerializer,
+    GoogleCompleteProfileSerializer,
     GoogleLoginSerializer,
     KYCDocumentSerializer,
     KYCUploadSerializer,
@@ -731,6 +732,24 @@ class GoogleLoginView(APIView):
             ip_address=self._get_client_ip(request),
         )
 
+        # Check if user has a real phone number (not a placeholder +000...)
+        has_real_phone = user.phone and not user.phone.startswith("+000")
+
+        if not has_real_phone:
+            # New Google user — needs to complete profile (phone + PIN)
+            return Response(
+                {
+                    "user": UserSerializer(user, context={"request": request}).data,
+                    "tokens": {
+                        "refresh": str(refresh),
+                        "access": str(refresh.access_token),
+                    },
+                    "created": created,
+                    "phone_required": True,
+                },
+                status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+            )
+
         return Response(
             {
                 "user": UserSerializer(user, context={"request": request}).data,
@@ -742,6 +761,105 @@ class GoogleLoginView(APIView):
                 "pin_required": not bool(user.pin_hash),
             },
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+    def _get_client_ip(self, request):
+        xff = request.META.get("HTTP_X_FORWARDED_FOR")
+        if xff:
+            return xff.split(",")[0].strip()
+        return request.META.get("REMOTE_ADDR")
+
+
+class GoogleCompleteProfileView(APIView):
+    """
+    POST /api/v1/auth/google/complete-profile/
+    Complete profile for Google OAuth users who need to set phone + PIN.
+    Requires authentication (temp JWT from GoogleLoginView).
+    Accepts: {phone, otp, pin, full_name}
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = GoogleCompleteProfileSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        phone = serializer.validated_data["phone"]
+        otp = serializer.validated_data["otp"]
+        pin = serializer.validated_data["pin"]
+        full_name = serializer.validated_data.get("full_name", "")
+
+        user = request.user
+
+        # Ensure user actually needs profile completion (has placeholder phone)
+        if user.phone and not user.phone.startswith("+000"):
+            return Response(
+                {"error": "Profile already completed."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Verify OTP
+        cached_otp = cache.get(f"otp:{phone}")
+        if not cached_otp or cached_otp != otp:
+            return Response(
+                {"error": "Invalid or expired OTP."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Check phone not already used by another user
+        if User.objects.filter(phone=phone).exclude(id=user.id).exists():
+            return Response(
+                {"error": "Phone number already registered to another account."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        # Clear OTP after successful verification
+        cache.delete(f"otp:{phone}")
+
+        # Update user profile
+        user.phone = phone
+        if full_name:
+            user.full_name = full_name
+        user.set_pin(pin)
+        user.save(update_fields=["phone", "full_name", "pin_hash"])
+
+        # Register device if provided
+        device_id = request.data.get("device_id", "")
+        device_name = request.data.get("device_name", "")
+        platform = request.data.get("platform", "")
+        if device_id:
+            Device.objects.update_or_create(
+                user=user,
+                device_id=device_id,
+                defaults={
+                    "device_name": device_name,
+                    "platform": platform,
+                    "is_trusted": True,
+                    "ip_address": self._get_client_ip(request),
+                },
+            )
+
+        # Generate fresh tokens
+        refresh = RefreshToken.for_user(user)
+
+        AuditLog.objects.create(
+            user=user,
+            action="GOOGLE_COMPLETE_PROFILE",
+            entity_type="user",
+            entity_id=str(user.id),
+            ip_address=self._get_client_ip(request),
+        )
+
+        return Response(
+            {
+                "user": UserSerializer(user, context={"request": request}).data,
+                "tokens": {
+                    "refresh": str(refresh),
+                    "access": str(refresh.access_token),
+                },
+                "message": "Profile completed successfully.",
+            },
+            status=status.HTTP_200_OK,
         )
 
     def _get_client_ip(self, request):
