@@ -68,7 +68,7 @@ EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 EMAIL_HOST = env("EMAIL_HOST", default="smtp.resend.com")  # noqa: F405
 EMAIL_PORT = env.int("EMAIL_PORT", default=465)  # noqa: F405
 EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="resend")  # noqa: F405
-EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="re_CojuPUB8_LzVcTtJyFrHArxopmx5JP2Jm")  # noqa: F405
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")  # noqa: F405
 EMAIL_USE_TLS = False
 EMAIL_USE_SSL = True  # noqa: F405
 
@@ -112,9 +112,12 @@ ADMINS = [("Kevin", "kevinisaackareithi@gmail.com")]
 MANAGERS = ADMINS
 
 # Africa's Talking SMS (sandbox for testing, production later)
-AT_API_KEY = env("AT_API_KEY", default="atsk_0a0010aac91f1796b4bee68316e338b704b0eb1d74ade3ae31b06f7670260bea076f53b2")
+AT_API_KEY = env("AT_API_KEY", default="")
 AT_USERNAME = env("AT_USERNAME", default="Cpay")
 AT_SENDER_ID = env("AT_SENDER_ID", default="")
 
 # Admin email for OTP fallback (when SMS not available)
 ADMIN_OTP_EMAIL = "kevinisaackareithi@gmail.com"
+
+# Google OAuth
+GOOGLE_CLIENT_ID = env("GOOGLE_CLIENT_ID", default="")
