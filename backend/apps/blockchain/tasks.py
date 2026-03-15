@@ -403,3 +403,10 @@ def _credit_single_deposit(deposit_id: int):
         f"(user={wallet.user_id}, tx={deposit.tx_hash[:16]}...)"
     )
 
+    # Send deposit confirmed notification (email + push)
+    try:
+        from apps.core.email import send_deposit_confirmed_notification
+        send_deposit_confirmed_notification(wallet.user, deposit)
+    except Exception as e:
+        logger.error(f"Deposit notification failed for {deposit.id}: {e}")
+

@@ -1,8 +1,84 @@
-"""Email service module — thin wrappers that dispatch Celery tasks for async email delivery."""
+"""Email and SMS service module — thin wrappers that dispatch Celery tasks for async delivery."""
 
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Reusable SMS helper (eSMS Africa primary, Africa's Talking fallback)
+# ---------------------------------------------------------------------------
+
+
+def send_sms(phone, message):
+    """Send an SMS via eSMS Africa (primary) or Africa's Talking (fallback).
+
+    This is the single entry point for all outbound SMS. Uses the same
+    provider hierarchy as OTP sending in RequestOTPView.
+
+    Args:
+        phone: str, E.164 phone number (e.g. +254712345678).
+        message: str, SMS body (max ~160 chars recommended).
+
+    Returns:
+        bool: True if SMS was sent successfully via any provider.
+    """
+    from django.conf import settings
+
+    if not phone:
+        logger.warning("send_sms called with empty phone number")
+        return False
+
+    sms_sent = False
+
+    # Primary: eSMS Africa
+    esms_key = getattr(settings, "ESMS_API_KEY", "")
+    esms_account = getattr(settings, "ESMS_ACCOUNT_ID", "")
+    if esms_key and esms_account:
+        try:
+            import requests as http_requests
+            payload = {
+                "phoneNumber": phone,
+                "text": message,
+            }
+            sender_id = getattr(settings, "ESMS_SENDER_ID", "")
+            if sender_id:
+                payload["senderId"] = sender_id
+            resp = http_requests.post(
+                "https://api.esmsafrica.io/api/sms/send",
+                json=payload,
+                headers={
+                    "Content-Type": "application/json",
+                    "X-API-Key": esms_key,
+                    "X-Account-ID": esms_account,
+                },
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                sms_sent = True
+                logger.info(f"SMS sent via eSMS to {phone[:7]}***")
+            else:
+                logger.error(f"eSMS failed: {resp.status_code} {resp.text}")
+        except Exception as e:
+            logger.error(f"eSMS send failed: {e}")
+
+    # Fallback: Africa's Talking
+    if not sms_sent and getattr(settings, "AT_API_KEY", ""):
+        try:
+            import africastalking
+            africastalking.initialize(settings.AT_USERNAME, settings.AT_API_KEY)
+            sms = africastalking.SMS
+            sender = getattr(settings, "AT_SENDER_ID", "") or None
+            sms.send(message, [phone], sender_id=sender)
+            sms_sent = True
+            logger.info(f"SMS sent via AT to {phone[:7]}***")
+        except Exception as e:
+            logger.error(f"AT SMS send failed: {e}")
+
+    if not sms_sent:
+        logger.info(f"[DEV] SMS to {phone}: {message}")
+
+    return sms_sent
 
 
 def send_otp_email(user, otp_code):
@@ -151,13 +227,37 @@ def send_transaction_notifications(user, transaction):
         data={"transaction_id": str(transaction.id), "type": "transaction_complete"},
     )
 
-    # Admin alert for failed transactions
+    # Admin alert for failed transactions + user failure email
     if str(transaction.status) == "failed":
         from apps.core.tasks import send_failed_transaction_alert_task
 
         send_failed_transaction_alert_task.delay(
             transaction_id=str(transaction.id),
         )
+
+        # Send failure notification to user
+        if user.email:
+            from apps.core.tasks import send_email_task
+            from django.template.loader import render_to_string
+
+            ref = str(transaction.id)[:8].upper()
+            tx_label = type_labels.get(transaction.type, "Transaction")
+            html_content = render_to_string("email/transaction_receipt.html", {
+                "full_name": user.full_name or user.phone,
+                "amount": str(transaction.dest_amount),
+                "currency": transaction.dest_currency,
+                "tx_type": transaction.type,
+                "tx_type_label": tx_label,
+                "status": "failed",
+                "reference": ref,
+                "timestamp": transaction.created_at.isoformat(),
+            })
+            send_email_task.delay(
+                subject=f"CPay — Transaction Failed: {tx_label} {ref}",
+                html_content=html_content,
+                recipient_email=user.email,
+            )
+            logger.info(f"Queued failure email for {user.email} — ref {ref}")
 
 
 def send_security_alert(user, event_type, ip_address, device_info):
@@ -201,3 +301,142 @@ def send_admin_new_user_alert(user):
         kyc_tier=getattr(user, "kyc_tier", 0),
     )
     logger.info(f"Queued admin new-user alert for {user.phone}")
+
+
+def send_welcome_sms(user):
+    """Send welcome SMS to a newly registered user.
+
+    Args:
+        user: User model instance (must have phone).
+    """
+    if not user.phone or user.phone.startswith("+000"):
+        logger.warning(f"Cannot send welcome SMS: user has no real phone.")
+        return
+
+    from apps.core.tasks import send_sms_task
+
+    send_sms_task.delay(
+        phone=user.phone,
+        message=(
+            "Welcome to CPay! Your account is ready. "
+            "Deposit KES, pay bills, and send money with crypto. "
+            "Visit cpay.co.ke"
+        ),
+    )
+    logger.info(f"Queued welcome SMS for {user.phone}")
+
+
+def send_pin_change_alert(user, ip_address="", device_info=""):
+    """Send security alert email + SMS when PIN is changed.
+
+    Args:
+        user: User model instance.
+        ip_address: str, IP address of the request.
+        device_info: str, device description.
+    """
+    # Email alert
+    send_security_alert(user, "pin_change", ip_address, device_info)
+
+    # SMS alert
+    if user.phone:
+        from apps.core.tasks import send_sms_task
+
+        send_sms_task.delay(
+            phone=user.phone,
+            message=(
+                "CPay Security: Your PIN was changed. "
+                "If this was not you, contact support@cpay.co.ke immediately."
+            ),
+        )
+        logger.info(f"Queued PIN change SMS alert for {user.phone}")
+
+
+def send_pin_reset_alert(user, ip_address=""):
+    """Send security alert email when PIN is reset via forgot-PIN flow.
+
+    Args:
+        user: User model instance.
+        ip_address: str, IP address of the request.
+    """
+    send_security_alert(user, "pin_change", ip_address, "PIN reset via forgot-PIN flow")
+    logger.info(f"Queued PIN reset security alert for {user.phone}")
+
+
+def send_deposit_confirmed_notification(user, deposit):
+    """Send email + push notification when a blockchain deposit is confirmed.
+
+    Args:
+        user: User model instance.
+        deposit: BlockchainDeposit model instance with amount, currency, tx_hash.
+    """
+    # Email notification
+    if user.email:
+        from apps.core.tasks import send_email_task
+        from django.template.loader import render_to_string
+
+        context = {
+            "full_name": user.full_name or user.phone,
+            "amount": str(deposit.amount),
+            "currency": deposit.currency,
+            "tx_hash": deposit.tx_hash,
+            "chain": getattr(deposit, "chain", ""),
+        }
+        html_content = render_to_string("email/transaction_receipt.html", {
+            "full_name": context["full_name"],
+            "amount": context["amount"],
+            "currency": context["currency"],
+            "tx_type": "DEPOSIT",
+            "tx_type_label": "Crypto Deposit",
+            "status": "completed",
+            "reference": deposit.tx_hash[:8].upper() if deposit.tx_hash else "N/A",
+            "timestamp": deposit.credited_at.isoformat() if hasattr(deposit, "credited_at") and deposit.credited_at else "",
+            "crypto_amount": context["amount"],
+            "crypto_currency": context["currency"],
+        })
+        send_email_task.delay(
+            subject=f"CPay — Deposit Confirmed: {deposit.amount} {deposit.currency}",
+            html_content=html_content,
+            recipient_email=user.email,
+        )
+        logger.info(f"Queued deposit confirmation email for {user.email}")
+
+    # Push notification
+    from apps.core.tasks import send_push_task
+
+    send_push_task.delay(
+        user_id=str(user.id),
+        title="Deposit Confirmed",
+        body=f"{deposit.amount} {deposit.currency} has been credited to your wallet.",
+        data={"type": "deposit_confirmed", "currency": deposit.currency},
+    )
+
+
+def send_admin_kyc_upload_alert(user, document_type):
+    """Send admin alert when a user uploads a KYC document.
+
+    Args:
+        user: User model instance.
+        document_type: str, e.g. 'national_id', 'passport'.
+    """
+    from django.core.mail import mail_admins
+    from django.utils import timezone
+
+    now = timezone.now().strftime("%Y-%m-%d %H:%M:%S %Z")
+    doc_label = document_type.replace("_", " ").title()
+    body = (
+        f"KYC Document Submitted\n"
+        f"{'=' * 40}\n"
+        f"User: {user.phone} ({user.full_name or 'N/A'})\n"
+        f"Document: {doc_label}\n"
+        f"Time: {now}\n\n"
+        f"Action: Review in admin panel.\n"
+    )
+    try:
+        mail_admins(
+            subject=f"[CPay] KYC Upload: {user.phone} — {doc_label}",
+            message=body,
+            fail_silently=True,
+        )
+        logger.info(f"Admin KYC upload alert sent for {user.phone} — {doc_label}")
+    except Exception as exc:
+        logger.error(f"Failed to send admin KYC alert: {exc}")
