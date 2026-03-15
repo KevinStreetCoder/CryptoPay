@@ -245,17 +245,33 @@ def update_tron_confirmations():
         # look up the actual block number from the transaction.
         if not deposit.block_number or deposit.block_number > 10_000_000_000:
             try:
+                # Try standard transaction lookup first
                 tx_url = f"{base_url}/v1/transactions/{deposit.tx_hash}"
                 tx_resp = requests.get(tx_url, headers=headers, timeout=5)
+                real_block = None
                 if tx_resp.status_code == 200:
                     tx_data = tx_resp.json().get("data", [])
                     if tx_data:
                         real_block = tx_data[0].get(
                             "blockNumber", tx_data[0].get("block_number")
                         )
-                        if real_block and real_block < 10_000_000_000:
-                            deposit.block_number = real_block
-                            deposit.save(update_fields=["block_number"])
+
+                # Fallback: TRC-20 transfers use /wallet/gettransactioninfobyid
+                if not real_block:
+                    info_url = f"{base_url}/wallet/gettransactioninfobyid"
+                    info_resp = requests.post(
+                        info_url,
+                        json={"value": deposit.tx_hash},
+                        headers=headers,
+                        timeout=5,
+                    )
+                    if info_resp.status_code == 200:
+                        info_data = info_resp.json()
+                        real_block = info_data.get("blockNumber")
+
+                if real_block and real_block < 10_000_000_000:
+                    deposit.block_number = real_block
+                    deposit.save(update_fields=["block_number"])
             except Exception as e:
                 logger.warning(
                     f"Failed to resolve block_number for Tron deposit "
