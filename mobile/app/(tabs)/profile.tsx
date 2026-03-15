@@ -1143,6 +1143,16 @@ export default function ProfileScreen() {
             tc={tc}
             ts={ts}
           />
+          <MenuItem
+            icon="megaphone-outline"
+            label="Broadcast Notifications"
+            subtitle="Send announcements to all users"
+            onPress={() => router.push("/settings/admin-broadcast" as any)}
+            iconBg="rgba(139, 92, 246, 0.15)"
+            iconColor="#8B5CF6"
+            tc={tc}
+            ts={ts}
+          />
         </View>
       </>
     );
