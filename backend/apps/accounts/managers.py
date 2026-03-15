@@ -2,8 +2,9 @@ from django.contrib.auth.models import BaseUserManager
 
 
 class UserManager(BaseUserManager):
-    def create_user(self, phone="", pin=None, **extra_fields):
-        # Phone can be empty for Google OAuth users (they set it later)
+    def create_user(self, phone, pin=None, **extra_fields):
+        if not phone:
+            raise ValueError("Phone number is required")
         user = self.model(phone=phone, **extra_fields)
         if pin:
             user.set_pin(pin)

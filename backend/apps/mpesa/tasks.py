@@ -189,7 +189,7 @@ def _send_float_alert(level: str, balance: Decimal, message: str):
         from django.core.mail import mail_admins
 
         mail_admins(
-            subject=f"[CPay {level}] Float Balance Alert",
+            subject=f"[CryptoPay {level}] Float Balance Alert",
             message=(
                 f"Float Level: {level}\n"
                 f"Balance: KES {balance:,.0f}\n"
@@ -425,12 +425,6 @@ def poll_stk_status(checkout_request_id: str, transaction_id: str, attempt: int 
             tx.status = Transaction.Status.FAILED
             tx.save(update_fields=["failure_reason", "status", "updated_at"])
             logger.warning(f"STK Push failed via poll for tx {transaction_id}: {result}")
-            # Alert admins
-            try:
-                from apps.core.tasks import send_failed_transaction_alert_task
-                send_failed_transaction_alert_task.delay(transaction_id=transaction_id)
-            except Exception:
-                pass
         else:
             # Still pending — retry
             if attempt < max_attempts:
@@ -445,12 +439,6 @@ def poll_stk_status(checkout_request_id: str, transaction_id: str, attempt: int 
                 tx.status = Transaction.Status.FAILED
                 tx.save(update_fields=["failure_reason", "status", "updated_at"])
                 logger.error(f"STK Push timeout for tx {transaction_id} after {max_attempts} polls")
-                # Alert admins
-                try:
-                    from apps.core.tasks import send_failed_transaction_alert_task
-                    send_failed_transaction_alert_task.delay(transaction_id=transaction_id)
-                except Exception:
-                    pass
 
     except Exception as e:
         error_msg = str(e)

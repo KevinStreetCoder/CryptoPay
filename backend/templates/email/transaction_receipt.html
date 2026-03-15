@@ -15,36 +15,12 @@
     </tr>
     <tr>
       <td class="label">Type</td>
-      <td class="value">{{ tx_type_label|default:tx_type|title }}</td>
+      <td class="value">{{ tx_type|title }}</td>
     </tr>
     <tr>
       <td class="label">Amount</td>
       <td class="value">{{ amount }} {{ currency }}</td>
     </tr>
-    {% if crypto_amount %}
-    <tr>
-      <td class="label">Crypto Amount</td>
-      <td class="value">{{ crypto_amount }} {{ crypto_currency }}</td>
-    </tr>
-    {% endif %}
-    {% if exchange_rate %}
-    <tr>
-      <td class="label">Exchange Rate</td>
-      <td class="value">1 {{ crypto_currency }} = KES {{ exchange_rate }}</td>
-    </tr>
-    {% endif %}
-    {% if fee_amount %}
-    <tr>
-      <td class="label">Fee</td>
-      <td class="value">{{ fee_amount }} {{ fee_currency|default:"KES" }}</td>
-    </tr>
-    {% endif %}
-    {% if mpesa_receipt %}
-    <tr>
-      <td class="label">M-Pesa Receipt</td>
-      <td class="value" style="color: #10B981;">{{ mpesa_receipt }}</td>
-    </tr>
-    {% endif %}
     <tr>
       <td class="label">Status</td>
       <td class="value">
@@ -73,10 +49,10 @@
 {% endif %}
 
 <p style="text-align: center; padding-top: 8px;">
-  <a href="https://cpay.co.ke" style="display:inline-block;background-color:#10B981;color:#FFFFFF;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px;">View in App</a>
+  <a href="https://cryptopay.co.ke" class="btn">View in App</a>
 </p>
 
 <p style="font-size: 13px; color: #94a3b8;">
-  If you did not initiate this transaction, please contact <a href="mailto:support@cpay.co.ke" style="color: #10B981;">support@cpay.co.ke</a> immediately and secure your account.
+  If you did not initiate this transaction, please contact support immediately and secure your account.
 </p>
 {% endblock %}

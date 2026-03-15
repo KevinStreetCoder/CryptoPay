@@ -104,36 +104,6 @@ class GoogleLoginSerializer(serializers.Serializer):
     id_token = serializers.CharField()
 
 
-class GoogleCompleteProfileSerializer(serializers.Serializer):
-    """Complete profile for Google OAuth users: set real phone, verify OTP, set PIN."""
-
-    phone = serializers.CharField(max_length=15)
-    otp = serializers.CharField(max_length=6)
-    pin = serializers.CharField(min_length=6, max_length=6, write_only=True)
-    full_name = serializers.CharField(max_length=NAME_MAX_LENGTH, required=False, default="")
-
-    def validate_phone(self, value):
-        value = value.strip().replace(" ", "")
-        if value.startswith("0"):
-            value = "+254" + value[1:]
-        elif value.startswith("254"):
-            value = "+" + value
-        elif not value.startswith("+"):
-            value = "+254" + value
-
-        if not re.match(r"^\+254[17]\d{8}$", value):
-            raise serializers.ValidationError("Invalid Kenyan phone number")
-        return value
-
-    def validate_full_name(self, value):
-        return validate_full_name(value)
-
-    def validate_pin(self, value):
-        if not value.isdigit():
-            raise serializers.ValidationError("PIN must be 6 digits")
-        return value
-
-
 class DeviceSerializer(serializers.Serializer):
     """Device info submitted on login / registration."""
 
@@ -286,9 +256,8 @@ class RecoveryEmailSerializer(serializers.Serializer):
 
 
 class ForgotPINSerializer(serializers.Serializer):
-    """Step 1: Initiate PIN reset — send OTP to user's phone or email."""
+    """Step 1: Initiate PIN reset — send OTP to user's phone."""
     phone = serializers.CharField(max_length=15)
-    email = serializers.BooleanField(required=False, default=False)
 
     def validate_phone(self, value):
         value = value.strip().replace(" ", "")

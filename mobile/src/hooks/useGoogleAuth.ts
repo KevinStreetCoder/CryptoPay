@@ -5,19 +5,13 @@ import Constants from "expo-constants";
 
 WebBrowser.maybeCompleteAuthSession();
 
-// Google OAuth Client IDs
+// These would come from environment/app config in production
 const GOOGLE_WEB_CLIENT_ID =
-  Constants.expoConfig?.extra?.googleWebClientId ||
-  process.env.GOOGLE_WEB_CLIENT_ID ||
-  "797403635202-t2i871kkg2qfsoq19appg47c6ud0c6ac.apps.googleusercontent.com";
+  Constants.expoConfig?.extra?.googleWebClientId ?? "";
 const GOOGLE_ANDROID_CLIENT_ID =
-  Constants.expoConfig?.extra?.googleAndroidClientId ||
-  process.env.GOOGLE_ANDROID_CLIENT_ID ||
-  "797403635202-bbokau8cna2nju3omuaktls8ko0ptv4c.apps.googleusercontent.com";
+  Constants.expoConfig?.extra?.googleAndroidClientId ?? "";
 const GOOGLE_IOS_CLIENT_ID =
-  Constants.expoConfig?.extra?.googleIosClientId ||
-  process.env.GOOGLE_IOS_CLIENT_ID ||
-  "";
+  Constants.expoConfig?.extra?.googleIosClientId ?? "";
 
 /**
  * Hook that wraps expo-auth-session Google provider.

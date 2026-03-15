@@ -17,13 +17,7 @@ from rest_framework import status
 from rest_framework.generics import ListAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
-
-
-class PaymentRateThrottle(UserRateThrottle):
-    """Limit payment transactions to 10 per hour per user."""
-    rate = "10/hour"
 
 from django.utils import timezone
 
@@ -105,7 +99,6 @@ class PayBillView(APIView):
     """Pay a Paybill number with crypto."""
 
     permission_classes = [IsNotSuspended]
-    throttle_classes = [PaymentRateThrottle]
 
     def post(self, request):
         serializer = PayBillSerializer(data=request.data)
@@ -251,7 +244,6 @@ class PayTillView(APIView):
     """Pay a Till number with crypto."""
 
     permission_classes = [IsNotSuspended]
-    throttle_classes = [PaymentRateThrottle]
 
     def post(self, request):
         serializer = PayTillSerializer(data=request.data)
@@ -571,11 +563,6 @@ class BuyCryptoView(APIView):
             tx.status = Transaction.Status.FAILED
             tx.save(update_fields=["failure_reason", "status", "updated_at"])
             cache.delete(redis_key)
-            try:
-                from apps.core.tasks import send_failed_transaction_alert_task
-                send_failed_transaction_alert_task.delay(transaction_id=str(tx.id))
-            except Exception:
-                pass
             return Response(
                 {"error": "M-Pesa payment initiation failed. Please try again.", "transaction": TransactionSerializer(tx).data},
                 status=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -586,11 +573,6 @@ class BuyCryptoView(APIView):
             tx.status = Transaction.Status.FAILED
             tx.save(update_fields=["failure_reason", "status", "updated_at"])
             cache.delete(redis_key)
-            try:
-                from apps.core.tasks import send_failed_transaction_alert_task
-                send_failed_transaction_alert_task.delay(transaction_id=str(tx.id))
-            except Exception:
-                pass
             return Response(
                 {"error": "Payment initiation failed. Please try again."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,

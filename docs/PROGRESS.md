@@ -1,6 +1,6 @@
 # CryptoPay — Development Progress
 
-**Last updated:** 2026-03-15
+**Last updated:** 2026-03-14
 
 > See also: [ROADMAP.md](./ROADMAP.md) for strategic vision, fundraising, and expansion plans.
 > See also: [SYSTEM-DESIGN.md](./SYSTEM-DESIGN.md) for technical architecture and liquidity engine design.
@@ -914,7 +914,7 @@ eas build --platform ios --profile production
 
 ## KES Deposit Flow — IMPLEMENTED ✅
 
-**Last updated:** 2026-03-15
+**Last updated:** 2026-03-14
 
 | Component | Status | Details |
 |-----------|--------|---------|
@@ -1092,49 +1092,18 @@ Key findings applied:
 | L1 | Multi-stage Docker build | Low | 1h |
 | L2 | Automated dependency updates | Low | Dependabot config |
 
-### Production Deployment — Completed 2026-03-15
-
-| Component | Status | Details |
-|-----------|--------|---------|
-| Domain | ✅ Live | `cpay.co.ke` registered via Truehost (KSh 999/yr) |
-| VPS | ✅ Running | Contabo Cloud VPS 20 SSD, Ubuntu 24.04, 12GB RAM, 6 CPU, Docker |
-| Cloudflare | ✅ Active | DNS, SSL (Let's Encrypt), CDN, DDoS, WAF, origin rules (port 8080) |
-| Frontend | ✅ Deployed | `https://cpay.co.ke` — Expo web build served via nginx |
-| API | ✅ Live | `https://cpay.co.ke/api/v1/` — Django behind nginx reverse proxy |
-| Admin Panel | ✅ Live | `https://cpay.co.ke/admin/` — CSRF fixed for Cloudflare proxy |
-| Database | ✅ Migrated | PostgreSQL 16 on port 5433 (avoids camhub conflict) |
-| Redis | ✅ Running | Port 6380, AOF persistence |
-| Celery | ✅ Running | Worker + Beat, all tasks scheduled |
-| Email (Sending) | ✅ Working | Resend SMTP (port 465 SSL), `noreply@cpay.co.ke` |
-| SMS (OTP) | ⏳ Activating | Africa's Talking live app "Cpay", KES 100 funded, API key propagating |
-| Blockchain APIs | ✅ Connected | Alchemy (ETH+SOL), TronGrid (TRON), Esplora (BTC) |
-| SSL Certificate | ✅ Active | Universal SSL via Cloudflare, auto-renewal, expires 2026-06-12 |
-
 ### Go-Live Checklist (M-Pesa Production)
 
 | Step | Status | Details |
 |------|--------|---------|
 | Sandbox integration tested | ✅ Done | STK Push, C2B, B2B, B2C all implemented |
-| HTTPS callback URLs | ✅ Done | `https://cpay.co.ke/api/v1/mpesa/callback/...` |
-| SSL certificate | ✅ Done | Cloudflare Universal SSL |
-| VPS deployment | ✅ Done | `173.249.4.109` (Contabo Europe) |
 | Paybill/Till number obtained | ⬜ Pending | Apply via Safaricom Business |
+| HTTPS callback URLs | ⬜ Pending | Requires VPS deployment |
 | Go-live request letter | ⬜ Pending | Email to m-pesabusiness@safaricom.co.ke |
-| IP whitelisting | ⬜ Pending | Provide server IP `173.249.4.109` to Safaricom |
+| IP whitelisting | ⬜ Pending | Provide server IP to Safaricom |
 | Production credentials | ⬜ Pending | Replace sandbox App Key/Secret |
-
-### Remaining Items
-
-| # | Item | Priority | Status |
-|---|------|----------|--------|
-| 1 | SMS OTP delivery | High | AT key propagating (~1hr), will work automatically |
-| 2 | Branded email templates | High | Implementing now |
-| 3 | Admin alert automation | High | Implementing now |
-| 4 | Favicon/PWA icons | Medium | Implementing now |
-| 5 | Cloudflare Email Routing | Medium | Manual setup in Cloudflare dashboard |
-| 6 | Google OAuth credentials | Medium | Need Google Cloud Console project |
-| 7 | M-Pesa production | Blocked | Waiting on Safaricom approval |
-| 8 | AT Sender ID "CPay" | Low | Apply after AT activation (3-5 business days) |
+| SSL certificate | ⬜ Pending | Let's Encrypt + certbot auto-renewal |
+| VPS deployment | ⬜ Pending | Nairobi VPS (Lineserve/Truehost) |
 
 ---
 

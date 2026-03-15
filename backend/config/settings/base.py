@@ -239,11 +239,6 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.core.tasks.daily_database_backup",
         "schedule": crontab(hour=2, minute=0),
     },
-    # Daily operations summary email to admins (8:00 AM EAT)
-    "daily-summary-email": {
-        "task": "apps.core.tasks.daily_summary_email",
-        "schedule": crontab(hour=8, minute=0),
-    },
 }
 
 # --- DRF ---
@@ -368,15 +363,6 @@ MPESA_ALLOWED_IPS = env.list("MPESA_ALLOWED_IPS", default=[
 # --- Africa's Talking ---
 AT_API_KEY = env("AT_API_KEY", default="")
 AT_USERNAME = env("AT_USERNAME", default="sandbox")
-AT_SENDER_ID = env("AT_SENDER_ID", default="")
-
-# Unimatrix SMS (primary SMS/OTP provider)
-UNIMTX_ACCESS_KEY = env("UNIMTX_ACCESS_KEY", default="")
-
-# eSMS Africa (secondary SMS provider for Kenya)
-ESMS_API_KEY = env("ESMS_API_KEY", default="")
-ESMS_ACCOUNT_ID = env("ESMS_ACCOUNT_ID", default="")
-ESMS_SENDER_ID = env("ESMS_SENDER_ID", default="")
 AT_SENDER_ID = env("AT_SENDER_ID", default="CryptoPay")
 
 # --- Frontend URL (for email verification links) ---
@@ -622,12 +608,8 @@ LOGGING = {
 
 # --- Email ---
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
-DEFAULT_FROM_EMAIL = "CPay <noreply@cpay.co.ke>"
-SERVER_EMAIL = "CPay Alerts <alerts@cpay.co.ke>"
-
-# Admin email recipients (overridden in production.py)
-ADMINS = [("Admin", "admin@cpay.co.ke")]
-MANAGERS = ADMINS
+DEFAULT_FROM_EMAIL = "CryptoPay <noreply@cryptopay.co.ke>"
+SERVER_EMAIL = "CryptoPay Alerts <alerts@cryptopay.co.ke>"
 
 # --- Smile Identity KYC ---
 SMILE_IDENTITY_PARTNER_ID = env("SMILE_IDENTITY_PARTNER_ID", default="")
@@ -644,15 +626,3 @@ KYC_DAILY_LIMITS = {
 
 # --- Prometheus ---
 PROMETHEUS_MULTIPROC_DIR = env("PROMETHEUS_MULTIPROC_DIR", default="")
-
-# CSRF trusted origins (required for admin behind Cloudflare proxy)
-CSRF_TRUSTED_ORIGINS = [
-    "https://cpay.co.ke",
-    "https://www.cpay.co.ke",
-    "https://api.cpay.co.ke",
-    "http://localhost:8000",
-    "http://localhost:8081",
-]
-
-# Trust X-Forwarded-Proto from Cloudflare
-SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
