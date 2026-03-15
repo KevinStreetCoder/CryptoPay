@@ -99,7 +99,7 @@ def send_otp_email(user, otp_code):
             "otp_code": otp_code,
         })
         send_mail(
-            f"CPay — Your verification code is {otp_code}",
+            f"CryptoPay — Your verification code is {otp_code}",
             "",
             settings.DEFAULT_FROM_EMAIL,
             [user.email],
@@ -262,7 +262,7 @@ def send_transaction_notifications(user, transaction):
         ref = str(transaction.id)[:8].upper()
         label = TX_TYPE_LABELS.get(transaction.type, transaction.type.replace("_", " ").title())
         message = (
-            f"CPay: {label} of {transaction.dest_currency} {transaction.dest_amount} completed successfully. "
+            f"CryptoPay: {label} of {transaction.dest_currency} {transaction.dest_amount} completed successfully. "
             f"Ref: {ref}. Thank you for using CPay."
         )
         send_sms(user.phone, message)
@@ -313,7 +313,7 @@ def send_transaction_notifications(user, transaction):
                     "timestamp": transaction.created_at.isoformat(),
                 })
                 send_mail(
-                    f"CPay — Transaction Failed: {tx_label} {ref}",
+                    f"CryptoPay — Transaction Failed: {tx_label} {ref}",
                     "",
                     settings.DEFAULT_FROM_EMAIL,
                     [user.email],
@@ -393,7 +393,7 @@ def send_admin_new_user_alert(user):
     )
     try:
         mail_admins(
-            subject=f"[CPay] New user registered: {user.phone}",
+            subject=f"[CryptoPay] New user registered: {user.phone}",
             message=body,
             fail_silently=True,
         )
@@ -477,7 +477,7 @@ def send_deposit_confirmed_notification(user, deposit):
             }
             html_content = render_to_string("email/transaction_receipt.html", context)
             send_mail(
-                f"CPay — Deposit Confirmed: {deposit.amount} {deposit.currency}",
+                f"CryptoPay — Deposit Confirmed: {deposit.amount} {deposit.currency}",
                 "",
                 settings.DEFAULT_FROM_EMAIL,
                 [user.email],
@@ -493,7 +493,7 @@ def send_deposit_confirmed_notification(user, deposit):
         ref = deposit.tx_hash[:8].upper() if deposit.tx_hash else "N/A"
         send_sms(
             user.phone,
-            f"CPay: Deposit of {deposit.amount} {deposit.currency} confirmed "
+            f"CryptoPay: Deposit of {deposit.amount} {deposit.currency} confirmed "
             f"and credited to your wallet. Ref: {ref}. Thank you for using CPay."
         )
         logger.info(f"Deposit SMS sent to {user.phone}")
@@ -532,7 +532,7 @@ def send_admin_kyc_upload_alert(user, document_type):
     )
     try:
         mail_admins(
-            subject=f"[CPay] KYC Upload: {user.phone} — {doc_label}",
+            subject=f"[CryptoPay] KYC Upload: {user.phone} — {doc_label}",
             message=body,
             fail_silently=True,
         )

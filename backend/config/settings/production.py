@@ -104,8 +104,8 @@ CSRF_TRUSTED_ORIGINS = [
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # Email branding
-DEFAULT_FROM_EMAIL = "CPay <noreply@cpay.co.ke>"
-SERVER_EMAIL = "CPay Alerts <admin@cpay.co.ke>"
+DEFAULT_FROM_EMAIL = "CryptoPay <noreply@cpay.co.ke>"
+SERVER_EMAIL = "CryptoPay Alerts <admin@cpay.co.ke>"
 
 # Admin email notifications
 ADMINS = [("Kevin", "kevinisaackareithi@gmail.com")]
