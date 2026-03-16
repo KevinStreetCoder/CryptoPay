@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import { Button } from "../../src/components/Button";
 import { useToast } from "../../src/components/Toast";
 import { useWallets } from "../../src/hooks/useWallets";
 import { ratesApi, Quote } from "../../src/api/rates";
+import { paymentsApi, SavedPaybill } from "../../src/api/payments";
 import { normalizeError } from "../../src/utils/apiErrors";
 import { cacheQuote } from "../../src/utils/rateCache";
 import { colors, getThemeColors, getThemeShadows, CURRENCIES, CurrencyCode } from "../../src/constants/theme";
@@ -43,6 +44,41 @@ export default function PayBillScreen() {
   const [quote, setQuote] = useState<Quote | null>(null);
   const [loading, setLoading] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
+  const [savedBills, setSavedBills] = useState<SavedPaybill[]>([]);
+  const [loadingSaved, setLoadingSaved] = useState(false);
+
+  // Fetch saved paybills on mount
+  const fetchSavedBills = useCallback(async () => {
+    try {
+      setLoadingSaved(true);
+      const { data } = await paymentsApi.savedPaybills();
+      setSavedBills(data);
+    } catch {
+      // Silently fail — not critical
+    } finally {
+      setLoadingSaved(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSavedBills();
+  }, [fetchSavedBills]);
+
+  const handleDeleteSavedBill = async (id: string) => {
+    try {
+      await paymentsApi.deleteSavedPaybill(id);
+      setSavedBills((prev) => prev.filter((b) => b.id !== id));
+      toast.success("Removed", "Saved bill deleted");
+    } catch {
+      toast.error("Error", "Could not delete saved bill");
+    }
+  };
+
+  const handleSelectSavedBill = (bill: SavedPaybill) => {
+    setPaybillNumber(bill.paybill_number);
+    setAccountNumber(bill.account_number);
+    setQuote(null);
+  };
 
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
@@ -247,6 +283,77 @@ export default function PayBillScreen() {
                 marginTop: isDesktop ? 0 : 8,
               }}
             >
+              {/* Saved Bills */}
+              {savedBills.length > 0 && (
+                <View style={{ marginBottom: 20 }}>
+                  <SectionHeader title="Saved Bills" icon="bookmark-outline" iconColor={colors.primary[400]} />
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={{ gap: 10, paddingBottom: 4 }}
+                  >
+                    {savedBills.map((bill) => (
+                      <Pressable
+                        key={bill.id}
+                        onPress={() => handleSelectSavedBill(bill)}
+                        style={({ pressed, hovered }: any) => ({
+                          backgroundColor: isWeb && hovered ? tc.dark.elevated : tc.glass.bg,
+                          borderRadius: 14,
+                          borderWidth: 1,
+                          borderColor:
+                            paybillNumber === bill.paybill_number && accountNumber === bill.account_number
+                              ? colors.primary[400] + "60"
+                              : tc.glass.border,
+                          paddingVertical: 12,
+                          paddingHorizontal: 16,
+                          minWidth: 140,
+                          opacity: pressed ? 0.85 : 1,
+                          ...(isWeb ? { cursor: "pointer", transition: "all 0.15s ease" } as any : {}),
+                        })}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Select saved bill ${bill.label || bill.paybill_number}`}
+                      >
+                        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                          <Text
+                            style={{
+                              color: tc.textPrimary,
+                              fontSize: 13,
+                              fontFamily: "DMSans_600SemiBold",
+                              flex: 1,
+                            }}
+                            numberOfLines={1}
+                          >
+                            {bill.label || "Bill"}
+                          </Text>
+                          <Pressable
+                            onPress={(e) => {
+                              e.stopPropagation?.();
+                              handleDeleteSavedBill(bill.id);
+                            }}
+                            hitSlop={8}
+                            style={{ marginLeft: 8 }}
+                            accessibilityRole="button"
+                            accessibilityLabel="Delete saved bill"
+                          >
+                            <Ionicons name="close-circle-outline" size={16} color={tc.textMuted} />
+                          </Pressable>
+                        </View>
+                        <Text
+                          style={{
+                            color: tc.textMuted,
+                            fontSize: 12,
+                            fontFamily: "DMSans_400Regular",
+                            marginTop: 4,
+                          }}
+                        >
+                          {bill.paybill_number} / {bill.account_number}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+
               {/* Paybill Number */}
               <SectionHeader title={t("payment.paybillNumber")} icon="document-text-outline" iconColor={colors.primary[400]} />
               <TextInput

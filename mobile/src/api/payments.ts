@@ -116,6 +116,15 @@ export interface C2BInstructions {
   instructions: string[];
 }
 
+export interface SavedPaybill {
+  id: string;
+  paybill_number: string;
+  account_number: string;
+  label: string;
+  last_used_at: string | null;
+  created_at: string;
+}
+
 export interface ActivityParams {
   page?: number;
   page_size?: number;
@@ -149,4 +158,9 @@ export const paymentsApi = {
   withdraw: (data: WithdrawData) => api.post<Transaction>("/payments/withdraw/", data),
   withdrawStatus: (transactionId: string) => api.get<Transaction & { summary?: string }>(`/payments/withdraw/${transactionId}/status/`),
   withdrawFee: (currency: string, network: string) => api.get<WithdrawFeeInfo>("/payments/withdraw/fee/", { params: { currency, network } }),
+  // Saved Paybills
+  savedPaybills: () => api.get<SavedPaybill[]>("/payments/saved-paybills/"),
+  savePaybill: (data: { paybill_number: string; account_number: string; label?: string }) =>
+    api.post<SavedPaybill>("/payments/saved-paybills/", data),
+  deleteSavedPaybill: (id: string) => api.delete(`/payments/saved-paybills/${id}/`),
 };

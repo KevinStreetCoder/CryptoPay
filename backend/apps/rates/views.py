@@ -10,7 +10,8 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import ExchangeRate
+from .models import ExchangeRate, RateAlert
+from .serializers import RateAlertSerializer
 from .services import RateService
 
 logger = logging.getLogger(__name__)
@@ -128,3 +129,46 @@ class RateHistoryView(APIView):
                 data = [{"timestamp": row["bucket"].isoformat(), "rate": float(row["avg_rate"])} for row in qs_data]
 
         return Response({"currency": currency, "period": period, "data": data})
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Rate Alerts
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class RateAlertListCreateView(APIView):
+    """
+    GET  — List user's rate alerts.
+    POST — Create a new rate alert.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        alerts = RateAlert.objects.filter(user=request.user)
+        serializer = RateAlertSerializer(alerts, many=True)
+        return Response(serializer.data)
+
+    def post(self, request):
+        serializer = RateAlertSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        alert = RateAlert.objects.create(
+            user=request.user,
+            **serializer.validated_data,
+        )
+        return Response(RateAlertSerializer(alert).data, status=status.HTTP_201_CREATED)
+
+
+class RateAlertDeleteView(APIView):
+    """DELETE — Remove a rate alert."""
+
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, pk):
+        try:
+            alert = RateAlert.objects.get(id=pk, user=request.user)
+        except RateAlert.DoesNotExist:
+            return Response({"error": "Rate alert not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        alert.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)

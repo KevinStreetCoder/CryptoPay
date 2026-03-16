@@ -86,3 +86,27 @@ class Transaction(models.Model):
 
     def __str__(self):
         return f"{self.type} {self.status} - {self.source_amount} {self.source_currency}"
+
+
+class SavedPaybill(models.Model):
+    """User-saved paybill for quick repeat payments."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="saved_paybills",
+    )
+    paybill_number = models.CharField(max_length=20)
+    account_number = models.CharField(max_length=50)
+    label = models.CharField(max_length=100, blank=True, help_text="e.g. KPLC Home, DSTV")
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "saved_paybills"
+        ordering = ["-last_used_at", "-created_at"]
+        unique_together = [("user", "paybill_number", "account_number")]
+
+    def __str__(self):
+        return f"{self.user} — {self.label or self.paybill_number} ({self.account_number})"

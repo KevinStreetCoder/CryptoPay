@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import Transaction
+from .models import SavedPaybill, Transaction
 
 
 def _normalize_phone(value):
@@ -180,6 +180,22 @@ class WithdrawSerializer(serializers.Serializer):
             })
 
         return data
+
+
+class SavedPaybillSerializer(serializers.ModelSerializer):
+    """Serializer for user-saved paybills."""
+
+    class Meta:
+        model = SavedPaybill
+        fields = ("id", "paybill_number", "account_number", "label", "last_used_at", "created_at")
+        read_only_fields = ("id", "last_used_at", "created_at")
+
+    def validate_paybill_number(self, value):
+        if not value.isdigit():
+            raise serializers.ValidationError("Paybill number must contain only digits.")
+        if len(value) < 4 or len(value) > 7:
+            raise serializers.ValidationError("Paybill number must be 4-7 digits.")
+        return value
 
 
 class TransactionSerializer(serializers.ModelSerializer):

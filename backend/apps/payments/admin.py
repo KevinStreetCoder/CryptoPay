@@ -4,7 +4,7 @@ from django.contrib import admin
 from django.http import HttpResponse
 from django.utils import timezone
 
-from .models import Transaction
+from .models import SavedPaybill, Transaction
 
 
 def mark_as_reviewed(modeladmin, request, queryset):
@@ -121,3 +121,11 @@ class TransactionAdmin(admin.ModelAdmin):
         return obj.user.phone
     user_phone.short_description = "User"
     user_phone.admin_order_field = "user__phone"
+
+
+@admin.register(SavedPaybill)
+class SavedPaybillAdmin(admin.ModelAdmin):
+    list_display = ("user", "label", "paybill_number", "account_number", "last_used_at", "created_at")
+    list_filter = ("paybill_number",)
+    search_fields = ("user__phone", "paybill_number", "account_number", "label")
+    readonly_fields = ("id", "created_at")

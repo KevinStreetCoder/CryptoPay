@@ -103,8 +103,9 @@ function RootNavigator() {
     }
 
     const isLanding = segments[0] === "landing";
+    const isPitch = segments[0] === "pitch";
 
-    if (!user && !inAuthGroup && !isLanding) {
+    if (!user && !inAuthGroup && !isLanding && !isPitch) {
       // Show landing page to unauthenticated visitors on web, login on native
       if (Platform.OS === "web") {
         router.replace("/landing");
@@ -128,7 +129,8 @@ function RootNavigator() {
 
   const inAuthGroup = segments[0] === "auth";
   const isLandingPage = segments[0] === "landing";
-  const showDashboard = !!user && !inAuthGroup && !isLandingPage;
+  const isPitchPage = segments[0] === "pitch";
+  const showDashboard = !!user && !inAuthGroup && !isLandingPage && !isPitchPage;
 
   const stackContent = (
     <Stack
@@ -139,6 +141,7 @@ function RootNavigator() {
       }}
     >
       <Stack.Screen name="landing" options={{ animation: "fade" }} />
+      <Stack.Screen name="pitch" options={{ animation: "fade" }} />
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="onboarding" options={{ animation: "fade" }} />
       <Stack.Screen name="auth" options={{ animation: "slide_from_bottom" }} />
