@@ -797,6 +797,19 @@ Enterprise-level sweep pipeline that consolidates user deposit addresses into th
 
 **136 tests passing. 10 Docker containers healthy. First real USDT deposit credited.**
 
+#### ✅ COMPLETED (March 16, 2026 Session 9 — Audit Feature Batch: Pitch Page, Saved Paybills, Rate Alerts, WhatsApp Share)
+
+| # | Task | Area | Details | Files |
+|---|------|------|---------|-------|
+| 1 | **Investor pitch page** | Frontend | New `/pitch` route with full investor overview: problem/solution, market data (733K crypto users, KES 40T M-Pesa volume), traction metrics, revenue model, projections table, competitive comparison (CryptoPay vs Rift vs Yellow Card), team bio, $250K-$500K ask with use-of-funds breakdown, CTA buttons. Dark glassmorphism theme, DMSans fonts, no auth required. | `mobile/app/pitch.tsx`, `mobile/app/_layout.tsx` |
+| 2 | **WhatsApp share on success screen** | Frontend | Added "Share to WhatsApp" green button on payment success page. Opens WhatsApp with pre-filled message including KES amount and cpay.co.ke link. Uses `Linking.openURL` with `wa.me` deep link. | `mobile/app/payment/success.tsx` |
+| 3 | **Saved Paybills (backend)** | Backend | New `SavedPaybill` model (UUID PK, user FK, paybill_number, account_number, label, last_used_at). Migration 0005. Serializer with 4-7 digit validation. API: GET/POST `/payments/saved-paybills/`, DELETE `/payments/saved-paybills/{id}/`. Auto-saves paybill after successful payment via `get_or_create`. Admin registered. | `payments/models.py`, `payments/serializers.py`, `payments/views.py`, `payments/urls.py`, `payments/admin.py`, `payments/migrations/0005_savedpaybill.py` |
+| 4 | **Saved Paybills (frontend)** | Frontend | Paybill page shows horizontal scrollable "Saved Bills" cards at top. Tapping auto-fills paybill + account number. Delete button on each card. Glass card styling with active state highlight. API integration via `paymentsApi.savedPaybills/savePaybill/deleteSavedPaybill`. | `mobile/app/payment/paybill.tsx`, `mobile/src/api/payments.ts` |
+| 5 | **Rate Alerts (backend)** | Backend | New `RateAlert` model (UUID PK, user FK, currency, target_rate, direction above/below, is_active, triggered_at). Migration 0002. Serializer with 20-alert limit validation. API: GET/POST `/rates/alerts/`, DELETE `/rates/alerts/{id}/`. | `rates/models.py`, `rates/serializers.py` (new), `rates/views.py`, `rates/urls.py`, `rates/admin.py`, `rates/migrations/0002_ratealert.py` |
+| 6 | **Rate Alert trigger system** | Backend | Extended `refresh_rates` Celery task: after refreshing rates, checks all active alerts against current KES rates. Triggers email + SMS + push notification when target rate is reached. Marks alert as `is_active=False` with `triggered_at` timestamp. | `rates/tasks.py` |
+
+**New models: SavedPaybill, RateAlert. 2 new migrations. 5 new API endpoints. Investor pitch page live.**
+
 #### 🟡 REMAINING — Before Soft Launch (User Action Required)
 
 | # | Item | Status | Action |
@@ -820,6 +833,8 @@ Enterprise-level sweep pipeline that consolidates user deposit addresses into th
 | 5 | **Dollar Yield Products** | Deferred | Regulatory block — VASP licensing est. 2027 |
 | 6 | **Cross-Africa Remittance** | Not started | Uganda, Tanzania, Nigeria corridors |
 | 7 | **USSD Interface** | Not started | Feature phone access for non-smartphone users |
+| 8 | **Rate Alerts Frontend** | Backend done | Build UI for creating/managing rate alerts (backend API ready) |
+| 9 | **Investor Pitch PDF Export** | Not started | Generate PDF from pitch page for offline sharing |
 
 ---
 

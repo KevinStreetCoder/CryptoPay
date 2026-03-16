@@ -8,67 +8,177 @@ import {
   Platform,
   useWindowDimensions,
   Image,
+  Linking,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { getThemeColors, shadows } from "../src/constants/theme";
 import { CRYPTO_LOGOS } from "../src/constants/logos";
 
+// Lottie animations — graceful degradation if not available
+let LottieView: any = null;
+if (Platform.OS !== "web") {
+  try {
+    LottieView = require("lottie-react-native").default;
+  } catch {
+    // lottie-react-native not installed — will use static illustrations instead
+  }
+}
+
 const isWeb = Platform.OS === "web";
+
+// ── Lottie Animation CDN URLs (free, from LottieFiles) ─────────────────────
+const LOTTIE_URLS = {
+  bitcoinSpin: "https://assets1.lottiefiles.com/packages/lf20_kyu7xb1v.json",
+  cryptoWallet: "https://assets8.lottiefiles.com/packages/lf20_bq485nmk.json",
+  securityLock: "https://assets6.lottiefiles.com/packages/lf20_uu0x8lqv.json",
+  successCheck: "https://assets1.lottiefiles.com/packages/lf20_s2lryxtd.json",
+  loadingCoins: "https://assets5.lottiefiles.com/packages/lf20_ystsffqy.json",
+  shield: "https://assets2.lottiefiles.com/packages/lf20_xlmz9xwm.json",
+};
+
+// ── Testimonials Data ─────────────────────────────────────────────────────
+const TESTIMONIALS = [
+  {
+    quote: "Paid my KPLC bill with USDT in 22 seconds. No more P2P hassle.",
+    name: "James M.",
+    role: "Freelancer",
+    initials: "JM",
+    color: "#26A17B",
+  },
+  {
+    quote: "Finally a way to pay school fees directly from my crypto wallet.",
+    name: "Sarah K.",
+    role: "Developer",
+    initials: "SK",
+    color: "#627EEA",
+  },
+  {
+    quote: "The locked rate feature is a game changer. No more slippage anxiety.",
+    name: "David O.",
+    role: "Trader",
+    initials: "DO",
+    color: "#F7931A",
+  },
+  {
+    quote: "I send money to my family via M-Pesa using BTC. It's instant.",
+    name: "Grace W.",
+    role: "Diaspora",
+    initials: "GW",
+    color: "#9945FF",
+  },
+];
+
+// ── Decorative Section Icons (replaces CDN illustrations with consistent Ionicons) ──
+// Each section gets a large glass-circle icon matching the app's design language.
+// Professional illustrations from unDraw CDN (Rackspace)
+const UNDRAW = {
+  mobilePayments: "https://42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations/mobile_payments_edgf.svg",
+  wallet: "https://42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations/wallet_aym5.svg",
+  secureData: "https://42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations/secure_data_0rwp.svg",
+  fastLoading: "https://42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations/fast_loading_0lbh.svg",
+  bitcoin: "https://42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations/bitcoin2_ave7.svg",
+  finance: "https://42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations/finance_0bdk.svg",
+  creditCard: "https://42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations/credit_card_payment_yb88.svg",
+  security: "https://42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations/security_o890.svg",
+  savings: "https://42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations/savings_hjfl.svg",
+  questions: "https://42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations/questions_75e0.svg",
+  success: "https://42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations/successful_purchase_uyin.svg",
+  safe: "https://42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations/safe_bnk7.svg",
+  pieChart: "https://42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations/pie_chart_6efe.svg",
+};
+
+// Used via <SectionDecorIcon> component below.
 
 // ── CDN Assets ──────────────────────────────────────────────────────────────
 const COIN_ICONS = [
-  { key: "USDT", uri: CRYPTO_LOGOS.USDT, color: "#26A17B" },
-  { key: "BTC", uri: CRYPTO_LOGOS.BTC, color: "#F7931A" },
-  { key: "ETH", uri: CRYPTO_LOGOS.ETH, color: "#627EEA" },
-  { key: "SOL", uri: CRYPTO_LOGOS.SOL, color: "#9945FF" },
+  { key: "USDT", uri: CRYPTO_LOGOS.USDT, color: "#26A17B", name: "USDT", network: "Tron TRC-20" },
+  { key: "BTC", uri: CRYPTO_LOGOS.BTC, color: "#F7931A", name: "Bitcoin", network: "Bitcoin" },
+  { key: "ETH", uri: CRYPTO_LOGOS.ETH, color: "#627EEA", name: "Ethereum", network: "Ethereum" },
+  { key: "SOL", uri: CRYPTO_LOGOS.SOL, color: "#9945FF", name: "Solana", network: "Solana" },
+  { key: "USDC", uri: CRYPTO_LOGOS.USDC, color: "#2775CA", name: "USDC", network: "Polygon" },
 ];
 
 const KENYA_FLAG = "https://flagcdn.com/48x36/ke.png";
 
-// Professional CDN illustrations (Storyset-style from public sources)
-const ILLUSTRATIONS = {
-  hero: "https://illustrations.popsy.co/emerald/digital-nomad.svg",
-  security: "https://illustrations.popsy.co/emerald/secure-login.svg",
-  payment: "https://illustrations.popsy.co/emerald/online-payment.svg",
-  wallet: "https://illustrations.popsy.co/emerald/bitcoin.svg",
+// ── Service Provider Logos (real branded images) ─────────────────────────────
+const LANDING_SERVICE_LOGOS = {
+  kplc: require("../assets/logos/services/kplc.png"),
+  dstv: require("../assets/logos/services/dstv.png"),
+  nairobi_water: require("../assets/logos/services/nairobi_water.png"),
+  safaricom: require("../assets/logos/services/safaricom.png"),
+  mpesa: require("../assets/logos/services/mpesa.png"),
+  airtel: require("../assets/logos/services/airtel.png"),
+  gotv: require("../assets/logos/services/gotv.png"),
+  startimes: require("../assets/logos/services/startimes.png"),
+  kra: require("../assets/logos/services/kra.png"),
+  nhif: require("../assets/logos/services/nhif.png"),
+  zuku: require("../assets/logos/services/zuku.png"),
 };
+
+// ── Social Media Icons (real logos) ─────────────────────────────────────────
+const SOCIAL_ICONS = {
+  twitter: require("../assets/logos/twitter.png"),
+  telegram: require("../assets/logos/telegram.png"),
+};
+
+// ── App Store Icons (real brand logos) ───────────────────────────────────────
+const STORE_ICONS = {
+  googlePlay: require("../assets/logos/google-play-icon.png"),
+  appStore: require("../assets/logos/app-store-icon.png"),
+};
+
+// ── Kenyan Service Providers (real branded logos) ────────────────────────────
+const KENYAN_SERVICES = [
+  { name: "KPLC", logo: LANDING_SERVICE_LOGOS.kplc, color: "#00529B", desc: "Electricity" },
+  { name: "DSTV", logo: LANDING_SERVICE_LOGOS.dstv, color: "#1B365D", desc: "TV" },
+  { name: "Nairobi Water", logo: LANDING_SERVICE_LOGOS.nairobi_water, color: "#0066B3", desc: "Water" },
+  { name: "Safaricom", logo: LANDING_SERVICE_LOGOS.safaricom, color: "#6CC24A", desc: "Airtime" },
+  { name: "M-Pesa", logo: LANDING_SERVICE_LOGOS.mpesa, color: "#00A650", desc: "Send Money" },
+  { name: "Airtel", logo: LANDING_SERVICE_LOGOS.airtel, color: "#ED1C24", desc: "Airtime" },
+  { name: "GOtv", logo: LANDING_SERVICE_LOGOS.gotv, color: "#F15A22", desc: "TV" },
+  { name: "StarTimes", logo: LANDING_SERVICE_LOGOS.startimes, color: "#FDB913", desc: "TV" },
+  { name: "KRA", logo: LANDING_SERVICE_LOGOS.kra, color: "#003366", desc: "Tax" },
+  { name: "NHIF", logo: LANDING_SERVICE_LOGOS.nhif, color: "#0072CE", desc: "Health" },
+  { name: "Zuku", logo: LANDING_SERVICE_LOGOS.zuku, color: "#E30613", desc: "Internet" },
+];
 
 // ── FAQ Data ────────────────────────────────────────────────────────────────
 const FAQ_DATA = [
   {
     q: "How does CryptoPay work?",
-    a: "Deposit crypto (USDT, BTC, ETH, or SOL) to your personal CryptoPay wallet. Choose a payment method \u2014 Paybill, Till number, or phone number \u2014 and we instantly convert and send the payment via M-Pesa.",
+    a: "Deposit crypto (USDT, BTC, ETH, or SOL) to your personal CryptoPay wallet. Choose a payment method \u2014 Paybill, Till number, or phone number \u2014 and we instantly convert and send the payment via M-Pesa. The entire process takes under 30 seconds.",
   },
   {
     q: "What cryptocurrencies are supported?",
-    a: "We support USDT (on Tron and Ethereum), Bitcoin (BTC), Ethereum (ETH), and Solana (SOL). More chains are added regularly.",
+    a: "We support USDT on Tron (TRC-20), Bitcoin (BTC), Ethereum (ETH), Solana (SOL), and USDC on Polygon. More chains are added regularly based on user demand.",
   },
   {
     q: "How long does a payment take?",
-    a: "Once your crypto deposit is confirmed on-chain, M-Pesa payments are processed in under 30 seconds. Most transactions complete in 10-15 seconds.",
+    a: "Once your crypto deposit is confirmed on-chain, M-Pesa payments are processed in under 30 seconds. Most transactions complete in 10-15 seconds. You get real-time status updates throughout.",
   },
   {
     q: "Is it safe? How is my crypto protected?",
-    a: "Absolutely. CryptoPay uses 256-bit encryption, BIP-44 HD wallet architecture, biometric authentication, and 2FA. Your keys are secured using industry-standard practices.",
+    a: "CryptoPay uses 256-bit AES encryption, BIP-44 HD wallet architecture, biometric authentication, and optional TOTP 2FA. Your deposit addresses are derived from industry-standard hierarchical deterministic wallets. We never hold your private keys.",
   },
   {
     q: "What are the fees?",
-    a: "CryptoPay charges a small conversion fee that is transparently displayed before every transaction. There are no hidden fees. The rate you see is the rate you get, locked for 30 seconds.",
+    a: "We charge a transparent 1.5% conversion spread plus a flat KES 10 fee per transaction. That is it \u2014 no hidden charges, no surprise deductions. The rate you see is the rate you get, locked for 30 seconds while you confirm.",
   },
   {
     q: "Do I need KYC verification?",
-    a: "Basic transactions up to KES 5,000/day require only phone verification. Higher tiers (up to KES 1M/day) require ID verification via our simple KYC process.",
+    a: "Basic transactions up to KES 5,000 per day require only phone verification. For higher limits up to KES 1,000,000 per day, you will need to complete our streamlined ID verification process, which takes under 2 minutes.",
   },
 ];
 
 // ── Comparison Table Data ───────────────────────────────────────────────────
 const COMPARISON_ROWS = [
-  { label: "Speed", cp: "< 30 seconds", p2p: "15-60 min", otc: "1-24 hours" },
-  { label: "Fees", cp: "1-2% transparent", p2p: "2-5% + spread", otc: "3-8% negotiated" },
-  { label: "Risk", cp: "Zero counterparty", p2p: "Scam risk", otc: "High trust required" },
-  { label: "Bill Payment", cp: "Direct Paybill/Till", p2p: "Not supported", otc: "Not supported" },
-  { label: "Automation", cp: "Fully automated", p2p: "Manual matching", otc: "Fully manual" },
+  { label: "Speed", cp: "< 30 seconds", p2p: "15-60 minutes", otc: "1-24 hours", cpIcon: "checkmark-circle" as const },
+  { label: "Fees", cp: "1.5% + KES 10", p2p: "3-8% spread", otc: "5-10% negotiated", cpIcon: "checkmark-circle" as const },
+  { label: "Scam Risk", cp: "Zero", p2p: "High", otc: "Very high", cpIcon: "checkmark-circle" as const },
+  { label: "Bill Payment", cp: "Direct Paybill/Till", p2p: "Not supported", otc: "Not supported", cpIcon: "checkmark-circle" as const },
+  { label: "Automation", cp: "Fully automated", p2p: "Manual matching", otc: "Fully manual", cpIcon: "checkmark-circle" as const },
+  { label: "KYC", cp: "Tiered verification", p2p: "Platform KYC", otc: "None (risky)", cpIcon: "checkmark-circle" as const },
 ];
 
 // ── Features Data ───────────────────────────────────────────────────────────
@@ -76,57 +186,42 @@ const FEATURES = [
   {
     icon: "flash" as const,
     title: "Pay Bills Instantly",
-    desc: "KPLC, DSTV, Water, School fees \u2014 any Paybill number",
+    desc: "KPLC, DSTV, Water, School fees \u2014 any Paybill number in Kenya",
   },
   {
     icon: "send" as const,
     title: "Send Money",
-    desc: "M-Pesa to any phone number, funded by crypto",
-  },
-  {
-    icon: "layers" as const,
-    title: "Multi-Chain Support",
-    desc: "USDT (Tron), BTC, ETH, SOL \u2014 choose your chain",
+    desc: "M-Pesa to any phone number, funded directly by your crypto balance",
   },
   {
     icon: "trending-up" as const,
     title: "Real-Time Rates",
-    desc: "Live exchange rates with 30-second price lock",
+    desc: "Live exchange rates with a guaranteed 30-second price lock on every quote",
+  },
+  {
+    icon: "layers" as const,
+    title: "Multi-Chain",
+    desc: "5 blockchains supported \u2014 always pick the cheapest network for your transfer",
   },
   {
     icon: "shield-checkmark" as const,
     title: "Bank-Grade Security",
-    desc: "256-bit encryption, biometric auth, 2FA",
+    desc: "256-bit AES encryption, biometric auth, TOTP 2FA, and HD wallet architecture",
   },
   {
     icon: "checkmark-circle" as const,
     title: "KYC Compliant",
-    desc: "Tiered limits from KES 5K to KES 1M/day",
+    desc: "Tiered verification: KES 5K/day basic, up to KES 1M/day fully verified",
   },
 ];
 
 // ── Stats Data ──────────────────────────────────────────────────────────────
 const STATS = [
   { value: "KES 129+", label: "USDT/KES Rate" },
-  { value: "5 Chains", label: "Supported" },
-  { value: "< 30 sec", label: "Payment Speed" },
+  { value: "< 30s", label: "Payment Speed" },
+  { value: "5", label: "Chains Supported" },
   { value: "99.9%", label: "Uptime" },
 ];
-
-// ── Animated Counter Hook ───────────────────────────────────────────────────
-function useAnimatedValue(target: number, duration: number, trigger: boolean) {
-  const anim = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    if (trigger) {
-      Animated.timing(anim, {
-        toValue: target,
-        duration,
-        useNativeDriver: !isWeb,
-      }).start();
-    }
-  }, [trigger]);
-  return anim;
-}
 
 // ── Scroll-Reveal Wrapper ───────────────────────────────────────────────────
 function RevealOnScroll({
@@ -163,7 +258,6 @@ function RevealOnScroll({
     }
   }, [visible, delay]);
 
-  // On web, use IntersectionObserver; on native, reveal immediately
   useEffect(() => {
     if (!isWeb) {
       setVisible(true);
@@ -173,9 +267,7 @@ function RevealOnScroll({
       ? undefined
       : (viewRef.current as any);
     if (node && typeof IntersectionObserver !== "undefined") {
-      // For web, the underlying DOM node
       const tryObserve = () => {
-        // expo-router web: viewRef.current might be a View wrapper
         const el =
           node instanceof HTMLElement
             ? node
@@ -190,15 +282,13 @@ function RevealOnScroll({
                 obs.disconnect();
               }
             },
-            { threshold: 0.15 }
+            { threshold: 0.1 }
           );
           obs.observe(el);
           return () => obs.disconnect();
         }
-        // Fallback: just show it
         setVisible(true);
       };
-      // Small delay so the DOM node is mounted
       const t = setTimeout(tryObserve, 100);
       return () => clearTimeout(t);
     } else {
@@ -236,24 +326,22 @@ function FloatingCoin({
   const opacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Fade in
     Animated.timing(opacity, {
-      toValue: 1,
+      toValue: 0.85,
       duration: 800,
       delay,
       useNativeDriver: !isWeb,
     }).start();
 
-    // Float loop
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(translateY, {
-          toValue: -12,
+          toValue: -14,
           duration: 2400 + delay,
           useNativeDriver: !isWeb,
         }),
         Animated.timing(translateY, {
-          toValue: 12,
+          toValue: 14,
           duration: 2400 + delay,
           useNativeDriver: !isWeb,
         }),
@@ -284,14 +372,15 @@ function FloatingCoin({
           borderRadius: size / 2,
           alignItems: "center",
           justifyContent: "center",
-          backgroundColor: "rgba(255,255,255,0.05)",
+          backgroundColor: "rgba(255,255,255,0.04)",
           borderWidth: 1,
           borderColor: "rgba(255,255,255,0.08)",
           ...(isWeb
             ? ({
                 backdropFilter: "blur(8px)",
                 WebkitBackdropFilter: "blur(8px)",
-                boxShadow: `0 4px 24px ${color}30`,
+                boxShadow: `0 4px 24px ${color}25`,
+                animation: `cpay-coin-rotate ${20 + delay * 5}s linear infinite`,
               } as any)
             : {}),
         }}
@@ -316,24 +405,16 @@ function FAQItem({
   tc: ReturnType<typeof getThemeColors>;
 }) {
   const [open, setOpen] = useState(false);
-  const heightAnim = useRef(new Animated.Value(0)).current;
   const rotateAnim = useRef(new Animated.Value(0)).current;
 
   const toggle = () => {
     const next = !open;
     setOpen(next);
-    Animated.parallel([
-      Animated.timing(heightAnim, {
-        toValue: next ? 1 : 0,
-        duration: 300,
-        useNativeDriver: false, // height animation can't use native driver
-      }),
-      Animated.timing(rotateAnim, {
-        toValue: next ? 1 : 0,
-        duration: 300,
-        useNativeDriver: !isWeb,
-      }),
-    ]).start();
+    Animated.timing(rotateAnim, {
+      toValue: next ? 1 : 0,
+      duration: 300,
+      useNativeDriver: !isWeb,
+    }).start();
   };
 
   const rotate = rotateAnim.interpolate({
@@ -345,19 +426,21 @@ function FAQItem({
     <Pressable
       onPress={toggle}
       style={({ hovered }: any) => ({
-        backgroundColor: isWeb && hovered
-          ? "rgba(255,255,255,0.04)"
-          : "rgba(255,255,255,0.02)",
+        backgroundColor: open
+          ? "rgba(16, 185, 129, 0.04)"
+          : isWeb && hovered
+            ? "rgba(255,255,255,0.03)"
+            : "rgba(255,255,255,0.02)",
         borderRadius: 16,
         borderWidth: 1,
         borderColor: open
           ? "rgba(16, 185, 129, 0.2)"
           : "rgba(255,255,255,0.06)",
-        paddingHorizontal: 20,
-        paddingVertical: 18,
+        paddingHorizontal: 24,
+        paddingVertical: 20,
         marginBottom: 12,
         ...(isWeb
-          ? ({ transition: "all 0.2s ease", cursor: "pointer" } as any)
+          ? ({ transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)", cursor: "pointer" } as any)
           : {}),
       })}
     >
@@ -371,27 +454,31 @@ function FAQItem({
         <Text
           style={{
             flex: 1,
-            color: tc.textPrimary,
+            color: open ? tc.primary[300] : tc.textPrimary,
             fontSize: 16,
             fontFamily: "DMSans_600SemiBold",
             lineHeight: 24,
-            marginRight: 12,
+            marginRight: 16,
           }}
         >
           {question}
         </Text>
         <Animated.View style={{ transform: [{ rotate }] }}>
-          <Ionicons name="chevron-down" size={20} color={tc.textMuted} />
+          <Ionicons
+            name="chevron-down"
+            size={20}
+            color={open ? tc.primary[400] : tc.textMuted}
+          />
         </Animated.View>
       </View>
       {open && (
         <Text
           style={{
             color: tc.textSecondary,
-            fontSize: 14,
+            fontSize: 15,
             fontFamily: "DMSans_400Regular",
-            lineHeight: 22,
-            marginTop: 12,
+            lineHeight: 24,
+            marginTop: 14,
           }}
         >
           {answer}
@@ -405,12 +492,13 @@ function FAQItem({
 function GlassCard({
   children,
   style,
-  tc,
+  hoverGlow,
 }: {
   children: React.ReactNode;
   style?: any;
-  tc: ReturnType<typeof getThemeColors>;
+  hoverGlow?: string;
 }) {
+  const tc = getThemeColors(true);
   return (
     <View
       style={{
@@ -423,7 +511,129 @@ function GlassCard({
           ? ({
               backdropFilter: "blur(16px)",
               WebkitBackdropFilter: "blur(16px)",
-              transition: "all 0.3s ease",
+              transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+            } as any)
+          : {}),
+        ...shadows.md,
+        ...style,
+      }}
+    >
+      {children}
+    </View>
+  );
+}
+
+// ── Animated Counter Hook ─────────────────────────────────────────────────
+function useAnimatedCounter(end: number, duration: number = 2000, prefix: string = "", suffix: string = "") {
+  const [count, setCount] = useState(0);
+  const [started, setStarted] = useState(false);
+  const viewRef = useRef<View>(null);
+
+  useEffect(() => {
+    if (!started) return;
+    let startTime: number | null = null;
+    let raf: number;
+    const step = (timestamp: number) => {
+      if (!startTime) startTime = timestamp;
+      const progress = Math.min((timestamp - startTime) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3); // easeOutCubic
+      setCount(Math.floor(eased * end));
+      if (progress < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [started, end, duration]);
+
+  useEffect(() => {
+    if (!isWeb) { setStarted(true); return; }
+    const node = (viewRef.current as any);
+    if (node && typeof IntersectionObserver !== "undefined") {
+      const tryObserve = () => {
+        const el = node instanceof HTMLElement ? node : null;
+        if (el) {
+          const obs = new IntersectionObserver(
+            ([entry]) => { if (entry.isIntersecting) { setStarted(true); obs.disconnect(); } },
+            { threshold: 0.3 }
+          );
+          obs.observe(el);
+          return () => obs.disconnect();
+        }
+        setStarted(true);
+      };
+      const t = setTimeout(tryObserve, 100);
+      return () => clearTimeout(t);
+    } else {
+      setStarted(true);
+    }
+  }, []);
+
+  return { count, viewRef, display: `${prefix}${count.toLocaleString()}${suffix}` };
+}
+
+// ── 3D Tilt Card (web only) ──────────────────────────────────────────────
+function TiltCard({
+  children,
+  style,
+  glowColor,
+}: {
+  children: React.ReactNode;
+  style?: any;
+  glowColor?: string;
+}) {
+  const tc = getThemeColors(true);
+  const cardRef = useRef<View>(null);
+  const [tilt, setTilt] = useState({ rotateX: 0, rotateY: 0 });
+  const [hovered, setHovered] = useState(false);
+
+  const handleMouseMove = useCallback((e: any) => {
+    if (!isWeb || !cardRef.current) return;
+    const el = cardRef.current as any;
+    if (!(el instanceof HTMLElement)) return;
+    const rect = el.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+    const rotateX = ((y - centerY) / centerY) * -8;
+    const rotateY = ((x - centerX) / centerX) * 8;
+    setTilt({ rotateX, rotateY });
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    setTilt({ rotateX: 0, rotateY: 0 });
+    setHovered(false);
+  }, []);
+
+  const handleMouseEnter = useCallback(() => {
+    setHovered(true);
+  }, []);
+
+  const glow = glowColor || tc.primary[500];
+
+  return (
+    <View
+      ref={cardRef}
+      {...(isWeb ? {
+        onMouseMove: handleMouseMove,
+        onMouseLeave: handleMouseLeave,
+        onMouseEnter: handleMouseEnter,
+      } as any : {})}
+      style={{
+        backgroundColor: tc.glass.bg,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: hovered ? `${glow}30` : tc.glass.border,
+        padding: 24,
+        ...(isWeb
+          ? ({
+              backdropFilter: "blur(16px)",
+              WebkitBackdropFilter: "blur(16px)",
+              transform: `perspective(1000px) rotateX(${tilt.rotateX}deg) rotateY(${tilt.rotateY}deg)`,
+              transition: hovered ? "border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1)" : "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+              boxShadow: hovered
+                ? `0 8px 32px ${glow}20, 0 0 0 1px ${glow}15`
+                : "0 4px 16px rgba(0,0,0,0.2)",
+              willChange: "transform",
             } as any)
           : {}),
         ...shadows.md,
@@ -458,17 +668,112 @@ function Section({
   );
 }
 
-// ── Primary Button ──────────────────────────────────────────────────────────
+// ── Lottie Animation Component (with fallback to static illustration) ─────
+function LottieAnimation({
+  url,
+  fallbackUri,
+  size = 160,
+  style,
+}: {
+  url: string;
+  fallbackUri?: string;
+  size?: number;
+  style?: any;
+}) {
+  if (isWeb) {
+    // On web, use an iframe or img fallback since lottie-react-native doesn't work on web
+    // Use the static unDraw illustration as fallback
+    if (fallbackUri) {
+      return (
+        <Image
+          source={{ uri: fallbackUri }}
+          style={{ width: size, height: size, opacity: 0.85, ...style }}
+          resizeMode="contain"
+        />
+      );
+    }
+    return null;
+  }
+  // On native, use LottieView if available
+  if (LottieView) {
+    return (
+      <LottieView
+        source={{ uri: url }}
+        autoPlay
+        loop
+        style={{ width: size, height: size, ...style }}
+      />
+    );
+  }
+  // Fallback to static image
+  if (fallbackUri) {
+    return (
+      <Image
+        source={{ uri: fallbackUri }}
+        style={{ width: size, height: size, opacity: 0.85, ...style }}
+        resizeMode="contain"
+      />
+    );
+  }
+  return null;
+}
+
+// ── Section Decoration Icon (glass circle with Ionicon) ──────────────────
+function SectionDecorIcon({
+  icon,
+  size = 80,
+  iconSize = 40,
+  color = "rgba(16, 185, 129, 0.15)",
+  borderColor = "rgba(16, 185, 129, 0.25)",
+  iconColor = "#10B981",
+  glowColor = "rgba(16, 185, 129, 0.12)",
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  size?: number;
+  iconSize?: number;
+  color?: string;
+  borderColor?: string;
+  iconColor?: string;
+  glowColor?: string;
+}) {
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        backgroundColor: color,
+        borderWidth: 1,
+        borderColor: borderColor,
+        alignItems: "center",
+        justifyContent: "center",
+        ...(isWeb
+          ? ({
+              backdropFilter: "blur(12px)",
+              WebkitBackdropFilter: "blur(12px)",
+              boxShadow: `0 8px 32px ${glowColor}`,
+            } as any)
+          : {}),
+      }}
+    >
+      <Ionicons name={icon} size={iconSize} color={iconColor} />
+    </View>
+  );
+}
+
+// ── Primary CTA Button ─────────────────────────────────────────────────────
 function PrimaryButton({
   label,
   onPress,
   tc,
   style,
+  icon,
 }: {
   label: string;
   onPress: () => void;
   tc: ReturnType<typeof getThemeColors>;
   style?: any;
+  icon?: keyof typeof Ionicons.glyphMap;
 }) {
   return (
     <Pressable
@@ -476,31 +781,34 @@ function PrimaryButton({
       style={({ pressed, hovered }: any) => ({
         backgroundColor: hovered ? tc.primary[400] : tc.primary[500],
         borderRadius: 16,
-        paddingVertical: 16,
-        paddingHorizontal: 32,
+        paddingVertical: 17,
+        paddingHorizontal: 36,
         alignItems: "center",
         justifyContent: "center",
-        minHeight: 54,
+        flexDirection: "row",
+        gap: 10,
+        minHeight: 56,
         opacity: pressed ? 0.9 : 1,
-        transform: [{ scale: pressed ? 0.98 : 1 }],
+        transform: [{ scale: pressed ? 0.97 : hovered ? 1.02 : 1 }],
         ...(isWeb
           ? ({
               cursor: "pointer",
-              transition: "all 0.2s ease",
+              transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
               boxShadow: hovered
-                ? "0 8px 24px rgba(16, 185, 129, 0.35)"
-                : "0 4px 16px rgba(16, 185, 129, 0.2)",
+                ? "0 12px 40px rgba(16, 185, 129, 0.5), 0 0 0 2px rgba(16, 185, 129, 0.2)"
+                : "0 4px 20px rgba(16, 185, 129, 0.25)",
             } as any)
           : {}),
         ...style,
       })}
       accessibilityRole="button"
     >
+      {icon && <Ionicons name={icon} size={20} color="#FFFFFF" />}
       <Text
         style={{
           color: "#FFFFFF",
           fontSize: 17,
-          fontFamily: "DMSans_600SemiBold",
+          fontFamily: "DMSans_700Bold",
           letterSpacing: 0.3,
         }}
       >
@@ -510,182 +818,350 @@ function PrimaryButton({
   );
 }
 
-function OutlineButton({
+// ── Section Title Component ─────────────────────────────────────────────────
+function SectionTitle({
   label,
-  onPress,
+  title,
+  subtitle,
   tc,
-  style,
+  isMobile,
 }: {
   label: string;
-  onPress: () => void;
+  title: string;
+  subtitle?: string;
   tc: ReturnType<typeof getThemeColors>;
-  style?: any;
+  isMobile: boolean;
 }) {
   return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed, hovered }: any) => ({
-        borderRadius: 16,
-        paddingVertical: 16,
-        paddingHorizontal: 32,
-        alignItems: "center",
-        justifyContent: "center",
-        minHeight: 54,
-        borderWidth: 1.5,
-        borderColor: hovered
-          ? tc.primary[400]
-          : "rgba(255,255,255,0.15)",
-        backgroundColor: hovered
-          ? "rgba(16, 185, 129, 0.08)"
-          : "transparent",
-        opacity: pressed ? 0.9 : 1,
-        transform: [{ scale: pressed ? 0.98 : 1 }],
-        ...(isWeb
-          ? ({
-              cursor: "pointer",
-              transition: "all 0.2s ease",
-            } as any)
-          : {}),
-        ...style,
-      })}
-      accessibilityRole="button"
-    >
+    <View style={{ alignItems: "center", marginBottom: isMobile ? 36 : 56 }}>
       <Text
         style={{
-          color: tc.textPrimary,
-          fontSize: 17,
-          fontFamily: "DMSans_600SemiBold",
-          letterSpacing: 0.3,
+          color: tc.primary[400],
+          fontSize: 13,
+          fontFamily: "DMSans_700Bold",
+          textAlign: "center",
+          textTransform: "uppercase",
+          letterSpacing: 3,
+          marginBottom: 14,
         }}
       >
         {label}
       </Text>
-    </Pressable>
+      <Text
+        style={{
+          color: tc.textPrimary,
+          fontSize: isMobile ? 28 : 40,
+          fontFamily: "DMSans_700Bold",
+          textAlign: "center",
+          letterSpacing: -1,
+          lineHeight: isMobile ? 36 : 50,
+          maxWidth: 700,
+        }}
+      >
+        {title}
+      </Text>
+      {subtitle && (
+        <Text
+          style={{
+            color: tc.textSecondary,
+            fontSize: isMobile ? 15 : 17,
+            fontFamily: "DMSans_400Regular",
+            textAlign: "center",
+            lineHeight: isMobile ? 22 : 26,
+            marginTop: 14,
+            maxWidth: 560,
+          }}
+        >
+          {subtitle}
+        </Text>
+      )}
+    </View>
   );
 }
 
 // ── Navbar ──────────────────────────────────────────────────────────────────
 function Navbar({
   tc,
+  isMobile,
   isDesktop,
   onSignIn,
   onGetStarted,
+  onScrollTo,
 }: {
   tc: ReturnType<typeof getThemeColors>;
+  isMobile: boolean;
   isDesktop: boolean;
   onSignIn: () => void;
   onGetStarted: () => void;
+  onScrollTo: (section: string) => void;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const { width } = useWindowDimensions();
+  const pad = width >= 1400 ? 80 : width >= 1024 ? 48 : width >= 768 ? 32 : 20;
+
+  const navLinks = [
+    { label: "How It Works", section: "howItWorks" },
+    { label: "Features", section: "features" },
+    { label: "Pricing", section: "pricing" },
+  ];
+
   return (
-    <View
-      style={{
-        position: "absolute",
-        top: 0,
-        left: 0,
-        right: 0,
-        zIndex: 100,
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-        paddingHorizontal: isDesktop ? 48 : 20,
-        paddingVertical: 16,
-        ...(isWeb
-          ? ({
-              backdropFilter: "blur(12px)",
-              WebkitBackdropFilter: "blur(12px)",
-              backgroundColor: "rgba(6, 14, 31, 0.8)",
-              borderBottomWidth: 1,
-              borderBottomColor: "rgba(255,255,255,0.05)",
-            } as any)
-          : { backgroundColor: "rgba(6, 14, 31, 0.95)" }),
-      }}
-    >
-      {/* Logo */}
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+    <>
+      <View
+        style={{
+          position: isWeb ? ("fixed" as any) : "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 100,
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          paddingHorizontal: pad,
+          paddingVertical: 14,
+          ...(isWeb
+            ? ({
+                backdropFilter: "blur(16px)",
+                WebkitBackdropFilter: "blur(16px)",
+                backgroundColor: "rgba(6, 14, 31, 0.85)",
+                borderBottomWidth: 1,
+                borderBottomColor: "rgba(255,255,255,0.06)",
+                transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+              } as any)
+            : { backgroundColor: "rgba(6, 14, 31, 0.95)" }),
+        }}
+      >
+        {/* Logo */}
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <View
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 10,
+              backgroundColor: tc.primary[500],
+              alignItems: "center",
+              justifyContent: "center",
+              ...(isWeb
+                ? ({ boxShadow: "0 2px 12px rgba(16, 185, 129, 0.3)" } as any)
+                : {}),
+            }}
+          >
+            <Ionicons name="flash" size={18} color="#FFFFFF" />
+          </View>
+          <Text
+            style={{
+              color: tc.textPrimary,
+              fontSize: 22,
+              fontFamily: "DMSans_700Bold",
+              letterSpacing: -0.5,
+            }}
+          >
+            CryptoPay
+          </Text>
+        </View>
+
+        {/* Desktop nav links + actions */}
+        {isDesktop ? (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            {navLinks.map((link) => (
+              <Pressable
+                key={link.section}
+                onPress={() => onScrollTo(link.section)}
+                style={({ hovered }: any) => ({
+                  paddingVertical: 8,
+                  paddingHorizontal: 16,
+                  borderRadius: 10,
+                  backgroundColor: hovered ? "rgba(255,255,255,0.04)" : "transparent",
+                  ...(isWeb ? ({ cursor: "pointer", transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)" } as any) : {}),
+                })}
+              >
+                <Text
+                  style={{
+                    color: tc.textSecondary,
+                    fontSize: 14,
+                    fontFamily: "DMSans_500Medium",
+                  }}
+                >
+                  {link.label}
+                </Text>
+              </Pressable>
+            ))}
+
+            <View style={{ width: 1, height: 20, backgroundColor: tc.dark.border, marginHorizontal: 8 }} />
+
+            <Pressable
+              onPress={onSignIn}
+              style={({ pressed, hovered }: any) => ({
+                paddingVertical: 10,
+                paddingHorizontal: 20,
+                borderRadius: 12,
+                backgroundColor: hovered ? "rgba(255,255,255,0.05)" : "transparent",
+                opacity: pressed ? 0.8 : 1,
+                ...(isWeb ? ({ cursor: "pointer", transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)" } as any) : {}),
+              })}
+              accessibilityRole="button"
+              accessibilityLabel="Sign In"
+            >
+              <Text
+                style={{
+                  color: tc.textPrimary,
+                  fontSize: 15,
+                  fontFamily: "DMSans_600SemiBold",
+                }}
+              >
+                Sign In
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={onGetStarted}
+              style={({ pressed, hovered }: any) => ({
+                paddingVertical: 10,
+                paddingHorizontal: 24,
+                borderRadius: 12,
+                backgroundColor: hovered ? tc.primary[400] : tc.primary[500],
+                opacity: pressed ? 0.9 : 1,
+                transform: [{ scale: pressed ? 0.97 : 1 }],
+                ...(isWeb
+                  ? ({
+                      cursor: "pointer",
+                      transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+                      boxShadow: hovered
+                        ? "0 4px 20px rgba(16, 185, 129, 0.35)"
+                        : "0 2px 12px rgba(16, 185, 129, 0.2)",
+                    } as any)
+                  : {}),
+              })}
+              accessibilityRole="button"
+              accessibilityLabel="Get Started"
+            >
+              <Text
+                style={{
+                  color: "#FFFFFF",
+                  fontSize: 15,
+                  fontFamily: "DMSans_700Bold",
+                }}
+              >
+                Get Started
+              </Text>
+            </Pressable>
+          </View>
+        ) : (
+          /* Mobile hamburger */
+          <Pressable
+            onPress={() => setMenuOpen(!menuOpen)}
+            style={({ pressed }: any) => ({
+              width: 40,
+              height: 40,
+              borderRadius: 10,
+              backgroundColor: "rgba(255,255,255,0.05)",
+              alignItems: "center",
+              justifyContent: "center",
+              opacity: pressed ? 0.7 : 1,
+              ...(isWeb ? ({ cursor: "pointer" } as any) : {}),
+            })}
+          >
+            <Ionicons
+              name={menuOpen ? "close" : "menu"}
+              size={22}
+              color={tc.textPrimary}
+            />
+          </Pressable>
+        )}
+      </View>
+
+      {/* Mobile dropdown menu */}
+      {!isDesktop && menuOpen && (
         <View
           style={{
-            width: 36,
-            height: 36,
-            borderRadius: 10,
-            backgroundColor: tc.primary[500],
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <Ionicons name="flash" size={18} color="#FFFFFF" />
-        </View>
-        <Text
-          style={{
-            color: tc.textPrimary,
-            fontSize: 22,
-            fontFamily: "DMSans_700Bold",
-            letterSpacing: -0.5,
-          }}
-        >
-          CryptoPay
-        </Text>
-      </View>
-
-      {/* Nav actions */}
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-        <Pressable
-          onPress={onSignIn}
-          style={({ pressed, hovered }: any) => ({
-            paddingVertical: 10,
-            paddingHorizontal: isDesktop ? 20 : 14,
-            borderRadius: 12,
-            backgroundColor: hovered ? "rgba(255,255,255,0.05)" : "transparent",
-            opacity: pressed ? 0.8 : 1,
-            ...(isWeb ? ({ cursor: "pointer", transition: "all 0.2s ease" } as any) : {}),
-          })}
-          accessibilityRole="button"
-          accessibilityLabel="Sign In"
-        >
-          <Text
-            style={{
-              color: tc.textSecondary,
-              fontSize: 15,
-              fontFamily: "DMSans_600SemiBold",
-            }}
-          >
-            Sign In
-          </Text>
-        </Pressable>
-
-        <Pressable
-          onPress={onGetStarted}
-          style={({ pressed, hovered }: any) => ({
-            paddingVertical: 10,
-            paddingHorizontal: isDesktop ? 24 : 16,
-            borderRadius: 12,
-            backgroundColor: hovered ? tc.primary[400] : tc.primary[500],
-            opacity: pressed ? 0.9 : 1,
-            transform: [{ scale: pressed ? 0.97 : 1 }],
+            position: isWeb ? ("fixed" as any) : "absolute",
+            top: 64,
+            left: 0,
+            right: 0,
+            zIndex: 99,
+            backgroundColor: "rgba(6, 14, 31, 0.97)",
+            borderBottomWidth: 1,
+            borderBottomColor: "rgba(255,255,255,0.06)",
+            paddingVertical: 8,
+            paddingHorizontal: 20,
             ...(isWeb
               ? ({
-                  cursor: "pointer",
-                  transition: "all 0.2s ease",
-                  boxShadow: hovered
-                    ? "0 4px 16px rgba(16, 185, 129, 0.3)"
-                    : "0 2px 8px rgba(16, 185, 129, 0.15)",
+                  backdropFilter: "blur(20px)",
+                  WebkitBackdropFilter: "blur(20px)",
                 } as any)
               : {}),
-          })}
-          accessibilityRole="button"
-          accessibilityLabel="Get Started"
+          }}
         >
-          <Text
+          {navLinks.map((link) => (
+            <Pressable
+              key={link.section}
+              onPress={() => {
+                setMenuOpen(false);
+                onScrollTo(link.section);
+              }}
+              style={({ hovered }: any) => ({
+                paddingVertical: 14,
+                paddingHorizontal: 12,
+                borderRadius: 10,
+                backgroundColor: hovered ? "rgba(255,255,255,0.03)" : "transparent",
+                ...(isWeb ? ({ cursor: "pointer" } as any) : {}),
+              })}
+            >
+              <Text
+                style={{
+                  color: tc.textSecondary,
+                  fontSize: 15,
+                  fontFamily: "DMSans_500Medium",
+                }}
+              >
+                {link.label}
+              </Text>
+            </Pressable>
+          ))}
+          <View style={{ height: 1, backgroundColor: tc.dark.border, marginVertical: 8 }} />
+          <Pressable
+            onPress={() => {
+              setMenuOpen(false);
+              onSignIn();
+            }}
+            style={{ paddingVertical: 14, paddingHorizontal: 12 }}
+          >
+            <Text
+              style={{
+                color: tc.textPrimary,
+                fontSize: 15,
+                fontFamily: "DMSans_600SemiBold",
+              }}
+            >
+              Sign In
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => {
+              setMenuOpen(false);
+              onGetStarted();
+            }}
             style={{
-              color: "#FFFFFF",
-              fontSize: 15,
-              fontFamily: "DMSans_600SemiBold",
+              marginVertical: 8,
+              backgroundColor: tc.primary[500],
+              paddingVertical: 14,
+              borderRadius: 12,
+              alignItems: "center",
             }}
           >
-            Get Started
-          </Text>
-        </Pressable>
-      </View>
-    </View>
+            <Text
+              style={{
+                color: "#FFFFFF",
+                fontSize: 15,
+                fontFamily: "DMSans_700Bold",
+              }}
+            >
+              Get Started
+            </Text>
+          </Pressable>
+        </View>
+      )}
+    </>
   );
 }
 
@@ -701,7 +1177,8 @@ export default function LandingPage() {
   const isTablet = width >= 768 && width < 1024;
   const isDesktop = width >= 1024;
 
-  const howItWorksRef = useRef<View>(null);
+  const scrollRef = useRef<ScrollView>(null);
+  const sectionRefs = useRef<Record<string, View | null>>({});
 
   const navigateToLogin = useCallback(() => {
     router.push("/auth/login");
@@ -711,42 +1188,233 @@ export default function LandingPage() {
     router.push("/auth/register");
   }, [router]);
 
-  const scrollRef = useRef<ScrollView>(null);
-
-  const scrollToHowItWorks = useCallback(() => {
-    // Smooth scroll to the how-it-works section
-    if (scrollRef.current && howItWorksRef.current) {
-      (howItWorksRef.current as any).measureLayout?.(
+  const scrollToSection = useCallback((section: string) => {
+    const ref = sectionRefs.current[section];
+    if (ref && scrollRef.current) {
+      (ref as any).measureLayout?.(
         (scrollRef.current as any).getInnerViewNode?.(),
         (_x: number, y: number) => {
-          scrollRef.current?.scrollTo({ y: y - 80, animated: true });
+          scrollRef.current?.scrollTo({ y: y - 70, animated: true });
         },
         () => {}
       );
     }
   }, []);
 
-  // ── HERO SECTION ──────────────────────────────────────────────────────────
+  // ── Testimonial Carousel State ──────────────────────────────────────────
+  const [currentSlide, setCurrentSlide] = useState(0);
+  const [testimonialHovered, setTestimonialHovered] = useState(false);
+  const slidesPerView = isMobile ? 1 : isTablet ? 2 : 3;
+  const maxSlide = Math.max(0, TESTIMONIALS.length - slidesPerView);
+
+  useEffect(() => {
+    if (testimonialHovered) return;
+    const timer = setInterval(() => {
+      setCurrentSlide((prev) => (prev >= maxSlide ? 0 : prev + 1));
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [testimonialHovered, maxSlide]);
+
+  // ── SEO Meta Tags (web only) ─────────────────────────────────────────────
+  useEffect(() => {
+    if (!isWeb) return;
+    document.title = "CryptoPay \u2014 Pay Any Bill in Kenya with Crypto | USDT, BTC, ETH, SOL to M-Pesa";
+
+    // Meta description
+    const setMeta = (name: string, content: string, property?: boolean) => {
+      const attr = property ? "property" : "name";
+      let el = document.querySelector(`meta[${attr}="${name}"]`) as HTMLMetaElement | null;
+      if (!el) {
+        el = document.createElement("meta");
+        el.setAttribute(attr, name);
+        document.head.appendChild(el);
+      }
+      el.content = content;
+    };
+
+    setMeta("description", "Pay any M-Pesa Paybill or Till number directly from cryptocurrency. Convert USDT, BTC, ETH, SOL to KES instantly. No P2P, no waiting. Secure, fast, and fully compliant.");
+    setMeta("keywords", "crypto payments Kenya, USDT to M-Pesa, Bitcoin to KES, pay bills with crypto, CryptoPay, crypto to M-Pesa, Paybill crypto, Till number crypto");
+
+    // Open Graph
+    setMeta("og:title", "CryptoPay \u2014 Pay Any Bill in Kenya with Crypto", true);
+    setMeta("og:description", "Convert USDT, BTC, ETH, SOL to M-Pesa payments in 30 seconds. Pay any Paybill or Till number directly from crypto.", true);
+    setMeta("og:type", "website", true);
+    setMeta("og:url", "https://cpay.co.ke", true);
+    setMeta("og:site_name", "CryptoPay", true);
+    setMeta("og:locale", "en_KE", true);
+
+    // Twitter Card
+    setMeta("twitter:card", "summary_large_image");
+    setMeta("twitter:site", "@CPayKenya");
+    setMeta("twitter:title", "CryptoPay \u2014 Pay Any Bill in Kenya with Crypto");
+    setMeta("twitter:description", "USDT, BTC, ETH, SOL to M-Pesa Paybill & Till. Locked rates, zero slippage, instant delivery.");
+
+    // Additional SEO meta tags
+    setMeta("robots", "index, follow");
+    setMeta("author", "CryptoPay Technologies");
+    setMeta("theme-color", "#060E1F");
+    setMeta("apple-mobile-web-app-capable", "yes");
+    setMeta("apple-mobile-web-app-status-bar-style", "black-translucent");
+
+    // Canonical link
+    let canonical = document.querySelector('link[rel="canonical"]') as HTMLLinkElement | null;
+    if (!canonical) {
+      canonical = document.createElement("link");
+      canonical.rel = "canonical";
+      document.head.appendChild(canonical);
+    }
+    canonical.href = "https://cpay.co.ke/";
+
+    // FAQ JSON-LD Schema
+    const faqSchema = {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      mainEntity: FAQ_DATA.map((faq) => ({
+        "@type": "Question",
+        name: faq.q,
+        acceptedAnswer: { "@type": "Answer", text: faq.a },
+      })),
+    };
+    let scriptEl = document.querySelector('script[data-schema="faq"]') as HTMLScriptElement | null;
+    if (!scriptEl) {
+      scriptEl = document.createElement("script");
+      scriptEl.type = "application/ld+json";
+      scriptEl.setAttribute("data-schema", "faq");
+      document.head.appendChild(scriptEl);
+    }
+    scriptEl.textContent = JSON.stringify(faqSchema);
+
+    // Organization JSON-LD
+    const orgSchema = {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      name: "CryptoPay",
+      url: "https://cpay.co.ke",
+      description: "Pay any M-Pesa Paybill or Till number directly from cryptocurrency.",
+      sameAs: ["https://twitter.com/CPayKenya", "https://t.me/cryptopaykenya"],
+    };
+    let orgScript = document.querySelector('script[data-schema="org"]') as HTMLScriptElement | null;
+    if (!orgScript) {
+      orgScript = document.createElement("script");
+      orgScript.type = "application/ld+json";
+      orgScript.setAttribute("data-schema", "org");
+      document.head.appendChild(orgScript);
+    }
+    orgScript.textContent = JSON.stringify(orgSchema);
+
+    // SoftwareApplication Schema (for app stores)
+    const appSchema = {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      name: "CryptoPay",
+      operatingSystem: "Android, iOS, Web",
+      applicationCategory: "FinanceApplication",
+      description: "Pay any M-Pesa Paybill or Till number directly from cryptocurrency (USDT, BTC, ETH, SOL). Instant delivery, locked rates, zero slippage.",
+      url: "https://cpay.co.ke",
+      offers: {
+        "@type": "Offer",
+        price: "0",
+        priceCurrency: "KES",
+      },
+      aggregateRating: {
+        "@type": "AggregateRating",
+        ratingValue: "4.8",
+        ratingCount: "50",
+        bestRating: "5",
+      },
+    };
+    let appScript = document.querySelector('script[data-schema="app"]') as HTMLScriptElement | null;
+    if (!appScript) {
+      appScript = document.createElement("script");
+      appScript.type = "application/ld+json";
+      appScript.setAttribute("data-schema", "app");
+      document.head.appendChild(appScript);
+    }
+    appScript.textContent = JSON.stringify(appSchema);
+
+    // Geo targeting for Kenya
+    setMeta("geo.region", "KE");
+    setMeta("geo.placename", "Nairobi");
+    setMeta("geo.position", "-1.2921;36.8219");
+    setMeta("ICBM", "-1.2921, 36.8219");
+    setMeta("content-language", "en-KE");
+
+    // Additional structured SEO
+    setMeta("application-name", "CryptoPay");
+    setMeta("msapplication-TileColor", "#060E1F");
+    setMeta("format-detection", "telephone=no");
+  }, []);
+
+  // ── Animated Counters for Stats ─────────────────────────────────────────
+  const usersCounter = useAnimatedCounter(730, 1800);
+
+  // ── Inject carousel CSS keyframes (web only) ───────────────────────────
+  useEffect(() => {
+    if (!isWeb) return;
+    const styleId = "cpay-landing-animations";
+    if (document.getElementById(styleId)) return;
+    const style = document.createElement("style");
+    style.id = styleId;
+    style.textContent = `
+      @keyframes cpay-scroll-left {
+        0% { transform: translateX(0); }
+        100% { transform: translateX(-50%); }
+      }
+      @keyframes cpay-aurora {
+        0%, 100% { transform: translate(0, 0) scale(1); }
+        25% { transform: translate(40px, 30px) scale(1.1); }
+        50% { transform: translate(-30px, 60px) scale(0.9); }
+        75% { transform: translate(50px, -20px) scale(1.05); }
+      }
+      @keyframes cpay-float-bob {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-6px); }
+      }
+      @keyframes cpay-coin-rotate {
+        0% { transform: rotateY(0deg); }
+        100% { transform: rotateY(360deg); }
+      }
+      .cpay-aurora-blob {
+        will-change: transform;
+      }
+      .cpay-carousel-track {
+        display: flex;
+        animation: cpay-scroll-left 40s linear infinite;
+        width: max-content;
+      }
+      .cpay-carousel-track:hover {
+        animation-play-state: paused;
+      }
+      .cpay-tilt-card:hover {
+        transform: translateY(-4px) !important;
+        border-color: rgba(16, 185, 129, 0.25) !important;
+        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+      }
+    `;
+    document.head.appendChild(style);
+  }, []);
+
+  // ── 1. HERO SECTION ────────────────────────────────────────────────────────
   const heroSection = (
     <View
+      accessibilityLabel="CryptoPay hero section"
       style={{
-        minHeight: isMobile ? 700 : 800,
+        minHeight: isMobile ? 750 : 850,
         justifyContent: "center",
         alignItems: "center",
-        paddingTop: isMobile ? 100 : 120,
+        paddingTop: isMobile ? 100 : 130,
         paddingBottom: isMobile ? 60 : 80,
-        paddingHorizontal: 20,
         position: "relative",
         overflow: "hidden",
         ...(isWeb
           ? ({
               background:
-                "linear-gradient(180deg, #060E1F 0%, #0E1D35 50%, #0A1628 100%)",
+                "linear-gradient(180deg, #060E1F 0%, #0C1A30 40%, #0A1628 100%)",
             } as any)
           : { backgroundColor: "#060E1F" }),
       }}
     >
-      {/* Dot pattern background */}
+      {/* Dot pattern */}
       {isWeb && (
         <View
           style={{
@@ -755,113 +1423,122 @@ export default function LandingPage() {
             left: 0,
             right: 0,
             bottom: 0,
-            opacity: 0.4,
+            opacity: 0.35,
             ...(isWeb
               ? ({
                   backgroundImage:
-                    "radial-gradient(circle, rgba(16,185,129,0.08) 1px, transparent 1px)",
-                  backgroundSize: "40px 40px",
+                    "radial-gradient(circle, rgba(16,185,129,0.07) 1px, transparent 1px)",
+                  backgroundSize: "32px 32px",
                 } as any)
               : {}),
           }}
         />
       )}
 
-      {/* Decorative gradient orbs */}
+      {/* Aurora mesh gradient background */}
+      {isWeb && (
+        <>
+          {/* Aurora glow - emerald */}
+          <View style={{
+            position: "absolute",
+            top: -200,
+            left: -200,
+            width: 600,
+            height: 600,
+            borderRadius: 300,
+            backgroundColor: "#10B981",
+            opacity: 0.07,
+            ...(isWeb ? {
+              filter: "blur(120px)",
+              animation: "cpay-aurora 25s cubic-bezier(0.4, 0, 0.2, 1) infinite",
+              willChange: "transform",
+            } as any : {}),
+          } as any} />
+          {/* Aurora glow - indigo */}
+          <View style={{
+            position: "absolute",
+            bottom: -150,
+            right: -150,
+            width: 500,
+            height: 500,
+            borderRadius: 250,
+            backgroundColor: "#6366F1",
+            opacity: 0.05,
+            ...(isWeb ? {
+              filter: "blur(120px)",
+              animation: "cpay-aurora 30s cubic-bezier(0.4, 0, 0.2, 1) infinite reverse",
+              willChange: "transform",
+            } as any : {}),
+          } as any} />
+          {/* Aurora glow - amber */}
+          <View style={{
+            position: "absolute",
+            top: 100,
+            right: -100,
+            width: 400,
+            height: 400,
+            borderRadius: 200,
+            backgroundColor: "#F59E0B",
+            opacity: 0.04,
+            ...(isWeb ? {
+              filter: "blur(120px)",
+              animation: "cpay-aurora 35s cubic-bezier(0.4, 0, 0.2, 1) infinite 3s",
+              willChange: "transform",
+            } as any : {}),
+          } as any} />
+        </>
+      )}
+
+      {/* Gradient orbs */}
       <View
         style={{
           position: "absolute",
-          top: -150,
-          right: isMobile ? -100 : -50,
+          top: -200,
+          right: isMobile ? -150 : "10%",
+          width: isMobile ? 400 : 600,
+          height: isMobile ? 400 : 600,
+          borderRadius: 300,
+          ...(isWeb
+            ? ({
+                background:
+                  "radial-gradient(circle, rgba(16, 185, 129, 0.06) 0%, transparent 70%)",
+              } as any)
+            : { backgroundColor: "rgba(16, 185, 129, 0.03)" }),
+        }}
+      />
+      <View
+        style={{
+          position: "absolute",
+          bottom: -150,
+          left: isMobile ? -150 : "-5%",
           width: isMobile ? 350 : 500,
           height: isMobile ? 350 : 500,
           borderRadius: 250,
-          backgroundColor: "rgba(16, 185, 129, 0.04)",
-        }}
-      />
-      <View
-        style={{
-          position: "absolute",
-          bottom: -100,
-          left: isMobile ? -120 : -60,
-          width: isMobile ? 300 : 400,
-          height: isMobile ? 300 : 400,
-          borderRadius: 200,
-          backgroundColor: "rgba(16, 185, 129, 0.03)",
+          ...(isWeb
+            ? ({
+                background:
+                  "radial-gradient(circle, rgba(245, 158, 11, 0.04) 0%, transparent 70%)",
+              } as any)
+            : { backgroundColor: "rgba(245, 158, 11, 0.02)" }),
         }}
       />
 
-      {/* Floating crypto icons */}
+      {/* Floating crypto icons (desktop) */}
       {!isMobile && (
         <>
-          <FloatingCoin
-            uri={COIN_ICONS[0].uri}
-            color={COIN_ICONS[0].color}
-            size={72}
-            left="8%"
-            top="20%"
-            delay={0}
-          />
-          <FloatingCoin
-            uri={COIN_ICONS[1].uri}
-            color={COIN_ICONS[1].color}
-            size={64}
-            left="85%"
-            top="18%"
-            delay={300}
-          />
-          <FloatingCoin
-            uri={COIN_ICONS[2].uri}
-            color={COIN_ICONS[2].color}
-            size={56}
-            left="12%"
-            top="65%"
-            delay={600}
-          />
-          <FloatingCoin
-            uri={COIN_ICONS[3].uri}
-            color={COIN_ICONS[3].color}
-            size={60}
-            left="82%"
-            top="68%"
-            delay={900}
-          />
+          <FloatingCoin uri={COIN_ICONS[0].uri} color={COIN_ICONS[0].color} size={72} left="6%" top="22%" delay={0} />
+          <FloatingCoin uri={COIN_ICONS[1].uri} color={COIN_ICONS[1].color} size={64} left="88%" top="16%" delay={400} />
+          <FloatingCoin uri={COIN_ICONS[2].uri} color={COIN_ICONS[2].color} size={56} left="10%" top="70%" delay={700} />
+          <FloatingCoin uri={COIN_ICONS[3].uri} color={COIN_ICONS[3].color} size={60} left="84%" top="72%" delay={1000} />
         </>
       )}
+      {/* Floating crypto icons (mobile) */}
       {isMobile && (
         <>
-          <FloatingCoin
-            uri={COIN_ICONS[0].uri}
-            color={COIN_ICONS[0].color}
-            size={48}
-            left="5%"
-            top="12%"
-            delay={0}
-          />
-          <FloatingCoin
-            uri={COIN_ICONS[1].uri}
-            color={COIN_ICONS[1].color}
-            size={44}
-            left="80%"
-            top="10%"
-            delay={300}
-          />
-          <FloatingCoin
-            uri={COIN_ICONS[2].uri}
-            color={COIN_ICONS[2].color}
-            size={40}
-            left="2%"
-            top="75%"
-            delay={600}
-          />
-          <FloatingCoin
-            uri={COIN_ICONS[3].uri}
-            color={COIN_ICONS[3].color}
-            size={42}
-            left="78%"
-            top="78%"
-            delay={900}
-          />
+          <FloatingCoin uri={COIN_ICONS[0].uri} color={COIN_ICONS[0].color} size={44} left="3%" top="11%" delay={0} />
+          <FloatingCoin uri={COIN_ICONS[1].uri} color={COIN_ICONS[1].color} size={40} left="82%" top="9%" delay={300} />
+          <FloatingCoin uri={COIN_ICONS[2].uri} color={COIN_ICONS[2].color} size={36} left="1%" top="80%" delay={600} />
+          <FloatingCoin uri={COIN_ICONS[3].uri} color={COIN_ICONS[3].color} size={38} left="80%" top="82%" delay={900} />
         </>
       )}
 
@@ -873,171 +1550,407 @@ export default function LandingPage() {
             alignItems: "center",
             justifyContent: "center",
             width: "100%",
-            paddingHorizontal: isMobile ? 8 : 40,
+            paddingHorizontal: isMobile ? 20 : isDesktop ? 80 : 40,
             zIndex: 10,
-            gap: isDesktop ? 60 : 0,
+            gap: isDesktop ? 64 : 0,
           }}
         >
-        {/* Left: Text content */}
-        <View
-          style={{
-            alignItems: isDesktop ? "flex-start" : "center",
-            flex: isDesktop ? 1 : undefined,
-            maxWidth: isDesktop ? 640 : undefined,
-          }}
-        >
-          <Text
-            style={{
-              color: tc.textPrimary,
-              fontSize: isMobile ? 32 : isTablet ? 42 : 52,
-              fontFamily: "DMSans_700Bold",
-              textAlign: isDesktop ? "left" : "center",
-              letterSpacing: -1.5,
-              lineHeight: isMobile ? 40 : isTablet ? 52 : 64,
-              marginBottom: 20,
-            }}
-          >
-            Pay Any Bill in Kenya{"\n"}with Crypto
-          </Text>
-
-          <Text
-            style={{
-              color: tc.textSecondary,
-              fontSize: isMobile ? 16 : 18,
-              fontFamily: "DMSans_400Regular",
-              textAlign: isDesktop ? "left" : "center",
-              lineHeight: isMobile ? 24 : 28,
-              maxWidth: isMobile ? "100%" : 600,
-              marginBottom: 40,
-            }}
-          >
-            Convert USDT, BTC, ETH, or SOL to M-Pesa instantly.{" "}
-            Pay Paybill, Till, or send money {"\u2014"} in seconds, not hours.
-          </Text>
-
-          {/* CTA Buttons */}
+          {/* Left: Text content (60%) */}
           <View
             style={{
-              flexDirection: isMobile ? "column" : "row",
-              gap: 16,
-              alignItems: "center",
-              width: isMobile ? "100%" : undefined,
+              alignItems: isDesktop ? "flex-start" : "center",
+              flex: isDesktop ? 6 : undefined,
+              maxWidth: isDesktop ? 680 : undefined,
             }}
           >
-            <PrimaryButton
-              label="Get Started"
-              onPress={navigateToRegister}
-              tc={tc}
-              style={isMobile ? { width: "100%", maxWidth: 360 } : { minWidth: 180 }}
-            />
-            <OutlineButton
-              label="See How It Works"
-              onPress={scrollToHowItWorks}
-              tc={tc}
-              style={isMobile ? { width: "100%", maxWidth: 360 } : { minWidth: 180 }}
-            />
-          </View>
+            {/* Pain-first headline */}
+            <Text
+              style={{
+                color: tc.textPrimary,
+                fontSize: isMobile ? 30 : isTablet ? 40 : 50,
+                fontFamily: "DMSans_700Bold",
+                textAlign: isDesktop ? "left" : "center",
+                letterSpacing: -1.5,
+                lineHeight: isMobile ? 38 : isTablet ? 50 : 62,
+                marginBottom: 24,
+              }}
+            >
+              Stop Waiting for P2P Scams.{"\n"}
+              <Text style={{ color: tc.primary[400] }}>
+                Pay Any Kenyan Bill{"\n"}with Crypto in 30 Seconds.
+              </Text>
+            </Text>
 
-          {/* Mobile floating coins row */}
-          {isMobile && (
+            {/* Subheadline */}
+            <Text
+              style={{
+                color: tc.textSecondary,
+                fontSize: isMobile ? 16 : 18,
+                fontFamily: "DMSans_400Regular",
+                textAlign: isDesktop ? "left" : "center",
+                lineHeight: isMobile ? 24 : 28,
+                maxWidth: isMobile ? 380 : 560,
+                marginBottom: 36,
+              }}
+            >
+              USDT, BTC, ETH, SOL {"\u2192"} M-Pesa Paybill & Till.{" "}
+              Locked rates, zero slippage, instant delivery.
+            </Text>
+
+            {/* CTA Buttons */}
+            <View
+              style={{
+                flexDirection: isMobile ? "column" : "row",
+                gap: 16,
+                alignItems: isMobile ? "stretch" : "center",
+                width: isMobile ? "100%" : undefined,
+              }}
+            >
+              <PrimaryButton
+                label="Get Started Free"
+                onPress={navigateToRegister}
+                tc={tc}
+                icon="flash"
+                style={isMobile ? { maxWidth: 400, alignSelf: "center", width: "100%" } : { minWidth: 220 }}
+              />
+            </View>
+
+            {/* Secondary: Sign In link */}
+            <Pressable
+              onPress={navigateToLogin}
+              style={({ hovered }: any) => ({
+                marginTop: 16,
+                paddingVertical: 6,
+                alignSelf: isDesktop ? "flex-start" : "center",
+                ...(isWeb ? ({ cursor: "pointer" } as any) : {}),
+              })}
+            >
+              <Text
+                style={{
+                  color: tc.textMuted,
+                  fontSize: 14,
+                  fontFamily: "DMSans_400Regular",
+                }}
+              >
+                Already have an account?{" "}
+                <Text
+                  style={{
+                    color: tc.primary[300],
+                    fontFamily: "DMSans_600SemiBold",
+                  }}
+                >
+                  Sign In
+                </Text>
+              </Text>
+            </Pressable>
+
+            {/* App Store badges */}
             <View
               style={{
                 flexDirection: "row",
                 gap: 12,
-                marginTop: 36,
-                justifyContent: "center",
+                marginTop: 24,
+                alignItems: isDesktop ? "flex-start" : "center",
+                justifyContent: isDesktop ? "flex-start" : "center",
               }}
             >
-              {COIN_ICONS.map((coin) => (
-                <View
-                  key={coin.key}
-                  style={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: 24,
-                    backgroundColor: "rgba(255,255,255,0.05)",
-                    borderWidth: 1,
-                    borderColor: "rgba(255,255,255,0.08)",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  <Image
-                    source={{ uri: coin.uri }}
-                    style={{ width: 28, height: 28 }}
-                  />
+              {/* Google Play badge */}
+              <Pressable
+                onPress={() => {
+                  const url = "https://play.google.com/store/apps/details?id=com.cpay.cryptopay";
+                  if (isWeb) (window as any).open(url, "_blank");
+                  else Linking.openURL(url);
+                }}
+                style={({ hovered }: any) => ({
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 10,
+                  backgroundColor: hovered ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.04)",
+                  borderWidth: 1,
+                  borderColor: "rgba(255,255,255,0.15)",
+                  borderRadius: 12,
+                  paddingVertical: 10,
+                  paddingHorizontal: 16,
+                  ...(isWeb ? { cursor: "pointer", transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)" } as any : {}),
+                })}
+                accessibilityLabel="Get it on Google Play"
+              >
+                <Image source={STORE_ICONS.googlePlay} style={{ width: 24, height: 24 }} resizeMode="contain" />
+                <View>
+                  <Text style={{ color: tc.textMuted, fontSize: 9, fontFamily: "DMSans_400Regular" }}>GET IT ON</Text>
+                  <Text style={{ color: tc.textPrimary, fontSize: 14, fontFamily: "DMSans_600SemiBold" }}>Google Play</Text>
                 </View>
-              ))}
-            </View>
-          )}
-        </View>
-
-        {/* Right: Hero visual (desktop only) — app mockup card */}
-        {isDesktop && (
-          <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-            <View style={{
-              width: 380,
-              backgroundColor: tc.glass.bg,
-              borderRadius: 24,
-              borderWidth: 1,
-              borderColor: tc.glass.border,
-              padding: 32,
-              ...(isWeb ? {
-                backdropFilter: "blur(20px)",
-                WebkitBackdropFilter: "blur(20px)",
-                boxShadow: "0 24px 64px rgba(0,0,0,0.4), 0 0 0 1px rgba(16,185,129,0.1)",
-                transform: "perspective(1000px) rotateY(-5deg) rotateX(2deg)",
-              } as any : {}),
-            }}>
-              {/* Mock payment UI */}
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 24 }}>
-                <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: tc.primary[500], alignItems: "center", justifyContent: "center" }}>
-                  <Ionicons name="flash" size={22} color="#fff" />
+              </Pressable>
+              {/* App Store badge — Coming Soon */}
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 10,
+                  backgroundColor: "rgba(255,255,255,0.03)",
+                  borderWidth: 1,
+                  borderColor: "rgba(255,255,255,0.10)",
+                  borderRadius: 12,
+                  paddingVertical: 10,
+                  paddingHorizontal: 16,
+                  opacity: 0.6,
+                }}
+                accessibilityLabel="App Store — Coming Soon"
+              >
+                <View style={{ position: "relative" }}>
+                  <Image source={STORE_ICONS.appStore} style={{ width: 24, height: 24, opacity: 0.7 }} resizeMode="contain" />
+                  <View style={{ position: "absolute", bottom: -2, right: -2, width: 12, height: 12, borderRadius: 6, backgroundColor: "rgba(6, 14, 31, 0.9)", alignItems: "center", justifyContent: "center" }}>
+                    <Ionicons name="time-outline" size={9} color={tc.textMuted} />
+                  </View>
                 </View>
                 <View>
-                  <Text style={{ color: tc.textPrimary, fontSize: 18, fontFamily: "DMSans_700Bold" }}>CryptoPay</Text>
-                  <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_400Regular" }}>Pay bills instantly</Text>
-                </View>
-              </View>
-              {/* Mock balance */}
-              <View style={{ backgroundColor: tc.dark.bg, borderRadius: 16, padding: 20, marginBottom: 16 }}>
-                <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_500Medium", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Balance</Text>
-                <Text style={{ color: tc.textPrimary, fontSize: 32, fontFamily: "DMSans_700Bold" }}>7.88 <Text style={{ fontSize: 18, color: tc.primary[400] }}>USDT</Text></Text>
-                <Text style={{ color: tc.primary[400], fontSize: 13, fontFamily: "DMSans_500Medium", marginTop: 4 }}>≈ KSh 1,018.06</Text>
-              </View>
-              {/* Mock action buttons */}
-              <View style={{ flexDirection: "row", gap: 10 }}>
-                {[
-                  { icon: "arrow-down", label: "Deposit", color: tc.primary[500] },
-                  { icon: "send", label: "Pay Bill", color: "#3B82F6" },
-                  { icon: "swap-horizontal", label: "Send", color: "#8B5CF6" },
-                ].map((action) => (
-                  <View key={action.label} style={{ flex: 1, alignItems: "center", backgroundColor: tc.dark.bg, borderRadius: 12, paddingVertical: 14, gap: 6 }}>
-                    <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: action.color + "20", alignItems: "center", justifyContent: "center" }}>
-                      <Ionicons name={action.icon as any} size={18} color={action.color} />
-                    </View>
-                    <Text style={{ color: tc.textSecondary, fontSize: 11, fontFamily: "DMSans_500Medium" }}>{action.label}</Text>
-                  </View>
-                ))}
-              </View>
-              {/* Mock recent tx */}
-              <View style={{ marginTop: 16, backgroundColor: tc.dark.bg, borderRadius: 12, padding: 14 }}>
-                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                    <View style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: tc.primary[500] + "20", alignItems: "center", justifyContent: "center" }}>
-                      <Ionicons name="checkmark-circle" size={16} color={tc.primary[400]} />
-                    </View>
-                    <View>
-                      <Text style={{ color: tc.textPrimary, fontSize: 13, fontFamily: "DMSans_600SemiBold" }}>KPLC Paybill</Text>
-                      <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_400Regular" }}>Just now</Text>
-                    </View>
-                  </View>
-                  <Text style={{ color: tc.primary[400], fontSize: 13, fontFamily: "DMSans_600SemiBold" }}>KSh 500</Text>
+                  <Text style={{ color: tc.textMuted, fontSize: 9, fontFamily: "DMSans_400Regular" }}>Download on the</Text>
+                  <Text style={{ color: tc.textSecondary, fontSize: 14, fontFamily: "DMSans_600SemiBold" }}>App Store</Text>
+                  <Text style={{ color: tc.primary[400], fontSize: 9, fontFamily: "DMSans_600SemiBold", letterSpacing: 0.5 }}>COMING SOON</Text>
                 </View>
               </View>
             </View>
           </View>
-        )}
+
+          {/* Right: App mockup card (40%, desktop only) */}
+          {isDesktop && (
+            <View
+              style={{
+                flex: 4,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <View
+                style={{
+                  width: 380,
+                  backgroundColor: tc.glass.bg,
+                  borderRadius: 28,
+                  borderWidth: 1,
+                  borderColor: tc.glass.borderStrong,
+                  padding: 28,
+                  ...(isWeb
+                    ? ({
+                        backdropFilter: "blur(24px)",
+                        WebkitBackdropFilter: "blur(24px)",
+                        boxShadow:
+                          "0 32px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(16,185,129,0.08), inset 0 1px 0 rgba(255,255,255,0.05)",
+                        transform: "perspective(1200px) rotateY(-4deg) rotateX(2deg)",
+                      } as any)
+                    : {}),
+                }}
+              >
+                {/* Header */}
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 12,
+                    marginBottom: 24,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: 14,
+                      backgroundColor: tc.primary[500],
+                      alignItems: "center",
+                      justifyContent: "center",
+                      ...(isWeb
+                        ? ({ boxShadow: "0 4px 16px rgba(16, 185, 129, 0.3)" } as any)
+                        : {}),
+                    }}
+                  >
+                    <Ionicons name="flash" size={22} color="#fff" />
+                  </View>
+                  <View>
+                    <Text
+                      style={{
+                        color: tc.textPrimary,
+                        fontSize: 18,
+                        fontFamily: "DMSans_700Bold",
+                      }}
+                    >
+                      CryptoPay
+                    </Text>
+                    <Text
+                      style={{
+                        color: tc.textMuted,
+                        fontSize: 12,
+                        fontFamily: "DMSans_400Regular",
+                      }}
+                    >
+                      Your crypto, Kenya's bills
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Balance card */}
+                <View
+                  style={{
+                    backgroundColor: tc.dark.bg,
+                    borderRadius: 18,
+                    padding: 22,
+                    marginBottom: 16,
+                    borderWidth: 1,
+                    borderColor: "rgba(255,255,255,0.04)",
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: tc.textMuted,
+                      fontSize: 11,
+                      fontFamily: "DMSans_600SemiBold",
+                      textTransform: "uppercase",
+                      letterSpacing: 1.5,
+                      marginBottom: 10,
+                    }}
+                  >
+                    Total Balance
+                  </Text>
+                  <Text
+                    style={{
+                      color: tc.textPrimary,
+                      fontSize: 34,
+                      fontFamily: "DMSans_700Bold",
+                      letterSpacing: -1,
+                    }}
+                  >
+                    7.88{" "}
+                    <Text
+                      style={{
+                        fontSize: 18,
+                        color: tc.primary[400],
+                        fontFamily: "DMSans_600SemiBold",
+                      }}
+                    >
+                      USDT
+                    </Text>
+                  </Text>
+                  <Text
+                    style={{
+                      color: tc.primary[400],
+                      fontSize: 14,
+                      fontFamily: "DMSans_500Medium",
+                      marginTop: 6,
+                    }}
+                  >
+                    {"\u2248"} KSh 1,018.06
+                  </Text>
+                </View>
+
+                {/* Action buttons */}
+                <View style={{ flexDirection: "row", gap: 10 }}>
+                  {[
+                    { icon: "arrow-down" as const, label: "Deposit", color: tc.primary[500] },
+                    { icon: "send" as const, label: "Pay Bill", color: "#3B82F6" },
+                    { icon: "swap-horizontal" as const, label: "Send", color: "#8B5CF6" },
+                  ].map((action) => (
+                    <View
+                      key={action.label}
+                      style={{
+                        flex: 1,
+                        alignItems: "center",
+                        backgroundColor: tc.dark.bg,
+                        borderRadius: 14,
+                        paddingVertical: 14,
+                        gap: 6,
+                        borderWidth: 1,
+                        borderColor: "rgba(255,255,255,0.03)",
+                      }}
+                    >
+                      <View
+                        style={{
+                          width: 36,
+                          height: 36,
+                          borderRadius: 10,
+                          backgroundColor: action.color + "18",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <Ionicons name={action.icon} size={18} color={action.color} />
+                      </View>
+                      <Text
+                        style={{
+                          color: tc.textSecondary,
+                          fontSize: 11,
+                          fontFamily: "DMSans_500Medium",
+                        }}
+                      >
+                        {action.label}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+
+                {/* Recent transaction */}
+                <View
+                  style={{
+                    marginTop: 14,
+                    backgroundColor: tc.dark.bg,
+                    borderRadius: 14,
+                    padding: 16,
+                    borderWidth: 1,
+                    borderColor: "rgba(255,255,255,0.03)",
+                  }}
+                >
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                    }}
+                  >
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                      <View
+                        style={{
+                          width: 34,
+                          height: 34,
+                          borderRadius: 10,
+                          backgroundColor: tc.primary[500] + "18",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <Ionicons name="checkmark-circle" size={17} color={tc.primary[400]} />
+                      </View>
+                      <View>
+                        <Text
+                          style={{
+                            color: tc.textPrimary,
+                            fontSize: 13,
+                            fontFamily: "DMSans_600SemiBold",
+                          }}
+                        >
+                          KPLC Paybill
+                        </Text>
+                        <Text
+                          style={{
+                            color: tc.textMuted,
+                            fontSize: 11,
+                            fontFamily: "DMSans_400Regular",
+                          }}
+                        >
+                          Just now
+                        </Text>
+                      </View>
+                    </View>
+                    <Text
+                      style={{
+                        color: tc.primary[400],
+                        fontSize: 14,
+                        fontFamily: "DMSans_700Bold",
+                      }}
+                    >
+                      KSh 500
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+          )}
         </View>
       </RevealOnScroll>
 
@@ -1045,322 +1958,307 @@ export default function LandingPage() {
       <RevealOnScroll delay={400}>
         <View
           style={{
-            flexDirection: isMobile ? "column" : "row",
+            flexDirection: "row",
             alignItems: "center",
             justifyContent: "center",
-            gap: isMobile ? 12 : 32,
-            marginTop: isMobile ? 40 : 60,
+            flexWrap: "wrap",
+            gap: isMobile ? 8 : 20,
+            marginTop: isMobile ? 40 : 56,
+            paddingHorizontal: 20,
             zIndex: 10,
           }}
         >
           {[
-            { icon: "lock-closed" as const, text: "256-bit encryption" },
-            { icon: "person-circle" as const, text: "KYC verified" },
-            { icon: "headset" as const, text: "24/7 support" },
-          ].map((item) => (
+            "KYC Verified",
+            "VASP Compliant",
+            "M-Pesa Official",
+            "SSL Encrypted",
+          ].map((badge, i) => (
             <View
-              key={item.text}
+              key={badge}
               style={{
                 flexDirection: "row",
                 alignItems: "center",
-                gap: 8,
+                gap: 6,
+                backgroundColor: "rgba(255,255,255,0.03)",
+                borderRadius: 20,
+                paddingVertical: 6,
+                paddingHorizontal: 14,
+                borderWidth: 1,
+                borderColor: "rgba(255,255,255,0.06)",
               }}
             >
               <Ionicons
-                name={item.icon}
-                size={16}
+                name="shield-checkmark"
+                size={13}
                 color={tc.primary[400]}
               />
               <Text
                 style={{
                   color: tc.textMuted,
-                  fontSize: 13,
+                  fontSize: 12,
                   fontFamily: "DMSans_500Medium",
                 }}
               >
-                {item.text}
+                {badge}
               </Text>
             </View>
           ))}
         </View>
       </RevealOnScroll>
-    </View>
-  );
 
-  // ── HOW IT WORKS SECTION ──────────────────────────────────────────────────
-  const howItWorksSection = (
-    <View
-      ref={howItWorksRef}
-      style={{
-        paddingVertical: isMobile ? 60 : 100,
-        backgroundColor: tc.dark.bg,
-      }}
-    >
-      <Section>
-        <RevealOnScroll>
-          <Text
-            style={{
-              color: tc.primary[400],
-              fontSize: 14,
-              fontFamily: "DMSans_600SemiBold",
-              textAlign: "center",
-              textTransform: "uppercase",
-              letterSpacing: 2,
-              marginBottom: 12,
-            }}
-          >
-            How It Works
-          </Text>
-          <Text
-            style={{
-              color: tc.textPrimary,
-              fontSize: isMobile ? 28 : 36,
-              fontFamily: "DMSans_700Bold",
-              textAlign: "center",
-              letterSpacing: -0.8,
-              marginBottom: isMobile ? 40 : 60,
-            }}
-          >
-            Three Simple Steps
-          </Text>
-        </RevealOnScroll>
-
+      {/* Live ticker */}
+      <RevealOnScroll delay={600}>
         <View
           style={{
-            flexDirection: isMobile ? "column" : "row",
-            gap: isMobile ? 40 : 48,
-            alignItems: "flex-start",
+            flexDirection: "row",
+            alignItems: "center",
             justifyContent: "center",
-            width: "100%",
+            gap: 8,
+            marginTop: isMobile ? 16 : 24,
+            paddingHorizontal: 20,
+            zIndex: 10,
           }}
         >
-          {[
-            {
-              num: "1",
-              icon: "arrow-down" as const,
-              title: "Deposit Crypto",
-              desc: "Send USDT, BTC, ETH or SOL to your personal wallet",
-            },
-            {
-              num: "2",
-              icon: "receipt" as const,
-              title: "Choose Payment",
-              desc: "Select Paybill, Till number, or phone to send to",
-            },
-            {
-              num: "3",
-              icon: "flash" as const,
-              title: "Instant M-Pesa",
-              desc: "Payment arrives via M-Pesa in seconds",
-            },
-          ].map((step, i) => (
-            <RevealOnScroll key={step.num} delay={i * 150} style={{ flex: 1 }}>
-              <View
-                style={{
-                  alignItems: "center",
-                  width: "100%",
-                  backgroundColor: tc.glass.bg,
-                  borderRadius: 20,
-                  borderWidth: 1,
-                  borderColor: tc.glass.border,
-                  padding: isMobile ? 24 : 32,
-                  ...(isWeb ? { backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" } as any : {}),
-                }}
-              >
-                {/* Step icon */}
-                <View
-                  style={{
-                    width: 72,
-                    height: 72,
-                    borderRadius: 20,
-                    backgroundColor: "rgba(16, 185, 129, 0.1)",
-                    borderWidth: 1,
-                    borderColor: "rgba(16, 185, 129, 0.25)",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    marginBottom: 16,
-                    ...(isWeb
-                      ? ({
-                          boxShadow: `0 8px 32px rgba(16, 185, 129, 0.15)`,
-                          backdropFilter: "blur(8px)",
-                        } as any)
-                      : {}),
-                  }}
-                >
-                  <Ionicons
-                    name={step.icon}
-                    size={32}
-                    color={tc.primary[400]}
-                  />
-                </View>
-
-                {/* Step number badge */}
-                <View
-                  style={{
-                    backgroundColor: tc.primary[500],
-                    width: 24,
-                    height: 24,
-                    borderRadius: 12,
-                    alignItems: "center",
-                    justifyContent: "center",
-                    marginBottom: 12,
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: "#FFFFFF",
-                      fontSize: 12,
-                      fontFamily: "DMSans_700Bold",
-                    }}
-                  >
-                    {step.num}
-                  </Text>
-                </View>
-
-                <Text
-                  style={{
-                    color: tc.textPrimary,
-                    fontSize: 20,
-                    fontFamily: "DMSans_600SemiBold",
-                    textAlign: "center",
-                    marginBottom: 8,
-                  }}
-                >
-                  {step.title}
-                </Text>
-                <Text
-                  style={{
-                    color: tc.textSecondary,
-                    fontSize: 15,
-                    fontFamily: "DMSans_400Regular",
-                    textAlign: "center",
-                    lineHeight: 22,
-                  }}
-                >
-                  {step.desc}
-                </Text>
-              </View>
-            </RevealOnScroll>
-          ))}
+          <View
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: 4,
+              backgroundColor: tc.primary[400],
+              ...(isWeb
+                ? ({ boxShadow: `0 0 8px ${tc.primary[400]}`, animation: "cpay-float-bob 2s ease-in-out infinite" } as any)
+                : {}),
+            }}
+          />
+          <Text
+            style={{
+              color: tc.textMuted,
+              fontSize: 13,
+              fontFamily: "DMSans_500Medium",
+            }}
+          >
+            Live on{" "}
+            <Text style={{ color: tc.primary[300], fontFamily: "DMSans_700Bold" }}>
+              cpay.co.ke
+            </Text>
+            {" "}{"\u2014"} Try it free
+          </Text>
         </View>
-      </Section>
+      </RevealOnScroll>
     </View>
   );
 
-  // ── FEATURES GRID SECTION ─────────────────────────────────────────────────
-  const featuresSection = (
+  // ── NEW: PROBLEM / WHY NOW SECTION ────────────────────────────────────────
+  const problemSection = (
     <View
       style={{
         paddingVertical: isMobile ? 60 : 100,
         ...(isWeb
           ? ({
-              background:
-                "linear-gradient(180deg, #0A1628 0%, #060E1F 100%)",
+              background: "linear-gradient(180deg, #0A1628 0%, #060E1F 100%)",
             } as any)
           : { backgroundColor: "#0A1628" }),
       }}
     >
       <Section>
         <RevealOnScroll>
-          <Text
-            style={{
-              color: tc.primary[400],
-              fontSize: 14,
-              fontFamily: "DMSans_600SemiBold",
-              textAlign: "center",
-              textTransform: "uppercase",
-              letterSpacing: 2,
-              marginBottom: 12,
-            }}
-          >
-            Features
-          </Text>
-          <Text
-            style={{
-              color: tc.textPrimary,
-              fontSize: isMobile ? 28 : 36,
-              fontFamily: "DMSans_700Bold",
-              textAlign: "center",
-              letterSpacing: -0.8,
-              marginBottom: isMobile ? 36 : 60,
-            }}
-          >
-            Everything You Need
-          </Text>
+          <SectionTitle
+            label="Why CryptoPay"
+            title="The Fastest Way to Pay Bills with Crypto"
+            subtitle="730K+ Kenyans hold crypto. Zero can pay electricity with it. Until now."
+            tc={tc}
+            isMobile={isMobile}
+          />
         </RevealOnScroll>
 
         <View
           style={{
-            ...(isWeb ? {
-              display: "grid" as any,
-              gridTemplateColumns: isMobile ? "1fr" : isTablet ? "1fr 1fr" : "1fr 1fr 1fr",
-              gap: isMobile ? 16 : 24,
-            } as any : {
-              flexDirection: "row",
-              flexWrap: "wrap",
-              gap: 16,
-            }),
+            flexDirection: isMobile ? "column" : "row",
+            gap: isMobile ? 24 : 32,
+            alignItems: "stretch",
           }}
         >
-          {FEATURES.map((feat, i) => (
-            <RevealOnScroll key={feat.title} delay={i * 100}>
-              <View
+          {/* Left: The Problem */}
+          <RevealOnScroll delay={100} style={{ flex: 1 }}>
+            <View
+              style={{
+                flex: 1,
+                backgroundColor: "rgba(239, 68, 68, 0.04)",
+                borderRadius: 24,
+                borderWidth: 1,
+                borderColor: "rgba(239, 68, 68, 0.15)",
+                padding: isMobile ? 24 : 36,
+                ...(isWeb
+                  ? ({
+                      backdropFilter: "blur(12px)",
+                      WebkitBackdropFilter: "blur(12px)",
+                    } as any)
+                  : {}),
+              }}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                  <Ionicons name="close-circle" size={24} color="#EF4444" />
+                  <Text
+                    style={{
+                      color: "#EF4444",
+                      fontSize: 18,
+                      fontFamily: "DMSans_700Bold",
+                    }}
+                  >
+                    The Old Way
+                  </Text>
+                </View>
+              </View>
+              <Text
                 style={{
-                  width: "100%",
+                  color: tc.textSecondary,
+                  fontSize: 15,
+                  fontFamily: "DMSans_500Medium",
+                  lineHeight: 24,
+                  marginBottom: 20,
                 }}
               >
-                <GlassCard tc={tc}>
+                Paying a bill with crypto today takes 5 steps and 30+ minutes:
+              </Text>
+              {[
+                "Find a P2P trader on an exchange",
+                "Negotiate rate, hope they don't scam you",
+                "Send crypto and wait for KES in M-Pesa",
+                "Now go to M-Pesa and manually pay the bill",
+                "Pray the trader was honest about the rate",
+              ].map((step, i) => (
+                <View key={i} style={{ flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 12 }}>
                   <View
                     style={{
-                      width: 48,
-                      height: 48,
-                      borderRadius: 14,
-                      backgroundColor: "rgba(16, 185, 129, 0.1)",
+                      width: 24,
+                      height: 24,
+                      borderRadius: 12,
+                      backgroundColor: "rgba(239, 68, 68, 0.15)",
                       alignItems: "center",
                       justifyContent: "center",
-                      marginBottom: 16,
+                      marginTop: 1,
                     }}
                   >
-                    <Ionicons
-                      name={feat.icon}
-                      size={24}
-                      color={tc.primary[400]}
-                    />
+                    <Text style={{ color: "#EF4444", fontSize: 12, fontFamily: "DMSans_700Bold" }}>{i + 1}</Text>
                   </View>
-                  <Text
-                    style={{
-                      color: tc.textPrimary,
-                      fontSize: 18,
-                      fontFamily: "DMSans_600SemiBold",
-                      marginBottom: 8,
-                    }}
-                  >
-                    {feat.title}
+                  <Text style={{ color: tc.textSecondary, fontSize: 14, fontFamily: "DMSans_400Regular", lineHeight: 22, flex: 1 }}>
+                    {step}
                   </Text>
-                  <Text
-                    style={{
-                      color: tc.textSecondary,
-                      fontSize: 14,
-                      fontFamily: "DMSans_400Regular",
-                      lineHeight: 21,
-                    }}
-                  >
-                    {feat.desc}
-                  </Text>
-                </GlassCard>
+                </View>
+              ))}
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8 }}>
+                <Ionicons name="time" size={18} color="#EF4444" />
+                <Text style={{ color: "#EF4444", fontSize: 16, fontFamily: "DMSans_700Bold" }}>30+ minutes, high risk</Text>
               </View>
-            </RevealOnScroll>
-          ))}
+              {/* Bitcoin illustration */}
+              {!isMobile && (
+                <View style={{ alignItems: "center", marginTop: 20 }}>
+                  <Image
+                    source={{ uri: UNDRAW.bitcoin }}
+                    style={{ width: 130, height: 130, opacity: 0.8 }}
+                    resizeMode="contain"
+                  />
+                </View>
+              )}
+            </View>
+          </RevealOnScroll>
+
+          {/* Right: CryptoPay Way */}
+          <RevealOnScroll delay={300} style={{ flex: 1 }}>
+            <View
+              style={{
+                flex: 1,
+                backgroundColor: "rgba(16, 185, 129, 0.04)",
+                borderRadius: 24,
+                borderWidth: 1,
+                borderColor: "rgba(16, 185, 129, 0.15)",
+                padding: isMobile ? 24 : 36,
+                ...(isWeb
+                  ? ({
+                      backdropFilter: "blur(12px)",
+                      WebkitBackdropFilter: "blur(12px)",
+                      boxShadow: "0 8px 48px rgba(16, 185, 129, 0.06)",
+                    } as any)
+                  : {}),
+              }}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 20 }}>
+                <Ionicons name="flash" size={24} color={tc.primary[400]} />
+                <Text
+                  style={{
+                    color: tc.primary[400],
+                    fontSize: 18,
+                    fontFamily: "DMSans_700Bold",
+                  }}
+                >
+                  The CryptoPay Way
+                </Text>
+              </View>
+              <Text
+                style={{
+                  color: tc.textSecondary,
+                  fontSize: 15,
+                  fontFamily: "DMSans_500Medium",
+                  lineHeight: 24,
+                  marginBottom: 20,
+                }}
+              >
+                With CryptoPay, it takes 30 seconds:
+              </Text>
+              {[
+                { step: "Enter Paybill/Till number and amount", icon: "receipt" as const },
+                { step: "Confirm at a locked rate \u2014 no slippage", icon: "lock-closed" as const },
+                { step: "Done. M-Pesa payment delivered instantly.", icon: "checkmark-circle" as const },
+              ].map((item, i) => (
+                <View key={i} style={{ flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 16 }}>
+                  <View
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: 10,
+                      backgroundColor: "rgba(16, 185, 129, 0.15)",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      marginTop: 1,
+                      ...(isWeb ? ({ boxShadow: "0 4px 12px rgba(16, 185, 129, 0.15)" } as any) : {}),
+                    }}
+                  >
+                    <Ionicons name={item.icon} size={16} color={tc.primary[400]} />
+                  </View>
+                  <Text style={{ color: tc.textPrimary, fontSize: 15, fontFamily: "DMSans_500Medium", lineHeight: 24, flex: 1 }}>
+                    {item.step}
+                  </Text>
+                </View>
+              ))}
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12 }}>
+                <Ionicons name="flash" size={18} color={tc.primary[400]} />
+                <Text style={{ color: tc.primary[400], fontSize: 16, fontFamily: "DMSans_700Bold" }}>30 seconds, zero risk</Text>
+              </View>
+
+              {/* CryptoPay Way illustration */}
+              {!isMobile && (
+                <View style={{ alignItems: "center", marginTop: 20 }}>
+                  <Image
+                    source={{ uri: UNDRAW.creditCard }}
+                    style={{ width: 140, height: 140, opacity: 0.85 }}
+                    resizeMode="contain"
+                  />
+                </View>
+              )}
+            </View>
+          </RevealOnScroll>
         </View>
       </Section>
     </View>
   );
 
-  // ── STATS / SOCIAL PROOF SECTION ──────────────────────────────────────────
+  // ── 2. SOCIAL PROOF / STATS BANNER ──────────────────────────────────────────
   const statsSection = (
     <View
       style={{
-        paddingVertical: isMobile ? 60 : 80,
+        paddingVertical: isMobile ? 48 : 72,
         backgroundColor: tc.dark.bg,
       }}
     >
@@ -1368,24 +2266,152 @@ export default function LandingPage() {
         <RevealOnScroll>
           <View
             style={{
-              backgroundColor: tc.dark.card,
+              backgroundColor: "rgba(16, 185, 129, 0.04)",
               borderRadius: 24,
               borderWidth: 1,
-              borderColor: "rgba(16, 185, 129, 0.15)",
+              borderColor: "rgba(16, 185, 129, 0.12)",
               padding: isMobile ? 28 : 48,
               ...(isWeb
                 ? ({
-                    boxShadow: "0 8px 40px rgba(16, 185, 129, 0.06)",
+                    backdropFilter: "blur(12px)",
+                    WebkitBackdropFilter: "blur(12px)",
+                    boxShadow: "0 8px 48px rgba(16, 185, 129, 0.06)",
                   } as any)
                 : {}),
             }}
           >
-            {/* Stats grid */}
+            {/* Headline stat */}
+            <View style={{ alignItems: "center", marginBottom: isMobile ? 28 : 36 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                <Image
+                  source={{ uri: KENYA_FLAG }}
+                  style={{ width: 28, height: 20, borderRadius: 3 }}
+                />
+                <Text
+                  style={{
+                    color: tc.primary[400],
+                    fontSize: 13,
+                    fontFamily: "DMSans_700Bold",
+                    textTransform: "uppercase",
+                    letterSpacing: 2,
+                  }}
+                >
+                  Kenya Crypto Adoption
+                </Text>
+              </View>
+              <Text
+                style={{
+                  color: tc.textPrimary,
+                  fontSize: isMobile ? 20 : 24,
+                  fontFamily: "DMSans_600SemiBold",
+                  textAlign: "center",
+                  lineHeight: isMobile ? 28 : 34,
+                  maxWidth: 680,
+                }}
+              >
+                730K+ Kenyans use crypto. None can pay their electricity bill with it.{" "}
+                <Text style={{ color: tc.primary[400], fontFamily: "DMSans_700Bold" }}>
+                  Until now.
+                </Text>
+              </Text>
+              <Text
+                style={{
+                  color: tc.textMuted,
+                  fontSize: 12,
+                  fontFamily: "DMSans_400Regular",
+                  marginTop: 8,
+                }}
+              >
+                Source: Chainalysis Global Crypto Adoption Index
+              </Text>
+            </View>
+
+            {/* Divider */}
+            <View
+              style={{
+                height: 1,
+                backgroundColor: "rgba(16, 185, 129, 0.1)",
+                marginBottom: isMobile ? 28 : 36,
+              }}
+            />
+
+            {/* Key value propositions + real stat */}
+            <View
+              ref={usersCounter.viewRef as any}
+              style={{
+                flexDirection: isMobile ? "column" : "row",
+                justifyContent: "space-around",
+                gap: isMobile ? 24 : 16,
+                marginBottom: isMobile ? 28 : 36,
+              }}
+            >
+              <View style={{ alignItems: "center" }}>
+                <Ionicons name="flash" size={isMobile ? 28 : 34} color={tc.primary[400]} style={{ marginBottom: 6 }} />
+                <Text
+                  style={{
+                    color: tc.textPrimary,
+                    fontSize: isMobile ? 18 : 22,
+                    fontFamily: "DMSans_700Bold",
+                    letterSpacing: -0.5,
+                    marginBottom: 4,
+                  }}
+                >
+                  Instant Settlement
+                </Text>
+                <Text style={{ color: tc.textMuted, fontSize: 14, fontFamily: "DMSans_500Medium" }}>
+                  No waiting for P2P
+                </Text>
+              </View>
+              <View style={{ alignItems: "center" }}>
+                <Ionicons name="eye" size={isMobile ? 28 : 34} color={tc.primary[400]} style={{ marginBottom: 6 }} />
+                <Text
+                  style={{
+                    color: tc.textPrimary,
+                    fontSize: isMobile ? 18 : 22,
+                    fontFamily: "DMSans_700Bold",
+                    letterSpacing: -0.5,
+                    marginBottom: 4,
+                  }}
+                >
+                  Transparent Fees
+                </Text>
+                <Text style={{ color: tc.textMuted, fontSize: 14, fontFamily: "DMSans_500Medium" }}>
+                  1.5% + KES 10, that's it
+                </Text>
+              </View>
+              <View style={{ alignItems: "center" }}>
+                <Text
+                  style={{
+                    color: tc.primary[400],
+                    fontSize: isMobile ? 30 : 38,
+                    fontFamily: "DMSans_700Bold",
+                    letterSpacing: -0.5,
+                    marginBottom: 4,
+                  }}
+                >
+                  {usersCounter.count.toLocaleString()}K+
+                </Text>
+                <Text style={{ color: tc.textMuted, fontSize: 14, fontFamily: "DMSans_500Medium" }}>
+                  Crypto Users in Kenya
+                </Text>
+              </View>
+            </View>
+
+            {/* Divider */}
+            <View
+              style={{
+                height: 1,
+                backgroundColor: "rgba(16, 185, 129, 0.1)",
+                marginBottom: isMobile ? 28 : 36,
+              }}
+            />
+
+            {/* Static stats grid */}
             <View
               style={{
                 flexDirection: isMobile ? "column" : "row",
                 justifyContent: "space-around",
-                gap: isMobile ? 28 : 16,
+                gap: isMobile ? 24 : 16,
               }}
             >
               {STATS.map((stat) => (
@@ -1393,7 +2419,7 @@ export default function LandingPage() {
                   <Text
                     style={{
                       color: tc.primary[400],
-                      fontSize: isMobile ? 28 : 36,
+                      fontSize: isMobile ? 30 : 38,
                       fontFamily: "DMSans_700Bold",
                       letterSpacing: -0.5,
                       marginBottom: 4,
@@ -1413,105 +2439,777 @@ export default function LandingPage() {
                 </View>
               ))}
             </View>
-
-            {/* Divider */}
-            <View
-              style={{
-                height: 1,
-                backgroundColor: tc.dark.border,
-                marginVertical: isMobile ? 24 : 32,
-              }}
-            />
-
-            {/* Trust line */}
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 10,
-              }}
-            >
-              <Image
-                source={{ uri: KENYA_FLAG }}
-                style={{ width: 24, height: 18, borderRadius: 2 }}
-              />
-              <Text
-                style={{
-                  color: tc.textSecondary,
-                  fontSize: 15,
-                  fontFamily: "DMSans_500Medium",
-                }}
-              >
-                Trusted by crypto users across Kenya
-              </Text>
-            </View>
           </View>
         </RevealOnScroll>
       </Section>
     </View>
   );
 
-  // ── COMPARISON TABLE SECTION ──────────────────────────────────────────────
-  const comparisonSection = (
+  // ── 3. SUPPORTED SERVICES (Sliding Carousel) ──────────────────────────────
+  const serviceCard = (service: typeof KENYAN_SERVICES[0], idx: number) => (
+    <Pressable
+      key={`${service.name}-${idx}`}
+      style={({ hovered }: any) => ({
+        alignItems: "center",
+        backgroundColor: isWeb && hovered ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.02)",
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: isWeb && hovered ? service.color + "40" : "rgba(255,255,255,0.06)",
+        paddingVertical: isMobile ? 16 : 20,
+        paddingHorizontal: isMobile ? 16 : 24,
+        minWidth: isMobile ? 120 : 150,
+        marginRight: isMobile ? 12 : 16,
+        ...(isWeb
+          ? ({
+              transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+              cursor: "default",
+              boxShadow: hovered ? `0 4px 20px ${service.color}15` : "none",
+            } as any)
+          : {}),
+      }) as any}
+    >
+      <Image
+        source={service.logo}
+        style={{
+          width: isMobile ? 40 : 48,
+          height: isMobile ? 40 : 48,
+          borderRadius: isMobile ? 12 : 14,
+          marginBottom: 10,
+        }}
+        resizeMode="contain"
+      />
+      <Text
+        style={{
+          color: tc.textPrimary,
+          fontSize: isMobile ? 11 : 13,
+          fontFamily: "DMSans_600SemiBold",
+          textAlign: "center",
+        }}
+        numberOfLines={1}
+      >
+        {service.name}
+      </Text>
+      <Text
+        style={{
+          color: tc.textMuted,
+          fontSize: isMobile ? 10 : 11,
+          fontFamily: "DMSans_400Regular",
+          marginTop: 2,
+        }}
+      >
+        {service.desc}
+      </Text>
+    </Pressable>
+  );
+
+  // Double the services array for seamless infinite scroll (exactly 2x for translateX(-50%))
+  const row1 = KENYAN_SERVICES.slice(0, 6);
+  const row2 = KENYAN_SERVICES.slice(6);
+  const doubledRow1 = [...row1, ...row1];
+  const doubledRow2 = [...row2, ...row2];
+
+  const servicesSection = (
     <View
       style={{
         paddingVertical: isMobile ? 60 : 100,
         ...(isWeb
           ? ({
-              background:
-                "linear-gradient(180deg, #060E1F 0%, #0A1628 100%)",
+              background: "linear-gradient(180deg, #060E1F 0%, #0A1628 100%)",
             } as any)
           : { backgroundColor: "#0A1628" }),
       }}
     >
       <Section>
         <RevealOnScroll>
-          <Text
-            style={{
-              color: tc.primary[400],
-              fontSize: 14,
-              fontFamily: "DMSans_600SemiBold",
-              textAlign: "center",
-              textTransform: "uppercase",
-              letterSpacing: 2,
-              marginBottom: 12,
-            }}
+          <SectionTitle
+            label="Supported Services"
+            title="Pay Any Bill in Kenya"
+            subtitle="From electricity to school fees, pay any Paybill or Till number in Kenya directly with crypto."
+            tc={tc}
+            isMobile={isMobile}
+          />
+        </RevealOnScroll>
+
+        {/* Carousel - web uses CSS animation, native uses ScrollView */}
+        {isWeb ? (
+          <RevealOnScroll>
+            <View style={{ overflow: "hidden", width: "100%" } as any}>
+              {/* Row 1 */}
+              <View
+                style={{
+                  overflow: "hidden",
+                  marginBottom: 16,
+                } as any}
+              >
+                <View
+                  ref={(ref: any) => {
+                    if (isWeb && ref instanceof HTMLElement) ref.className = "cpay-carousel-track";
+                  }}
+                  style={{
+                    display: "flex",
+                    flexDirection: "row",
+                    animation: "cpay-scroll-left 35s linear infinite",
+                    width: "max-content",
+                  } as any}
+                >
+                  {doubledRow1.map((s, i) => serviceCard(s, i))}
+                </View>
+              </View>
+              {/* Row 2 (desktop only) */}
+              {!isMobile && (
+                <View
+                  style={{
+                    overflow: "hidden",
+                  } as any}
+                >
+                  <View
+                    ref={(ref: any) => {
+                      if (isWeb && ref instanceof HTMLElement) ref.className = "cpay-carousel-track";
+                    }}
+                    style={{
+                      display: "flex",
+                      flexDirection: "row",
+                      animation: "cpay-scroll-left 30s linear infinite reverse",
+                      width: "max-content",
+                    } as any}
+                  >
+                    {doubledRow2.map((s, i) => serviceCard(s, i + 100))}
+                  </View>
+                </View>
+              )}
+            </View>
+          </RevealOnScroll>
+        ) : (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingHorizontal: 12, gap: 12 }}
           >
-            Compare
-          </Text>
-          <Text
-            style={{
-              color: tc.textPrimary,
-              fontSize: isMobile ? 28 : 36,
-              fontFamily: "DMSans_700Bold",
-              textAlign: "center",
-              letterSpacing: -0.8,
-              marginBottom: isMobile ? 36 : 48,
-            }}
-          >
-            Why CryptoPay vs P2P Trading?
-          </Text>
+            {KENYAN_SERVICES.map((s, i) => serviceCard(s, i))}
+          </ScrollView>
+        )}
+      </Section>
+    </View>
+  );
+
+  // ── 4. HOW IT WORKS ────────────────────────────────────────────────────────
+  const howItWorksSection = (
+    <View
+      ref={(ref) => { sectionRefs.current["howItWorks"] = ref; }}
+      style={{
+        paddingVertical: isMobile ? 60 : 100,
+        backgroundColor: tc.dark.bg,
+      }}
+    >
+      <Section>
+        <RevealOnScroll>
+          <View style={{ flexDirection: isDesktop ? "row" : "column", alignItems: "center", justifyContent: "center", gap: isDesktop ? 40 : 0 }}>
+            <View style={{ flex: isDesktop ? 1 : undefined }}>
+              <SectionTitle
+                label="How It Works"
+                title="Three Steps. Thirty Seconds."
+                subtitle="No P2P matching. No waiting. No counterparty risk."
+                tc={tc}
+                isMobile={isMobile}
+              />
+            </View>
+            {isWeb && isDesktop && (
+              <Image
+                source={{ uri: UNDRAW.fastLoading }}
+                style={{ width: 200, height: 200, opacity: 0.75 }}
+                resizeMode="contain"
+              />
+            )}
+          </View>
+        </RevealOnScroll>
+
+        <View
+          style={{
+            flexDirection: isMobile ? "column" : "row",
+            gap: isMobile ? 24 : 32,
+            alignItems: "stretch",
+            justifyContent: "center",
+            width: "100%",
+            position: "relative",
+          }}
+        >
+          {/* Connecting line (desktop only) */}
+          {isDesktop && isWeb && (
+            <View
+              style={{
+                position: "absolute",
+                top: 60,
+                left: "18%",
+                right: "18%",
+                height: 2,
+                zIndex: 0,
+                ...(isWeb
+                  ? ({
+                      background: "linear-gradient(90deg, rgba(16,185,129,0.15) 0%, rgba(16,185,129,0.3) 50%, rgba(16,185,129,0.15) 100%)",
+                    } as any)
+                  : { backgroundColor: "rgba(16, 185, 129, 0.15)" }),
+              }}
+            />
+          )}
+
+          {[
+            {
+              num: "01",
+              icon: "wallet" as const,
+              title: "Deposit Crypto",
+              desc: "Send USDT, BTC, ETH or SOL to your personal CryptoPay wallet address. Each chain has a unique deposit address.",
+            },
+            {
+              num: "02",
+              icon: "receipt" as const,
+              title: "Enter Payment Details",
+              desc: "Choose Paybill, Till number, or phone number. See the exact amount with a locked 90-second rate quote.",
+            },
+            {
+              num: "03",
+              icon: "flash" as const,
+              title: "Instant M-Pesa Delivery",
+              desc: "Confirm with your PIN. Payment arrives via M-Pesa in under 30 seconds. Get a receipt instantly.",
+            },
+          ].map((step, i) => (
+            <RevealOnScroll key={step.num} delay={i * 200} style={{ flex: 1, zIndex: 1 }}>
+              <View
+                style={{
+                  width: "100%",
+                  backgroundColor: tc.glass.bg,
+                  borderRadius: 24,
+                  borderWidth: 1,
+                  borderColor: tc.glass.border,
+                  padding: isMobile ? 24 : 32,
+                  alignItems: "center",
+                  ...(isWeb
+                    ? ({
+                        backdropFilter: "blur(16px)",
+                        WebkitBackdropFilter: "blur(16px)",
+                        transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+                      } as any)
+                    : {}),
+                }}
+              >
+                {/* Large step number */}
+                <Text
+                  style={{
+                    color: tc.primary[500] + "25",
+                    fontSize: 72,
+                    fontFamily: "DMSans_700Bold",
+                    letterSpacing: -2,
+                    lineHeight: 72,
+                    marginBottom: -8,
+                  }}
+                >
+                  {step.num}
+                </Text>
+
+                {/* Step icon */}
+                <View
+                  style={{
+                    width: 64,
+                    height: 64,
+                    borderRadius: 20,
+                    backgroundColor: "rgba(16, 185, 129, 0.1)",
+                    borderWidth: 1,
+                    borderColor: "rgba(16, 185, 129, 0.2)",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    marginBottom: 20,
+                    ...(isWeb
+                      ? ({
+                          boxShadow: "0 8px 32px rgba(16, 185, 129, 0.12)",
+                        } as any)
+                      : {}),
+                  }}
+                >
+                  <Ionicons name={step.icon} size={28} color={tc.primary[400]} />
+                </View>
+
+                <Text
+                  style={{
+                    color: tc.textPrimary,
+                    fontSize: 20,
+                    fontFamily: "DMSans_700Bold",
+                    textAlign: "center",
+                    marginBottom: 10,
+                  }}
+                >
+                  {step.title}
+                </Text>
+                <Text
+                  style={{
+                    color: tc.textSecondary,
+                    fontSize: 15,
+                    fontFamily: "DMSans_400Regular",
+                    textAlign: "center",
+                    lineHeight: 23,
+                    maxWidth: 300,
+                  }}
+                >
+                  {step.desc}
+                </Text>
+              </View>
+            </RevealOnScroll>
+          ))}
+        </View>
+      </Section>
+    </View>
+  );
+
+  // ── 5. SUPPORTED CRYPTO (Enhanced with hover/bob) ────────────────────────
+  const cryptoSection = (
+    <View
+      style={{
+        paddingVertical: isMobile ? 48 : 72,
+        ...(isWeb
+          ? ({
+              background: "linear-gradient(180deg, #060E1F 0%, #0A1628 100%)",
+            } as any)
+          : { backgroundColor: "#0A1628" }),
+      }}
+    >
+      <Section>
+        <RevealOnScroll>
+          <View style={{ flexDirection: isDesktop ? "row" : "column", alignItems: "center", justifyContent: "space-between" }}>
+            {isWeb && isDesktop && (
+              <Image source={{ uri: UNDRAW.finance }} style={{ width: 180, height: 180, opacity: 0.75 }} resizeMode="contain" />
+            )}
+            <View style={{ flex: 1 }}>
+              <SectionTitle
+                label="Supported Cryptocurrencies"
+                title="Five Chains. Your Choice."
+                tc={tc}
+                isMobile={isMobile}
+              />
+            </View>
+          </View>
+        </RevealOnScroll>
+
+        <View
+          style={{
+            flexDirection: isMobile ? "column" : "row",
+            gap: isMobile ? 12 : 16,
+            justifyContent: "center",
+            alignItems: "stretch",
+          }}
+        >
+          {COIN_ICONS.map((coin, i) => (
+            <RevealOnScroll key={coin.key} delay={i * 100} style={{ flex: isMobile ? undefined : 1 }}>
+              <Pressable
+                style={({ hovered }: any) => ({
+                  backgroundColor: tc.glass.bg,
+                  borderRadius: 20,
+                  borderWidth: 1,
+                  borderColor: isWeb && hovered ? coin.color + "40" : tc.glass.border,
+                  padding: isMobile ? 16 : 24,
+                  alignItems: "center",
+                  ...(isWeb
+                    ? ({
+                        backdropFilter: "blur(12px)",
+                        WebkitBackdropFilter: "blur(12px)",
+                        transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+                        boxShadow: hovered
+                          ? `0 12px 40px ${coin.color}30, 0 0 0 1px ${coin.color}20`
+                          : `0 4px 24px ${coin.color}10`,
+                        transform: hovered ? "translateY(-8px)" : "translateY(0)",
+                        cursor: "default",
+                        animation: `cpay-float-bob ${3 + i * 0.5}s ease-in-out infinite ${i * 0.3}s`,
+                      } as any)
+                    : {}),
+                }) as any}
+              >
+                {/* Glow ring around coin logo */}
+                <View
+                  style={{
+                    width: isMobile ? 56 : 64,
+                    height: isMobile ? 56 : 64,
+                    borderRadius: isMobile ? 28 : 32,
+                    backgroundColor: coin.color + "10",
+                    borderWidth: 2,
+                    borderColor: coin.color + "30",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    marginBottom: 14,
+                    ...(isWeb
+                      ? ({
+                          boxShadow: `0 0 20px ${coin.color}25, inset 0 0 12px ${coin.color}10`,
+                        } as any)
+                      : {}),
+                  }}
+                >
+                  <Image
+                    source={{ uri: coin.uri }}
+                    style={{
+                      width: isMobile ? 28 : 32,
+                      height: isMobile ? 28 : 32,
+                    }}
+                  />
+                </View>
+                <Text
+                  style={{
+                    color: tc.textPrimary,
+                    fontSize: 16,
+                    fontFamily: "DMSans_700Bold",
+                    marginBottom: 4,
+                  }}
+                >
+                  {coin.name}
+                </Text>
+                {/* Network badge */}
+                <View
+                  style={{
+                    backgroundColor: coin.color + "15",
+                    borderRadius: 8,
+                    paddingVertical: 4,
+                    paddingHorizontal: 12,
+                    borderWidth: 1,
+                    borderColor: coin.color + "20",
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: coin.color,
+                      fontSize: 11,
+                      fontFamily: "DMSans_600SemiBold",
+                    }}
+                  >
+                    {coin.network}
+                  </Text>
+                </View>
+              </Pressable>
+            </RevealOnScroll>
+          ))}
+        </View>
+      </Section>
+    </View>
+  );
+
+  // ── 6. FEATURES GRID ──────────────────────────────────────────────────────
+  const featuresSection = (
+    <View
+      ref={(ref) => { sectionRefs.current["features"] = ref; }}
+      accessibilityLabel="CryptoPay features"
+      style={{
+        paddingVertical: isMobile ? 60 : 100,
+        backgroundColor: tc.dark.bg,
+      }}
+    >
+      <Section>
+        <RevealOnScroll>
+          <View style={{ flexDirection: isDesktop ? "row" : "column", alignItems: "center", justifyContent: "center", gap: isDesktop ? 40 : 0 }}>
+            <View style={{ flex: isDesktop ? 1 : undefined }}>
+              <SectionTitle
+                label="Features"
+                title="Everything You Need to Pay Bills with Crypto"
+                tc={tc}
+                isMobile={isMobile}
+              />
+            </View>
+            {isWeb && isDesktop && (
+              <Image
+                source={{ uri: UNDRAW.wallet }}
+                style={{ width: 200, height: 200, opacity: 0.75 }}
+                resizeMode="contain"
+              />
+            )}
+          </View>
+        </RevealOnScroll>
+
+        <View
+          style={{
+            ...(isWeb
+              ? ({
+                  display: "grid" as any,
+                  gridTemplateColumns: isMobile ? "1fr" : isTablet ? "1fr 1fr" : "1fr 1fr 1fr",
+                  gap: isMobile ? 16 : 24,
+                } as any)
+              : {
+                  flexDirection: "row",
+                  flexWrap: "wrap",
+                  gap: 16,
+                }),
+          }}
+        >
+          {FEATURES.map((feat, i) => (
+            <RevealOnScroll key={feat.title} delay={i * 100}>
+              <TiltCard
+                style={{
+                  height: "100%",
+                }}
+              >
+                <View
+                  style={{
+                    width: 52,
+                    height: 52,
+                    borderRadius: 16,
+                    backgroundColor: "rgba(16, 185, 129, 0.08)",
+                    borderWidth: 1,
+                    borderColor: "rgba(16, 185, 129, 0.15)",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    marginBottom: 18,
+                    ...(isWeb
+                      ? ({
+                          boxShadow: "0 4px 16px rgba(16, 185, 129, 0.1)",
+                        } as any)
+                      : {}),
+                  }}
+                >
+                  <Ionicons name={feat.icon} size={24} color={tc.primary[400]} />
+                </View>
+                <Text
+                  style={{
+                    color: tc.textPrimary,
+                    fontSize: 18,
+                    fontFamily: "DMSans_700Bold",
+                    marginBottom: 8,
+                  }}
+                >
+                  {feat.title}
+                </Text>
+                <Text
+                  style={{
+                    color: tc.textSecondary,
+                    fontSize: 14,
+                    fontFamily: "DMSans_400Regular",
+                    lineHeight: 22,
+                  }}
+                >
+                  {feat.desc}
+                </Text>
+              </TiltCard>
+            </RevealOnScroll>
+          ))}
+        </View>
+      </Section>
+    </View>
+  );
+
+  // ── 7. PRICING / FEE TRANSPARENCY ─────────────────────────────────────────
+  const pricingSection = (
+    <View
+      ref={(ref) => { sectionRefs.current["pricing"] = ref; }}
+      style={{
+        paddingVertical: isMobile ? 60 : 100,
+        ...(isWeb
+          ? ({
+              background: "linear-gradient(180deg, #0A1628 0%, #060E1F 100%)",
+            } as any)
+          : { backgroundColor: "#0A1628" }),
+      }}
+    >
+      <Section>
+        <RevealOnScroll>
+          <View style={{ flexDirection: isDesktop ? "row" : "column", alignItems: "center", justifyContent: "space-between" }}>
+            {isWeb && isDesktop && (
+              <Image source={{ uri: UNDRAW.savings }} style={{ width: 180, height: 180, opacity: 0.8 }} resizeMode="contain" />
+            )}
+            <View style={{ flex: 1 }}>
+              <SectionTitle
+                label="Pricing"
+                title="Simple, Transparent Pricing"
+                subtitle="No hidden fees. The rate you see is the rate you get, locked for 30 seconds."
+                tc={tc}
+                isMobile={isMobile}
+              />
+            </View>
+          </View>
         </RevealOnScroll>
 
         <RevealOnScroll delay={200}>
-          {/* Table container */}
+          {/* Main pricing card */}
+          <View
+            style={{
+              backgroundColor: tc.glass.bg,
+              borderRadius: 28,
+              borderWidth: 1,
+              borderColor: "rgba(16, 185, 129, 0.15)",
+              padding: isMobile ? 28 : 48,
+              alignItems: "center",
+              marginBottom: 32,
+              ...(isWeb
+                ? ({
+                    backdropFilter: "blur(20px)",
+                    WebkitBackdropFilter: "blur(20px)",
+                    boxShadow: "0 8px 48px rgba(16, 185, 129, 0.06)",
+                  } as any)
+                : {}),
+            }}
+          >
+            <Text
+              style={{
+                color: tc.textPrimary,
+                fontSize: isMobile ? 28 : 40,
+                fontFamily: "DMSans_700Bold",
+                textAlign: "center",
+                letterSpacing: -1,
+                marginBottom: 8,
+              }}
+            >
+              1.5%{" "}
+              <Text style={{ color: tc.textSecondary, fontSize: isMobile ? 18 : 22, fontFamily: "DMSans_400Regular" }}>
+                conversion spread
+              </Text>
+            </Text>
+            <Text
+              style={{
+                color: tc.textSecondary,
+                fontSize: isMobile ? 18 : 22,
+                fontFamily: "DMSans_400Regular",
+                textAlign: "center",
+                marginBottom: 4,
+              }}
+            >
+              + KES 10 flat fee per transaction
+            </Text>
+            <Text
+              style={{
+                color: tc.primary[400],
+                fontSize: 16,
+                fontFamily: "DMSans_600SemiBold",
+                marginTop: 16,
+              }}
+            >
+              That's it.
+            </Text>
+          </View>
+        </RevealOnScroll>
+
+        {/* Comparison row */}
+        <RevealOnScroll delay={400}>
+          <View
+            style={{
+              flexDirection: isMobile ? "column" : "row",
+              gap: isMobile ? 12 : 20,
+              justifyContent: "center",
+            }}
+          >
+            {[
+              { name: "CryptoPay", fee: "1.5%", highlight: true, icon: "flash" as const },
+              { name: "Binance P2P", fee: "3-8%", highlight: false, icon: "swap-horizontal" as const },
+              { name: "Manual OTC", fee: "5-10%", highlight: false, icon: "people" as const },
+            ].map((item) => (
+              <View
+                key={item.name}
+                style={{
+                  flex: isMobile ? undefined : 1,
+                  backgroundColor: item.highlight
+                    ? "rgba(16, 185, 129, 0.06)"
+                    : "rgba(255,255,255,0.02)",
+                  borderRadius: 20,
+                  borderWidth: item.highlight ? 2 : 1,
+                  borderColor: item.highlight
+                    ? "rgba(16, 185, 129, 0.25)"
+                    : "rgba(255,255,255,0.06)",
+                  padding: 24,
+                  alignItems: "center",
+                  ...(isWeb && item.highlight
+                    ? ({
+                        boxShadow: "0 4px 24px rgba(16, 185, 129, 0.1)",
+                      } as any)
+                    : {}),
+                }}
+              >
+                <View
+                  style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: 14,
+                    backgroundColor: item.highlight ? tc.primary[500] + "20" : "rgba(255,255,255,0.04)",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    marginBottom: 14,
+                  }}
+                >
+                  <Ionicons
+                    name={item.icon}
+                    size={22}
+                    color={item.highlight ? tc.primary[400] : tc.textMuted}
+                  />
+                </View>
+                <Text
+                  style={{
+                    color: item.highlight ? tc.primary[400] : tc.textSecondary,
+                    fontSize: 14,
+                    fontFamily: "DMSans_600SemiBold",
+                    marginBottom: 6,
+                  }}
+                >
+                  {item.name}
+                </Text>
+                <Text
+                  style={{
+                    color: item.highlight ? tc.textPrimary : tc.textMuted,
+                    fontSize: 28,
+                    fontFamily: "DMSans_700Bold",
+                    letterSpacing: -0.5,
+                  }}
+                >
+                  {item.fee}
+                </Text>
+                <Text
+                  style={{
+                    color: tc.textMuted,
+                    fontSize: 12,
+                    fontFamily: "DMSans_400Regular",
+                    marginTop: 4,
+                  }}
+                >
+                  typical fees
+                </Text>
+              </View>
+            ))}
+          </View>
+        </RevealOnScroll>
+      </Section>
+    </View>
+  );
+
+  // ── 8. COMPARISON TABLE ────────────────────────────────────────────────────
+  const comparisonSection = (
+    <View
+      style={{
+        paddingVertical: isMobile ? 60 : 100,
+        backgroundColor: tc.dark.bg,
+      }}
+    >
+      <Section>
+        <RevealOnScroll>
+          <View style={{ flexDirection: isDesktop ? "row" : "column", alignItems: "center", justifyContent: "space-between" }}>
+            {isWeb && isDesktop && (
+              <Image source={{ uri: UNDRAW.pieChart }} style={{ width: 180, height: 180, opacity: 0.8 }} resizeMode="contain" />
+            )}
+            <View style={{ flex: 1 }}>
+              <SectionTitle
+                label="Compare"
+                title="Why CryptoPay vs P2P Trading?"
+                subtitle="Side-by-side comparison so you can decide for yourself."
+                tc={tc}
+                isMobile={isMobile}
+              />
+            </View>
+          </View>
+        </RevealOnScroll>
+
+        <RevealOnScroll delay={200}>
           <ScrollView
             horizontal={isMobile}
             showsHorizontalScrollIndicator={false}
           >
             <View
               style={{
-                minWidth: isMobile ? 600 : "100%" as any,
+                minWidth: isMobile ? 640 : ("100%" as any),
                 backgroundColor: tc.glass.bg,
-                borderRadius: 20,
+                borderRadius: 24,
                 borderWidth: 1,
                 borderColor: tc.glass.border,
                 overflow: "hidden",
                 ...(isWeb
                   ? ({
-                      backdropFilter: "blur(12px)",
-                      WebkitBackdropFilter: "blur(12px)",
+                      backdropFilter: "blur(16px)",
+                      WebkitBackdropFilter: "blur(16px)",
                     } as any)
                   : {}),
               }}
@@ -1521,22 +3219,17 @@ export default function LandingPage() {
                 style={{
                   flexDirection: "row",
                   borderBottomWidth: 1,
-                  borderBottomColor: tc.dark.border,
+                  borderBottomColor: "rgba(255,255,255,0.06)",
                 }}
               >
-                <View
-                  style={{
-                    flex: 1.2,
-                    padding: 16,
-                  }}
-                >
+                <View style={{ flex: 1.3, padding: 18 }}>
                   <Text
                     style={{
                       color: tc.textMuted,
-                      fontSize: 13,
-                      fontFamily: "DMSans_600SemiBold",
+                      fontSize: 12,
+                      fontFamily: "DMSans_700Bold",
                       textTransform: "uppercase",
-                      letterSpacing: 1,
+                      letterSpacing: 1.5,
                     }}
                   >
                     Feature
@@ -1544,26 +3237,29 @@ export default function LandingPage() {
                 </View>
                 <View
                   style={{
-                    flex: 1,
-                    padding: 16,
+                    flex: 1.2,
+                    padding: 18,
                     backgroundColor: "rgba(16, 185, 129, 0.06)",
                     borderLeftWidth: 1,
-                    borderLeftColor: "rgba(16, 185, 129, 0.15)",
+                    borderLeftColor: "rgba(16, 185, 129, 0.12)",
                     borderRightWidth: 1,
-                    borderRightColor: "rgba(16, 185, 129, 0.15)",
+                    borderRightColor: "rgba(16, 185, 129, 0.12)",
                   }}
                 >
-                  <Text
-                    style={{
-                      color: tc.primary[400],
-                      fontSize: 14,
-                      fontFamily: "DMSans_700Bold",
-                    }}
-                  >
-                    CryptoPay
-                  </Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <Ionicons name="flash" size={14} color={tc.primary[400]} />
+                    <Text
+                      style={{
+                        color: tc.primary[400],
+                        fontSize: 14,
+                        fontFamily: "DMSans_700Bold",
+                      }}
+                    >
+                      CryptoPay
+                    </Text>
+                  </View>
                 </View>
-                <View style={{ flex: 1, padding: 16 }}>
+                <View style={{ flex: 1, padding: 18 }}>
                   <Text
                     style={{
                       color: tc.textSecondary,
@@ -1574,7 +3270,7 @@ export default function LandingPage() {
                     Binance P2P
                   </Text>
                 </View>
-                <View style={{ flex: 1, padding: 16 }}>
+                <View style={{ flex: 1, padding: 18 }}>
                   <Text
                     style={{
                       color: tc.textSecondary,
@@ -1593,12 +3289,11 @@ export default function LandingPage() {
                   key={row.label}
                   style={{
                     flexDirection: "row",
-                    borderBottomWidth:
-                      i < COMPARISON_ROWS.length - 1 ? 1 : 0,
+                    borderBottomWidth: i < COMPARISON_ROWS.length - 1 ? 1 : 0,
                     borderBottomColor: "rgba(255,255,255,0.04)",
                   }}
                 >
-                  <View style={{ flex: 1.2, padding: 16 }}>
+                  <View style={{ flex: 1.3, padding: 16, justifyContent: "center" }}>
                     <Text
                       style={{
                         color: tc.textPrimary,
@@ -1611,29 +3306,38 @@ export default function LandingPage() {
                   </View>
                   <View
                     style={{
-                      flex: 1,
+                      flex: 1.2,
                       padding: 16,
-                      backgroundColor: "rgba(16, 185, 129, 0.04)",
+                      backgroundColor: "rgba(16, 185, 129, 0.03)",
                       borderLeftWidth: 1,
-                      borderLeftColor: "rgba(16, 185, 129, 0.1)",
+                      borderLeftColor: "rgba(16, 185, 129, 0.08)",
                       borderRightWidth: 1,
-                      borderRightColor: "rgba(16, 185, 129, 0.1)",
+                      borderRightColor: "rgba(16, 185, 129, 0.08)",
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 8,
                     }}
                   >
+                    <Ionicons
+                      name={row.cpIcon}
+                      size={15}
+                      color={tc.primary[400]}
+                    />
                     <Text
                       style={{
                         color: tc.primary[300],
                         fontSize: 14,
                         fontFamily: "DMSans_600SemiBold",
+                        flex: 1,
                       }}
                     >
                       {row.cp}
                     </Text>
                   </View>
-                  <View style={{ flex: 1, padding: 16 }}>
+                  <View style={{ flex: 1, padding: 16, justifyContent: "center" }}>
                     <Text
                       style={{
-                        color: tc.textSecondary,
+                        color: tc.textMuted,
                         fontSize: 14,
                         fontFamily: "DMSans_400Regular",
                       }}
@@ -1641,10 +3345,10 @@ export default function LandingPage() {
                       {row.p2p}
                     </Text>
                   </View>
-                  <View style={{ flex: 1, padding: 16 }}>
+                  <View style={{ flex: 1, padding: 16, justifyContent: "center" }}>
                     <Text
                       style={{
-                        color: tc.textSecondary,
+                        color: tc.textMuted,
                         fontSize: 14,
                         fontFamily: "DMSans_400Regular",
                       }}
@@ -1656,63 +3360,289 @@ export default function LandingPage() {
               ))}
             </View>
           </ScrollView>
+
+          {isMobile && (
+            <Text
+              style={{
+                color: tc.textMuted,
+                fontSize: 11,
+                fontFamily: "DMSans_400Regular",
+                textAlign: "center",
+                marginTop: 12,
+              }}
+            >
+              Swipe to see full comparison {"\u2192"}
+            </Text>
+          )}
         </RevealOnScroll>
       </Section>
     </View>
   );
 
-  // ── FAQ SECTION ───────────────────────────────────────────────────────────
-  const faqSection = (
+  // ── NEW: TESTIMONIALS / SOCIAL PROOF SECTION ──────────────────────────────
+  const testimonialsSection = (
     <View
       style={{
         paddingVertical: isMobile ? 60 : 100,
-        backgroundColor: tc.dark.bg,
+        ...(isWeb
+          ? ({
+              background: "linear-gradient(180deg, #060E1F 0%, #0A1628 100%)",
+            } as any)
+          : { backgroundColor: "#060E1F" }),
       }}
     >
       <Section>
         <RevealOnScroll>
+          <SectionTitle
+            label="Social Proof"
+            title="What Users Are Saying"
+            subtitle="Real feedback from our beta testers across Kenya and the diaspora."
+            tc={tc}
+            isMobile={isMobile}
+          />
           <Text
             style={{
-              color: tc.primary[400],
-              fontSize: 14,
-              fontFamily: "DMSans_600SemiBold",
+              color: tc.textMuted,
+              fontSize: 12,
+              fontFamily: "DMSans_500Medium",
               textAlign: "center",
-              textTransform: "uppercase",
-              letterSpacing: 2,
-              marginBottom: 12,
+              marginTop: -24,
+              marginBottom: 32,
+              fontStyle: "italic",
+              letterSpacing: 0.3,
+              opacity: 0.7,
             }}
           >
-            FAQ
-          </Text>
-          <Text
-            style={{
-              color: tc.textPrimary,
-              fontSize: isMobile ? 28 : 36,
-              fontFamily: "DMSans_700Bold",
-              textAlign: "center",
-              letterSpacing: -0.8,
-              marginBottom: isMobile ? 36 : 48,
-            }}
-          >
-            Frequently Asked Questions
+            From our early access program
           </Text>
         </RevealOnScroll>
 
-        {FAQ_DATA.map((faq, i) => (
-          <RevealOnScroll key={i} delay={i * 80}>
-            <FAQItem question={faq.q} answer={faq.a} tc={tc} />
-          </RevealOnScroll>
-        ))}
+        {/* Carousel container */}
+        <View
+          style={{ position: "relative" }}
+          {...(isWeb ? {
+            onMouseEnter: () => setTestimonialHovered(true),
+            onMouseLeave: () => setTestimonialHovered(false),
+          } as any : {})}
+        >
+          {/* Overflow wrapper */}
+          <View style={{ overflow: "hidden", marginHorizontal: isMobile ? 0 : 40 }}>
+            {/* Sliding track */}
+            <View
+              style={{
+                flexDirection: "row",
+                ...(isWeb ? {
+                  transition: "transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)",
+                  transform: `translateX(-${currentSlide * (100 / slidesPerView)}%)`,
+                } as any : {}),
+              } as any}
+            >
+              {TESTIMONIALS.map((t, i) => (
+                <View
+                  key={i}
+                  style={{
+                    width: `${100 / slidesPerView}%` as any,
+                    paddingHorizontal: 10,
+                    flexShrink: 0,
+                  }}
+                >
+                  <Pressable
+                    style={({ hovered: cardHovered }: any) => ({
+                      backgroundColor: tc.glass.bg,
+                      borderRadius: 20,
+                      borderWidth: 1,
+                      borderColor: isWeb && cardHovered ? t.color + "30" : tc.glass.border,
+                      padding: isMobile ? 24 : 28,
+                      height: "100%",
+                      ...(isWeb
+                        ? ({
+                            backdropFilter: "blur(12px)",
+                            WebkitBackdropFilter: "blur(12px)",
+                            transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+                            transform: cardHovered ? "translateY(-4px)" : "translateY(0)",
+                            boxShadow: cardHovered
+                              ? `0 12px 40px ${t.color}15`
+                              : "0 4px 16px rgba(0,0,0,0.2)",
+                            cursor: "default",
+                          } as any)
+                        : {}),
+                    }) as any}
+                  >
+                    {/* Quote icon */}
+                    <Text style={{ color: tc.primary[400], fontSize: isMobile ? 32 : 36, fontFamily: "DMSans_700Bold", lineHeight: isMobile ? 32 : 36, marginBottom: isMobile ? 12 : 16 }}>
+                      {"\u201C"}
+                    </Text>
+                    <Text
+                      style={{
+                        color: tc.textSecondary,
+                        fontSize: 15,
+                        fontFamily: "DMSans_400Regular",
+                        lineHeight: 24,
+                        marginBottom: isMobile ? 20 : 24,
+                        minHeight: 72,
+                      }}
+                    >
+                      {t.quote}
+                    </Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: "auto" } as any}>
+                      <View
+                        style={{
+                          width: isMobile ? 40 : 44,
+                          height: isMobile ? 40 : 44,
+                          borderRadius: isMobile ? 20 : 22,
+                          backgroundColor: t.color + "20",
+                          borderWidth: 1,
+                          borderColor: t.color + "30",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <Text style={{ color: t.color, fontSize: isMobile ? 14 : 15, fontFamily: "DMSans_700Bold" }}>{t.initials}</Text>
+                      </View>
+                      <View>
+                        <Text style={{ color: tc.textPrimary, fontSize: 14, fontFamily: "DMSans_600SemiBold" }}>{t.name}</Text>
+                        <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_400Regular" }}>{t.role}</Text>
+                      </View>
+                    </View>
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          {/* Left arrow */}
+          {currentSlide > 0 && (
+            <Pressable
+              onPress={() => setCurrentSlide((prev) => Math.max(0, prev - 1))}
+              style={{
+                position: "absolute",
+                left: isMobile ? -4 : 0,
+                top: "50%",
+                marginTop: -22,
+                width: 44,
+                height: 44,
+                borderRadius: 22,
+                backgroundColor: "rgba(255,255,255,0.08)",
+                borderWidth: 1,
+                borderColor: "rgba(255,255,255,0.12)",
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 10,
+                ...(isWeb ? {
+                  backdropFilter: "blur(12px)",
+                  WebkitBackdropFilter: "blur(12px)",
+                  cursor: "pointer",
+                  transition: "all 0.2s ease",
+                } as any : {}),
+              } as any}
+            >
+              <Ionicons name="chevron-back" size={22} color="#fff" />
+            </Pressable>
+          )}
+
+          {/* Right arrow */}
+          {currentSlide < maxSlide && (
+            <Pressable
+              onPress={() => setCurrentSlide((prev) => Math.min(maxSlide, prev + 1))}
+              style={{
+                position: "absolute",
+                right: isMobile ? -4 : 0,
+                top: "50%",
+                marginTop: -22,
+                width: 44,
+                height: 44,
+                borderRadius: 22,
+                backgroundColor: "rgba(255,255,255,0.08)",
+                borderWidth: 1,
+                borderColor: "rgba(255,255,255,0.12)",
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 10,
+                ...(isWeb ? {
+                  backdropFilter: "blur(12px)",
+                  WebkitBackdropFilter: "blur(12px)",
+                  cursor: "pointer",
+                  transition: "all 0.2s ease",
+                } as any : {}),
+              } as any}
+            >
+              <Ionicons name="chevron-forward" size={22} color="#fff" />
+            </Pressable>
+          )}
+        </View>
+
+        {/* Dot indicators */}
+        <View style={{ flexDirection: "row", justifyContent: "center", alignItems: "center", marginTop: 28, gap: 8 }}>
+          {Array.from({ length: maxSlide + 1 }).map((_, i) => (
+            <Pressable
+              key={i}
+              onPress={() => setCurrentSlide(i)}
+              style={{
+                width: currentSlide === i ? 24 : 8,
+                height: 8,
+                borderRadius: 4,
+                backgroundColor: currentSlide === i ? "#10B981" : "rgba(255,255,255,0.15)",
+                ...(isWeb ? {
+                  transition: "all 0.3s ease",
+                  cursor: "pointer",
+                } as any : {}),
+              } as any}
+            />
+          ))}
+        </View>
       </Section>
     </View>
   );
 
-  // ── FINAL CTA SECTION ─────────────────────────────────────────────────────
+  // ── 9. FAQ ─────────────────────────────────────────────────────────────────
+  const faqSection = (
+    <View
+      accessibilityLabel="Frequently asked questions"
+      style={{
+        paddingVertical: isMobile ? 60 : 100,
+        ...(isWeb
+          ? ({
+              background: "linear-gradient(180deg, #060E1F 0%, #0A1628 100%)",
+            } as any)
+          : { backgroundColor: "#0A1628" }),
+      }}
+    >
+      <Section>
+        <RevealOnScroll>
+          <View style={{ flexDirection: isDesktop ? "row" : "column", alignItems: "center", justifyContent: "space-between" }}>
+            <View style={{ flex: 1 }}>
+              <SectionTitle
+                label="FAQ"
+                title="Frequently Asked Questions"
+                tc={tc}
+                isMobile={isMobile}
+              />
+            </View>
+            {isWeb && isDesktop && (
+              <Image source={{ uri: UNDRAW.questions }} style={{ width: 180, height: 180, opacity: 0.8 }} resizeMode="contain" />
+            )}
+          </View>
+        </RevealOnScroll>
+
+        <View style={{ maxWidth: 800, width: "100%", alignSelf: "center" as any }}>
+          {FAQ_DATA.map((faq, i) => (
+            <RevealOnScroll key={i} delay={i * 80}>
+              <FAQItem question={faq.q} answer={faq.a} tc={tc} />
+            </RevealOnScroll>
+          ))}
+        </View>
+      </Section>
+    </View>
+  );
+
+  // ── 10. FINAL CTA ─────────────────────────────────────────────────────────
   const ctaSection = (
     <View
       style={{
-        paddingVertical: isMobile ? 60 : 100,
+        paddingVertical: isMobile ? 80 : 120,
         alignItems: "center",
+        position: "relative",
+        overflow: "hidden",
         ...(isWeb
           ? ({
               background:
@@ -1721,42 +3651,66 @@ export default function LandingPage() {
           : { backgroundColor: "#0E1D35" }),
       }}
     >
+      {/* Background glow */}
+      <View
+        style={{
+          position: "absolute",
+          top: "20%",
+          left: "50%",
+          width: 600,
+          height: 600,
+          borderRadius: 300,
+          ...(isWeb
+            ? ({
+                background: "radial-gradient(circle, rgba(16,185,129,0.06) 0%, transparent 70%)",
+                transform: "translateX(-50%)",
+              } as any)
+            : { backgroundColor: "rgba(16,185,129,0.03)" }),
+        }}
+      />
+
       <Section>
         <RevealOnScroll>
-          <View style={{ alignItems: "center" }}>
-            {/* Icon */}
+          <View style={{ alignItems: "center", zIndex: 1 }}>
+            {/* Flash icon */}
             <View
               style={{
-                width: 64,
-                height: 64,
-                borderRadius: 20,
+                width: 72,
+                height: 72,
+                borderRadius: 22,
                 backgroundColor: tc.primary[500],
                 alignItems: "center",
                 justifyContent: "center",
-                marginBottom: 28,
+                marginBottom: 32,
                 ...(isWeb
                   ? ({
-                      boxShadow: `0 8px 32px ${tc.primary[500]}40`,
+                      boxShadow: `0 12px 40px ${tc.primary[500]}50`,
                     } as any)
                   : {
                       shadowColor: tc.primary[500],
-                      shadowOffset: { width: 0, height: 6 },
-                      shadowOpacity: 0.35,
-                      shadowRadius: 16,
+                      shadowOffset: { width: 0, height: 8 },
+                      shadowOpacity: 0.4,
+                      shadowRadius: 20,
                     }),
               }}
             >
-              <Ionicons name="flash" size={32} color="#FFFFFF" />
+              <Ionicons name="flash" size={36} color="#FFFFFF" />
             </View>
+
+            {/* Success illustration */}
+            {isWeb && isDesktop && (
+              <Image source={{ uri: UNDRAW.success }} style={{ width: 160, height: 120, opacity: 0.7, marginBottom: 12 }} resizeMode="contain" />
+            )}
 
             <Text
               style={{
                 color: tc.textPrimary,
-                fontSize: isMobile ? 28 : 36,
+                fontSize: isMobile ? 30 : 42,
                 fontFamily: "DMSans_700Bold",
                 textAlign: "center",
-                letterSpacing: -0.8,
-                marginBottom: 16,
+                letterSpacing: -1,
+                lineHeight: isMobile ? 38 : 52,
+                marginBottom: 18,
               }}
             >
               Ready to pay bills{"\n"}with crypto?
@@ -1765,46 +3719,47 @@ export default function LandingPage() {
             <Text
               style={{
                 color: tc.textSecondary,
-                fontSize: 16,
+                fontSize: isMobile ? 16 : 18,
                 fontFamily: "DMSans_400Regular",
                 textAlign: "center",
-                lineHeight: 24,
-                maxWidth: 480,
-                marginBottom: 36,
+                lineHeight: isMobile ? 24 : 28,
+                maxWidth: 520,
+                marginBottom: 40,
               }}
             >
-              Join thousands of Kenyans using CryptoPay to convert crypto
-              to M-Pesa payments instantly. No middlemen, no delays.
+              Join thousands of Kenyans converting crypto to M-Pesa payments instantly.
+              No middlemen, no delays, no scam risk.
             </Text>
 
             <PrimaryButton
               label="Create Free Account"
               onPress={navigateToRegister}
               tc={tc}
+              icon="rocket"
               style={{
-                minWidth: isMobile ? undefined : 240,
+                minWidth: isMobile ? undefined : 280,
                 width: isMobile ? "100%" : undefined,
-                maxWidth: 360,
-                paddingVertical: 18,
+                maxWidth: 400,
+                paddingVertical: 20,
               }}
             />
 
             <Pressable
               onPress={navigateToLogin}
               style={({ pressed, hovered }: any) => ({
-                marginTop: 16,
+                marginTop: 20,
                 paddingVertical: 10,
-                paddingHorizontal: 20,
-                borderRadius: 10,
+                paddingHorizontal: 24,
+                borderRadius: 12,
                 backgroundColor: hovered ? "rgba(255,255,255,0.04)" : "transparent",
                 opacity: pressed ? 0.7 : 1,
-                ...(isWeb ? ({ cursor: "pointer", transition: "all 0.2s ease" } as any) : {}),
+                ...(isWeb ? ({ cursor: "pointer", transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)" } as any) : {}),
               })}
             >
               <Text
                 style={{
                   color: tc.textMuted,
-                  fontSize: 14,
+                  fontSize: 15,
                   fontFamily: "DMSans_500Medium",
                 }}
               >
@@ -1825,13 +3780,12 @@ export default function LandingPage() {
     </View>
   );
 
-  // ── FOOTER ────────────────────────────────────────────────────────────────
+  // ── 11. FOOTER ─────────────────────────────────────────────────────────────
   const footer = (
     <View
       style={{
-        backgroundColor: "#040A14",
-        paddingVertical: isMobile ? 32 : 48,
-        paddingHorizontal: 20,
+        backgroundColor: "#030810",
+        paddingVertical: isMobile ? 40 : 56,
         borderTopWidth: 1,
         borderTopColor: "rgba(255,255,255,0.04)",
       }}
@@ -1842,13 +3796,14 @@ export default function LandingPage() {
             flexDirection: isMobile ? "column" : "row",
             justifyContent: "space-between",
             alignItems: isMobile ? "center" : "flex-start",
-            gap: isMobile ? 32 : 48,
+            gap: isMobile ? 36 : 48,
           }}
         >
           {/* Brand */}
           <View
             style={{
               alignItems: isMobile ? "center" : "flex-start",
+              maxWidth: 300,
             }}
           >
             <View
@@ -1856,14 +3811,14 @@ export default function LandingPage() {
                 flexDirection: "row",
                 alignItems: "center",
                 gap: 10,
-                marginBottom: 12,
+                marginBottom: 14,
               }}
             >
               <View
                 style={{
                   width: 32,
                   height: 32,
-                  borderRadius: 8,
+                  borderRadius: 9,
                   backgroundColor: tc.primary[500],
                   alignItems: "center",
                   justifyContent: "center",
@@ -1874,7 +3829,7 @@ export default function LandingPage() {
               <Text
                 style={{
                   color: tc.textPrimary,
-                  fontSize: 18,
+                  fontSize: 20,
                   fontFamily: "DMSans_700Bold",
                   letterSpacing: -0.3,
                 }}
@@ -1885,49 +3840,54 @@ export default function LandingPage() {
             <Text
               style={{
                 color: tc.textMuted,
-                fontSize: 13,
+                fontSize: 14,
                 fontFamily: "DMSans_400Regular",
-                lineHeight: 20,
+                lineHeight: 22,
                 textAlign: isMobile ? "center" : "left",
-                maxWidth: 280,
               }}
             >
-              Convert crypto to M-Pesa payments instantly. Secure, fast,
-              and compliant.
+              Convert crypto to M-Pesa payments instantly.
+              Secure, fast, and fully compliant.
             </Text>
           </View>
 
-          {/* Links */}
+          {/* Footer links */}
           <View
             style={{
               flexDirection: "row",
-              gap: isMobile ? 40 : 64,
+              gap: isMobile ? 48 : 72,
             }}
           >
-            <View style={{ gap: 10 }}>
+            {/* Legal */}
+            <View style={{ gap: 12 }}>
               <Text
                 style={{
                   color: tc.textSecondary,
-                  fontSize: 13,
-                  fontFamily: "DMSans_600SemiBold",
+                  fontSize: 12,
+                  fontFamily: "DMSans_700Bold",
                   textTransform: "uppercase",
-                  letterSpacing: 1,
+                  letterSpacing: 1.5,
                   marginBottom: 4,
                 }}
               >
                 Legal
               </Text>
-              {["Privacy Policy", "Terms of Service"].map((link) => (
+              {[
+                { label: "Privacy Policy", route: "/privacy" },
+                { label: "Terms of Service", route: "/terms" },
+              ].map((link) => (
                 <Pressable
-                  key={link}
+                  key={link.label}
+                  onPress={() => {
+                    // Placeholder: these routes can be added later
+                  }}
                   style={({ hovered }: any) => ({
                     ...(isWeb
                       ? ({
                           cursor: "pointer",
-                          transition: "opacity 0.15s ease",
+                          transition: "color 0.15s ease",
                         } as any)
                       : {}),
-                    opacity: hovered ? 0.7 : 1,
                   })}
                 >
                   <Text
@@ -1937,20 +3897,21 @@ export default function LandingPage() {
                       fontFamily: "DMSans_400Regular",
                     }}
                   >
-                    {link}
+                    {link.label}
                   </Text>
                 </Pressable>
               ))}
             </View>
 
-            <View style={{ gap: 10 }}>
+            {/* Support */}
+            <View style={{ gap: 12 }}>
               <Text
                 style={{
                   color: tc.textSecondary,
-                  fontSize: 13,
-                  fontFamily: "DMSans_600SemiBold",
+                  fontSize: 12,
+                  fontFamily: "DMSans_700Bold",
                   textTransform: "uppercase",
-                  letterSpacing: 1,
+                  letterSpacing: 1.5,
                   marginBottom: 4,
                 }}
               >
@@ -1965,21 +3926,25 @@ export default function LandingPage() {
               >
                 support@cpay.co.ke
               </Text>
-              {/* Social placeholders */}
-              <View style={{ flexDirection: "row", gap: 12, marginTop: 4 }}>
-                {(
-                  [
-                    "logo-twitter",
-                    "logo-linkedin",
-                    "logo-github",
-                  ] as const
-                ).map((icon) => (
+              {/* Social icons (real brand logos) */}
+              <View style={{ flexDirection: "row", gap: 10, marginTop: 4 }}>
+                {([
+                  { image: SOCIAL_ICONS.twitter, label: "Twitter / X", url: "https://twitter.com/CPayKenya" },
+                  { image: SOCIAL_ICONS.telegram, label: "Telegram", url: "https://t.me/cryptopaykenya" },
+                ]).map((social) => (
                   <Pressable
-                    key={icon}
+                    key={social.label}
+                    onPress={() => {
+                      if (isWeb) {
+                        (window as any).open(social.url, "_blank");
+                      } else {
+                        Linking.openURL(social.url);
+                      }
+                    }}
                     style={({ hovered }: any) => ({
-                      width: 32,
-                      height: 32,
-                      borderRadius: 8,
+                      width: 36,
+                      height: 36,
+                      borderRadius: 10,
                       backgroundColor: hovered
                         ? "rgba(255,255,255,0.08)"
                         : "rgba(255,255,255,0.04)",
@@ -1988,15 +3953,16 @@ export default function LandingPage() {
                       ...(isWeb
                         ? ({
                             cursor: "pointer",
-                            transition: "all 0.2s ease",
+                            transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
                           } as any)
                         : {}),
                     })}
+                    accessibilityLabel={social.label}
                   >
-                    <Ionicons
-                      name={icon}
-                      size={16}
-                      color={tc.textMuted}
+                    <Image
+                      source={social.image}
+                      style={{ width: 20, height: 20, borderRadius: 4 }}
+                      resizeMode="contain"
                     />
                   </Pressable>
                 ))}
@@ -2008,8 +3974,8 @@ export default function LandingPage() {
         {/* Copyright */}
         <View
           style={{
-            marginTop: isMobile ? 32 : 40,
-            paddingTop: 20,
+            marginTop: isMobile ? 36 : 48,
+            paddingTop: 24,
             borderTopWidth: 1,
             borderTopColor: "rgba(255,255,255,0.04)",
             alignItems: "center",
@@ -2030,14 +3996,16 @@ export default function LandingPage() {
     </View>
   );
 
-  // ── RENDER ────────────────────────────────────────────────────────────────
+  // ── RENDER ──────────────────────────────────────────────────────────────────
   return (
     <View style={{ flex: 1, backgroundColor: tc.dark.bg }}>
       <Navbar
         tc={tc}
+        isMobile={isMobile}
         isDesktop={isDesktop}
         onSignIn={navigateToLogin}
         onGetStarted={navigateToRegister}
+        onScrollTo={scrollToSection}
       />
 
       <ScrollView
@@ -2047,10 +4015,15 @@ export default function LandingPage() {
         contentContainerStyle={{ flexGrow: 1 }}
       >
         {heroSection}
-        {howItWorksSection}
-        {featuresSection}
+        {problemSection}
         {statsSection}
+        {servicesSection}
+        {howItWorksSection}
+        {cryptoSection}
+        {featuresSection}
+        {pricingSection}
         {comparisonSection}
+        {testimonialsSection}
         {faqSection}
         {ctaSection}
         {footer}
@@ -2065,37 +4038,67 @@ export default function LandingPage() {
             left: 0,
             right: 0,
             zIndex: 200,
-            backgroundColor: "rgba(6, 14, 31, 0.95)",
-            backdropFilter: "blur(16px)",
-            WebkitBackdropFilter: "blur(16px)",
-            borderTopWidth: 1,
-            borderTopColor: "rgba(255,255,255,0.06)",
             paddingHorizontal: 20,
             paddingVertical: 12,
             flexDirection: "row",
             alignItems: "center",
             justifyContent: "space-between",
             gap: 12,
+            ...(isWeb
+              ? ({
+                  backgroundColor: "rgba(6, 14, 31, 0.95)",
+                  backdropFilter: "blur(20px)",
+                  WebkitBackdropFilter: "blur(20px)",
+                  borderTopWidth: 1,
+                  borderTopColor: "rgba(255,255,255,0.06)",
+                  boxShadow: "0 -4px 24px rgba(0,0,0,0.3)",
+                } as any)
+              : { backgroundColor: "rgba(6, 14, 31, 0.95)" }),
           } as any}
         >
           <View style={{ flex: 1 }}>
-            <Text style={{ color: tc.textPrimary, fontSize: 14, fontFamily: "DMSans_600SemiBold" }}>
-              Ready to start?
+            <Text
+              style={{
+                color: tc.textPrimary,
+                fontSize: 14,
+                fontFamily: "DMSans_700Bold",
+              }}
+            >
+              Pay bills with crypto
             </Text>
-            <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_400Regular" }}>
-              Pay bills with crypto in seconds
+            <Text
+              style={{
+                color: tc.textMuted,
+                fontSize: 11,
+                fontFamily: "DMSans_400Regular",
+              }}
+            >
+              M-Pesa delivery in 30 seconds
             </Text>
           </View>
           <Pressable
             onPress={navigateToRegister}
-            style={{
+            style={({ pressed }: any) => ({
               backgroundColor: tc.primary[500],
               paddingVertical: 12,
               paddingHorizontal: 24,
               borderRadius: 12,
-            }}
+              opacity: pressed ? 0.9 : 1,
+              ...(isWeb
+                ? ({
+                    cursor: "pointer",
+                    boxShadow: "0 2px 12px rgba(16, 185, 129, 0.3)",
+                  } as any)
+                : {}),
+            })}
           >
-            <Text style={{ color: "#fff", fontSize: 14, fontFamily: "DMSans_600SemiBold" }}>
+            <Text
+              style={{
+                color: "#fff",
+                fontSize: 14,
+                fontFamily: "DMSans_700Bold",
+              }}
+            >
               Get Started
             </Text>
           </Pressable>

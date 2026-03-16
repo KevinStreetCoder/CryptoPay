@@ -30,9 +30,9 @@ from django.utils import timezone
 from apps.accounts.models import AuditLog
 
 from .circuit_breaker import PaymentCircuitBreaker, PaymentsPaused
-from .models import Transaction
+from .models import SavedPaybill, Transaction
 from .saga import PaymentSaga, SagaError
-from .serializers import BuyCryptoSerializer, DepositQuoteSerializer, PayBillSerializer, PayTillSerializer, SendMpesaSerializer, TransactionSerializer, WithdrawSerializer
+from .serializers import BuyCryptoSerializer, DepositQuoteSerializer, PayBillSerializer, PayTillSerializer, SavedPaybillSerializer, SendMpesaSerializer, TransactionSerializer, WithdrawSerializer
 from .services import DailyLimitExceededError, check_daily_limit
 
 logger = logging.getLogger(__name__)
@@ -234,6 +234,17 @@ class PayBillView(APIView):
             },
             ip_address=self._get_client_ip(request),
         )
+
+        # Auto-save paybill for quick reuse (if not already saved)
+        try:
+            SavedPaybill.objects.get_or_create(
+                user=user,
+                paybill_number=data["paybill"],
+                account_number=data["account"],
+                defaults={"last_used_at": timezone.now()},
+            )
+        except Exception:
+            pass  # Non-critical — don't fail the payment response
 
         return Response(
             TransactionSerializer(tx).data,
@@ -1277,3 +1288,62 @@ class CircuitBreakerStatusView(APIView):
         if xff:
             return xff.split(",")[0].strip()
         return request.META.get("REMOTE_ADDR", "0.0.0.0")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Saved Paybills
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class SavedPaybillListCreateView(APIView):
+    """
+    GET  — List user's saved paybills.
+    POST — Save a new paybill.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        paybills = SavedPaybill.objects.filter(user=request.user)
+        serializer = SavedPaybillSerializer(paybills, many=True)
+        return Response(serializer.data)
+
+    def post(self, request):
+        serializer = SavedPaybillSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        # Check if already saved
+        existing = SavedPaybill.objects.filter(
+            user=request.user,
+            paybill_number=serializer.validated_data["paybill_number"],
+            account_number=serializer.validated_data["account_number"],
+        ).first()
+
+        if existing:
+            # Update label and last_used_at if already exists
+            if serializer.validated_data.get("label"):
+                existing.label = serializer.validated_data["label"]
+            existing.last_used_at = timezone.now()
+            existing.save(update_fields=["label", "last_used_at"])
+            return Response(SavedPaybillSerializer(existing).data, status=status.HTTP_200_OK)
+
+        saved = SavedPaybill.objects.create(
+            user=request.user,
+            **serializer.validated_data,
+        )
+        return Response(SavedPaybillSerializer(saved).data, status=status.HTTP_201_CREATED)
+
+
+class SavedPaybillDeleteView(APIView):
+    """DELETE — Remove a saved paybill."""
+
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, pk):
+        try:
+            paybill = SavedPaybill.objects.get(id=pk, user=request.user)
+        except SavedPaybill.DoesNotExist:
+            return Response({"error": "Saved paybill not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        paybill.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)

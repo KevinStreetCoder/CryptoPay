@@ -1,4 +1,4 @@
-import { View, Text, Pressable, Platform, useWindowDimensions, Share, ScrollView } from "react-native";
+import { View, Text, Pressable, Platform, useWindowDimensions, Share, ScrollView, Linking } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -298,6 +298,12 @@ export default function PaymentSuccessScreen() {
     }
   };
 
+  const handleShareWhatsApp = () => {
+    const message = `I just paid my bill with crypto using CryptoPay! KSh ${amountKES.toLocaleString()} sent via M-Pesa in seconds. Try it: https://cpay.co.ke`;
+    const encoded = encodeURIComponent(message);
+    Linking.openURL(`https://wa.me/?text=${encoded}`);
+  };
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
       <ScrollView
@@ -486,6 +492,33 @@ export default function PaymentSuccessScreen() {
             >
               <Ionicons name="share-outline" size={18} color={colors.primary[400]} />
               <Text style={{ color: colors.primary[400], fontSize: 14, fontFamily: "DMSans_600SemiBold" }}>Share</Text>
+            </Pressable>
+          </Animated.View>
+        )}
+
+        {/* Share to WhatsApp */}
+        {!isFailed && (
+          <Animated.View style={{ width: "100%", marginTop: 8, opacity: buttonsFade }}>
+            <Pressable
+              onPress={handleShareWhatsApp}
+              style={({ pressed, hovered }: any) => ({
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+                paddingVertical: 14,
+                borderRadius: 14,
+                backgroundColor: isWeb && hovered ? "#128C7E" : "#25D366",
+                opacity: pressed ? 0.85 : 1,
+                ...(isWeb ? { cursor: "pointer", transition: "all 0.15s ease" } as any : {}),
+              })}
+              accessibilityRole="button"
+              accessibilityLabel="Share to WhatsApp"
+            >
+              <Ionicons name="logo-whatsapp" size={20} color="#FFFFFF" />
+              <Text style={{ color: "#FFFFFF", fontSize: 14, fontFamily: "DMSans_600SemiBold" }}>
+                Share to WhatsApp
+              </Text>
             </Pressable>
           </Animated.View>
         )}

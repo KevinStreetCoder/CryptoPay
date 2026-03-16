@@ -20,4 +20,7 @@ urlpatterns = [
     path("activity/", views.UnifiedActivityView.as_view(), name="activity"),
     path("<uuid:transaction_id>/receipt/", views.TransactionReceiptView.as_view(), name="transaction-receipt"),
     path("circuit-breaker/", views.CircuitBreakerStatusView.as_view(), name="circuit-breaker"),
+    # Saved Paybills
+    path("saved-paybills/", views.SavedPaybillListCreateView.as_view(), name="saved-paybills"),
+    path("saved-paybills/<uuid:pk>/", views.SavedPaybillDeleteView.as_view(), name="saved-paybill-delete"),
 ]
