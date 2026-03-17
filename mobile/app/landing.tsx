@@ -1693,9 +1693,39 @@ export default function LandingPage() {
                 marginBottom: 36,
               }}
             >
-              Convert USDT, BTC, ETH, or SOL to M-Pesa payments instantly.{" "}
-              Locked rates. Zero slippage. PIN-secured delivery.
+              Convert your crypto to M-Pesa payments instantly. Pay any Paybill, Till, or send to any phone number.
             </Text>
+
+            {/* Feature pills */}
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 32, justifyContent: isDesktop ? "flex-start" : "center" }}>
+              {[
+                { icon: "lock-closed" as keyof typeof Ionicons.glyphMap, text: "Locked rates" },
+                { icon: "shield-checkmark" as keyof typeof Ionicons.glyphMap, text: "Zero slippage" },
+                { icon: "finger-print" as keyof typeof Ionicons.glyphMap, text: "PIN + biometric" },
+                { icon: "flash" as keyof typeof Ionicons.glyphMap, text: "Under 30 seconds" },
+              ].map((pill) => (
+                <View
+                  key={pill.text}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 6,
+                    backgroundColor: "rgba(16, 185, 129, 0.08)",
+                    borderWidth: 1,
+                    borderColor: "rgba(16, 185, 129, 0.2)",
+                    borderRadius: 20,
+                    paddingVertical: 6,
+                    paddingHorizontal: 14,
+                    ...(isWeb ? { transition: "all 0.2s ease", cursor: "default" } as any : {}),
+                  }}
+                >
+                  <Ionicons name={pill.icon} size={14} color={tc.primary[400]} />
+                  <Text style={{ color: tc.primary[300], fontSize: 13, fontFamily: "DMSans_500Medium" }}>
+                    {pill.text}
+                  </Text>
+                </View>
+              ))}
+            </View>
 
             {/* CTA Buttons */}
             <View
@@ -2127,7 +2157,7 @@ export default function LandingPage() {
               borderRadius: 4,
               backgroundColor: tc.primary[400],
               ...(isWeb
-                ? ({ boxShadow: `0 0 8px ${tc.primary[400]}`, animation: "cpay-float-bob 2s ease-in-out infinite" } as any)
+                ? ({ boxShadow: `0 0 8px ${tc.primary[400]}`, animation: "cpay-pulse-green 2s ease-in-out infinite" } as any)
                 : {}),
             }}
           />
