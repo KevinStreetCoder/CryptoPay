@@ -1448,6 +1448,7 @@ export default function LandingPage() {
     const style = document.createElement("style");
     style.id = styleId;
     style.textContent = `
+      /* ── Keyframe Animations ─────────────────────────── */
       @keyframes cpay-scroll-left {
         0% { transform: translateX(0); }
         100% { transform: translateX(-50%); }
@@ -1469,49 +1470,201 @@ export default function LandingPage() {
         0% { transform: rotateY(0deg); }
         100% { transform: rotateY(360deg); }
       }
-      .cpay-aurora-blob {
-        will-change: transform;
+      @keyframes cpay-pulse-green {
+        0%, 100% { opacity: 1; box-shadow: 0 0 4px rgba(16,185,129,0.6); }
+        50% { opacity: 0.5; box-shadow: 0 0 12px rgba(16,185,129,0.9); }
       }
+      @keyframes cpay-glow-pulse {
+        0%, 100% { box-shadow: 0 0 20px rgba(16,185,129,0.2); }
+        50% { box-shadow: 0 0 40px rgba(16,185,129,0.4), 0 0 80px rgba(16,185,129,0.1); }
+      }
+      @keyframes cpay-shine-sweep {
+        0% { left: -100%; }
+        100% { left: 200%; }
+      }
+      @keyframes cpay-hero-grid {
+        0% { opacity: 0.03; }
+        50% { opacity: 0.06; }
+        100% { opacity: 0.03; }
+      }
+
+      /* ── Aurora & Carousel ───────────────────────────── */
+      .cpay-aurora-blob { will-change: transform; }
       .cpay-carousel-track {
         display: flex;
         animation: cpay-scroll-left 40s linear infinite;
         width: max-content;
       }
-      .cpay-carousel-track:hover {
-        animation-play-state: paused;
+      .cpay-carousel-track:hover { animation-play-state: paused; }
+
+      /* ── Card Hover: Lift + Glow + Shine ─────────────── */
+      .cpay-tilt-card {
+        transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+        position: relative;
+        overflow: hidden;
+      }
+      .cpay-tilt-card::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 60%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.03), transparent);
+        transition: none;
       }
       .cpay-tilt-card:hover {
         transform: translateY(-6px) !important;
         border-color: rgba(16, 185, 129, 0.3) !important;
-        box-shadow: 0 12px 40px rgba(16, 185, 129, 0.15), 0 0 0 1px rgba(16, 185, 129, 0.1) !important;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        box-shadow: 0 16px 48px rgba(16, 185, 129, 0.15), 0 0 0 1px rgba(16, 185, 129, 0.1) !important;
       }
-      /* Global hover for all glass cards */
-      .cpay-glass-hover {
+      .cpay-tilt-card:hover::after {
+        animation: cpay-shine-sweep 0.8s ease-out;
+      }
+
+      /* ── Glass Card Hover (all sections) ─────────────── */
+      [data-glass="true"] {
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        position: relative;
+        overflow: hidden;
+      }
+      [data-glass="true"]::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 50%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.02), transparent);
+      }
+      [data-glass="true"]:hover {
+        transform: translateY(-4px);
+        border-color: rgba(16, 185, 129, 0.25);
+        box-shadow: 0 12px 36px rgba(16, 185, 129, 0.1), 0 0 0 1px rgba(16,185,129,0.08);
+      }
+      [data-glass="true"]:hover::after {
+        animation: cpay-shine-sweep 0.7s ease-out;
+      }
+
+      /* ── Nav Link Hover ──────────────────────────────── */
+      .cpay-nav-link {
+        transition: all 0.2s ease;
+        position: relative;
+      }
+      .cpay-nav-link::after {
+        content: '';
+        position: absolute;
+        bottom: -2px;
+        left: 50%;
+        width: 0;
+        height: 2px;
+        background: #10B981;
+        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        transform: translateX(-50%);
+        border-radius: 1px;
+      }
+      .cpay-nav-link:hover::after {
+        width: 80%;
+      }
+      .cpay-nav-link:hover {
+        color: #10B981 !important;
+      }
+
+      /* ── Button Glow Pulse ───────────────────────────── */
+      .cpay-cta-glow {
+        animation: cpay-glow-pulse 3s ease-in-out infinite;
+        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .cpay-cta-glow:hover {
+        transform: scale(1.03) translateY(-2px);
+        box-shadow: 0 8px 32px rgba(16,185,129,0.4), 0 0 60px rgba(16,185,129,0.15) !important;
+      }
+      .cpay-cta-glow:active {
+        transform: scale(0.97);
+      }
+
+      /* ── Icon Hover Bounce ───────────────────────────── */
+      .cpay-icon-hover {
+        transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+      .cpay-icon-hover:hover {
+        transform: scale(1.15) rotate(-5deg);
+      }
+
+      /* ── Illustration Hover ──────────────────────────── */
+      img[alt*="illustration"], img[alt*="Illustration"] {
+        transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1), filter 0.5s ease;
+      }
+      img[alt*="illustration"]:hover, img[alt*="Illustration"]:hover {
+        transform: scale(1.06) translateY(-4px);
+        filter: drop-shadow(0 8px 24px rgba(16,185,129,0.2));
+      }
+
+      /* ── Hero Background Grid ────────────────────────── */
+      .cpay-hero-grid {
+        background-image:
+          linear-gradient(rgba(16,185,129,0.03) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(16,185,129,0.03) 1px, transparent 1px);
+        background-size: 60px 60px;
+        animation: cpay-hero-grid 8s ease-in-out infinite;
+      }
+
+      /* ── Crypto Card Glow on Hover ───────────────────── */
+      .cpay-crypto-card {
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       }
-      .cpay-glass-hover:hover {
+      .cpay-crypto-card:hover {
+        transform: translateY(-8px) scale(1.02);
+        box-shadow: 0 16px 48px var(--glow-color, rgba(16,185,129,0.2));
+      }
+
+      /* ── Service Logo Hover ──────────────────────────── */
+      .cpay-service-logo {
+        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .cpay-service-logo:hover {
+        transform: scale(1.08);
+        border-color: rgba(16,185,129,0.3) !important;
+        box-shadow: 0 4px 16px rgba(16,185,129,0.1);
+      }
+
+      /* ── Step Card Lift ──────────────────────────────── */
+      .cpay-step-card {
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .cpay-step-card:hover {
+        transform: translateY(-6px);
+        border-color: rgba(16,185,129,0.3) !important;
+        box-shadow: 0 12px 40px rgba(16,185,129,0.12);
+      }
+
+      /* ── FAQ Item Hover ──────────────────────────────── */
+      .cpay-faq-item {
+        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .cpay-faq-item:hover {
+        border-color: rgba(16,185,129,0.25) !important;
+        background-color: rgba(255,255,255,0.03) !important;
+      }
+
+      /* ── Testimonial Card ────────────────────────────── */
+      .cpay-testimonial {
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .cpay-testimonial:hover {
         transform: translateY(-4px);
-        border-color: rgba(16, 185, 129, 0.2);
-        box-shadow: 0 8px 32px rgba(16, 185, 129, 0.1);
+        border-color: rgba(16,185,129,0.2) !important;
+        box-shadow: 0 8px 32px rgba(16,185,129,0.08);
       }
-      /* Illustration hover animation */
-      .cpay-illust-hover {
-        transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+
+      /* ── Partner Badge Hover ─────────────────────────── */
+      .cpay-partner-badge {
+        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
       }
-      .cpay-illust-hover:hover {
-        transform: scale(1.08) rotate(2deg);
-      }
-      /* Button icon slide on hover */
-      .cpay-btn-icon {
-        transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-      }
-      .cpay-btn:hover .cpay-btn-icon {
-        transform: translateX(4px);
-      }
-      @keyframes cpay-pulse-green {
-        0%, 100% { opacity: 1; box-shadow: 0 0 4px rgba(16,185,129,0.6); }
-        50% { opacity: 0.5; box-shadow: 0 0 12px rgba(16,185,129,0.9); }
+      .cpay-partner-badge:hover {
+        transform: translateY(-3px);
+        border-color: rgba(16,185,129,0.3) !important;
+        box-shadow: 0 6px 20px rgba(16,185,129,0.1);
       }
     `;
     document.head.appendChild(style);
@@ -1555,6 +1708,21 @@ export default function LandingPage() {
                 } as any)
               : {}),
           }}
+        />
+      )}
+
+      {/* Hero grid pattern overlay */}
+      {isWeb && (
+        <View
+          className="cpay-hero-grid"
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 0,
+          } as any}
         />
       )}
 
@@ -1673,24 +1841,24 @@ export default function LandingPage() {
             alignItems: "center",
             justifyContent: "center",
             width: "100%",
-            paddingHorizontal: isMobile ? 20 : isDesktop ? 80 : 40,
+            paddingHorizontal: isMobile ? 20 : width >= 1400 ? 120 : isDesktop ? 80 : 40,
             zIndex: 10,
-            gap: isDesktop ? 64 : 0,
+            gap: isDesktop ? (width >= 1400 ? 100 : 64) : 0,
           }}
         >
           {/* Left: Text content (60%) */}
           <View
             style={{
               alignItems: isDesktop ? "flex-start" : "center",
-              flex: isDesktop ? 6 : undefined,
-              maxWidth: isDesktop ? 680 : undefined,
+              flex: isDesktop ? 1 : undefined,
+              minWidth: isDesktop ? 400 : undefined,
             }}
           >
             {/* Pain-first headline */}
             <Text
               style={{
                 color: tc.textPrimary,
-                fontSize: isMobile ? 30 : isTablet ? 40 : 50,
+                fontSize: isMobile ? 30 : isTablet ? 40 : width >= 1400 ? 58 : 50,
                 fontFamily: "DMSans_700Bold",
                 textAlign: isDesktop ? "left" : "center",
                 letterSpacing: -1.5,
@@ -1918,14 +2086,17 @@ export default function LandingPage() {
           {isDesktop && (
             <View
               style={{
-                flex: 4,
+                flex: 1,
                 alignItems: "center",
                 justifyContent: "center",
+                maxWidth: 480,
               }}
             >
               <Pressable
                 style={({ hovered }: any) => ({
-                  width: 380,
+                  width: "100%",
+                  maxWidth: 420,
+                  minWidth: 340,
                   backgroundColor: tc.glass.bg,
                   borderRadius: 28,
                   borderWidth: 1,
