@@ -86,6 +86,10 @@ const UNDRAW = {
   success: "https://42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations/successful_purchase_uyin.svg",
   safe: "https://42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations/safe_bnk7.svg",
   pieChart: "https://42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations/pie_chart_6efe.svg",
+  businessDeal: "https://42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations/business_deal_cpi9.svg",
+  onlineWorld: "https://42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations/online_world_mc1t.svg",
+  inProgress: "https://42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations/in_progress_ql66.svg",
+  digitalNomad: "https://42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations/digital_nomad_9kgl.svg",
 };
 
 // Used via <SectionDecorIcon> component below.
@@ -100,6 +104,14 @@ const COIN_ICONS = [
 ];
 
 const KENYA_FLAG = "https://flagcdn.com/48x36/ke.png";
+
+// ── Partner Logos (real downloaded images) ───────────────────────────────────
+const PARTNER_LOGOS = {
+  smileIdentity: require("../assets/logos/partners/smile-identity.png"),
+  coingecko: require("../assets/logos/partners/coingecko.png"),
+  mpesa: require("../assets/logos/partners/mpesa-logo.png"),
+  sentry: require("../assets/logos/partners/sentry.png"),
+};
 
 // ── Service Provider Logos (real branded images) ─────────────────────────────
 const LANDING_SERVICE_LOGOS = {
@@ -1421,8 +1433,11 @@ export default function LandingPage() {
         75% { transform: translate(50px, -20px) scale(1.05); }
       }
       @keyframes cpay-float-bob {
-        0%, 100% { transform: translateY(0px); }
-        50% { transform: translateY(-6px); }
+        0% { transform: translateY(0px); }
+        25% { transform: translateY(-3px); }
+        50% { transform: translateY(-5px); }
+        75% { transform: translateY(-3px); }
+        100% { transform: translateY(0px); }
       }
       @keyframes cpay-coin-rotate {
         0% { transform: rotateY(0deg); }
@@ -1445,8 +1460,8 @@ export default function LandingPage() {
         transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
       }
       @keyframes cpay-pulse-green {
-        0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6); }
-        50% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+        0%, 100% { opacity: 1; box-shadow: 0 0 4px rgba(16,185,129,0.6); }
+        50% { opacity: 0.5; box-shadow: 0 0 12px rgba(16,185,129,0.9); }
       }
     `;
     document.head.appendChild(style);
@@ -1501,11 +1516,11 @@ export default function LandingPage() {
             position: "absolute",
             top: -200,
             left: -200,
-            width: 600,
-            height: 600,
-            borderRadius: 300,
+            width: 720,
+            height: 720,
+            borderRadius: 360,
             backgroundColor: "#10B981",
-            opacity: 0.07,
+            opacity: 0.12,
             ...(isWeb ? {
               filter: "blur(120px)",
               animation: "cpay-aurora 25s cubic-bezier(0.4, 0, 0.2, 1) infinite",
@@ -1517,11 +1532,11 @@ export default function LandingPage() {
             position: "absolute",
             bottom: -150,
             right: -150,
-            width: 500,
-            height: 500,
-            borderRadius: 250,
+            width: 600,
+            height: 600,
+            borderRadius: 300,
             backgroundColor: "#6366F1",
-            opacity: 0.05,
+            opacity: 0.08,
             ...(isWeb ? {
               filter: "blur(120px)",
               animation: "cpay-aurora 30s cubic-bezier(0.4, 0, 0.2, 1) infinite reverse",
@@ -1533,11 +1548,11 @@ export default function LandingPage() {
             position: "absolute",
             top: 100,
             right: -100,
-            width: 400,
-            height: 400,
-            borderRadius: 200,
+            width: 480,
+            height: 480,
+            borderRadius: 240,
             backgroundColor: "#F59E0B",
-            opacity: 0.04,
+            opacity: 0.06,
             ...(isWeb ? {
               filter: "blur(120px)",
               animation: "cpay-aurora 35s cubic-bezier(0.4, 0, 0.2, 1) infinite 3s",
@@ -3721,14 +3736,15 @@ export default function LandingPage() {
             }}
           >
             {[
-              { icon: "shield-checkmark" as const, label: "Smile Identity KYC", color: "#10B981", desc: "Security" },
-              { icon: "analytics" as const, label: "CoinGecko Rates", color: "#F59E0B", desc: "Monitoring" },
-              { icon: "phone-portrait" as const, label: "M-Pesa (pending)", color: "#00A650", desc: "Payments" },
-              { icon: "server" as const, label: "Sentry Monitoring", color: "#6366F1", desc: "Infrastructure" },
+              { logo: PARTNER_LOGOS.smileIdentity, label: "Smile Identity", color: "#10B981", desc: "KYC Verification" },
+              { logo: PARTNER_LOGOS.coingecko, label: "CoinGecko", color: "#F59E0B", desc: "Live Rates" },
+              { logo: PARTNER_LOGOS.mpesa, label: "M-Pesa", color: "#00A650", desc: "Payments" },
+              { logo: PARTNER_LOGOS.sentry, label: "Sentry", color: "#6366F1", desc: "Error Tracking" },
             ].map((partner) => (
               <View
                 key={partner.label}
                 style={{
+                  width: isMobile ? "47%" : undefined,
                   flex: isMobile ? undefined : 1,
                   flexDirection: "row",
                   alignItems: "center",
@@ -3737,8 +3753,8 @@ export default function LandingPage() {
                   borderRadius: 16,
                   borderWidth: 1,
                   borderColor: tc.glass.border,
-                  paddingVertical: 16,
-                  paddingHorizontal: 20,
+                  paddingVertical: 14,
+                  paddingHorizontal: 16,
                   ...(isWeb
                     ? ({
                         backdropFilter: "blur(12px)",
@@ -3748,20 +3764,15 @@ export default function LandingPage() {
                     : {}),
                 }}
               >
-                <View
+                <Image
+                  source={partner.logo}
                   style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 12,
-                    backgroundColor: partner.color + "15",
-                    borderWidth: 1,
-                    borderColor: partner.color + "25",
-                    alignItems: "center",
-                    justifyContent: "center",
+                    width: 32,
+                    height: 32,
+                    borderRadius: 8,
                   }}
-                >
-                  <Ionicons name={partner.icon} size={20} color={partner.color} />
-                </View>
+                  resizeMode="contain"
+                />
                 <View style={{ flex: 1 }}>
                   <Text
                     style={{
