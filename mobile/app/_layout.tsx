@@ -114,23 +114,19 @@ function RootNavigator() {
     if (!user && !inAuthGroup && !isPublicPage) {
       if (Platform.OS === "web") {
         if (isAppSubdomain) {
-          // app.cpay.co.ke → show login directly (it's the app domain)
           router.replace("/auth/login");
           return;
         }
-        // cpay.co.ke → show landing page
-        router.replace("/landing");
+        // Root index.tsx handles landing page rendering — no redirect needed
+        // Only redirect if user navigated to a non-public route directly
+        if (segments[0]) {
+          router.replace("/");
+        }
       } else {
         router.replace("/auth/login");
       }
-    } else if (user && inAuthGroup) {
+    } else if (user && (inAuthGroup || isLanding)) {
       router.replace("/(tabs)");
-    } else if (user && isLanding) {
-      // Authenticated user on landing → go to dashboard
-      router.replace("/(tabs)");
-    } else if (isLanding && isAppSubdomain) {
-      // Don't show landing on app subdomain — show login or dashboard
-      router.replace(user ? "/(tabs)" : "/auth/login");
     }
   }, [user, segments, appReady, router]);
 
