@@ -5,6 +5,7 @@ import {
   ScrollView,
   Pressable,
   Animated,
+  Easing,
   Platform,
   useWindowDimensions,
   Image,
@@ -363,13 +364,15 @@ function FloatingCoin({
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(translateY, {
-          toValue: -14,
-          duration: 2400 + delay,
+          toValue: -8,
+          duration: 2000 + delay,
+          easing: Easing.bezier(0.37, 0, 0.63, 1),
           useNativeDriver: !isWeb,
         }),
         Animated.timing(translateY, {
-          toValue: 14,
-          duration: 2400 + delay,
+          toValue: 8,
+          duration: 2000 + delay,
+          easing: Easing.bezier(0.37, 0, 0.63, 1),
           useNativeDriver: !isWeb,
         }),
       ])
@@ -2126,7 +2129,7 @@ export default function LandingPage() {
   const problemSection = (
     <View
       style={{
-        paddingVertical: isMobile ? 60 : 100,
+        paddingVertical: isMobile ? 40 : 64,
         ...(isWeb
           ? ({
               background: "linear-gradient(180deg, #0A1628 0%, #060E1F 100%)",
@@ -2319,7 +2322,7 @@ export default function LandingPage() {
   const statsSection = (
     <View
       style={{
-        paddingVertical: isMobile ? 48 : 72,
+        paddingVertical: isMobile ? 32 : 48,
         backgroundColor: tc.dark.bg,
       }}
     >
@@ -2572,7 +2575,7 @@ export default function LandingPage() {
   const servicesSection = (
     <View
       style={{
-        paddingVertical: isMobile ? 60 : 100,
+        paddingVertical: isMobile ? 40 : 64,
         ...(isWeb
           ? ({
               background: "linear-gradient(180deg, #060E1F 0%, #0A1628 100%)",
@@ -2658,7 +2661,7 @@ export default function LandingPage() {
     <View
       ref={(ref) => { sectionRefs.current["howItWorks"] = ref; }}
       style={{
-        paddingVertical: isMobile ? 60 : 100,
+        paddingVertical: isMobile ? 40 : 64,
         backgroundColor: tc.dark.bg,
       }}
     >
@@ -2817,7 +2820,7 @@ export default function LandingPage() {
   const cryptoSection = (
     <View
       style={{
-        paddingVertical: isMobile ? 48 : 72,
+        paddingVertical: isMobile ? 32 : 48,
         ...(isWeb
           ? ({
               background: "linear-gradient(180deg, #060E1F 0%, #0A1628 100%)",
@@ -2945,7 +2948,7 @@ export default function LandingPage() {
       ref={(ref) => { sectionRefs.current["features"] = ref; }}
       accessibilityLabel="CryptoPay features"
       style={{
-        paddingVertical: isMobile ? 60 : 100,
+        paddingVertical: isMobile ? 40 : 64,
         backgroundColor: tc.dark.bg,
       }}
     >
@@ -3039,7 +3042,7 @@ export default function LandingPage() {
     <View
       ref={(ref) => { sectionRefs.current["pricing"] = ref; }}
       style={{
-        paddingVertical: isMobile ? 60 : 100,
+        paddingVertical: isMobile ? 40 : 64,
         ...(isWeb
           ? ({
               background: "linear-gradient(180deg, #0A1628 0%, #060E1F 100%)",
@@ -3250,7 +3253,7 @@ export default function LandingPage() {
   const comparisonSection = (
     <View
       style={{
-        paddingVertical: isMobile ? 60 : 100,
+        paddingVertical: isMobile ? 40 : 64,
         backgroundColor: tc.dark.bg,
       }}
     >
@@ -3460,7 +3463,7 @@ export default function LandingPage() {
   const platformStatsSection = (
     <View
       style={{
-        paddingVertical: isMobile ? 60 : 100,
+        paddingVertical: isMobile ? 40 : 64,
         ...(isWeb
           ? ({
               background: "linear-gradient(180deg, #060E1F 0%, #0A1628 100%)",
@@ -3693,7 +3696,7 @@ export default function LandingPage() {
   const partnerLogosSection = (
     <View
       style={{
-        paddingVertical: isMobile ? 48 : 72,
+        paddingVertical: isMobile ? 32 : 48,
         backgroundColor: tc.dark.bg,
       }}
     >
@@ -3805,7 +3808,7 @@ export default function LandingPage() {
   const testimonialsSection = (
     <View
       style={{
-        paddingVertical: isMobile ? 60 : 100,
+        paddingVertical: isMobile ? 40 : 64,
         ...(isWeb
           ? ({
               background: "linear-gradient(180deg, #060E1F 0%, #0A1628 100%)",
@@ -4021,7 +4024,7 @@ export default function LandingPage() {
     <View
       accessibilityLabel="Frequently asked questions"
       style={{
-        paddingVertical: isMobile ? 60 : 100,
+        paddingVertical: isMobile ? 40 : 64,
         ...(isWeb
           ? ({
               background: "linear-gradient(180deg, #060E1F 0%, #0A1628 100%)",
@@ -4059,7 +4062,7 @@ export default function LandingPage() {
   const ctaSection = (
     <View
       style={{
-        paddingVertical: isMobile ? 80 : 120,
+        paddingVertical: isMobile ? 56 : 80,
         alignItems: "center",
         position: "relative",
         overflow: "hidden",
