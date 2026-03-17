@@ -668,6 +668,32 @@ function Section({
   );
 }
 
+// ── SVG Image Component (uses <img> on web for SVG support) ─────────────────
+function SvgImage({ uri, size = 160, style, alt = "" }: { uri: string; size?: number; style?: any; alt?: string }) {
+  if (isWeb) {
+    return (
+      <img
+        src={uri}
+        alt={alt}
+        style={{
+          width: size,
+          height: size,
+          objectFit: "contain" as any,
+          opacity: 0.85,
+          ...style,
+        }}
+      />
+    );
+  }
+  return (
+    <Image
+      source={{ uri }}
+      style={{ width: size, height: size, opacity: 0.85, ...style }}
+      resizeMode="contain"
+    />
+  );
+}
+
 // ── Lottie Animation Component (with fallback to static illustration) ─────
 function LottieAnimation({
   url,
@@ -2153,15 +2179,9 @@ export default function LandingPage() {
                 <Text style={{ color: "#EF4444", fontSize: 16, fontFamily: "DMSans_700Bold" }}>30+ minutes, high risk</Text>
               </View>
               {/* Bitcoin illustration */}
-              {!isMobile && (
-                <View style={{ alignItems: "center", marginTop: 20 }}>
-                  <Image
-                    source={{ uri: UNDRAW.bitcoin }}
-                    style={{ width: 130, height: 130, opacity: 0.8 }}
-                    resizeMode="contain"
-                  />
-                </View>
-              )}
+              <View style={{ alignItems: "center", marginTop: 20 }}>
+                <SvgImage uri={UNDRAW.bitcoin} size={isDesktop ? 180 : isTablet ? 140 : 100} style={{ opacity: 0.8 }} alt="Old way illustration" />
+              </View>
             </View>
           </RevealOnScroll>
 
@@ -2238,15 +2258,9 @@ export default function LandingPage() {
               </View>
 
               {/* CryptoPay Way illustration */}
-              {!isMobile && (
-                <View style={{ alignItems: "center", marginTop: 20 }}>
-                  <Image
-                    source={{ uri: UNDRAW.creditCard }}
-                    style={{ width: 140, height: 140, opacity: 0.85 }}
-                    resizeMode="contain"
-                  />
-                </View>
-              )}
+              <View style={{ alignItems: "center", marginTop: 20 }}>
+                <SvgImage uri={UNDRAW.creditCard} size={isDesktop ? 180 : isTablet ? 140 : 100} style={{ opacity: 0.85 }} alt="CryptoPay instant payment" />
+              </View>
             </View>
           </RevealOnScroll>
         </View>
@@ -2603,7 +2617,7 @@ export default function LandingPage() {
     >
       <Section>
         <RevealOnScroll>
-          <View style={{ flexDirection: isDesktop ? "row" : "column", alignItems: "center", justifyContent: "center", gap: isDesktop ? 40 : 0 }}>
+          <View style={{ flexDirection: isDesktop ? "row" : "column", alignItems: "center", justifyContent: "center", gap: isDesktop ? 40 : 16 }}>
             <View style={{ flex: isDesktop ? 1 : undefined }}>
               <SectionTitle
                 label="How It Works"
@@ -2613,13 +2627,7 @@ export default function LandingPage() {
                 isMobile={isMobile}
               />
             </View>
-            {isWeb && isDesktop && (
-              <Image
-                source={{ uri: UNDRAW.fastLoading }}
-                style={{ width: 200, height: 200, opacity: 0.75 }}
-                resizeMode="contain"
-              />
-            )}
+            <SvgImage uri={UNDRAW.fastLoading} size={isDesktop ? 180 : isTablet ? 140 : 100} style={{ opacity: 0.75 }} alt="Fast loading illustration" />
           </View>
         </RevealOnScroll>
 
@@ -2772,10 +2780,8 @@ export default function LandingPage() {
     >
       <Section>
         <RevealOnScroll>
-          <View style={{ flexDirection: isDesktop ? "row" : "column", alignItems: "center", justifyContent: "space-between" }}>
-            {isWeb && isDesktop && (
-              <Image source={{ uri: UNDRAW.finance }} style={{ width: 180, height: 180, opacity: 0.75 }} resizeMode="contain" />
-            )}
+          <View style={{ flexDirection: isDesktop ? "row" : "column", alignItems: "center", justifyContent: "space-between", gap: isDesktop ? 0 : 16 }}>
+            <SvgImage uri={UNDRAW.finance} size={isDesktop ? 180 : isTablet ? 140 : 100} style={{ opacity: 0.75 }} alt="Crypto chains illustration" />
             <View style={{ flex: 1 }}>
               <SectionTitle
                 label="Supported Cryptocurrencies"
@@ -2898,7 +2904,7 @@ export default function LandingPage() {
     >
       <Section>
         <RevealOnScroll>
-          <View style={{ flexDirection: isDesktop ? "row" : "column", alignItems: "center", justifyContent: "center", gap: isDesktop ? 40 : 0 }}>
+          <View style={{ flexDirection: isDesktop ? "row" : "column", alignItems: "center", justifyContent: "center", gap: isDesktop ? 40 : 16 }}>
             <View style={{ flex: isDesktop ? 1 : undefined }}>
               <SectionTitle
                 label="Features"
@@ -2907,13 +2913,7 @@ export default function LandingPage() {
                 isMobile={isMobile}
               />
             </View>
-            {isWeb && isDesktop && (
-              <Image
-                source={{ uri: UNDRAW.wallet }}
-                style={{ width: 200, height: 200, opacity: 0.75 }}
-                resizeMode="contain"
-              />
-            )}
+            <SvgImage uri={UNDRAW.wallet} size={isDesktop ? 180 : isTablet ? 140 : 100} style={{ opacity: 0.75 }} alt="Wallet illustration" />
           </View>
         </RevealOnScroll>
 
@@ -3002,10 +3002,8 @@ export default function LandingPage() {
     >
       <Section>
         <RevealOnScroll>
-          <View style={{ flexDirection: isDesktop ? "row" : "column", alignItems: "center", justifyContent: "space-between" }}>
-            {isWeb && isDesktop && (
-              <Image source={{ uri: UNDRAW.savings }} style={{ width: 180, height: 180, opacity: 0.8 }} resizeMode="contain" />
-            )}
+          <View style={{ flexDirection: isDesktop ? "row" : "column", alignItems: "center", justifyContent: "space-between", gap: isDesktop ? 0 : 16 }}>
+            <SvgImage uri={UNDRAW.savings} size={isDesktop ? 180 : isTablet ? 140 : 100} style={{ opacity: 0.8 }} alt="Pricing illustration" />
             <View style={{ flex: 1 }}>
               <SectionTitle
                 label="Pricing"
@@ -3177,10 +3175,8 @@ export default function LandingPage() {
     >
       <Section>
         <RevealOnScroll>
-          <View style={{ flexDirection: isDesktop ? "row" : "column", alignItems: "center", justifyContent: "space-between" }}>
-            {isWeb && isDesktop && (
-              <Image source={{ uri: UNDRAW.pieChart }} style={{ width: 180, height: 180, opacity: 0.8 }} resizeMode="contain" />
-            )}
+          <View style={{ flexDirection: isDesktop ? "row" : "column", alignItems: "center", justifyContent: "space-between", gap: isDesktop ? 0 : 16 }}>
+            <SvgImage uri={UNDRAW.pieChart} size={isDesktop ? 180 : isTablet ? 140 : 100} style={{ opacity: 0.8 }} alt="Comparison illustration" />
             <View style={{ flex: 1 }}>
               <SectionTitle
                 label="Compare"
@@ -3609,7 +3605,7 @@ export default function LandingPage() {
     >
       <Section>
         <RevealOnScroll>
-          <View style={{ flexDirection: isDesktop ? "row" : "column", alignItems: "center", justifyContent: "space-between" }}>
+          <View style={{ flexDirection: isDesktop ? "row" : "column", alignItems: "center", justifyContent: "space-between", gap: isDesktop ? 0 : 16 }}>
             <View style={{ flex: 1 }}>
               <SectionTitle
                 label="FAQ"
@@ -3618,9 +3614,7 @@ export default function LandingPage() {
                 isMobile={isMobile}
               />
             </View>
-            {isWeb && isDesktop && (
-              <Image source={{ uri: UNDRAW.questions }} style={{ width: 180, height: 180, opacity: 0.8 }} resizeMode="contain" />
-            )}
+            <SvgImage uri={UNDRAW.questions} size={isDesktop ? 180 : isTablet ? 140 : 100} style={{ opacity: 0.8 }} alt="FAQ illustration" />
           </View>
         </RevealOnScroll>
 
@@ -3698,9 +3692,7 @@ export default function LandingPage() {
             </View>
 
             {/* Success illustration */}
-            {isWeb && isDesktop && (
-              <Image source={{ uri: UNDRAW.success }} style={{ width: 160, height: 120, opacity: 0.7, marginBottom: 12 }} resizeMode="contain" />
-            )}
+            <SvgImage uri={UNDRAW.success} size={isDesktop ? 180 : isTablet ? 140 : 100} style={{ opacity: 0.7, marginBottom: 12 }} alt="Success illustration" />
 
             <Text
               style={{
