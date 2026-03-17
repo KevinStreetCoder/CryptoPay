@@ -1874,24 +1874,29 @@ export default function LandingPage() {
                 justifyContent: "center",
               }}
             >
-              <View
-                style={{
+              <Pressable
+                style={({ hovered }: any) => ({
                   width: 380,
                   backgroundColor: tc.glass.bg,
                   borderRadius: 28,
                   borderWidth: 1,
-                  borderColor: tc.glass.borderStrong,
+                  borderColor: hovered ? "rgba(16,185,129,0.3)" : tc.glass.borderStrong,
                   padding: 28,
                   ...(isWeb
                     ? ({
                         backdropFilter: "blur(24px)",
                         WebkitBackdropFilter: "blur(24px)",
-                        boxShadow:
-                          "0 32px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(16,185,129,0.08), inset 0 1px 0 rgba(255,255,255,0.05)",
-                        transform: "perspective(1200px) rotateY(-4deg) rotateX(2deg)",
+                        boxShadow: hovered
+                          ? "0 40px 100px rgba(0,0,0,0.6), 0 0 0 1px rgba(16,185,129,0.2), 0 0 40px rgba(16,185,129,0.1)"
+                          : "0 32px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(16,185,129,0.08), inset 0 1px 0 rgba(255,255,255,0.05)",
+                        transform: hovered
+                          ? "perspective(1200px) rotateY(-2deg) rotateX(1deg) translateY(-8px)"
+                          : "perspective(1200px) rotateY(-4deg) rotateX(2deg)",
+                        transition: "all 0.4s cubic-bezier(0.4, 0, 0.2, 1)",
+                        cursor: "pointer",
                       } as any)
                     : {}),
-                }}
+                })}
               >
                 {/* Header */}
                 <View
@@ -2101,7 +2106,7 @@ export default function LandingPage() {
                     </Text>
                   </View>
                 </View>
-              </View>
+              </Pressable>
             </View>
           )}
         </View>
