@@ -1839,11 +1839,11 @@ export default function LandingPage() {
           style={{
             flexDirection: isDesktop ? "row" : "column",
             alignItems: "center",
-            justifyContent: "center",
+            justifyContent: isDesktop ? "space-between" : "center",
             width: "100%",
-            paddingHorizontal: isMobile ? 20 : width >= 1400 ? 120 : isDesktop ? 80 : 40,
+            paddingHorizontal: isMobile ? 20 : width >= 1400 ? 100 : isDesktop ? 60 : 40,
             zIndex: 10,
-            gap: isDesktop ? (width >= 1400 ? 100 : 64) : 0,
+            gap: isDesktop ? 48 : 0,
           }}
         >
           {/* Left: Text content (60%) */}
@@ -2086,17 +2086,14 @@ export default function LandingPage() {
           {isDesktop && (
             <View
               style={{
-                flex: 1,
+                flex: 0,
                 alignItems: "center",
                 justifyContent: "center",
-                maxWidth: 480,
               }}
             >
               <Pressable
                 style={({ hovered }: any) => ({
-                  width: "100%",
-                  maxWidth: 420,
-                  minWidth: 340,
+                  width: width >= 1400 ? 440 : 380,
                   backgroundColor: tc.glass.bg,
                   borderRadius: 28,
                   borderWidth: 1,
