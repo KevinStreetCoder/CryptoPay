@@ -213,6 +213,21 @@ const FEATURES = [
     title: "KYC Compliant",
     desc: "Tiered verification: KES 5K/day basic, up to KES 1M/day fully verified",
   },
+  {
+    icon: "timer" as const,
+    title: "90-Second Quote Lock",
+    desc: "Your rate is locked for 90 seconds. No slippage, no surprises.",
+  },
+  {
+    icon: "cloud-offline" as const,
+    title: "Works Offline",
+    desc: "Cached rates let you prepare payments even without internet.",
+  },
+  {
+    icon: "book" as const,
+    title: "Full Ledger Transparency",
+    desc: "Every transaction recorded with double-entry accounting. Download receipts anytime.",
+  },
 ];
 
 // ── Stats Data ──────────────────────────────────────────────────────────────
@@ -1374,6 +1389,19 @@ export default function LandingPage() {
   // ── Animated Counters for Stats ─────────────────────────────────────────
   const usersCounter = useAnimatedCounter(730, 1800);
 
+  // ── Live CoinGecko Rate ───────────────────────────────────────────────
+  const [liveRate, setLiveRate] = useState<string>("129+");
+  useEffect(() => {
+    if (!isWeb) return;
+    fetch("https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=kes")
+      .then(r => r.json())
+      .then(d => {
+        const rate = d?.tether?.kes;
+        if (rate) setLiveRate(`KES ${rate.toFixed(2)}`);
+      })
+      .catch(() => {}); // silently fail, keep default
+  }, []);
+
   // ── Inject carousel CSS keyframes (web only) ───────────────────────────
   useEffect(() => {
     if (!isWeb) return;
@@ -1415,6 +1443,10 @@ export default function LandingPage() {
         transform: translateY(-4px) !important;
         border-color: rgba(16, 185, 129, 0.25) !important;
         transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+      }
+      @keyframes cpay-pulse-green {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6); }
+        50% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
       }
     `;
     document.head.appendChild(style);
@@ -3072,6 +3104,40 @@ export default function LandingPage() {
             >
               That's it.
             </Text>
+
+            {/* Try free badge */}
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 8,
+                marginTop: 20,
+                backgroundColor: "rgba(16, 185, 129, 0.08)",
+                borderRadius: 24,
+                paddingVertical: 10,
+                paddingHorizontal: 20,
+                borderWidth: 1,
+                borderColor: "rgba(16, 185, 129, 0.2)",
+                ...(isWeb
+                  ? ({
+                      backdropFilter: "blur(8px)",
+                      WebkitBackdropFilter: "blur(8px)",
+                      boxShadow: "0 4px 16px rgba(16, 185, 129, 0.08)",
+                    } as any)
+                  : {}),
+              }}
+            >
+              <Ionicons name="gift" size={18} color={tc.primary[400]} />
+              <Text
+                style={{
+                  color: tc.primary[300],
+                  fontSize: 14,
+                  fontFamily: "DMSans_600SemiBold",
+                }}
+              >
+                First KES 5,000 — zero fees
+              </Text>
+            </View>
           </View>
         </RevealOnScroll>
 
@@ -3370,6 +3436,355 @@ export default function LandingPage() {
               Swipe to see full comparison {"\u2192"}
             </Text>
           )}
+        </RevealOnScroll>
+      </Section>
+    </View>
+  );
+
+  // ── PLATFORM STATS (Live Data) ────────────────────────────────────────────
+  const platformStatsSection = (
+    <View
+      style={{
+        paddingVertical: isMobile ? 60 : 100,
+        ...(isWeb
+          ? ({
+              background: "linear-gradient(180deg, #060E1F 0%, #0A1628 100%)",
+            } as any)
+          : { backgroundColor: "#060E1F" }),
+      }}
+    >
+      <Section>
+        <RevealOnScroll>
+          <SectionTitle
+            label="Platform Stats"
+            title="Real-Time Platform Data"
+            subtitle="Live numbers powering your payments."
+            tc={tc}
+            isMobile={isMobile}
+          />
+        </RevealOnScroll>
+
+        <RevealOnScroll delay={200}>
+          <View
+            style={{
+              flexDirection: isMobile ? "column" : "row",
+              gap: isMobile ? 16 : 24,
+              justifyContent: "center",
+            }}
+          >
+            {/* Card 1: Live USDT Rate */}
+            <View
+              style={{
+                flex: isMobile ? undefined : 1,
+                backgroundColor: tc.glass.bg,
+                borderRadius: 24,
+                borderWidth: 1,
+                borderColor: "rgba(16, 185, 129, 0.15)",
+                padding: isMobile ? 24 : 32,
+                alignItems: "center",
+                ...(isWeb
+                  ? ({
+                      backdropFilter: "blur(16px)",
+                      WebkitBackdropFilter: "blur(16px)",
+                      boxShadow: "0 8px 32px rgba(16, 185, 129, 0.06)",
+                      transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+                    } as any)
+                  : {}),
+              }}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 16 }}>
+                <View
+                  style={{
+                    width: 10,
+                    height: 10,
+                    borderRadius: 5,
+                    backgroundColor: "#10B981",
+                    ...(isWeb
+                      ? ({
+                          animation: "cpay-pulse-green 2s ease-in-out infinite",
+                        } as any)
+                      : {}),
+                  }}
+                />
+                <View
+                  style={{
+                    backgroundColor: "rgba(16, 185, 129, 0.12)",
+                    borderRadius: 8,
+                    paddingVertical: 3,
+                    paddingHorizontal: 8,
+                  }}
+                >
+                  <Text style={{ color: "#10B981", fontSize: 10, fontFamily: "DMSans_700Bold", letterSpacing: 1.5, textTransform: "uppercase" }}>
+                    LIVE
+                  </Text>
+                </View>
+              </View>
+              <View
+                style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 18,
+                  backgroundColor: "rgba(16, 185, 129, 0.1)",
+                  borderWidth: 1,
+                  borderColor: "rgba(16, 185, 129, 0.2)",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginBottom: 16,
+                }}
+              >
+                <Ionicons name="trending-up" size={28} color={tc.primary[400]} />
+              </View>
+              <Text
+                style={{
+                  color: tc.textPrimary,
+                  fontSize: isMobile ? 26 : 32,
+                  fontFamily: "DMSans_700Bold",
+                  letterSpacing: -0.5,
+                  marginBottom: 6,
+                }}
+              >
+                {liveRate}
+              </Text>
+              <Text style={{ color: tc.textMuted, fontSize: 14, fontFamily: "DMSans_500Medium" }}>
+                USDT/KES Exchange Rate
+              </Text>
+              <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_400Regular", marginTop: 4, opacity: 0.7 }}>
+                via CoinGecko
+              </Text>
+            </View>
+
+            {/* Card 2: Supported Chains */}
+            <View
+              style={{
+                flex: isMobile ? undefined : 1,
+                backgroundColor: tc.glass.bg,
+                borderRadius: 24,
+                borderWidth: 1,
+                borderColor: tc.glass.border,
+                padding: isMobile ? 24 : 32,
+                alignItems: "center",
+                ...(isWeb
+                  ? ({
+                      backdropFilter: "blur(16px)",
+                      WebkitBackdropFilter: "blur(16px)",
+                      boxShadow: "0 8px 32px rgba(0,0,0,0.15)",
+                      transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+                    } as any)
+                  : {}),
+              }}
+            >
+              <View
+                style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 18,
+                  backgroundColor: "rgba(99, 102, 241, 0.1)",
+                  borderWidth: 1,
+                  borderColor: "rgba(99, 102, 241, 0.2)",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginBottom: 16,
+                  marginTop: isMobile ? 0 : 34,
+                }}
+              >
+                <Ionicons name="layers" size={28} color="#818CF8" />
+              </View>
+              <Text
+                style={{
+                  color: tc.textPrimary,
+                  fontSize: isMobile ? 26 : 32,
+                  fontFamily: "DMSans_700Bold",
+                  letterSpacing: -0.5,
+                  marginBottom: 6,
+                }}
+              >
+                5 Chains
+              </Text>
+              <Text style={{ color: tc.textMuted, fontSize: 14, fontFamily: "DMSans_500Medium" }}>
+                Supported Blockchains
+              </Text>
+              <View style={{ flexDirection: "row", gap: 6, marginTop: 12, flexWrap: "wrap", justifyContent: "center" }}>
+                {COIN_ICONS.map((coin) => (
+                  <Image
+                    key={coin.key}
+                    source={{ uri: coin.uri }}
+                    style={{ width: 24, height: 24, borderRadius: 12 }}
+                  />
+                ))}
+              </View>
+            </View>
+
+            {/* Card 3: Payment Speed */}
+            <View
+              style={{
+                flex: isMobile ? undefined : 1,
+                backgroundColor: tc.glass.bg,
+                borderRadius: 24,
+                borderWidth: 1,
+                borderColor: tc.glass.border,
+                padding: isMobile ? 24 : 32,
+                alignItems: "center",
+                ...(isWeb
+                  ? ({
+                      backdropFilter: "blur(16px)",
+                      WebkitBackdropFilter: "blur(16px)",
+                      boxShadow: "0 8px 32px rgba(0,0,0,0.15)",
+                      transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+                    } as any)
+                  : {}),
+              }}
+            >
+              <View
+                style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 18,
+                  backgroundColor: "rgba(245, 158, 11, 0.1)",
+                  borderWidth: 1,
+                  borderColor: "rgba(245, 158, 11, 0.2)",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginBottom: 16,
+                  marginTop: isMobile ? 0 : 34,
+                }}
+              >
+                <Ionicons name="flash" size={28} color="#F59E0B" />
+              </View>
+              <Text
+                style={{
+                  color: tc.textPrimary,
+                  fontSize: isMobile ? 26 : 32,
+                  fontFamily: "DMSans_700Bold",
+                  letterSpacing: -0.5,
+                  marginBottom: 6,
+                }}
+              >
+                {"< 30s"}
+              </Text>
+              <Text style={{ color: tc.textMuted, fontSize: 14, fontFamily: "DMSans_500Medium" }}>
+                Average Payment Speed
+              </Text>
+              <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_400Regular", marginTop: 4, opacity: 0.7 }}>
+                Crypto to M-Pesa delivery
+              </Text>
+            </View>
+          </View>
+        </RevealOnScroll>
+      </Section>
+    </View>
+  );
+
+  // ── TRUSTED TECHNOLOGY (Partner Logos) ──────────────────────────────────────
+  const partnerLogosSection = (
+    <View
+      style={{
+        paddingVertical: isMobile ? 48 : 72,
+        backgroundColor: tc.dark.bg,
+      }}
+    >
+      <Section>
+        <RevealOnScroll>
+          <View style={{ alignItems: "center", marginBottom: isMobile ? 28 : 40 }}>
+            <Text
+              style={{
+                color: tc.textMuted,
+                fontSize: 12,
+                fontFamily: "DMSans_700Bold",
+                textTransform: "uppercase",
+                letterSpacing: 3,
+                marginBottom: 8,
+              }}
+            >
+              Trusted Technology
+            </Text>
+            <Text
+              style={{
+                color: tc.textSecondary,
+                fontSize: isMobile ? 14 : 15,
+                fontFamily: "DMSans_400Regular",
+                textAlign: "center",
+              }}
+            >
+              Built on industry-leading infrastructure
+            </Text>
+          </View>
+        </RevealOnScroll>
+
+        <RevealOnScroll delay={100}>
+          <View
+            style={{
+              flexDirection: isMobile ? "column" : "row",
+              gap: isMobile ? 12 : 16,
+              justifyContent: "center",
+              alignItems: "stretch",
+              flexWrap: "wrap",
+            }}
+          >
+            {[
+              { icon: "shield-checkmark" as const, label: "Smile Identity KYC", color: "#10B981", desc: "Security" },
+              { icon: "analytics" as const, label: "CoinGecko Rates", color: "#F59E0B", desc: "Monitoring" },
+              { icon: "phone-portrait" as const, label: "M-Pesa (pending)", color: "#00A650", desc: "Payments" },
+              { icon: "server" as const, label: "Sentry Monitoring", color: "#6366F1", desc: "Infrastructure" },
+            ].map((partner) => (
+              <View
+                key={partner.label}
+                style={{
+                  flex: isMobile ? undefined : 1,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 12,
+                  backgroundColor: tc.glass.bg,
+                  borderRadius: 16,
+                  borderWidth: 1,
+                  borderColor: tc.glass.border,
+                  paddingVertical: 16,
+                  paddingHorizontal: 20,
+                  ...(isWeb
+                    ? ({
+                        backdropFilter: "blur(12px)",
+                        WebkitBackdropFilter: "blur(12px)",
+                        transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+                      } as any)
+                    : {}),
+                }}
+              >
+                <View
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 12,
+                    backgroundColor: partner.color + "15",
+                    borderWidth: 1,
+                    borderColor: partner.color + "25",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Ionicons name={partner.icon} size={20} color={partner.color} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={{
+                      color: tc.textPrimary,
+                      fontSize: 13,
+                      fontFamily: "DMSans_600SemiBold",
+                    }}
+                  >
+                    {partner.label}
+                  </Text>
+                  <Text
+                    style={{
+                      color: tc.textMuted,
+                      fontSize: 11,
+                      fontFamily: "DMSans_400Regular",
+                    }}
+                  >
+                    {partner.desc}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
         </RevealOnScroll>
       </Section>
     </View>
@@ -3719,7 +4134,7 @@ export default function LandingPage() {
                 marginBottom: 40,
               }}
             >
-              Join thousands of Kenyans converting crypto to M-Pesa payments instantly.
+              Join our early access program. First 500 users get zero fees for 30 days.
               No middlemen, no delays, no scam risk.
             </Text>
 
@@ -3735,6 +4150,33 @@ export default function LandingPage() {
                 paddingVertical: 20,
               }}
             />
+
+            {/* Limited beta badge */}
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 6,
+                marginTop: 16,
+                backgroundColor: "rgba(245, 158, 11, 0.08)",
+                borderRadius: 20,
+                paddingVertical: 8,
+                paddingHorizontal: 16,
+                borderWidth: 1,
+                borderColor: "rgba(245, 158, 11, 0.2)",
+              }}
+            >
+              <Ionicons name="time" size={14} color="#F59E0B" />
+              <Text
+                style={{
+                  color: "#F59E0B",
+                  fontSize: 13,
+                  fontFamily: "DMSans_600SemiBold",
+                }}
+              >
+                Limited beta spots available
+              </Text>
+            </View>
 
             <Pressable
               onPress={navigateToLogin}
@@ -4015,6 +4457,8 @@ export default function LandingPage() {
         {featuresSection}
         {pricingSection}
         {comparisonSection}
+        {platformStatsSection}
+        {partnerLogosSection}
         {testimonialsSection}
         {faqSection}
         {ctaSection}
