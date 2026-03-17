@@ -1782,7 +1782,7 @@ export default function LandingPage() {
               />
               {/* Outline "See How It Works" button */}
               <Pressable
-                onPress={scrollToHowItWorks}
+                onPress={() => scrollToSection("howItWorks")}
                 style={({ hovered, pressed }: any) => ({
                   paddingVertical: 14,
                   paddingHorizontal: 28,
