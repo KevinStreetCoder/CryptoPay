@@ -1458,9 +1458,33 @@ export default function LandingPage() {
         animation-play-state: paused;
       }
       .cpay-tilt-card:hover {
-        transform: translateY(-4px) !important;
-        border-color: rgba(16, 185, 129, 0.25) !important;
-        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        transform: translateY(-6px) !important;
+        border-color: rgba(16, 185, 129, 0.3) !important;
+        box-shadow: 0 12px 40px rgba(16, 185, 129, 0.15), 0 0 0 1px rgba(16, 185, 129, 0.1) !important;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+      }
+      /* Global hover for all glass cards */
+      .cpay-glass-hover {
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .cpay-glass-hover:hover {
+        transform: translateY(-4px);
+        border-color: rgba(16, 185, 129, 0.2);
+        box-shadow: 0 8px 32px rgba(16, 185, 129, 0.1);
+      }
+      /* Illustration hover animation */
+      .cpay-illust-hover {
+        transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .cpay-illust-hover:hover {
+        transform: scale(1.08) rotate(2deg);
+      }
+      /* Button icon slide on hover */
+      .cpay-btn-icon {
+        transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .cpay-btn:hover .cpay-btn-icon {
+        transform: translateX(4px);
       }
       @keyframes cpay-pulse-green {
         0%, 100% { opacity: 1; box-shadow: 0 0 4px rgba(16,185,129,0.6); }
@@ -1669,8 +1693,8 @@ export default function LandingPage() {
                 marginBottom: 36,
               }}
             >
-              USDT, BTC, ETH, SOL {"\u2192"} M-Pesa Paybill & Till.{" "}
-              Locked rates, zero slippage, instant delivery.
+              Convert USDT, BTC, ETH, or SOL to M-Pesa payments instantly.{" "}
+              Locked rates. Zero slippage. PIN-secured delivery.
             </Text>
 
             {/* CTA Buttons */}
@@ -2142,7 +2166,7 @@ export default function LandingPage() {
           <SectionTitle
             label="Why CryptoPay"
             title="The Fastest Way to Pay Bills with Crypto"
-            subtitle="730K+ Kenyans hold crypto. Zero can pay electricity with it. Until now."
+            subtitle="Tired of P2P delays, scams, and manual transfers? There's a better way."
             tc={tc}
             isMobile={isMobile}
           />
