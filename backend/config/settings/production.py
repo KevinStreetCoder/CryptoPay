@@ -98,6 +98,7 @@ CSRF_TRUSTED_ORIGINS = [
     "https://cpay.co.ke",
     "https://www.cpay.co.ke",
     "https://api.cpay.co.ke",
+    "https://app.cpay.co.ke",
     "http://localhost:8000",
     "http://localhost:8081",
 ]
