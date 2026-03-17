@@ -114,11 +114,11 @@ function RootNavigator() {
     if (!user && !inAuthGroup && !isPublicPage) {
       if (Platform.OS === "web") {
         if (isAppSubdomain) {
-          // app.cpay.co.ke → redirect unauthenticated users to main marketing site
-          window.location.href = "https://cpay.co.ke";
+          // app.cpay.co.ke → show login directly (it's the app domain)
+          router.replace("/auth/login");
           return;
         }
-        // cpay.co.ke → show landing page at root (no /landing URL visible)
+        // cpay.co.ke → show landing page
         router.replace("/landing");
       } else {
         router.replace("/auth/login");
@@ -126,8 +126,11 @@ function RootNavigator() {
     } else if (user && inAuthGroup) {
       router.replace("/(tabs)");
     } else if (user && isLanding) {
-      // Authenticated user on landing page → go to dashboard
+      // Authenticated user on landing → go to dashboard
       router.replace("/(tabs)");
+    } else if (isLanding && isAppSubdomain) {
+      // Don't show landing on app subdomain — show login or dashboard
+      router.replace(user ? "/(tabs)" : "/auth/login");
     }
   }, [user, segments, appReady, router]);
 
