@@ -102,17 +102,31 @@ function RootNavigator() {
       return;
     }
 
-    const isLanding = segments[0] === "landing";
+    const isLanding = segments[0] === "landing" || (!segments[0] && !user); // Root = landing for unauth
     const isPitch = segments[0] === "pitch";
+    const isPrivacy = segments[0] === "privacy";
+    const isTerms = segments[0] === "terms";
+    const isPublicPage = isLanding || isPitch || isPrivacy || isTerms;
 
-    if (!user && !inAuthGroup && !isLanding && !isPitch) {
-      // Show landing page to unauthenticated visitors on web, login on native
+    const webHost = Platform.OS === "web" && typeof window !== "undefined" ? window.location?.hostname : "";
+    const isAppSubdomain = webHost === "app.cpay.co.ke";
+
+    if (!user && !inAuthGroup && !isPublicPage) {
       if (Platform.OS === "web") {
+        if (isAppSubdomain) {
+          // app.cpay.co.ke → redirect unauthenticated users to main marketing site
+          window.location.href = "https://cpay.co.ke";
+          return;
+        }
+        // cpay.co.ke → show landing page at root (no /landing URL visible)
         router.replace("/landing");
       } else {
         router.replace("/auth/login");
       }
     } else if (user && inAuthGroup) {
+      router.replace("/(tabs)");
+    } else if (user && isLanding) {
+      // Authenticated user on landing page → go to dashboard
       router.replace("/(tabs)");
     }
   }, [user, segments, appReady, router]);
