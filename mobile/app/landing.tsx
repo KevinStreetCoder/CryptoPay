@@ -72,25 +72,48 @@ const TESTIMONIALS = [
 
 // ── Decorative Section Icons (replaces CDN illustrations with consistent Ionicons) ──
 // Each section gets a large glass-circle icon matching the app's design language.
-// Professional illustrations from unDraw CDN (Rackspace)
+// Professional illustrations from unDraw CDN — ALL verified working URLs
+const U = "https://42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations";
 const UNDRAW = {
-  mobilePayments: "https://42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations/confirmed_81ex.svg",
-  wallet: "https://42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations/wallet_aym5.svg",
-  secureData: "https://42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations/secure_data_0rwp.svg",
-  fastLoading: "https://42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations/fast_loading_0lbh.svg",
-  bitcoin: "https://42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations/bitcoin2_ave7.svg",
-  finance: "https://42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations/finance_0bdk.svg",
-  creditCard: "https://42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations/credit_card_payment_yb88.svg",
-  security: "https://42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations/security_o890.svg",
-  savings: "https://42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations/revenue_3osh.svg",
-  questions: "https://42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations/questions_75e0.svg",
-  success: "https://42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations/successful_purchase_uyin.svg",
-  safe: "https://42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations/safe_bnk7.svg",
-  pieChart: "https://42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations/pie_chart_6efe.svg",
-  businessDeal: "https://42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations/business_deal_cpi9.svg",
-  onlineWorld: "https://42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations/online_world_mc1t.svg",
-  inProgress: "https://42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations/in_progress_ql66.svg",
-  digitalNomad: "https://42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations/digital_nomad_9kgl.svg",
+  // Hero & CTA
+  makerLaunch: `${U}/maker_launch_crhe.svg`,
+  target: `${U}/target_kriv.svg`,
+  welcome: `${U}/welcome_3gvl.svg`,
+  // Problem section
+  warning: `${U}/warning_cyit.svg`,
+  confirmed: `${U}/confirmed_81ex.svg`,
+  // How It Works
+  userFlow: `${U}/user_flow_vr6w.svg`,
+  instantSupport: `${U}/instant_support_elxh.svg`,
+  // Crypto
+  bitcoin: `${U}/bitcoin2_ave7.svg`,
+  btcP2p: `${U}/btc_p2p_lth5.svg`,
+  finance: `${U}/finance_0bdk.svg`,
+  // Features
+  featuresOverview: `${U}/features_overview_jg7a.svg`,
+  wallet: `${U}/wallet_aym5.svg`,
+  secureData: `${U}/secure_data_0rwp.svg`,
+  security: `${U}/security_o890.svg`,
+  // Pricing & Compare
+  revenue: `${U}/revenue_3osh.svg`,
+  pieChart: `${U}/pie_chart_6efe.svg`,
+  select: `${U}/select_13cv.svg`,
+  // Social proof
+  community: `${U}/design_community_rcft.svg`,
+  businessDeal: `${U}/business_deal_cpi9.svg`,
+  // FAQ & Support
+  questions: `${U}/questions_75e0.svg`,
+  // Success
+  success: `${U}/successful_purchase_uyin.svg`,
+  creditCard: `${U}/credit_card_payment_yb88.svg`,
+  // Mobile & Speed
+  mobileTesting: `${U}/mobile_testing_reah.svg`,
+  fastLoading: `${U}/fast_loading_0lbh.svg`,
+  // Extra
+  onlineWorld: `${U}/online_world_mc1t.svg`,
+  safe: `${U}/safe_bnk7.svg`,
+  digitalNomad: `${U}/digital_nomad_9kgl.svg`,
+  inProgress: `${U}/in_progress_ql66.svg`,
 };
 
 // Used via <SectionDecorIcon> component below.
@@ -3107,7 +3130,7 @@ export default function LandingPage() {
       <Section>
         <RevealOnScroll>
           <View style={{ flexDirection: isDesktop ? "row" : "column", alignItems: "center", justifyContent: "space-between", gap: isDesktop ? 0 : 16 }}>
-            <SvgImage uri={UNDRAW.savings} size={isDesktop ? 180 : isTablet ? 140 : 100} style={{ opacity: 0.8 }} alt="Pricing illustration" />
+            <SvgImage uri={UNDRAW.revenue} size={isDesktop ? 180 : isTablet ? 140 : 100} style={{ opacity: 0.8 }} alt="Pricing illustration" />
             <View style={{ flex: 1 }}>
               <SectionTitle
                 label="Pricing"
