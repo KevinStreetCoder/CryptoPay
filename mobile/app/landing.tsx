@@ -1750,15 +1750,29 @@ export default function LandingPage() {
               ))}
             </View>
 
-            {/* CTA Buttons */}
+            {/* CTA Buttons with glow ring */}
             <View
               style={{
                 flexDirection: isMobile ? "column" : "row",
                 gap: 16,
                 alignItems: isMobile ? "stretch" : "center",
                 width: isMobile ? "100%" : undefined,
+                position: "relative",
               }}
             >
+              {/* Decorative glow behind CTA */}
+              {isWeb && (
+                <View style={{
+                  position: "absolute",
+                  top: -20,
+                  left: isMobile ? "10%" : -30,
+                  width: isMobile ? "80%" : 280,
+                  height: 80,
+                  borderRadius: 40,
+                  backgroundColor: "rgba(16, 185, 129, 0.06)",
+                  ...(isWeb ? { filter: "blur(30px)" } as any : {}),
+                } as any} />
+              )}
               <PrimaryButton
                 label="Get Started Free"
                 onPress={navigateToRegister}
@@ -1766,18 +1780,52 @@ export default function LandingPage() {
                 icon="flash"
                 style={isMobile ? { maxWidth: 400, alignSelf: "center", width: "100%" } : { minWidth: 220 }}
               />
+              {/* Outline "See How It Works" button */}
+              <Pressable
+                onPress={scrollToHowItWorks}
+                style={({ hovered, pressed }: any) => ({
+                  paddingVertical: 14,
+                  paddingHorizontal: 28,
+                  borderRadius: 16,
+                  borderWidth: 1.5,
+                  borderColor: hovered ? tc.primary[400] : "rgba(255,255,255,0.15)",
+                  backgroundColor: hovered ? "rgba(16,185,129,0.08)" : "transparent",
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                  opacity: pressed ? 0.9 : 1,
+                  ...(isWeb ? {
+                    cursor: "pointer",
+                    transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+                  } as any : {}),
+                  ...(isMobile ? { maxWidth: 400, alignSelf: "center", width: "100%" } : {}),
+                })}
+              >
+                <Ionicons name="play-circle-outline" size={18} color={tc.textSecondary} />
+                <Text style={{ color: tc.textSecondary, fontSize: 15, fontFamily: "DMSans_600SemiBold" }}>
+                  See How It Works
+                </Text>
+              </Pressable>
             </View>
 
-            {/* Secondary: Sign In link */}
+            {/* Secondary: Sign In link with arrow hover */}
             <Pressable
               onPress={navigateToLogin}
               style={({ hovered }: any) => ({
                 marginTop: 16,
-                paddingVertical: 6,
+                paddingVertical: 8,
+                paddingHorizontal: 12,
+                borderRadius: 8,
                 alignSelf: isDesktop ? "flex-start" : "center",
-                ...(isWeb ? ({ cursor: "pointer" } as any) : {}),
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 6,
+                backgroundColor: hovered ? "rgba(255,255,255,0.04)" : "transparent",
+                ...(isWeb ? { cursor: "pointer", transition: "all 0.2s ease" } as any : {}),
               })}
             >
+              <Ionicons name="log-in-outline" size={16} color={tc.textMuted} />
               <Text
                 style={{
                   color: tc.textMuted,
@@ -1795,6 +1843,7 @@ export default function LandingPage() {
                   Sign In
                 </Text>
               </Text>
+              <Ionicons name="arrow-forward" size={14} color={tc.primary[400]} />
             </Pressable>
 
             {/* App Store badges */}
