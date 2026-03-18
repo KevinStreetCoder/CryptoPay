@@ -18,17 +18,17 @@ export function PinInput({ length = 6, onComplete, error, testID }: PinInputProp
   const inputRef = useRef<TextInput>(null);
   const { width: screenWidth } = useWindowDimensions();
 
-  // Responsive box sizing: fit boxes + gaps within screen
-  // Account for page padding (24×2) + card padding (32×2) + card border (2×2) = 116px
-  const containerPadding = 120;
-  const totalGaps = (length - 1) * 10;
-  // On tablet (768-1024), the card has maxWidth:460 so cap available width accordingly
-  const cardMaxWidth = 460;
-  const cardInnerWidth = cardMaxWidth - 64; // card padding (32×2)
-  const rawAvailable = screenWidth - containerPadding - totalGaps;
-  const available = Math.min(rawAvailable, cardInnerWidth - totalGaps);
-  const maxSize = Platform.OS === 'web' ? 54 : 50;
-  const boxSize = Math.max(36, Math.min(maxSize, Math.floor(available / length)));
+  // Responsive box sizing: fit boxes + gaps within available card width
+  const isMobile = screenWidth < 768;
+  const gap = isMobile ? 8 : 10;
+  const totalGaps = (length - 1) * gap;
+  // Card inner width: on mobile = screen - 80px padding, on tablet/desktop = min(380, screen*0.4)
+  const cardInner = isMobile
+    ? screenWidth - 80
+    : Math.min(380, screenWidth * 0.38);
+  const available = cardInner - totalGaps;
+  const maxSize = Platform.OS === "web" ? 52 : 48;
+  const boxSize = Math.max(32, Math.min(maxSize, Math.floor(available / length)));
   const boxHeight = Math.round(boxSize * 1.15);
   const boxRadius = Math.max(10, Math.round(boxSize * 0.26));
   const dotSize = Math.max(10, Math.round(boxSize * 0.26));
@@ -59,7 +59,7 @@ export function PinInput({ length = 6, onComplete, error, testID }: PinInputProp
       accessibilityRole="none"
       accessibilityLabel={`PIN entry, ${pin.length} of ${length} digits entered`}
     >
-      <View style={{ flexDirection: "row", justifyContent: "center", gap: 10, maxWidth: "100%", flexShrink: 1, alignSelf: "center" }}>
+      <View style={{ flexDirection: "row", justifyContent: "center", gap, maxWidth: "100%", flexShrink: 1, alignSelf: "center" }}>
         {Array.from({ length }).map((_, i) => {
           const isFilled = pin.length > i;
           const isActive = pin.length === i;
