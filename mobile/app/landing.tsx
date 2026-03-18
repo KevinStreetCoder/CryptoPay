@@ -1915,11 +1915,11 @@ export default function LandingPage() {
           style={{
             flexDirection: isDesktop ? "row" : "column",
             alignItems: "center",
-            justifyContent: isDesktop ? "space-between" : "center",
+            justifyContent: "center",
             width: "100%",
-            paddingHorizontal: isMobile ? 20 : width >= 1400 ? 100 : isDesktop ? 60 : 40,
+            paddingHorizontal: isMobile ? 16 : width >= 1400 ? 80 : isDesktop ? 48 : 32,
             zIndex: 10,
-            gap: isDesktop ? 48 : 0,
+            gap: isDesktop ? 40 : 24,
           }}
         >
           {/* Left: Text content (60%) */}
@@ -1945,7 +1945,7 @@ export default function LandingPage() {
               {isWeb ? (
                 <>
                   <span className="cpay-headline-static" style={{ color: tc.textPrimary }}>
-                    Your Crypto. Kenya's Bills.
+                    Pay Any Bill in Kenya with Crypto.
                   </span>
                   {"\n"}
                   <span className="cpay-headline-interactive">
@@ -1954,7 +1954,7 @@ export default function LandingPage() {
                 </>
               ) : (
                 <>
-                  Your Crypto. Kenya's Bills.{"\n"}
+                  Pay Any Bill in Kenya with Crypto.{"\n"}
                   <Text style={{ color: tc.primary[400] }}>
                     Pay Any Kenyan Bill{"\n"}with Crypto in 30 Seconds.
                   </Text>
@@ -2184,27 +2184,23 @@ export default function LandingPage() {
           >
               <Pressable
                 style={({ hovered }: any) => ({
-                  width: isMobile ? "90%" : isTablet ? 320 : width >= 1400 ? 420 : 360,
-                  maxWidth: 420,
+                  width: isMobile ? "100%" : isTablet ? 300 : width >= 1400 ? 380 : 340,
+                  maxWidth: isMobile ? 340 : 400,
                   alignSelf: "center",
                   backgroundColor: tc.glass.bg,
-                  borderRadius: isMobile ? 20 : 28,
+                  borderRadius: 24,
                   borderWidth: 1,
-                  borderColor: hovered ? "rgba(16,185,129,0.3)" : tc.glass.borderStrong,
-                  padding: isMobile ? 20 : 28,
+                  borderColor: hovered ? "rgba(16,185,129,0.25)" : tc.glass.borderStrong,
+                  padding: isMobile ? 18 : 24,
                   ...(isWeb
                     ? ({
-                        backdropFilter: "blur(24px)",
-                        WebkitBackdropFilter: "blur(24px)",
+                        backdropFilter: "blur(20px)",
+                        WebkitBackdropFilter: "blur(20px)",
                         boxShadow: hovered
-                          ? "0 24px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(16,185,129,0.2), 0 0 30px rgba(16,185,129,0.1)"
-                          : "0 16px 48px rgba(0,0,0,0.4), 0 0 0 1px rgba(16,185,129,0.08)",
-                        transform: isDesktop
-                          ? (hovered
-                              ? "perspective(1200px) rotateY(-2deg) rotateX(1deg) translateY(-6px)"
-                              : "perspective(1200px) rotateY(-3deg) rotateX(1deg)")
-                          : (hovered ? "translateY(-4px)" : "none"),
-                        transition: "all 0.4s cubic-bezier(0.4, 0, 0.2, 1)",
+                          ? "0 20px 50px rgba(0,0,0,0.5), 0 0 0 1px rgba(16,185,129,0.15), 0 0 20px rgba(16,185,129,0.08)"
+                          : "0 12px 36px rgba(0,0,0,0.35), 0 0 0 1px rgba(16,185,129,0.06)",
+                        transform: hovered ? "translateY(-6px)" : "none",
+                        transition: "all 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
                         cursor: "pointer",
                       } as any)
                     : {}),
