@@ -721,13 +721,14 @@ export default function LandingPage() {
         <FloatingCoin uri={COIN_ICONS[1].uri} color={COIN_ICONS[1].color} size={36} left="85%" top="5%" delay={300} />
       </>}
 
-      {/* ── HERO MAIN CONTENT — 2-col on desktop, full width ── */}
+      {/* ── HERO MAIN CONTENT — 2-col on desktop, centered max-width ── */}
       <View style={{
         flexDirection: isDesktop ? "row" : "column",
-        alignItems: isDesktop ? "center" : "center",
-        justifyContent: "space-between",
+        alignItems: "center",
+        justifyContent: "center",
         paddingHorizontal: heroPad,
-        zIndex: 10, gap: isDesktop ? 48 : 32, width: "100%",
+        zIndex: 10, gap: isDesktop ? 56 : 32,
+        width: "100%", maxWidth: 1280, alignSelf: "center" as any,
       }}>
         {/* LEFT: Text content */}
         <RevealOnScroll variant="slide-left" style={{ flex: isDesktop ? 1 : undefined, maxWidth: isDesktop ? 620 : undefined }}>
