@@ -320,9 +320,10 @@ export default function LoginScreen() {
           padding: isDesktop ? 40 : 32,
           borderWidth: 1,
           borderColor: "rgba(255, 255, 255, 0.08)",
-          maxWidth: 480,
+          maxWidth: 460,
           width: "100%",
           alignSelf: "center",
+          overflow: "hidden" as const,
           ...(isWeb
             ? ({
                 shadowColor: "#000",
@@ -719,7 +720,7 @@ export default function LoginScreen() {
                 </View>
               )}
 
-              <View style={{ marginTop: isDesktop ? 8 : 24, marginBottom: 8 }}>
+              <View style={{ marginTop: isDesktop ? 8 : 24, marginBottom: 8, maxWidth: "100%", overflow: "hidden" as const }}>
                 <PinInput
                   onComplete={handlePinComplete}
                   error={pinError}

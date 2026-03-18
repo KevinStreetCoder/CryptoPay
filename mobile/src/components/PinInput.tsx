@@ -22,7 +22,11 @@ export function PinInput({ length = 6, onComplete, error, testID }: PinInputProp
   // Account for page padding (24×2) + card padding (32×2) + card border (2×2) = 116px
   const containerPadding = 120;
   const totalGaps = (length - 1) * 10;
-  const available = screenWidth - containerPadding - totalGaps;
+  // On tablet (768-1024), the card has maxWidth:460 so cap available width accordingly
+  const cardMaxWidth = 460;
+  const cardInnerWidth = cardMaxWidth - 64; // card padding (32×2)
+  const rawAvailable = screenWidth - containerPadding - totalGaps;
+  const available = Math.min(rawAvailable, cardInnerWidth - totalGaps);
   const maxSize = Platform.OS === 'web' ? 54 : 50;
   const boxSize = Math.max(36, Math.min(maxSize, Math.floor(available / length)));
   const boxHeight = Math.round(boxSize * 1.15);
@@ -55,7 +59,7 @@ export function PinInput({ length = 6, onComplete, error, testID }: PinInputProp
       accessibilityRole="none"
       accessibilityLabel={`PIN entry, ${pin.length} of ${length} digits entered`}
     >
-      <View style={{ flexDirection: "row", justifyContent: "center", gap: 10 }}>
+      <View style={{ flexDirection: "row", justifyContent: "center", gap: 10, maxWidth: "100%", flexShrink: 1, alignSelf: "center" }}>
         {Array.from({ length }).map((_, i) => {
           const isFilled = pin.length > i;
           const isActive = pin.length === i;
