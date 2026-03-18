@@ -1600,6 +1600,50 @@ export default function LandingPage() {
         filter: drop-shadow(0 8px 24px rgba(16,185,129,0.2));
       }
 
+      /* ── Interactive Headline Gradient ──────────────── */
+      @keyframes cpay-gradient-shift {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+      }
+      .cpay-headline-interactive {
+        background: linear-gradient(135deg, #10B981, #34D399, #F59E0B, #10B981);
+        background-size: 300% 300%;
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        animation: cpay-gradient-shift 6s ease infinite;
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), filter 0.3s ease;
+        cursor: default;
+      }
+      .cpay-headline-interactive:hover {
+        animation-duration: 1.5s;
+        transform: scale(1.02);
+        filter: drop-shadow(0 0 30px rgba(16,185,129,0.4));
+      }
+      /* Static headline (white part) hover glow */
+      .cpay-headline-static {
+        transition: text-shadow 0.4s ease;
+      }
+      .cpay-headline-static:hover {
+        text-shadow: 0 0 40px rgba(255,255,255,0.15);
+      }
+
+      /* ── Floating Particles ──────────────────────────── */
+      @keyframes cpay-particle-float {
+        0%, 100% { transform: translateY(0px) translateX(0px) scale(1); opacity: 0.3; }
+        25% { transform: translateY(-20px) translateX(10px) scale(1.2); opacity: 0.6; }
+        50% { transform: translateY(-10px) translateX(-15px) scale(0.8); opacity: 0.4; }
+        75% { transform: translateY(-30px) translateX(5px) scale(1.1); opacity: 0.5; }
+      }
+
+      /* ── Mockup Card Shine ───────────────────────────── */
+      @keyframes cpay-card-shine {
+        0% { left: -100%; opacity: 0; }
+        50% { opacity: 0.5; }
+        100% { left: 150%; opacity: 0; }
+      }
+
       /* ── Hero Background Grid ────────────────────────── */
       .cpay-hero-grid {
         background-image:
@@ -1709,6 +1753,38 @@ export default function LandingPage() {
               : {}),
           }}
         />
+      )}
+
+      {/* Floating particles for depth */}
+      {isWeb && !isMobile && (
+        <>
+          {[
+            { size: 4, left: "15%", top: "25%", delay: "0s", dur: "8s" },
+            { size: 3, left: "75%", top: "35%", delay: "2s", dur: "10s" },
+            { size: 5, left: "45%", top: "60%", delay: "4s", dur: "12s" },
+            { size: 3, left: "85%", top: "55%", delay: "1s", dur: "9s" },
+            { size: 4, left: "25%", top: "75%", delay: "3s", dur: "11s" },
+            { size: 2, left: "60%", top: "20%", delay: "5s", dur: "7s" },
+          ].map((p, i) => (
+            <View
+              key={`particle-${i}`}
+              style={{
+                position: "absolute",
+                left: p.left as any,
+                top: p.top as any,
+                width: p.size,
+                height: p.size,
+                borderRadius: p.size / 2,
+                backgroundColor: "#10B981",
+                zIndex: 1,
+                ...(isWeb ? {
+                  animation: `cpay-particle-float ${p.dur} ease-in-out ${p.delay} infinite`,
+                  opacity: 0.3,
+                } as any : {}),
+              } as any}
+            />
+          ))}
+        </>
       )}
 
       {/* Hero grid pattern overlay */}
@@ -1866,10 +1942,24 @@ export default function LandingPage() {
                 marginBottom: 24,
               }}
             >
-              Stop Waiting for P2P Scams.{"\n"}
-              <Text style={{ color: tc.primary[400] }}>
-                Pay Any Kenyan Bill{"\n"}with Crypto in 30 Seconds.
-              </Text>
+              {isWeb ? (
+                <>
+                  <span className="cpay-headline-static" style={{ color: tc.textPrimary }}>
+                    Stop Waiting for P2P Scams.
+                  </span>
+                  {"\n"}
+                  <span className="cpay-headline-interactive">
+                    Pay Any Kenyan Bill{"\n"}with Crypto in 30 Seconds.
+                  </span>
+                </>
+              ) : (
+                <>
+                  Stop Waiting for P2P Scams.{"\n"}
+                  <Text style={{ color: tc.primary[400] }}>
+                    Pay Any Kenyan Bill{"\n"}with Crypto in 30 Seconds.
+                  </Text>
+                </>
+              )}
             </Text>
 
             {/* Subheadline */}
