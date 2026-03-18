@@ -430,8 +430,8 @@ export default function LandingPage() {
   const scrollRef = useRef<ScrollView>(null);
   const sectionRefs = useRef<Record<string, View | null>>({});
 
-  const navigateToLogin = () => router.push("/login" as any);
-  const navigateToRegister = () => router.push("/register" as any);
+  const navigateToLogin = () => router.push("/auth/login" as any);
+  const navigateToRegister = () => router.push("/auth/register" as any);
   const scrollToSection = (section: string) => {
     if (section === "top") { scrollRef.current?.scrollTo({ y: 0, animated: true }); return; }
     const ref = sectionRefs.current[section];
@@ -572,9 +572,10 @@ export default function LandingPage() {
       .cpay-bento-card:hover .cpay-icon-bounce,
       .cpay-step-card:hover .cpay-icon-bounce { transform: scale(1.15) rotate(-5deg); }
 
-      /* Illustration float */
-      .cpay-illustration { transition: transform 0.5s ease, filter 0.5s ease; }
-      .cpay-illustration:hover { transform: scale(1.06) translateY(-4px); filter: drop-shadow(0 8px 24px rgba(16,185,129,0.15)); }
+      /* Illustration animated idle + dramatic hover */
+      @keyframes cpay-illus-idle { 0%,100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-6px) rotate(1deg); } }
+      .cpay-illustration { animation: cpay-illus-idle 5s ease-in-out infinite; transition: transform 0.4s cubic-bezier(0.34,1.56,0.64,1), filter 0.4s ease; cursor: pointer; }
+      .cpay-illustration:hover { animation-play-state: paused; transform: scale(1.15) translateY(-10px) rotate(-3deg); filter: drop-shadow(0 12px 32px rgba(16,185,129,0.25)) brightness(1.1); }
 
       /* Animated gradient border for featured cards */
       @keyframes cpay-border-glow { 0%,100% { border-color: rgba(16,185,129,0.12); } 50% { border-color: rgba(16,185,129,0.3); } }
@@ -602,191 +603,190 @@ export default function LandingPage() {
   }, []);
 
   // ═══════════════════════════════════════════════════════════════════════
-  // SECTION 1: HERO — CENTERED layout, wide mockup below
+  // SECTION 1: HERO — Full-width 2-col on desktop, stacked on mobile
   // ═══════════════════════════════════════════════════════════════════════
-  const heroMockupWidth = isMobile ? Math.min(width - 40, 400) : isTablet ? 480 : Math.max(500, Math.min(width * 0.45, 580));
+  const heroMockupWidth = isMobile ? Math.min(width - 40, 400) : isTablet ? 420 : Math.min(width * 0.38, 520);
+  const heroPad = width >= 1400 ? 80 : width >= 1024 ? 48 : width >= 768 ? 32 : 20;
 
   const heroSection = (
     <View style={{
-      justifyContent: "center", alignItems: "center",
-      paddingTop: isMobile ? 100 : 120, paddingBottom: isMobile ? 40 : 64,
+      paddingTop: isMobile ? 100 : 130, paddingBottom: isMobile ? 40 : 72,
       position: "relative", overflow: "hidden",
       ...(isWeb ? { background: "linear-gradient(180deg, #060E1F 0%, #0C1A30 40%, #0A1628 100%)" } as any : { backgroundColor: "#060E1F" }),
     }}>
-      {/* Dot pattern */}
+      {/* Background effects */}
       {isWeb && <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, opacity: 0.25, ...(isWeb ? { backgroundImage: "radial-gradient(circle, rgba(16,185,129,0.06) 1px, transparent 1px)", backgroundSize: "36px 36px" } as any : {}) }} />}
-      {/* Aurora blobs */}
       {isWeb && <>
         <View style={{ position: "absolute", top: -200, left: -200, width: 700, height: 700, borderRadius: 350, backgroundColor: "#10B981", opacity: 0.1, ...(isWeb ? { filter: "blur(130px)", animation: "cpay-aurora 25s ease infinite", willChange: "transform" } as any : {}) } as any} />
         <View style={{ position: "absolute", bottom: -150, right: -150, width: 550, height: 550, borderRadius: 275, backgroundColor: "#6366F1", opacity: 0.06, ...(isWeb ? { filter: "blur(130px)", animation: "cpay-aurora 30s ease infinite reverse" } as any : {}) } as any} />
         <View style={{ position: "absolute", top: 80, right: -80, width: 400, height: 400, borderRadius: 200, backgroundColor: "#F59E0B", opacity: 0.05, ...(isWeb ? { filter: "blur(130px)", animation: "cpay-aurora 35s ease infinite 3s" } as any : {}) } as any} />
       </>}
-      {/* Particles */}
       {isWeb && !isMobile && [
         { s: 4, l: "12%", t: "20%", d: "0s", dur: "8s" }, { s: 3, l: "78%", t: "30%", d: "2s", dur: "10s" },
         { s: 5, l: "50%", t: "70%", d: "4s", dur: "12s" }, { s: 3, l: "88%", t: "60%", d: "1s", dur: "9s" },
       ].map((p, i) => (
         <View key={`p-${i}`} style={{ position: "absolute", left: p.l as any, top: p.t as any, width: p.s, height: p.s, borderRadius: p.s / 2, backgroundColor: "#10B981", zIndex: 1, ...(isWeb ? { animation: `cpay-particle ${p.dur} ease-in-out ${p.d} infinite`, opacity: 0.3 } as any : {}) } as any} />
       ))}
-      {/* Floating coins */}
       {!isMobile && <>
-        <FloatingCoin uri={COIN_ICONS[0].uri} color={COIN_ICONS[0].color} size={64} left="5%" top="18%" delay={0} />
-        <FloatingCoin uri={COIN_ICONS[1].uri} color={COIN_ICONS[1].color} size={54} left="90%" top="15%" delay={400} />
-        <FloatingCoin uri={COIN_ICONS[2].uri} color={COIN_ICONS[2].color} size={48} left="7%" top="75%" delay={700} />
-        <FloatingCoin uri={COIN_ICONS[3].uri} color={COIN_ICONS[3].color} size={52} left="87%" top="72%" delay={1000} />
+        <FloatingCoin uri={COIN_ICONS[0].uri} color={COIN_ICONS[0].color} size={64} left="4%" top="15%" delay={0} />
+        <FloatingCoin uri={COIN_ICONS[1].uri} color={COIN_ICONS[1].color} size={54} left="92%" top="12%" delay={400} />
+        <FloatingCoin uri={COIN_ICONS[2].uri} color={COIN_ICONS[2].color} size={48} left="6%" top="78%" delay={700} />
+        <FloatingCoin uri={COIN_ICONS[3].uri} color={COIN_ICONS[3].color} size={52} left="89%" top="75%" delay={1000} />
       </>}
       {isMobile && <>
-        <FloatingCoin uri={COIN_ICONS[0].uri} color={COIN_ICONS[0].color} size={40} left="3%" top="8%" delay={0} />
-        <FloatingCoin uri={COIN_ICONS[1].uri} color={COIN_ICONS[1].color} size={36} left="85%" top="6%" delay={300} />
+        <FloatingCoin uri={COIN_ICONS[0].uri} color={COIN_ICONS[0].color} size={40} left="3%" top="6%" delay={0} />
+        <FloatingCoin uri={COIN_ICONS[1].uri} color={COIN_ICONS[1].color} size={36} left="85%" top="5%" delay={300} />
       </>}
 
-      {/* ── HERO TEXT — always centered ── */}
-      <RevealOnScroll variant="fade-up">
-        <View style={{ alignItems: "center", paddingHorizontal: isMobile ? 20 : 40, zIndex: 10, maxWidth: 720 }}>
-          <Text style={{
-            color: tc.textPrimary, fontSize: isMobile ? 34 : isTablet ? 44 : 56,
-            fontFamily: "DMSans_700Bold", textAlign: "center", letterSpacing: -1.5,
-            lineHeight: isMobile ? 42 : isTablet ? 54 : 66, marginBottom: 22,
-          }}>
-            {isWeb ? (
-              <>Your crypto. Their M-Pesa.{"\n"}<span className="cpay-gradient-headline">Settled in seconds.</span></>
-            ) : (
-              <>Your crypto. Their M-Pesa.{"\n"}<Text style={{ color: tc.primary[400] }}>Settled in seconds.</Text></>
-            )}
-          </Text>
-          <Text style={{ color: tc.textSecondary, fontSize: isMobile ? 16 : 18, fontFamily: "DMSans_400Regular", textAlign: "center", lineHeight: isMobile ? 25 : 28, maxWidth: 520, marginBottom: 28 }}>
-            Send USDT, BTC, ETH, or SOL — we deliver KES to any Paybill, Till, or phone number in Kenya. No P2P drama, no waiting.
-          </Text>
-          {/* Feature pills */}
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 28, justifyContent: "center" }}>
-            {[
-              { icon: "lock-closed" as keyof typeof Ionicons.glyphMap, text: "Rate locked 90s" },
-              { icon: "flash" as keyof typeof Ionicons.glyphMap, text: "Under 30 seconds" },
-              { icon: "shield-checkmark" as keyof typeof Ionicons.glyphMap, text: "HD wallet security" },
-            ].map((pill) => (
-              <View key={pill.text} style={{ flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(16,185,129,0.06)", borderWidth: 1, borderColor: "rgba(16,185,129,0.15)", borderRadius: 999, paddingVertical: 6, paddingHorizontal: 14 }}>
-                <Ionicons name={pill.icon} size={13} color={tc.primary[400]} />
-                <Text style={{ color: tc.primary[300], fontSize: 13, fontFamily: "DMSans_500Medium" }}>{pill.text}</Text>
-              </View>
-            ))}
-          </View>
-          {/* CTAs */}
-          <View style={{ flexDirection: isMobile ? "column" : "row", gap: 14, alignItems: isMobile ? "stretch" : "center", width: isMobile ? "100%" : undefined }}>
-            <Pressable onPress={navigateToRegister} style={({ hovered, pressed }: any) => ({
-              backgroundColor: hovered ? tc.primary[400] : tc.primary[500], borderRadius: 999,
-              paddingVertical: 16, paddingHorizontal: 36, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
-              opacity: pressed ? 0.9 : 1,
-              ...(isWeb ? { cursor: "pointer", transition: "all 0.25s ease", boxShadow: hovered ? "0 12px 36px rgba(16,185,129,0.45)" : "0 6px 20px rgba(16,185,129,0.25)", transform: hovered ? "translateY(-2px)" : "none" } as any : {}),
-              ...(isMobile ? { maxWidth: 400, alignSelf: "center" as any, width: "100%" } : {}),
-            })}>
-              <Ionicons name="flash" size={18} color="#fff" />
-              <Text style={{ color: "#fff", fontSize: 16, fontFamily: "DMSans_700Bold" }}>Start Paying</Text>
-            </Pressable>
-            <Pressable onPress={() => scrollToSection("howItWorks")} style={({ hovered, pressed }: any) => ({
-              paddingVertical: 14, paddingHorizontal: 28, borderRadius: 999, borderWidth: 1.5,
-              borderColor: hovered ? tc.primary[400] : "rgba(255,255,255,0.12)",
-              backgroundColor: hovered ? "rgba(16,185,129,0.06)" : "transparent",
-              flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, opacity: pressed ? 0.9 : 1,
-              ...(isWeb ? { cursor: "pointer", transition: "all 0.25s ease" } as any : {}),
-              ...(isMobile ? { maxWidth: 400, alignSelf: "center" as any, width: "100%" } : {}),
-            })}>
-              <Ionicons name="play-circle-outline" size={17} color={tc.textSecondary} />
-              <Text style={{ color: tc.textSecondary, fontSize: 15, fontFamily: "DMSans_600SemiBold" }}>See How It Works</Text>
-            </Pressable>
-          </View>
-          {/* Sign in + store badges */}
-          <Pressable onPress={navigateToLogin} style={({ hovered }: any) => ({ marginTop: 14, flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: hovered ? "rgba(255,255,255,0.03)" : "transparent", paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, ...(isWeb ? { cursor: "pointer", transition: "all 0.2s ease" } as any : {}) })}>
-            <Text style={{ color: tc.textMuted, fontSize: 14, fontFamily: "DMSans_400Regular" }}>
-              Already have an account? <Text style={{ color: tc.primary[300], fontFamily: "DMSans_600SemiBold" }}>Sign In</Text>
+      {/* ── HERO MAIN CONTENT — 2-col on desktop, full width ── */}
+      <View style={{
+        flexDirection: isDesktop ? "row" : "column",
+        alignItems: isDesktop ? "center" : "center",
+        justifyContent: "space-between",
+        paddingHorizontal: heroPad,
+        zIndex: 10, gap: isDesktop ? 48 : 32, width: "100%",
+      }}>
+        {/* LEFT: Text content */}
+        <RevealOnScroll variant="slide-left" style={{ flex: isDesktop ? 1 : undefined, maxWidth: isDesktop ? 620 : undefined }}>
+          <View style={{ alignItems: isDesktop ? "flex-start" : "center" }}>
+            <Text style={{
+              color: tc.textPrimary, fontSize: isMobile ? 34 : isTablet ? 42 : width >= 1400 ? 58 : 50,
+              fontFamily: "DMSans_700Bold", textAlign: isDesktop ? "left" : "center", letterSpacing: -1.5,
+              lineHeight: isMobile ? 42 : isTablet ? 52 : width >= 1400 ? 68 : 60, marginBottom: 20,
+            }}>
+              {isWeb ? (
+                <>Pay bills in Kenya{"\n"}directly from crypto.{"\n"}<span className="cpay-gradient-headline">No P2P. No waiting.</span></>
+              ) : (
+                <>Pay bills in Kenya{"\n"}directly from crypto.{"\n"}<Text style={{ color: tc.primary[400] }}>No P2P. No waiting.</Text></>
+              )}
             </Text>
-          </Pressable>
-          <View style={{ flexDirection: "row", gap: 12, marginTop: 16 }}>
-            <Pressable onPress={() => { const u = "https://play.google.com/store/apps/details?id=com.cpay.cryptopay"; if (isWeb) (window as any).open(u, "_blank"); else Linking.openURL(u); }}
-              style={({ hovered }: any) => ({ flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: hovered ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.03)", borderWidth: 1, borderColor: "rgba(255,255,255,0.1)", borderRadius: 12, paddingVertical: 8, paddingHorizontal: 14, ...(isWeb ? { cursor: "pointer", transition: "all 0.2s ease" } as any : {}) })}>
-              <Image source={STORE_ICONS.googlePlay} style={{ width: 20, height: 20 }} resizeMode="contain" />
-              <View><Text style={{ color: tc.textMuted, fontSize: 8, fontFamily: "DMSans_400Regular" }}>GET IT ON</Text><Text style={{ color: tc.textPrimary, fontSize: 12, fontFamily: "DMSans_600SemiBold" }}>Google Play</Text></View>
+            <Text style={{ color: tc.textSecondary, fontSize: isMobile ? 16 : 18, fontFamily: "DMSans_400Regular", textAlign: isDesktop ? "left" : "center", lineHeight: isMobile ? 25 : 28, maxWidth: 500, marginBottom: 24 }}>
+              Drop your USDT, BTC, ETH, or SOL — we convert and send KES to any Paybill, Till, or phone number via M-Pesa in under 30 seconds.
+            </Text>
+            {/* Feature pills */}
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 28, justifyContent: isDesktop ? "flex-start" : "center" }}>
+              {[
+                { icon: "lock-closed" as keyof typeof Ionicons.glyphMap, text: "Rate locked 90s" },
+                { icon: "flash" as keyof typeof Ionicons.glyphMap, text: "Under 30 seconds" },
+                { icon: "shield-checkmark" as keyof typeof Ionicons.glyphMap, text: "HD wallet security" },
+              ].map((pill) => (
+                <View key={pill.text} style={{ flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(16,185,129,0.06)", borderWidth: 1, borderColor: "rgba(16,185,129,0.15)", borderRadius: 999, paddingVertical: 6, paddingHorizontal: 14 }}>
+                  <Ionicons name={pill.icon} size={13} color={tc.primary[400]} />
+                  <Text style={{ color: tc.primary[300], fontSize: 13, fontFamily: "DMSans_500Medium" }}>{pill.text}</Text>
+                </View>
+              ))}
+            </View>
+            {/* CTAs */}
+            <View style={{ flexDirection: isMobile ? "column" : "row", gap: 14, alignItems: isMobile ? "stretch" : "center", width: isMobile ? "100%" : undefined }}>
+              <Pressable onPress={navigateToRegister} style={({ hovered, pressed }: any) => ({
+                backgroundColor: hovered ? tc.primary[400] : tc.primary[500], borderRadius: 999,
+                paddingVertical: 16, paddingHorizontal: 36, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
+                opacity: pressed ? 0.9 : 1,
+                ...(isWeb ? { cursor: "pointer", transition: "all 0.25s ease", boxShadow: hovered ? "0 12px 36px rgba(16,185,129,0.45)" : "0 6px 20px rgba(16,185,129,0.25)", transform: hovered ? "translateY(-2px)" : "none" } as any : {}),
+                ...(isMobile ? { maxWidth: 400, alignSelf: "center" as any, width: "100%" } : {}),
+              })}>
+                <Ionicons name="flash" size={18} color="#fff" />
+                <Text style={{ color: "#fff", fontSize: 16, fontFamily: "DMSans_700Bold" }}>Get Started Free</Text>
+              </Pressable>
+              <Pressable onPress={() => scrollToSection("howItWorks")} style={({ hovered, pressed }: any) => ({
+                paddingVertical: 14, paddingHorizontal: 28, borderRadius: 999, borderWidth: 1.5,
+                borderColor: hovered ? tc.primary[400] : "rgba(255,255,255,0.12)",
+                backgroundColor: hovered ? "rgba(16,185,129,0.06)" : "transparent",
+                flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, opacity: pressed ? 0.9 : 1,
+                ...(isWeb ? { cursor: "pointer", transition: "all 0.25s ease" } as any : {}),
+                ...(isMobile ? { maxWidth: 400, alignSelf: "center" as any, width: "100%" } : {}),
+              })}>
+                <Ionicons name="play-circle-outline" size={17} color={tc.textSecondary} />
+                <Text style={{ color: tc.textSecondary, fontSize: 15, fontFamily: "DMSans_600SemiBold" }}>See How It Works</Text>
+              </Pressable>
+            </View>
+            {/* Sign in + store badges */}
+            <Pressable onPress={navigateToLogin} style={({ hovered }: any) => ({ marginTop: 14, flexDirection: "row", alignItems: "center", gap: 6, alignSelf: isDesktop ? "flex-start" as any : "center" as any, backgroundColor: hovered ? "rgba(255,255,255,0.03)" : "transparent", paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, ...(isWeb ? { cursor: "pointer", transition: "all 0.2s ease" } as any : {}) })}>
+              <Text style={{ color: tc.textMuted, fontSize: 14, fontFamily: "DMSans_400Regular" }}>
+                Already have an account? <Text style={{ color: tc.primary[300], fontFamily: "DMSans_600SemiBold" }}>Sign In</Text>
+              </Text>
             </Pressable>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "rgba(255,255,255,0.02)", borderWidth: 1, borderColor: "rgba(255,255,255,0.06)", borderRadius: 12, paddingVertical: 8, paddingHorizontal: 14, opacity: 0.5 }}>
-              <Image source={STORE_ICONS.appStore} style={{ width: 20, height: 20, opacity: 0.7 }} resizeMode="contain" />
-              <View><Text style={{ color: tc.textMuted, fontSize: 8, fontFamily: "DMSans_400Regular" }}>Download on the</Text><Text style={{ color: tc.textSecondary, fontSize: 12, fontFamily: "DMSans_600SemiBold" }}>App Store</Text></View>
+            <View style={{ flexDirection: "row", gap: 12, marginTop: 14, justifyContent: isDesktop ? "flex-start" : "center" }}>
+              <Pressable onPress={() => { const u = "https://play.google.com/store/apps/details?id=com.cpay.cryptopay"; if (isWeb) (window as any).open(u, "_blank"); else Linking.openURL(u); }}
+                style={({ hovered }: any) => ({ flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: hovered ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.03)", borderWidth: 1, borderColor: "rgba(255,255,255,0.1)", borderRadius: 12, paddingVertical: 8, paddingHorizontal: 14, ...(isWeb ? { cursor: "pointer", transition: "all 0.2s ease" } as any : {}) })}>
+                <Image source={STORE_ICONS.googlePlay} style={{ width: 20, height: 20 }} resizeMode="contain" />
+                <View><Text style={{ color: tc.textMuted, fontSize: 8, fontFamily: "DMSans_400Regular" }}>GET IT ON</Text><Text style={{ color: tc.textPrimary, fontSize: 12, fontFamily: "DMSans_600SemiBold" }}>Google Play</Text></View>
+              </Pressable>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "rgba(255,255,255,0.02)", borderWidth: 1, borderColor: "rgba(255,255,255,0.06)", borderRadius: 12, paddingVertical: 8, paddingHorizontal: 14, opacity: 0.5 }}>
+                <Image source={STORE_ICONS.appStore} style={{ width: 20, height: 20, opacity: 0.7 }} resizeMode="contain" />
+                <View><Text style={{ color: tc.textMuted, fontSize: 8, fontFamily: "DMSans_400Regular" }}>Download on the</Text><Text style={{ color: tc.textSecondary, fontSize: 12, fontFamily: "DMSans_600SemiBold" }}>App Store</Text></View>
+              </View>
             </View>
           </View>
-        </View>
-      </RevealOnScroll>
+        </RevealOnScroll>
 
-      {/* ── HERO MOCKUP — CENTERED, WIDE, 3D float animation ── */}
-      <RevealOnScroll delay={300} variant="scale-up">
-        <View style={{ alignItems: "center", marginTop: isMobile ? 32 : 44, zIndex: 10, paddingHorizontal: 20 }}>
+        {/* RIGHT: App Mockup — 3D float animation */}
+        <RevealOnScroll delay={200} variant="slide-right" style={{ alignItems: "center" }}>
           <View
             ref={(ref: any) => { if (isWeb && ref instanceof HTMLElement) ref.className = "cpay-hero-mockup"; }}
             style={{
               width: heroMockupWidth, backgroundColor: "rgba(12,26,46,0.88)",
               borderRadius: 24, borderWidth: 1.5, borderColor: "rgba(16,185,129,0.15)",
-              padding: isMobile ? 18 : 28, overflow: "hidden",
+              padding: isMobile ? 18 : 24, overflow: "hidden",
               ...(isWeb ? { backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", boxShadow: "0 20px 60px rgba(0,0,0,0.45), 0 0 0 1px rgba(16,185,129,0.08)", willChange: "transform" } as any : {}),
             } as any}
           >
-            {/* App header */}
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 20 }}>
-              <View style={{ width: 42, height: 42, borderRadius: 13, backgroundColor: tc.primary[500], alignItems: "center", justifyContent: "center", ...(isWeb ? { boxShadow: "0 4px 14px rgba(16,185,129,0.3)" } as any : {}) }}>
-                <Ionicons name="flash" size={20} color="#fff" />
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 18 }}>
+              <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: tc.primary[500], alignItems: "center", justifyContent: "center", ...(isWeb ? { boxShadow: "0 4px 14px rgba(16,185,129,0.3)" } as any : {}) }}>
+                <Ionicons name="flash" size={18} color="#fff" />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={{ color: tc.textPrimary, fontSize: 17, fontFamily: "DMSans_700Bold" }}>CryptoPay</Text>
-                <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_400Regular" }}>Your crypto, Kenya's bills</Text>
+                <Text style={{ color: tc.textPrimary, fontSize: 16, fontFamily: "DMSans_700Bold" }}>CryptoPay</Text>
+                <Text style={{ color: tc.textMuted, fontSize: 10, fontFamily: "DMSans_400Regular" }}>Pay bills with crypto</Text>
               </View>
-              {/* Crypto photo accent */}
-              <Image source={{ uri: CDN_IMAGES.cryptoCoins }} style={{ width: 48, height: 48, borderRadius: 12, opacity: 0.8 }} resizeMode="cover" />
+              <Image source={{ uri: CDN_IMAGES.cryptoCoins }} style={{ width: 44, height: 44, borderRadius: 12, opacity: 0.8 }} resizeMode="cover" />
             </View>
-            {/* Balance */}
-            <View style={{ backgroundColor: "#060E1F", borderRadius: 16, padding: 20, marginBottom: 14, borderWidth: 1, borderColor: "rgba(255,255,255,0.03)" }}>
-              <Text style={{ color: tc.textMuted, fontSize: 10, fontFamily: "DMSans_600SemiBold", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 8 }}>Total Balance</Text>
+            <View style={{ backgroundColor: "#060E1F", borderRadius: 14, padding: 18, marginBottom: 12, borderWidth: 1, borderColor: "rgba(255,255,255,0.03)" }}>
+              <Text style={{ color: tc.textMuted, fontSize: 9, fontFamily: "DMSans_600SemiBold", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 6 }}>Total Balance</Text>
               <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" }}>
-                <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 28 : 34, fontFamily: "DMSans_700Bold", letterSpacing: -1 }}>
-                  7.88 <Text style={{ fontSize: 16, color: tc.primary[400], fontFamily: "DMSans_600SemiBold" }}>USDT</Text>
+                <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 26 : 30, fontFamily: "DMSans_700Bold", letterSpacing: -1 }}>
+                  7.88 <Text style={{ fontSize: 14, color: tc.primary[400], fontFamily: "DMSans_600SemiBold" }}>USDT</Text>
                 </Text>
-                <Text style={{ color: tc.primary[400], fontSize: 13, fontFamily: "DMSans_500Medium" }}>{"\u2248"} KSh 1,018</Text>
+                <Text style={{ color: tc.primary[400], fontSize: 12, fontFamily: "DMSans_500Medium" }}>{"\u2248"} KSh 1,018</Text>
               </View>
             </View>
-            {/* Actions row */}
-            <View style={{ flexDirection: "row", gap: 8 }}>
+            <View style={{ flexDirection: "row", gap: 6 }}>
               {[
                 { icon: "arrow-down" as const, label: "Deposit", color: tc.primary[500] },
                 { icon: "send" as const, label: "Pay Bill", color: "#3B82F6" },
                 { icon: "swap-horizontal" as const, label: "Send", color: "#8B5CF6" },
                 { icon: "cart" as const, label: "Buy", color: "#F59E0B" },
               ].map((a) => (
-                <View key={a.label} style={{ flex: 1, alignItems: "center", backgroundColor: "#060E1F", borderRadius: 12, paddingVertical: 12, gap: 5, borderWidth: 1, borderColor: "rgba(255,255,255,0.02)" }}>
-                  <View style={{ width: 30, height: 30, borderRadius: 8, backgroundColor: a.color + "15", alignItems: "center", justifyContent: "center" }}>
-                    <Ionicons name={a.icon} size={14} color={a.color} />
+                <View key={a.label} style={{ flex: 1, alignItems: "center", backgroundColor: "#060E1F", borderRadius: 10, paddingVertical: 10, gap: 4, borderWidth: 1, borderColor: "rgba(255,255,255,0.02)" }}>
+                  <View style={{ width: 28, height: 28, borderRadius: 7, backgroundColor: a.color + "15", alignItems: "center", justifyContent: "center" }}>
+                    <Ionicons name={a.icon} size={13} color={a.color} />
                   </View>
-                  <Text style={{ color: tc.textSecondary, fontSize: 10, fontFamily: "DMSans_500Medium" }}>{a.label}</Text>
+                  <Text style={{ color: tc.textSecondary, fontSize: 9, fontFamily: "DMSans_500Medium" }}>{a.label}</Text>
                 </View>
               ))}
             </View>
-            {/* Recent transactions */}
-            <View style={{ marginTop: 12, gap: 6 }}>
+            <View style={{ marginTop: 10, gap: 5 }}>
               {[
-                { name: "KPLC Electricity", amount: "KSh 2,500", time: "Just now", icon: "checkmark-circle" as const },
-                { name: "Safaricom Airtime", amount: "KSh 100", time: "2 min ago", icon: "checkmark-circle" as const },
+                { name: "KPLC Electricity", amount: "KSh 2,500", time: "Just now" },
+                { name: "Safaricom Airtime", amount: "KSh 100", time: "2 min ago" },
               ].map((tx) => (
-                <View key={tx.name} style={{ backgroundColor: "#060E1F", borderRadius: 12, padding: 12, borderWidth: 1, borderColor: "rgba(255,255,255,0.02)", flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                    <View style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: tc.primary[500] + "15", alignItems: "center", justifyContent: "center" }}>
-                      <Ionicons name={tx.icon} size={14} color={tc.primary[400]} />
+                <View key={tx.name} style={{ backgroundColor: "#060E1F", borderRadius: 10, padding: 10, borderWidth: 1, borderColor: "rgba(255,255,255,0.02)", flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <View style={{ width: 26, height: 26, borderRadius: 7, backgroundColor: tc.primary[500] + "15", alignItems: "center", justifyContent: "center" }}>
+                      <Ionicons name="checkmark-circle" size={13} color={tc.primary[400]} />
                     </View>
                     <View>
-                      <Text style={{ color: tc.textPrimary, fontSize: 12, fontFamily: "DMSans_600SemiBold" }}>{tx.name}</Text>
-                      <Text style={{ color: tc.textMuted, fontSize: 10, fontFamily: "DMSans_400Regular" }}>{tx.time}</Text>
+                      <Text style={{ color: tc.textPrimary, fontSize: 11, fontFamily: "DMSans_600SemiBold" }}>{tx.name}</Text>
+                      <Text style={{ color: tc.textMuted, fontSize: 9, fontFamily: "DMSans_400Regular" }}>{tx.time}</Text>
                     </View>
                   </View>
-                  <Text style={{ color: tc.primary[400], fontSize: 12, fontFamily: "DMSans_700Bold" }}>{tx.amount}</Text>
+                  <Text style={{ color: tc.primary[400], fontSize: 11, fontFamily: "DMSans_700Bold" }}>{tx.amount}</Text>
                 </View>
               ))}
             </View>
           </View>
-        </View>
-      </RevealOnScroll>
+        </RevealOnScroll>
+      </View>
 
       {/* Trust bar */}
       <RevealOnScroll delay={500} variant="fade-in">
