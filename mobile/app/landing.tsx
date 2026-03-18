@@ -869,24 +869,42 @@ export default function LandingPage() {
         </RevealOnScroll>
       </View>
 
-      {/* Trust bar */}
-      <RevealOnScroll delay={500} variant="fade-in">
-        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", flexWrap: "wrap", gap: isMobile ? 12 : 24, marginTop: isMobile ? 32 : 44, paddingHorizontal: 20, zIndex: 10 }}>
-          {[{ logo: PARTNER_LOGOS.mpesa, label: "M-Pesa" }, { logo: PARTNER_LOGOS.smileIdentity, label: "Smile Identity" }, { logo: PARTNER_LOGOS.coingecko, label: "CoinGecko" }, { logo: PARTNER_LOGOS.sentry, label: "Sentry" }].map((p) => (
-            <View key={p.label} style={{ flexDirection: "row", alignItems: "center", gap: 8, opacity: 0.45 }}>
-              <Image source={p.logo} style={{ width: 20, height: 20, borderRadius: 5 }} resizeMode="contain" />
-              <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_500Medium" }}>{p.label}</Text>
-            </View>
-          ))}
-        </View>
-      </RevealOnScroll>
-      {/* Live ticker */}
-      <RevealOnScroll delay={700} variant="fade-in">
-        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 14, zIndex: 10 }}>
-          <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: tc.primary[400], ...(isWeb ? { animation: "cpay-pulse-dot 2s ease-in-out infinite" } as any : {}) }} />
-          <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_500Medium" }}>
-            Live on <Text style={{ color: tc.primary[300], fontFamily: "DMSans_700Bold" }}>cpay.co.ke</Text>
+      {/* Trusted by — animated partner cards with hover */}
+      <RevealOnScroll delay={500} variant="fade-up">
+        <View style={{ alignItems: "center", marginTop: isMobile ? 36 : 52, paddingHorizontal: 20, zIndex: 10 }}>
+          <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_600SemiBold", textTransform: "uppercase", letterSpacing: 2, marginBottom: 16 }}>
+            Trusted Technology
           </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", flexWrap: "wrap", gap: isMobile ? 10 : 16 }}>
+            {[
+              { logo: PARTNER_LOGOS.mpesa, label: "M-Pesa", desc: "Payments", color: "#00A650" },
+              { logo: PARTNER_LOGOS.smileIdentity, label: "Smile Identity", desc: "KYC", color: "#10B981" },
+              { logo: PARTNER_LOGOS.coingecko, label: "CoinGecko", desc: "Rates", color: "#F59E0B" },
+              { logo: PARTNER_LOGOS.sentry, label: "Sentry", desc: "Monitoring", color: "#6366F1" },
+            ].map((p) => (
+              <Pressable
+                key={p.label}
+                ref={(ref: any) => { if (isWeb && ref instanceof HTMLElement) ref.className = "cpay-service-card"; }}
+                style={({ hovered }: any) => ({
+                  flexDirection: "row", alignItems: "center", gap: 12,
+                  backgroundColor: isWeb && hovered ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.02)",
+                  borderRadius: 14, borderWidth: 1,
+                  borderColor: isWeb && hovered ? p.color + "30" : "rgba(255,255,255,0.06)",
+                  paddingVertical: isMobile ? 10 : 14, paddingHorizontal: isMobile ? 14 : 20,
+                  ...(isWeb ? {
+                    cursor: "default", transition: "all 0.3s ease",
+                    boxShadow: hovered ? `0 8px 24px ${p.color}15` : "none",
+                  } as any : {}),
+                }) as any}
+              >
+                <Image source={p.logo} style={{ width: isMobile ? 28 : 36, height: isMobile ? 28 : 36, borderRadius: 8 }} resizeMode="contain" />
+                <View>
+                  <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 13 : 15, fontFamily: "DMSans_700Bold" }}>{p.label}</Text>
+                  <Text style={{ color: tc.textMuted, fontSize: isMobile ? 11 : 12, fontFamily: "DMSans_400Regular" }}>{p.desc}</Text>
+                </View>
+              </Pressable>
+            ))}
+          </View>
         </View>
       </RevealOnScroll>
     </View>
@@ -1206,45 +1224,56 @@ export default function LandingPage() {
         }}>
           {FEATURES.map((feat, i) => (
             <RevealOnScroll key={feat.title} delay={i * 80} variant={i % 2 === 0 ? "fade-up" : "scale-up"}>
-              <Pressable
+              <View
                 ref={(ref: any) => { if (isWeb && ref instanceof HTMLElement) ref.className = "cpay-bento-card"; }}
-                style={({ hovered }: any) => ({
+                style={{
                   backgroundColor: "rgba(12,26,46,0.6)", borderRadius: 20, borderWidth: 1,
-                  borderColor: isWeb && hovered ? feat.accent + "35" : "rgba(255,255,255,0.05)",
+                  borderColor: "rgba(255,255,255,0.05)",
                   padding: isMobile ? 24 : feat.size === "large" ? 36 : 28,
-                  minHeight: feat.size === "large" && !isMobile ? 200 : isMobile ? undefined : 160,
+                  minHeight: feat.size === "large" && !isMobile ? 220 : isMobile ? undefined : 180,
                   ...(isWeb ? {
                     gridColumn: feat.size === "large" && !isMobile && !isTablet ? "span 2" : undefined,
                     backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
-                    boxShadow: hovered ? `0 12px 36px ${feat.accent}12` : "none",
-                    cursor: "default",
+                    display: "flex", flexDirection: "column" as any,
                   } as any : {}),
-                }) as any}
+                } as any}
               >
-                <View
-                  ref={(ref: any) => { if (isWeb && ref instanceof HTMLElement) ref.className = "cpay-feat-icon"; }}
-                  style={{
-                    width: feat.size === "large" ? 52 : 44, height: feat.size === "large" ? 52 : 44,
-                    borderRadius: feat.size === "large" ? 16 : 13,
-                    backgroundColor: feat.accent + "12", borderWidth: 1, borderColor: feat.accent + "20",
-                    alignItems: "center", justifyContent: "center", marginBottom: 20,
-                  } as any}
-                >
-                  <Ionicons name={feat.icon} size={feat.size === "large" ? 24 : 20} color={feat.accent} />
+                {/* Icon — centered */}
+                <View style={{ alignSelf: "flex-start", marginBottom: 24 }}>
+                  <View
+                    ref={(ref: any) => { if (isWeb && ref instanceof HTMLElement) ref.className = "cpay-feat-icon"; }}
+                    style={{
+                      width: feat.size === "large" ? 56 : 48, height: feat.size === "large" ? 56 : 48,
+                      borderRadius: feat.size === "large" ? 16 : 14,
+                      backgroundColor: feat.accent + "15", borderWidth: 1.5, borderColor: feat.accent + "25",
+                      alignItems: "center", justifyContent: "center",
+                      ...(isWeb ? { boxShadow: `0 4px 16px ${feat.accent}15` } as any : {}),
+                    } as any}
+                  >
+                    <Ionicons name={feat.icon} size={feat.size === "large" ? 26 : 22} color={feat.accent} />
+                  </View>
                 </View>
-                <Text style={{
-                  color: tc.textPrimary, fontSize: feat.size === "large" ? 20 : 17,
-                  fontFamily: "DMSans_700Bold", marginBottom: 10, lineHeight: feat.size === "large" ? 28 : 24,
-                }}>
-                  {feat.title}
-                </Text>
-                <Text style={{
-                  color: tc.textSecondary, fontSize: isMobile ? 14 : 15,
-                  fontFamily: "DMSans_400Regular", lineHeight: isMobile ? 22 : 24,
-                }}>
-                  {feat.desc}
-                </Text>
-              </Pressable>
+
+                {/* Title — block level, clear separation */}
+                <View style={{ marginBottom: 12 }}>
+                  <Text style={{
+                    color: tc.textPrimary, fontSize: feat.size === "large" ? 22 : 18,
+                    fontFamily: "DMSans_700Bold", lineHeight: feat.size === "large" ? 30 : 26,
+                  }}>
+                    {feat.title}
+                  </Text>
+                </View>
+
+                {/* Description — clearly separated */}
+                <View style={{ flex: 1 }}>
+                  <Text style={{
+                    color: tc.textSecondary, fontSize: isMobile ? 14 : 15,
+                    fontFamily: "DMSans_400Regular", lineHeight: isMobile ? 22 : 24,
+                  }}>
+                    {feat.desc}
+                  </Text>
+                </View>
+              </View>
             </RevealOnScroll>
           ))}
         </View>
