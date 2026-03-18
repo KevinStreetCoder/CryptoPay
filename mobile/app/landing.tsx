@@ -1719,7 +1719,7 @@ export default function LandingPage() {
     <View
       accessibilityLabel="CryptoPay hero section"
       style={{
-        minHeight: isMobile ? 750 : 850,
+        minHeight: isMobile ? undefined : 850,
         justifyContent: "center",
         alignItems: "center",
         paddingTop: isMobile ? 100 : 130,
@@ -2184,24 +2184,26 @@ export default function LandingPage() {
           >
               <Pressable
                 style={({ hovered }: any) => ({
-                  width: isMobile ? "100%" : isTablet ? 340 : width >= 1400 ? 440 : 380,
-                  maxWidth: isMobile ? 360 : undefined,
-                  alignSelf: isMobile ? "center" : undefined,
+                  width: isMobile ? "90%" : isTablet ? 320 : width >= 1400 ? 420 : 360,
+                  maxWidth: 420,
+                  alignSelf: "center",
                   backgroundColor: tc.glass.bg,
-                  borderRadius: 28,
+                  borderRadius: isMobile ? 20 : 28,
                   borderWidth: 1,
                   borderColor: hovered ? "rgba(16,185,129,0.3)" : tc.glass.borderStrong,
-                  padding: 28,
+                  padding: isMobile ? 20 : 28,
                   ...(isWeb
                     ? ({
                         backdropFilter: "blur(24px)",
                         WebkitBackdropFilter: "blur(24px)",
                         boxShadow: hovered
-                          ? "0 40px 100px rgba(0,0,0,0.6), 0 0 0 1px rgba(16,185,129,0.2), 0 0 40px rgba(16,185,129,0.1)"
-                          : "0 32px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(16,185,129,0.08), inset 0 1px 0 rgba(255,255,255,0.05)",
-                        transform: hovered
-                          ? "perspective(1200px) rotateY(-2deg) rotateX(1deg) translateY(-8px)"
-                          : "perspective(1200px) rotateY(-4deg) rotateX(2deg)",
+                          ? "0 24px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(16,185,129,0.2), 0 0 30px rgba(16,185,129,0.1)"
+                          : "0 16px 48px rgba(0,0,0,0.4), 0 0 0 1px rgba(16,185,129,0.08)",
+                        transform: isDesktop
+                          ? (hovered
+                              ? "perspective(1200px) rotateY(-2deg) rotateX(1deg) translateY(-6px)"
+                              : "perspective(1200px) rotateY(-3deg) rotateX(1deg)")
+                          : (hovered ? "translateY(-4px)" : "none"),
                         transition: "all 0.4s cubic-bezier(0.4, 0, 0.2, 1)",
                         cursor: "pointer",
                       } as any)
@@ -2523,7 +2525,9 @@ export default function LandingPage() {
         paddingVertical: isMobile ? 40 : 64,
         ...(isWeb
           ? ({
-              background: "linear-gradient(180deg, #0A1628 0%, #060E1F 100%)",
+              background: "linear-gradient(170deg, #0A1628 0%, #081420 50%, #060E1F 100%)",
+              borderTop: "1px solid rgba(16,185,129,0.06)",
+              borderBottom: "1px solid rgba(16,185,129,0.06)",
             } as any)
           : { backgroundColor: "#0A1628" }),
       }}
@@ -3052,8 +3056,13 @@ export default function LandingPage() {
     <View
       ref={(ref) => { sectionRefs.current["howItWorks"] = ref; }}
       style={{
-        paddingVertical: isMobile ? 40 : 64,
-        backgroundColor: tc.dark.bg,
+        paddingVertical: isMobile ? 44 : 72,
+        ...(isWeb
+          ? ({
+              background: "linear-gradient(135deg, #060E1F 0%, #0B1A2E 30%, #0D1F35 60%, #060E1F 100%)",
+              position: "relative",
+            } as any)
+          : { backgroundColor: "#0B1A2E" }),
       }}
     >
       <Section>
@@ -3339,8 +3348,14 @@ export default function LandingPage() {
       ref={(ref) => { sectionRefs.current["features"] = ref; }}
       accessibilityLabel="CryptoPay features"
       style={{
-        paddingVertical: isMobile ? 40 : 64,
-        backgroundColor: tc.dark.bg,
+        paddingVertical: isMobile ? 44 : 72,
+        position: "relative" as any,
+        ...(isWeb
+          ? ({
+              background: "linear-gradient(180deg, #060E1F 0%, #081422 40%, #0A1830 70%, #060E1F 100%)",
+              borderTop: "1px solid rgba(16,185,129,0.04)",
+            } as any)
+          : { backgroundColor: "#081422" }),
       }}
     >
       <Section>
@@ -3433,10 +3448,11 @@ export default function LandingPage() {
     <View
       ref={(ref) => { sectionRefs.current["pricing"] = ref; }}
       style={{
-        paddingVertical: isMobile ? 40 : 64,
+        paddingVertical: isMobile ? 44 : 72,
+        position: "relative" as any,
         ...(isWeb
           ? ({
-              background: "linear-gradient(180deg, #0A1628 0%, #060E1F 100%)",
+              background: "radial-gradient(ellipse at center top, rgba(16,185,129,0.06) 0%, transparent 60%), linear-gradient(180deg, #060E1F 0%, #0A1628 50%, #060E1F 100%)",
             } as any)
           : { backgroundColor: "#0A1628" }),
       }}
@@ -3644,8 +3660,14 @@ export default function LandingPage() {
   const comparisonSection = (
     <View
       style={{
-        paddingVertical: isMobile ? 40 : 64,
-        backgroundColor: tc.dark.bg,
+        paddingVertical: isMobile ? 44 : 72,
+        ...(isWeb
+          ? ({
+              background: "linear-gradient(180deg, #081420 0%, #0C1C30 50%, #060E1F 100%)",
+              borderTop: "1px solid rgba(255,255,255,0.03)",
+              borderBottom: "1px solid rgba(255,255,255,0.03)",
+            } as any)
+          : { backgroundColor: "#0C1C30" }),
       }}
     >
       <Section>
@@ -4460,7 +4482,8 @@ export default function LandingPage() {
         ...(isWeb
           ? ({
               background:
-                "linear-gradient(180deg, #0A1628 0%, #0E1D35 50%, #060E1F 100%)",
+                "radial-gradient(ellipse at center, rgba(16,185,129,0.08) 0%, transparent 50%), linear-gradient(180deg, #081422 0%, #0E1D35 40%, #0A1628 80%, #060E1F 100%)",
+              borderTop: "1px solid rgba(16,185,129,0.08)",
             } as any)
           : { backgroundColor: "#0E1D35" }),
       }}
