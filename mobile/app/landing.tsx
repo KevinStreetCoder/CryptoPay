@@ -211,7 +211,7 @@ const FAQ_DATA = [
 const COMPARISON_ROWS = [
   { label: "Speed", cp: "< 30 seconds", p2p: "15-60 minutes", otc: "1-24 hours", cpIcon: "checkmark-circle" as const },
   { label: "Fees", cp: "1.5% + KES 10", p2p: "3-8% spread", otc: "5-10% negotiated", cpIcon: "checkmark-circle" as const },
-  { label: "Scam Risk", cp: "Zero", p2p: "High", otc: "Very high", cpIcon: "checkmark-circle" as const },
+  { label: "Trust Level", cp: "Automated & verified", p2p: "Depends on trader", otc: "Requires personal trust", cpIcon: "checkmark-circle" as const },
   { label: "Bill Payment", cp: "Direct Paybill/Till", p2p: "Not supported", otc: "Not supported", cpIcon: "checkmark-circle" as const },
   { label: "Automation", cp: "Fully automated", p2p: "Manual matching", otc: "Fully manual", cpIcon: "checkmark-circle" as const },
   { label: "KYC", cp: "Tiered verification", p2p: "Platform KYC", otc: "None (risky)", cpIcon: "checkmark-circle" as const },
@@ -241,7 +241,7 @@ const FEATURES = [
   },
   {
     icon: "shield-checkmark" as const,
-    title: "Bank-Grade Security",
+    title: "Enterprise Security",
     desc: "256-bit AES encryption, biometric auth, TOTP 2FA, and HD wallet architecture",
   },
   {
@@ -1326,7 +1326,7 @@ export default function LandingPage() {
     setMeta("twitter:card", "summary_large_image");
     setMeta("twitter:site", "@CPayKenya");
     setMeta("twitter:title", "CryptoPay \u2014 Pay Any Bill in Kenya with Crypto");
-    setMeta("twitter:description", "USDT, BTC, ETH, SOL to M-Pesa Paybill & Till. Locked rates, zero slippage, instant delivery.");
+    setMeta("twitter:description", "USDT, BTC, ETH, SOL to M-Pesa Paybill & Till. Locked rates, rate protection, instant delivery.");
 
     // Additional SEO meta tags
     setMeta("robots", "index, follow");
@@ -1388,7 +1388,7 @@ export default function LandingPage() {
       name: "CryptoPay",
       operatingSystem: "Android, iOS, Web",
       applicationCategory: "FinanceApplication",
-      description: "Pay any M-Pesa Paybill or Till number directly from cryptocurrency (USDT, BTC, ETH, SOL). Instant delivery, locked rates, zero slippage.",
+      description: "Pay any M-Pesa Paybill or Till number directly from cryptocurrency (USDT, BTC, ETH, SOL). Instant delivery, locked rates, rate protection.",
       url: "https://cpay.co.ke",
       offers: {
         "@type": "Offer",
@@ -1945,7 +1945,7 @@ export default function LandingPage() {
               {isWeb ? (
                 <>
                   <span className="cpay-headline-static" style={{ color: tc.textPrimary }}>
-                    Stop Waiting for P2P Scams.
+                    Your Crypto. Kenya's Bills.
                   </span>
                   {"\n"}
                   <span className="cpay-headline-interactive">
@@ -1954,7 +1954,7 @@ export default function LandingPage() {
                 </>
               ) : (
                 <>
-                  Stop Waiting for P2P Scams.{"\n"}
+                  Your Crypto. Kenya's Bills.{"\n"}
                   <Text style={{ color: tc.primary[400] }}>
                     Pay Any Kenyan Bill{"\n"}with Crypto in 30 Seconds.
                   </Text>
@@ -1981,7 +1981,7 @@ export default function LandingPage() {
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 32, justifyContent: isDesktop ? "flex-start" : "center" }}>
               {[
                 { icon: "lock-closed" as keyof typeof Ionicons.glyphMap, text: "Locked rates" },
-                { icon: "shield-checkmark" as keyof typeof Ionicons.glyphMap, text: "Zero slippage" },
+                { icon: "shield-checkmark" as keyof typeof Ionicons.glyphMap, text: "Rate protection" },
                 { icon: "finger-print" as keyof typeof Ionicons.glyphMap, text: "PIN + biometric" },
                 { icon: "flash" as keyof typeof Ionicons.glyphMap, text: "Under 30 seconds" },
               ].map((pill) => (
@@ -2533,7 +2533,7 @@ export default function LandingPage() {
           <SectionTitle
             label="Why CryptoPay"
             title="The Fastest Way to Pay Bills with Crypto"
-            subtitle="Tired of P2P delays, scams, and manual transfers? There's a better way."
+            subtitle="Paying bills with crypto shouldn't take five steps and thirty minutes."
             tc={tc}
             isMobile={isMobile}
           />
@@ -2591,7 +2591,7 @@ export default function LandingPage() {
               </Text>
               {[
                 "Find a P2P trader on an exchange",
-                "Negotiate rate, hope they don't scam you",
+                "Negotiate rate and hope for the best",
                 "Send crypto and wait for KES in M-Pesa",
                 "Now go to M-Pesa and manually pay the bill",
                 "Pray the trader was honest about the rate",
@@ -3063,7 +3063,7 @@ export default function LandingPage() {
               <SectionTitle
                 label="How It Works"
                 title="Three Steps. Thirty Seconds."
-                subtitle="No P2P matching. No waiting. No counterparty risk."
+                subtitle="No middlemen. No manual steps. Just tap and pay."
                 tc={tc}
                 isMobile={isMobile}
               />
@@ -4540,7 +4540,7 @@ export default function LandingPage() {
               }}
             >
               Join our early access program. First 500 users get zero fees for 30 days.
-              No middlemen, no delays, no scam risk.
+              Direct crypto-to-M-Pesa. Simple, fast, transparent.
             </Text>
 
             <PrimaryButton
