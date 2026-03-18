@@ -2082,18 +2082,21 @@ export default function LandingPage() {
             </View>
           </View>
 
-          {/* Right: App mockup card (40%, desktop only) */}
-          {isDesktop && (
-            <View
-              style={{
-                flex: 0,
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
+          {/* App mockup card — visible on ALL screens */}
+          <View
+            style={{
+              flex: isDesktop ? 0 : undefined,
+              alignItems: "center",
+              justifyContent: "center",
+              marginTop: isDesktop ? 0 : 32,
+              width: isDesktop ? undefined : "100%",
+            }}
+          >
               <Pressable
                 style={({ hovered }: any) => ({
-                  width: width >= 1400 ? 440 : 380,
+                  width: isMobile ? "100%" : isTablet ? 340 : width >= 1400 ? 440 : 380,
+                  maxWidth: isMobile ? 360 : undefined,
+                  alignSelf: isMobile ? "center" : undefined,
                   backgroundColor: tc.glass.bg,
                   borderRadius: 28,
                   borderWidth: 1,
@@ -2325,7 +2328,6 @@ export default function LandingPage() {
                 </View>
               </Pressable>
             </View>
-          )}
         </View>
       </RevealOnScroll>
 

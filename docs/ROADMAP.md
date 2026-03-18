@@ -442,11 +442,12 @@ VASP license costs (when regulations are published) could add KES 5M -- 10M in m
 
 ## 9. Competitive Landscape (Updated March 2026)
 
-**UPDATED March 2026:** Rift (riftfi.xyz) is the first known competitor to ship crypto-to-Paybill in Kenya. CryptoPay must accelerate to maintain differentiation.
+**UPDATED March 2026:** Two direct competitors identified — Rift and Pretium Africa. CryptoPay must differentiate on speed, KYC compliance, and native mobile UX.
 
 | Competitor | Kenya Services | Crypto→Paybill? | Key Intel |
 |-----------|---------------|-----------------|-----------|
 | **Rift (riftfi.xyz)** | Buy stablecoins, pay Paybills/Till, send money, cross-Africa remittance, yield products | **YES** | ~1,000 users, web-only (apps ~May 2026), ERC-4337 Account Abstraction, gasless UX, DeFi yield. Weak KYC, unclear VASP status. **DIRECT COMPETITOR.** |
+| **Pretium Africa (pretium.africa)** | Consumer app, Payment API, Ecommerce checkout. USDT/USDC ↔ fiat in 7+ African markets | **YES (via API)** | 600K+ processed txns, 99.99% success rate, offices in Nairobi + Newark DE. B2B focused (API/SDK). Enterprise-grade infrastructure. **MAJOR COMPETITOR — more mature than Rift.** |
 | **Yellow Card** | B2B stablecoin infra (API only) | NO | Exited retail Jan 2026, $3B+ processed 2024, helped draft VASP Act |
 | **Bitnob** | Buy/sell crypto, M-Pesa on/off-ramp | NO | Active in 8 countries, virtual USD card |
 | **Kotani Pay** | B2B stablecoin off-ramp API | NO (API-only) | Tether strategic investment Oct 2025, USSD access |
@@ -455,12 +456,19 @@ VASP license costs (when regulations are published) could add KES 5M -- 10M in m
 | **Luno** | Buy/sell/hold crypto, KES pairs | NO | Relaunched Kenya mid-2025, traditional exchange |
 | **Binance** | Full exchange, P2P with M-Pesa | NO | Accessible, no VASP license yet |
 
-**Strategic Response to Rift:**
+**Strategic Response to Competitors:**
+
+*Vs Rift:*
 - **Ship native apps before Rift's mobile launch (~May 2026)** — their web-only UX is a window of opportunity
-- **Lean on multi-chain support** (Tron, ETH, BTC, SOL) vs Rift's likely single-chain (EVM)
-- **Emphasize KYC/compliance** as trust differentiator — Rift's KYC is reportedly slow and their VASP status unclear
-- **Evaluate Account Abstraction (ERC-4337)** for gasless transactions — Rift's paymaster model is a genuine UX win
-- **Consider dollar-denominated yield products** — Rift's "Estate Royalty" feature shows user demand for stablecoin savings
+- **Multi-chain support** (Tron, ETH, BTC, SOL) vs Rift's EVM-only
+- **KYC/compliance first** — Rift's KYC is reportedly slow, VASP status unclear
+
+*Vs Pretium Africa:*
+- Pretium is **B2B focused** (API/SDK for merchants) — CryptoPay is **B2C focused** (direct consumer app)
+- Pretium operates in **7+ markets** but is enterprise-heavy — CryptoPay targets **individual crypto holders** paying personal bills
+- Pretium has more traction (600K txns) but their consumer app is secondary to their API business
+- **CryptoPay differentiator**: One-tap Paybill/Till payment UX, Kenyan-first design, direct M-Pesa integration
+- **Future opportunity**: CryptoPay's B2B API (Phase 4) could compete with Pretium's API offering
 
 **Strategic Opportunity:** Yellow Card's exit from retail (Jan 2026) created a consumer-facing gap. Their API can be CryptoPay's liquidity backbone while we own the consumer experience. 99%+ of their volume was stablecoins — validates our USDT-first approach.
 
