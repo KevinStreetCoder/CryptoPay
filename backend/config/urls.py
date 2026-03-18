@@ -45,6 +45,8 @@ urlpatterns = [
     path("api/v1/wallets/", include("apps.wallets.urls")),
     path("api/v1/payments/", include("apps.payments.urls")),
     path("api/v1/mpesa/", include("apps.mpesa.urls")),
+    # C2B callback URLs without "mpesa" in path — Safaricom blocks URLs containing "mpesa"
+    path("api/v1/hooks/", include("apps.mpesa.hooks_urls")),
     path("api/v1/rates/", include("apps.rates.urls")),
     path("api/v1/notifications/", include("apps.notifications.urls")),
     # OpenAPI / Swagger

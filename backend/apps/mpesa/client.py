@@ -17,6 +17,7 @@ import requests
 from cryptography.hazmat.primitives.asymmetric import padding as asym_padding
 from cryptography.x509 import load_pem_x509_certificate
 from django.conf import settings
+from django.core.cache import cache
 
 from .middleware import build_callback_url
 
@@ -41,14 +42,13 @@ class MpesaClient:
         self.shortcode = settings.MPESA_SHORTCODE
         self.passkey = settings.MPESA_PASSKEY
         self.callback_base = settings.MPESA_CALLBACK_BASE_URL
-        self._access_token = None
-        self._token_expiry = None
 
     @property
     def access_token(self) -> str:
-        """Get OAuth access token, caching for reuse."""
-        if self._access_token and self._token_expiry and datetime.now() < self._token_expiry:
-            return self._access_token
+        """Get OAuth access token, caching in Redis for reuse across processes."""
+        token = cache.get("mpesa:oauth_token")
+        if token:
+            return token
 
         url = f"{self.base_url}/oauth/v1/generate?grant_type=client_credentials"
         credentials = base64.b64encode(
@@ -63,11 +63,10 @@ class MpesaClient:
         response.raise_for_status()
 
         data = response.json()
-        self._access_token = data["access_token"]
-        # Token valid for ~3600s, refresh at 3000s to be safe
-        from datetime import timedelta
-        self._token_expiry = datetime.now() + timedelta(seconds=3000)
-        return self._access_token
+        token = data["access_token"]
+        # Token valid for ~3600s, cache for 3000s (50 min) to be safe
+        cache.set("mpesa:oauth_token", token, timeout=3000)
+        return token
 
     def _headers(self) -> dict:
         return {
@@ -109,13 +108,23 @@ class MpesaClient:
             "TransactionDesc": description or "CryptoPay deposit",
         }
 
-        response = requests.post(
-            f"{self.base_url}/mpesa/stkpush/v1/processrequest",
-            json=payload,
-            headers=self._headers(),
-            timeout=30,
-        )
-        data = response.json()
+        try:
+            response = requests.post(
+                f"{self.base_url}/mpesa/stkpush/v1/processrequest",
+                json=payload,
+                headers=self._headers(),
+                timeout=30,
+            )
+            response.raise_for_status()
+            data = response.json()
+        except requests.exceptions.HTTPError as e:
+            raise MpesaError(f"Daraja API HTTP {e.response.status_code}: {e.response.text[:200]}") from e
+        except (ValueError, requests.exceptions.JSONDecodeError):
+            raise MpesaError(f"Daraja API returned non-JSON response: {response.text[:200]}")
+        except requests.exceptions.ConnectionError as e:
+            raise MpesaError(f"Cannot reach Daraja API: {e}") from e
+        except requests.exceptions.Timeout:
+            raise MpesaError("Daraja API request timed out")
 
         if data.get("ResponseCode") != "0":
             raise MpesaError(f"STK Push failed: {data.get('ResponseDescription', data)}")
@@ -136,17 +145,27 @@ class MpesaClient:
             "ResponseType": getattr(
                 settings, "MPESA_C2B_RESPONSE_TYPE", "Completed"
             ),
-            "ConfirmationURL": f"{self.callback_base}/api/v1/mpesa/callback/c2b/confirm/",
-            "ValidationURL": f"{self.callback_base}/api/v1/mpesa/callback/c2b/validate/",
+            "ConfirmationURL": f"{self.callback_base}/api/v1/hooks/c2b/confirm/",
+            "ValidationURL": f"{self.callback_base}/api/v1/hooks/c2b/validate/",
         }
 
-        response = requests.post(
-            f"{self.base_url}/mpesa/c2b/v1/registerurl",
-            json=payload,
-            headers=self._headers(),
-            timeout=30,
-        )
-        data = response.json()
+        try:
+            response = requests.post(
+                f"{self.base_url}/mpesa/c2b/v1/registerurl",
+                json=payload,
+                headers=self._headers(),
+                timeout=30,
+            )
+            response.raise_for_status()
+            data = response.json()
+        except requests.exceptions.HTTPError as e:
+            raise MpesaError(f"Daraja API HTTP {e.response.status_code}: {e.response.text[:200]}") from e
+        except (ValueError, requests.exceptions.JSONDecodeError):
+            raise MpesaError(f"Daraja API returned non-JSON response: {response.text[:200]}")
+        except requests.exceptions.ConnectionError as e:
+            raise MpesaError(f"Cannot reach Daraja API: {e}") from e
+        except requests.exceptions.Timeout:
+            raise MpesaError("Daraja API request timed out")
 
         if data.get("ResponseCode") != "0" and data.get("ResponseDescription", "").lower() != "success":
             raise MpesaError(f"C2B URL registration failed: {data}")
@@ -165,13 +184,23 @@ class MpesaClient:
             "CheckoutRequestID": checkout_request_id,
         }
 
-        response = requests.post(
-            f"{self.base_url}/mpesa/stkpushquery/v1/query",
-            json=payload,
-            headers=self._headers(),
-            timeout=30,
-        )
-        return response.json()
+        try:
+            response = requests.post(
+                f"{self.base_url}/mpesa/stkpushquery/v1/query",
+                json=payload,
+                headers=self._headers(),
+                timeout=30,
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.HTTPError as e:
+            raise MpesaError(f"Daraja API HTTP {e.response.status_code}: {e.response.text[:200]}") from e
+        except (ValueError, requests.exceptions.JSONDecodeError):
+            raise MpesaError(f"Daraja API returned non-JSON response: {response.text[:200]}")
+        except requests.exceptions.ConnectionError as e:
+            raise MpesaError(f"Cannot reach Daraja API: {e}") from e
+        except requests.exceptions.Timeout:
+            raise MpesaError("Daraja API request timed out")
 
     @staticmethod
     def _normalize_phone(phone: str) -> str:
@@ -203,13 +232,23 @@ class MpesaClient:
             "Occasion": "",
         }
 
-        response = requests.post(
-            f"{self.base_url}/mpesa/b2c/v1/paymentrequest",
-            json=payload,
-            headers=self._headers(),
-            timeout=30,
-        )
-        data = response.json()
+        try:
+            response = requests.post(
+                f"{self.base_url}/mpesa/b2c/v1/paymentrequest",
+                json=payload,
+                headers=self._headers(),
+                timeout=30,
+            )
+            response.raise_for_status()
+            data = response.json()
+        except requests.exceptions.HTTPError as e:
+            raise MpesaError(f"Daraja API HTTP {e.response.status_code}: {e.response.text[:200]}") from e
+        except (ValueError, requests.exceptions.JSONDecodeError):
+            raise MpesaError(f"Daraja API returned non-JSON response: {response.text[:200]}")
+        except requests.exceptions.ConnectionError as e:
+            raise MpesaError(f"Cannot reach Daraja API: {e}") from e
+        except requests.exceptions.Timeout:
+            raise MpesaError("Daraja API request timed out")
 
         if data.get("ResponseCode") != "0":
             msg = data.get("ResponseDescription") or data.get("errorMessage") or str(data)
@@ -238,13 +277,23 @@ class MpesaClient:
             "ResultURL": build_callback_url("b2b", tx_ref),
         }
 
-        response = requests.post(
-            f"{self.base_url}/mpesa/b2b/v1/paymentrequest",
-            json=payload,
-            headers=self._headers(),
-            timeout=30,
-        )
-        data = response.json()
+        try:
+            response = requests.post(
+                f"{self.base_url}/mpesa/b2b/v1/paymentrequest",
+                json=payload,
+                headers=self._headers(),
+                timeout=30,
+            )
+            response.raise_for_status()
+            data = response.json()
+        except requests.exceptions.HTTPError as e:
+            raise MpesaError(f"Daraja API HTTP {e.response.status_code}: {e.response.text[:200]}") from e
+        except (ValueError, requests.exceptions.JSONDecodeError):
+            raise MpesaError(f"Daraja API returned non-JSON response: {response.text[:200]}")
+        except requests.exceptions.ConnectionError as e:
+            raise MpesaError(f"Cannot reach Daraja API: {e}") from e
+        except requests.exceptions.Timeout:
+            raise MpesaError("Daraja API request timed out")
 
         if data.get("ResponseCode") != "0":
             raise MpesaError(f"B2B failed: {data.get('ResponseDescription', data)}")
@@ -268,13 +317,23 @@ class MpesaClient:
             "ResultURL": build_callback_url("b2b", tx_ref),
         }
 
-        response = requests.post(
-            f"{self.base_url}/mpesa/b2b/v1/paymentrequest",
-            json=payload,
-            headers=self._headers(),
-            timeout=30,
-        )
-        data = response.json()
+        try:
+            response = requests.post(
+                f"{self.base_url}/mpesa/b2b/v1/paymentrequest",
+                json=payload,
+                headers=self._headers(),
+                timeout=30,
+            )
+            response.raise_for_status()
+            data = response.json()
+        except requests.exceptions.HTTPError as e:
+            raise MpesaError(f"Daraja API HTTP {e.response.status_code}: {e.response.text[:200]}") from e
+        except (ValueError, requests.exceptions.JSONDecodeError):
+            raise MpesaError(f"Daraja API returned non-JSON response: {response.text[:200]}")
+        except requests.exceptions.ConnectionError as e:
+            raise MpesaError(f"Cannot reach Daraja API: {e}") from e
+        except requests.exceptions.Timeout:
+            raise MpesaError("Daraja API request timed out")
 
         if data.get("ResponseCode") != "0":
             raise MpesaError(f"BuyGoods failed: {data.get('ResponseDescription', data)}")
@@ -296,13 +355,23 @@ class MpesaClient:
             "Occasion": "",
         }
 
-        response = requests.post(
-            f"{self.base_url}/mpesa/transactionstatus/v1/query",
-            json=payload,
-            headers=self._headers(),
-            timeout=30,
-        )
-        return response.json()
+        try:
+            response = requests.post(
+                f"{self.base_url}/mpesa/transactionstatus/v1/query",
+                json=payload,
+                headers=self._headers(),
+                timeout=30,
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.HTTPError as e:
+            raise MpesaError(f"Daraja API HTTP {e.response.status_code}: {e.response.text[:200]}") from e
+        except (ValueError, requests.exceptions.JSONDecodeError):
+            raise MpesaError(f"Daraja API returned non-JSON response: {response.text[:200]}")
+        except requests.exceptions.ConnectionError as e:
+            raise MpesaError(f"Cannot reach Daraja API: {e}") from e
+        except requests.exceptions.Timeout:
+            raise MpesaError("Daraja API request timed out")
 
     def reversal(self, transaction_id: str, amount: int, remarks: str = "") -> dict:
         """Request reversal of a completed M-Pesa transaction."""
@@ -320,13 +389,23 @@ class MpesaClient:
             "Occasion": "",
         }
 
-        response = requests.post(
-            f"{self.base_url}/mpesa/reversal/v1/request",
-            json=payload,
-            headers=self._headers(),
-            timeout=30,
-        )
-        return response.json()
+        try:
+            response = requests.post(
+                f"{self.base_url}/mpesa/reversal/v1/request",
+                json=payload,
+                headers=self._headers(),
+                timeout=30,
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.HTTPError as e:
+            raise MpesaError(f"Daraja API HTTP {e.response.status_code}: {e.response.text[:200]}") from e
+        except (ValueError, requests.exceptions.JSONDecodeError):
+            raise MpesaError(f"Daraja API returned non-JSON response: {response.text[:200]}")
+        except requests.exceptions.ConnectionError as e:
+            raise MpesaError(f"Cannot reach Daraja API: {e}") from e
+        except requests.exceptions.Timeout:
+            raise MpesaError("Daraja API request timed out")
 
     def account_balance(self) -> dict:
         """Check the M-Pesa float balance."""
@@ -341,13 +420,23 @@ class MpesaClient:
             "ResultURL": f"{self.callback_base}/api/v1/mpesa/callback/balance/",
         }
 
-        response = requests.post(
-            f"{self.base_url}/mpesa/accountbalance/v1/query",
-            json=payload,
-            headers=self._headers(),
-            timeout=30,
-        )
-        return response.json()
+        try:
+            response = requests.post(
+                f"{self.base_url}/mpesa/accountbalance/v1/query",
+                json=payload,
+                headers=self._headers(),
+                timeout=30,
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.HTTPError as e:
+            raise MpesaError(f"Daraja API HTTP {e.response.status_code}: {e.response.text[:200]}") from e
+        except (ValueError, requests.exceptions.JSONDecodeError):
+            raise MpesaError(f"Daraja API returned non-JSON response: {response.text[:200]}")
+        except requests.exceptions.ConnectionError as e:
+            raise MpesaError(f"Cannot reach Daraja API: {e}") from e
+        except requests.exceptions.Timeout:
+            raise MpesaError("Daraja API request timed out")
 
     def _get_security_credential(self) -> str:
         """
