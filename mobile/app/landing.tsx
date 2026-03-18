@@ -873,9 +873,9 @@ export default function LandingPage() {
         minWidth: isMobile ? 120 : 170, marginRight: isMobile ? 10 : 16,
       } as any}
     >
-      <Image source={service.logo} style={{ width: isMobile ? 40 : 52, height: isMobile ? 40 : 52, borderRadius: 14, marginBottom: 10 }} resizeMode="contain" />
-      <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 12 : 14, fontFamily: "DMSans_600SemiBold", textAlign: "center" }} numberOfLines={1}>{service.name}</Text>
-      <Text style={{ color: tc.textMuted, fontSize: isMobile ? 10 : 11, fontFamily: "DMSans_400Regular", marginTop: 2 }}>{service.desc}</Text>
+      <Image source={service.logo} style={{ width: isMobile ? 44 : 52, height: isMobile ? 44 : 52, borderRadius: 14, marginBottom: 10 }} resizeMode="contain" />
+      <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 13 : 15, fontFamily: "DMSans_700Bold", textAlign: "center" }} numberOfLines={1}>{service.name}</Text>
+      <Text style={{ color: tc.textSecondary, fontSize: isMobile ? 12 : 13, fontFamily: "DMSans_500Medium", marginTop: 3 }}>{service.desc}</Text>
     </View>
   );
   const row1 = KENYAN_SERVICES.slice(0, 6); const row2 = KENYAN_SERVICES.slice(6);
@@ -890,8 +890,8 @@ export default function LandingPage() {
             <View style={{ alignItems: isDesktop ? "flex-start" : "center", flex: 1 }}>
               <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_700Bold", textTransform: "uppercase", letterSpacing: 3, marginBottom: 10 }}>Supported Services</Text>
               <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 26 : 38, fontFamily: "DMSans_700Bold", textAlign: isDesktop ? "left" : "center", letterSpacing: -1 }}>Pay anything in Kenya</Text>
-              <Text style={{ color: tc.textSecondary, fontSize: isMobile ? 14 : 16, fontFamily: "DMSans_400Regular", marginTop: 8, textAlign: isDesktop ? "left" : "center", maxWidth: 420 }}>
-                Electricity, water, TV, airtime, school fees, tax — any Paybill or Till number.
+              <Text style={{ color: tc.textSecondary, fontSize: isMobile ? 15 : 17, fontFamily: "DMSans_400Regular", lineHeight: isMobile ? 23 : 26, marginTop: 10, textAlign: isDesktop ? "left" : "center", maxWidth: 480 }}>
+                Electricity, water, TV, airtime, school fees, tax — any Paybill or Till number in Kenya.
               </Text>
             </View>
             <SvgIllustration uri={ILLUSTRATIONS.onlineWorld} size={isMobile ? 60 : 120} style={{ opacity: 0.7 }} />
@@ -902,40 +902,42 @@ export default function LandingPage() {
         {isDesktop && isWeb && (
           <RevealOnScroll variant="fade-up" delay={100}>
             <View style={{
-              ...(isWeb ? { display: "grid" as any, gridTemplateColumns: "repeat(6, 1fr)", gap: 16, marginBottom: 32 } as any : {}),
+              ...(isWeb ? { display: "grid" as any, gridTemplateColumns: "repeat(6, 1fr)", gap: 20, marginBottom: 24 } as any : {}),
             }}>
-              {KENYAN_SERVICES.slice(0, 6).map((service, i) => (
+              {KENYAN_SERVICES.slice(0, 6).map((service) => (
                 <View
                   key={service.name}
                   ref={(ref: any) => { if (isWeb && ref instanceof HTMLElement) ref.className = "cpay-service-card"; }}
                   style={{
-                    alignItems: "center", backgroundColor: "rgba(255,255,255,0.02)", borderRadius: 16,
+                    alignItems: "center", justifyContent: "center",
+                    backgroundColor: "rgba(255,255,255,0.02)", borderRadius: 18,
                     borderWidth: 1, borderColor: "rgba(255,255,255,0.05)",
-                    paddingVertical: 24, paddingHorizontal: 16,
+                    paddingVertical: 28, paddingHorizontal: 20,
                   } as any}
                 >
-                  <Image source={service.logo} style={{ width: 56, height: 56, borderRadius: 16, marginBottom: 12 }} resizeMode="contain" />
-                  <Text style={{ color: tc.textPrimary, fontSize: 14, fontFamily: "DMSans_600SemiBold", textAlign: "center" }}>{service.name}</Text>
-                  <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_400Regular", marginTop: 3 }}>{service.desc}</Text>
+                  <Image source={service.logo} style={{ width: 60, height: 60, borderRadius: 16, marginBottom: 14 }} resizeMode="contain" />
+                  <Text style={{ color: tc.textPrimary, fontSize: 15, fontFamily: "DMSans_700Bold", textAlign: "center" }}>{service.name}</Text>
+                  <Text style={{ color: tc.textSecondary, fontSize: 13, fontFamily: "DMSans_500Medium", marginTop: 4 }}>{service.desc}</Text>
                 </View>
               ))}
             </View>
             <View style={{
-              ...(isWeb ? { display: "grid" as any, gridTemplateColumns: "repeat(5, 1fr)", gap: 16, maxWidth: "83%", marginHorizontal: "auto" } as any : {}),
+              ...(isWeb ? { display: "grid" as any, gridTemplateColumns: "repeat(5, 1fr)", gap: 20, maxWidth: "85%", marginLeft: "auto", marginRight: "auto" } as any : {}),
             }}>
               {KENYAN_SERVICES.slice(6).map((service) => (
                 <View
                   key={service.name}
                   ref={(ref: any) => { if (isWeb && ref instanceof HTMLElement) ref.className = "cpay-service-card"; }}
                   style={{
-                    alignItems: "center", backgroundColor: "rgba(255,255,255,0.02)", borderRadius: 16,
+                    alignItems: "center", justifyContent: "center",
+                    backgroundColor: "rgba(255,255,255,0.02)", borderRadius: 18,
                     borderWidth: 1, borderColor: "rgba(255,255,255,0.05)",
-                    paddingVertical: 24, paddingHorizontal: 16,
+                    paddingVertical: 28, paddingHorizontal: 20,
                   } as any}
                 >
-                  <Image source={service.logo} style={{ width: 56, height: 56, borderRadius: 16, marginBottom: 12 }} resizeMode="contain" />
-                  <Text style={{ color: tc.textPrimary, fontSize: 14, fontFamily: "DMSans_600SemiBold", textAlign: "center" }}>{service.name}</Text>
-                  <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_400Regular", marginTop: 3 }}>{service.desc}</Text>
+                  <Image source={service.logo} style={{ width: 60, height: 60, borderRadius: 16, marginBottom: 14 }} resizeMode="contain" />
+                  <Text style={{ color: tc.textPrimary, fontSize: 15, fontFamily: "DMSans_700Bold", textAlign: "center" }}>{service.name}</Text>
+                  <Text style={{ color: tc.textSecondary, fontSize: 13, fontFamily: "DMSans_500Medium", marginTop: 4 }}>{service.desc}</Text>
                 </View>
               ))}
             </View>
@@ -1174,10 +1176,10 @@ export default function LandingPage() {
               <Pressable
                 ref={(ref: any) => { if (isWeb && ref instanceof HTMLElement) ref.className = "cpay-bento-card"; }}
                 style={({ hovered }: any) => ({
-                  backgroundColor: "rgba(12,26,46,0.6)", borderRadius: 18, borderWidth: 1,
+                  backgroundColor: "rgba(12,26,46,0.6)", borderRadius: 20, borderWidth: 1,
                   borderColor: isWeb && hovered ? feat.accent + "35" : "rgba(255,255,255,0.05)",
-                  padding: isMobile ? 22 : feat.size === "large" ? 30 : 22,
-                  minHeight: feat.size === "large" && !isMobile ? 190 : undefined,
+                  padding: isMobile ? 24 : feat.size === "large" ? 36 : 28,
+                  minHeight: feat.size === "large" && !isMobile ? 200 : isMobile ? undefined : 160,
                   ...(isWeb ? {
                     gridColumn: feat.size === "large" && !isMobile && !isTablet ? "span 2" : undefined,
                     backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
@@ -1188,12 +1190,27 @@ export default function LandingPage() {
               >
                 <View
                   ref={(ref: any) => { if (isWeb && ref instanceof HTMLElement) ref.className = "cpay-feat-icon"; }}
-                  style={{ width: feat.size === "large" ? 48 : 40, height: feat.size === "large" ? 48 : 40, borderRadius: feat.size === "large" ? 14 : 12, backgroundColor: feat.accent + "12", alignItems: "center", justifyContent: "center", marginBottom: 16 } as any}
+                  style={{
+                    width: feat.size === "large" ? 52 : 44, height: feat.size === "large" ? 52 : 44,
+                    borderRadius: feat.size === "large" ? 16 : 13,
+                    backgroundColor: feat.accent + "12", borderWidth: 1, borderColor: feat.accent + "20",
+                    alignItems: "center", justifyContent: "center", marginBottom: 20,
+                  } as any}
                 >
-                  <Ionicons name={feat.icon} size={feat.size === "large" ? 22 : 18} color={feat.accent} />
+                  <Ionicons name={feat.icon} size={feat.size === "large" ? 24 : 20} color={feat.accent} />
                 </View>
-                <Text style={{ color: tc.textPrimary, fontSize: feat.size === "large" ? 19 : 16, fontFamily: "DMSans_700Bold", marginBottom: 6 }}>{feat.title}</Text>
-                <Text style={{ color: tc.textSecondary, fontSize: 14, fontFamily: "DMSans_400Regular", lineHeight: 22 }}>{feat.desc}</Text>
+                <Text style={{
+                  color: tc.textPrimary, fontSize: feat.size === "large" ? 20 : 17,
+                  fontFamily: "DMSans_700Bold", marginBottom: 10, lineHeight: feat.size === "large" ? 28 : 24,
+                }}>
+                  {feat.title}
+                </Text>
+                <Text style={{
+                  color: tc.textSecondary, fontSize: isMobile ? 14 : 15,
+                  fontFamily: "DMSans_400Regular", lineHeight: isMobile ? 22 : 24,
+                }}>
+                  {feat.desc}
+                </Text>
               </Pressable>
             </RevealOnScroll>
           ))}
