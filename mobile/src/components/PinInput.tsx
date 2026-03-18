@@ -18,17 +18,18 @@ export function PinInput({ length = 6, onComplete, error, testID }: PinInputProp
   const inputRef = useRef<TextInput>(null);
   const { width: screenWidth } = useWindowDimensions();
 
-  // Responsive box sizing: fit boxes + gaps within available card width
-  const isMobile = screenWidth < 768;
-  const gap = isMobile ? 8 : 10;
+  // Responsive box sizing
+  // The PIN lives inside a card (maxWidth ~460px, padding ~32px each side = ~396px inner)
+  // 6 boxes + 5 gaps must fit within that inner width
+  const gap = 10;
   const totalGaps = (length - 1) * gap;
-  // Card inner width: on mobile = screen - 80px padding, on tablet/desktop = min(380, screen*0.4)
-  const cardInner = isMobile
-    ? screenWidth - 80
-    : Math.min(380, screenWidth * 0.38);
-  const available = cardInner - totalGaps;
-  const maxSize = Platform.OS === "web" ? 52 : 48;
-  const boxSize = Math.max(32, Math.min(maxSize, Math.floor(available / length)));
+  // On mobile: use screen width minus generous padding
+  // On tablet/desktop: cap to 340px (fits inside any card up to 460px with padding)
+  const innerWidth = screenWidth < 768
+    ? Math.min(screenWidth - 80, 340)
+    : 340;
+  const available = innerWidth - totalGaps;
+  const boxSize = Math.max(32, Math.min(50, Math.floor(available / length)));
   const boxHeight = Math.round(boxSize * 1.15);
   const boxRadius = Math.max(10, Math.round(boxSize * 0.26));
   const dotSize = Math.max(10, Math.round(boxSize * 0.26));
