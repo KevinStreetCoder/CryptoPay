@@ -58,9 +58,9 @@ const ILLUSTRATIONS = {
 };
 
 // SVG image component (uses <img> on web for proper SVG rendering)
-function SvgIllustration({ uri, size = 140, style }: { uri: string; size?: number; style?: any }) {
+function SvgIllustration({ uri, size = 140, style, className }: { uri: string; size?: number; style?: any; className?: string }) {
   if (isWeb) {
-    return <img src={uri} alt="" style={{ width: size, height: size, objectFit: "contain" as any, opacity: 0.85, ...style }} />;
+    return <img src={uri} alt="" className={className || "cpay-illustration"} style={{ width: size, height: size, objectFit: "contain" as any, opacity: 0.85, ...style }} />;
   }
   return <Image source={{ uri }} style={{ width: size, height: size, opacity: 0.85, ...style }} resizeMode="contain" />;
 }
@@ -575,6 +575,28 @@ export default function LandingPage() {
       /* Illustration float */
       .cpay-illustration { transition: transform 0.5s ease, filter 0.5s ease; }
       .cpay-illustration:hover { transform: scale(1.06) translateY(-4px); filter: drop-shadow(0 8px 24px rgba(16,185,129,0.15)); }
+
+      /* Animated gradient border for featured cards */
+      @keyframes cpay-border-glow { 0%,100% { border-color: rgba(16,185,129,0.12); } 50% { border-color: rgba(16,185,129,0.3); } }
+      .cpay-glow-border-anim { animation: cpay-border-glow 3s ease-in-out infinite; }
+
+      /* Pill badge pulse */
+      @keyframes cpay-badge-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.3); } 50% { box-shadow: 0 0 0 6px rgba(16,185,129,0); } }
+      .cpay-badge-pulse { animation: cpay-badge-pulse 2s ease-in-out infinite; }
+
+      /* Feature icon color shift on hover */
+      .cpay-bento-card:hover .cpay-feat-icon { transform: scale(1.2) rotate(-8deg); }
+      .cpay-feat-icon { transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1); }
+
+      /* CTA button ripple */
+      @keyframes cpay-ripple { 0% { box-shadow: 0 0 0 0 rgba(16,185,129,0.4); } 100% { box-shadow: 0 0 0 20px rgba(16,185,129,0); } }
+      .cpay-cta-ripple { animation: cpay-ripple 2s ease-out infinite; }
+
+      /* Smooth scroll behavior */
+      html { scroll-behavior: smooth; }
+
+      /* Selection color */
+      ::selection { background: rgba(16,185,129,0.3); color: #fff; }
     `;
     document.head.appendChild(style);
   }, []);
@@ -812,15 +834,68 @@ export default function LandingPage() {
   const doubledRow1 = [...row1, ...row1]; const doubledRow2 = [...row2, ...row2];
 
   const servicesSection = (
-    <View style={{ paddingVertical: isMobile ? 36 : 56, ...(isWeb ? { background: "linear-gradient(180deg, #0A1628 0%, #081420 100%)", borderTop: "1px solid rgba(16,185,129,0.06)" } as any : { backgroundColor: "#0A1628" }) }}>
+    <View style={{ paddingVertical: isMobile ? 36 : 64, ...(isWeb ? { background: "linear-gradient(180deg, #0A1628 0%, #081420 100%)", borderTop: "1px solid rgba(16,185,129,0.06)" } as any : { backgroundColor: "#0A1628" }) }}>
       <Section>
         <RevealOnScroll variant="slide-right">
-          <View style={{ alignItems: "center", marginBottom: isMobile ? 28 : 40 }}>
-            <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_700Bold", textTransform: "uppercase", letterSpacing: 3, marginBottom: 10 }}>Supported Services</Text>
-            <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 26 : 36, fontFamily: "DMSans_700Bold", textAlign: "center", letterSpacing: -1 }}>Pay anything in Kenya</Text>
+          <View style={{ flexDirection: isDesktop ? "row" : "column", alignItems: "center", justifyContent: "space-between", marginBottom: isMobile ? 28 : 40, gap: 16 }}>
+            {isDesktop && <SvgIllustration uri={ILLUSTRATIONS.finance} size={120} style={{ opacity: 0.7 }} />}
+            <View style={{ alignItems: isDesktop ? "flex-start" : "center", flex: 1 }}>
+              <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_700Bold", textTransform: "uppercase", letterSpacing: 3, marginBottom: 10 }}>Supported Services</Text>
+              <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 26 : 38, fontFamily: "DMSans_700Bold", textAlign: isDesktop ? "left" : "center", letterSpacing: -1 }}>Pay anything in Kenya</Text>
+              <Text style={{ color: tc.textSecondary, fontSize: isMobile ? 14 : 16, fontFamily: "DMSans_400Regular", marginTop: 8, textAlign: isDesktop ? "left" : "center", maxWidth: 420 }}>
+                Electricity, water, TV, airtime, school fees, tax — any Paybill or Till number.
+              </Text>
+            </View>
+            {isDesktop && <SvgIllustration uri={ILLUSTRATIONS.onlineWorld} size={120} style={{ opacity: 0.7 }} />}
           </View>
         </RevealOnScroll>
-        {isWeb ? (
+
+        {/* Desktop: full-width grid of ALL services */}
+        {isDesktop && isWeb && (
+          <RevealOnScroll variant="fade-up" delay={100}>
+            <View style={{
+              ...(isWeb ? { display: "grid" as any, gridTemplateColumns: "repeat(6, 1fr)", gap: 16, marginBottom: 32 } as any : {}),
+            }}>
+              {KENYAN_SERVICES.slice(0, 6).map((service, i) => (
+                <View
+                  key={service.name}
+                  ref={(ref: any) => { if (isWeb && ref instanceof HTMLElement) ref.className = "cpay-service-card"; }}
+                  style={{
+                    alignItems: "center", backgroundColor: "rgba(255,255,255,0.02)", borderRadius: 16,
+                    borderWidth: 1, borderColor: "rgba(255,255,255,0.05)",
+                    paddingVertical: 24, paddingHorizontal: 16,
+                  } as any}
+                >
+                  <Image source={service.logo} style={{ width: 56, height: 56, borderRadius: 16, marginBottom: 12 }} resizeMode="contain" />
+                  <Text style={{ color: tc.textPrimary, fontSize: 14, fontFamily: "DMSans_600SemiBold", textAlign: "center" }}>{service.name}</Text>
+                  <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_400Regular", marginTop: 3 }}>{service.desc}</Text>
+                </View>
+              ))}
+            </View>
+            <View style={{
+              ...(isWeb ? { display: "grid" as any, gridTemplateColumns: "repeat(5, 1fr)", gap: 16, maxWidth: "83%", marginHorizontal: "auto" } as any : {}),
+            }}>
+              {KENYAN_SERVICES.slice(6).map((service) => (
+                <View
+                  key={service.name}
+                  ref={(ref: any) => { if (isWeb && ref instanceof HTMLElement) ref.className = "cpay-service-card"; }}
+                  style={{
+                    alignItems: "center", backgroundColor: "rgba(255,255,255,0.02)", borderRadius: 16,
+                    borderWidth: 1, borderColor: "rgba(255,255,255,0.05)",
+                    paddingVertical: 24, paddingHorizontal: 16,
+                  } as any}
+                >
+                  <Image source={service.logo} style={{ width: 56, height: 56, borderRadius: 16, marginBottom: 12 }} resizeMode="contain" />
+                  <Text style={{ color: tc.textPrimary, fontSize: 14, fontFamily: "DMSans_600SemiBold", textAlign: "center" }}>{service.name}</Text>
+                  <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_400Regular", marginTop: 3 }}>{service.desc}</Text>
+                </View>
+              ))}
+            </View>
+          </RevealOnScroll>
+        )}
+
+        {/* Tablet: carousel */}
+        {isWeb && !isDesktop && (
           <RevealOnScroll variant="fade-in">
             <View style={{ overflow: "hidden", width: "100%" } as any}>
               <View style={{ overflow: "hidden", marginBottom: 14 } as any}>
@@ -828,10 +903,12 @@ export default function LandingPage() {
                   {doubledRow1.map((s, i) => serviceCard(s, i))}
                 </View>
               </View>
-              {!isMobile && <View style={{ overflow: "hidden" } as any}><View ref={(ref: any) => { if (isWeb && ref instanceof HTMLElement) ref.className = "cpay-carousel-track-reverse"; }} style={{ display: "flex", flexDirection: "row", width: "max-content" } as any}>{doubledRow2.map((s, i) => serviceCard(s, i + 100))}</View></View>}
             </View>
           </RevealOnScroll>
-        ) : (
+        )}
+
+        {/* Native: horizontal scroll */}
+        {!isWeb && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 12, gap: 10 }}>
             {KENYAN_SERVICES.map((s, i) => serviceCard(s, i))}
           </ScrollView>
@@ -972,10 +1049,13 @@ export default function LandingPage() {
     }}>
       <Section>
         <RevealOnScroll variant="fade-up">
-          <View style={{ alignItems: "center", marginBottom: isMobile ? 36 : 56 }}>
-            <Text style={{ color: tc.primary[400], fontSize: 12, fontFamily: "DMSans_700Bold", textTransform: "uppercase", letterSpacing: 3, marginBottom: 12 }}>How It Works</Text>
-            <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 28 : 42, fontFamily: "DMSans_700Bold", textAlign: "center", letterSpacing: -1, lineHeight: isMobile ? 36 : 52 }}>Three steps. Thirty seconds.</Text>
-            <Text style={{ color: tc.textSecondary, fontSize: isMobile ? 15 : 17, fontFamily: "DMSans_400Regular", textAlign: "center", marginTop: 12, maxWidth: 480 }}>No middlemen. No manual steps. Just tap and pay.</Text>
+          <View style={{ flexDirection: isDesktop ? "row" : "column", alignItems: "center", justifyContent: "center", gap: isDesktop ? 40 : 16, marginBottom: isMobile ? 36 : 56 }}>
+            {isDesktop && <SvgIllustration uri={ILLUSTRATIONS.fastLoading} size={140} style={{ opacity: 0.75 }} />}
+            <View style={{ alignItems: isDesktop ? "flex-start" : "center", flex: isDesktop ? 1 : undefined }}>
+              <Text style={{ color: tc.primary[400], fontSize: 12, fontFamily: "DMSans_700Bold", textTransform: "uppercase", letterSpacing: 3, marginBottom: 12 }}>How It Works</Text>
+              <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 28 : 42, fontFamily: "DMSans_700Bold", textAlign: isDesktop ? "left" : "center", letterSpacing: -1, lineHeight: isMobile ? 36 : 52 }}>Three steps. Thirty seconds.</Text>
+              <Text style={{ color: tc.textSecondary, fontSize: isMobile ? 15 : 17, fontFamily: "DMSans_400Regular", textAlign: isDesktop ? "left" : "center", marginTop: 12, maxWidth: 480 }}>No middlemen. No manual steps. Just tap and pay.</Text>
+            </View>
           </View>
         </RevealOnScroll>
         <View style={{ flexDirection: isMobile ? "column" : "row", gap: isMobile ? 20 : 28, position: "relative" }}>
@@ -1058,7 +1138,10 @@ export default function LandingPage() {
                   } as any : {}),
                 }) as any}
               >
-                <View style={{ width: feat.size === "large" ? 48 : 40, height: feat.size === "large" ? 48 : 40, borderRadius: feat.size === "large" ? 14 : 12, backgroundColor: feat.accent + "12", alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
+                <View
+                  ref={(ref: any) => { if (isWeb && ref instanceof HTMLElement) ref.className = "cpay-feat-icon"; }}
+                  style={{ width: feat.size === "large" ? 48 : 40, height: feat.size === "large" ? 48 : 40, borderRadius: feat.size === "large" ? 14 : 12, backgroundColor: feat.accent + "12", alignItems: "center", justifyContent: "center", marginBottom: 16 } as any}
+                >
                   <Ionicons name={feat.icon} size={feat.size === "large" ? 22 : 18} color={feat.accent} />
                 </View>
                 <Text style={{ color: tc.textPrimary, fontSize: feat.size === "large" ? 19 : 16, fontFamily: "DMSans_700Bold", marginBottom: 6 }}>{feat.title}</Text>
@@ -1212,7 +1295,7 @@ export default function LandingPage() {
             <View style={{ flexDirection: "row", ...(isWeb ? { transition: "transform 0.5s cubic-bezier(0.4,0,0.2,1)", transform: `translateX(-${currentSlide * (100 / slidesPerView)}%)` } as any : {}) } as any}>
               {TESTIMONIALS.map((t, i) => (
                 <View key={i} style={{ width: `${100 / slidesPerView}%` as any, paddingHorizontal: 8, flexShrink: 0 }}>
-                  <View style={{ backgroundColor: "rgba(12,26,46,0.6)", borderRadius: 18, borderWidth: 1, borderColor: "rgba(255,255,255,0.05)", padding: isMobile ? 22 : 26, height: "100%", ...(isWeb ? { backdropFilter: "blur(8px)" } as any : {}) } as any}>
+                  <View ref={(ref: any) => { if (isWeb && ref instanceof HTMLElement) ref.className = "cpay-testimonial"; }} style={{ backgroundColor: "rgba(12,26,46,0.6)", borderRadius: 18, borderWidth: 1, borderColor: "rgba(255,255,255,0.05)", padding: isMobile ? 22 : 26, height: "100%", ...(isWeb ? { backdropFilter: "blur(8px)" } as any : {}) } as any}>
                     <Text style={{ color: t.color, fontSize: 28, fontFamily: "DMSans_700Bold", lineHeight: 28, marginBottom: 14 }}>{"\u201C"}</Text>
                     <Text style={{ color: tc.textSecondary, fontSize: 15, fontFamily: "DMSans_400Regular", lineHeight: 24, marginBottom: 20, minHeight: 72 }}>{t.quote}</Text>
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: "auto" } as any}>
