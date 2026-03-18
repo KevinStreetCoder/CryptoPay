@@ -598,6 +598,8 @@ export default function ProfileScreen() {
         padding: isDesktop ? 20 : 16,
         borderWidth: 1,
         borderColor: tc.glass.border,
+        maxWidth: "100%",
+        overflow: "hidden" as const,
       }}
     >
       <View
@@ -606,9 +608,11 @@ export default function ProfileScreen() {
           alignItems: "center",
           justifyContent: "space-between",
           marginBottom: 14,
+          flexWrap: "wrap",
+          gap: 8,
         }}
       >
-        <View>
+        <View style={{ flex: 1, minWidth: 160 }}>
           <Text
             style={{
               color: tc.textMuted,
@@ -621,13 +625,14 @@ export default function ProfileScreen() {
           >
             {t("profile.verificationLevel")}
           </Text>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <View
               style={{
                 width: 10,
                 height: 10,
                 borderRadius: 5,
                 backgroundColor: currentTier?.color,
+                flexShrink: 0,
                 ...ts.glow(currentTier?.color || tc.dark.muted, 0.4),
               }}
             />
@@ -636,7 +641,9 @@ export default function ProfileScreen() {
                 fontSize: 15,
                 fontFamily: "DMSans_600SemiBold",
                 color: currentTier?.color,
+                flexShrink: 1,
               }}
+              numberOfLines={2}
             >
               {t("kyc.tier")} {currentTier?.tier}: {currentTier ? t(currentTier.labelKey) : ""}
             </Text>
@@ -650,6 +657,7 @@ export default function ProfileScreen() {
             paddingVertical: 6,
             borderWidth: 1,
             borderColor: tc.glass.border,
+            flexShrink: 0,
           }}
         >
           <Text
@@ -658,6 +666,7 @@ export default function ProfileScreen() {
               fontSize: 12,
               fontFamily: "DMSans_600SemiBold",
             }}
+            numberOfLines={1}
           >
             {currentTier?.limit}
           </Text>
@@ -1222,6 +1231,8 @@ export default function ProfileScreen() {
             : colors.error + "20",
         marginBottom: 16,
         maxWidth: isDesktop ? 360 : undefined,
+        width: "100%",
+        alignSelf: isDesktop ? "center" as const : undefined,
         ...(isWeb ? { cursor: "pointer", transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)" } as any : {}),
         transform: [{ scale: pressed ? 0.98 : 1 }],
       })}
@@ -1402,6 +1413,7 @@ export default function ProfileScreen() {
             marginBottom: 24,
             borderWidth: 1,
             borderColor: tc.glass.border,
+            overflow: "hidden" as const,
             ...ts.md,
           }}
         >
@@ -1481,8 +1493,8 @@ export default function ProfileScreen() {
               {/* Right: Info chips + KYC status (fills remaining space) */}
               <View style={{ flex: 1, justifyContent: "center" }}>
                 {/* Info chips row */}
-                <View style={{ flexDirection: "row", gap: 12, marginBottom: 20 }}>
-                  <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: "row", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+                  <View style={{ flex: 1, minWidth: 200 }}>
                     <ProfileInfoChip
                       icon="mail-outline"
                       label={t("help.email")}
@@ -1491,7 +1503,7 @@ export default function ProfileScreen() {
                       badge={emailBadge}
                     />
                   </View>
-                  <View style={{ flex: 1 }}>
+                  <View style={{ flex: 1, minWidth: 200 }}>
                     {isMaxTier ? (
                       /* Verified badge chip for max-tier */
                       <View
@@ -1504,6 +1516,8 @@ export default function ProfileScreen() {
                           padding: 14,
                           borderWidth: 1,
                           borderColor: colors.success + "25",
+                          maxWidth: "100%",
+                          overflow: "hidden" as const,
                         }}
                       >
                         <View
@@ -1514,15 +1528,16 @@ export default function ProfileScreen() {
                             backgroundColor: colors.success + "20",
                             alignItems: "center",
                             justifyContent: "center",
+                            flexShrink: 0,
                           }}
                         >
                           <Ionicons name="shield-checkmark" size={18} color={colors.success} />
                         </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_500Medium" }}>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_500Medium" }} numberOfLines={1}>
                             {t("kyc.currentLevel")}
                           </Text>
-                          <Text style={{ color: colors.success, fontSize: 14, fontFamily: "DMSans_700Bold", marginTop: 1 }}>
+                          <Text style={{ color: colors.success, fontSize: 14, fontFamily: "DMSans_700Bold", marginTop: 1 }} numberOfLines={1}>
                             {t("profile.identityVerified")}
                           </Text>
                         </View>
@@ -1532,9 +1547,10 @@ export default function ProfileScreen() {
                             paddingVertical: 3,
                             borderRadius: 6,
                             backgroundColor: colors.success + "18",
+                            flexShrink: 0,
                           }}
                         >
-                          <Text style={{ color: colors.success, fontSize: 10, fontFamily: "DMSans_700Bold" }}>
+                          <Text style={{ color: colors.success, fontSize: 10, fontFamily: "DMSans_700Bold" }} numberOfLines={1}>
                             {t("kyc.tier").toUpperCase()} {currentTier?.tier}
                           </Text>
                         </View>
@@ -1624,7 +1640,7 @@ export default function ProfileScreen() {
               </View>
 
               {/* Info chips */}
-              <View style={{ gap: 10, marginBottom: 4 }}>
+              <View style={{ gap: 10, marginBottom: 4, maxWidth: "100%" }}>
                 <ProfileInfoChip
                   icon="mail-outline"
                   label={t("help.email")}
@@ -1644,6 +1660,8 @@ export default function ProfileScreen() {
                       padding: 14,
                       borderWidth: 1,
                       borderColor: colors.success + "25",
+                      maxWidth: "100%",
+                      overflow: "hidden" as const,
                     }}
                   >
                     <View
@@ -1654,18 +1672,19 @@ export default function ProfileScreen() {
                         backgroundColor: colors.success + "20",
                         alignItems: "center",
                         justifyContent: "center",
+                        flexShrink: 0,
                       }}
                     >
                       <Ionicons name="shield-checkmark" size={20} color={colors.success} />
                     </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_500Medium" }}>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_500Medium" }} numberOfLines={1}>
                         {t("kyc.currentLevel")}
                       </Text>
-                      <Text style={{ color: colors.success, fontSize: 15, fontFamily: "DMSans_700Bold", marginTop: 2 }}>
+                      <Text style={{ color: colors.success, fontSize: 15, fontFamily: "DMSans_700Bold", marginTop: 2 }} numberOfLines={1}>
                         {t("profile.identityVerified")}
                       </Text>
-                      <Text style={{ color: tc.textSecondary, fontSize: 11, fontFamily: "DMSans_400Regular", marginTop: 1 }}>
+                      <Text style={{ color: tc.textSecondary, fontSize: 11, fontFamily: "DMSans_400Regular", marginTop: 1 }} numberOfLines={1}>
                         {t("kyc.enhancedDd")} — {currentTier?.limit}
                       </Text>
                     </View>
@@ -1675,9 +1694,10 @@ export default function ProfileScreen() {
                         paddingVertical: 3,
                         borderRadius: 6,
                         backgroundColor: colors.success + "18",
+                        flexShrink: 0,
                       }}
                     >
-                      <Text style={{ color: colors.success, fontSize: 10, fontFamily: "DMSans_700Bold" }}>
+                      <Text style={{ color: colors.success, fontSize: 10, fontFamily: "DMSans_700Bold" }} numberOfLines={1}>
                         {t("kyc.tier").toUpperCase()} {currentTier?.tier}
                       </Text>
                     </View>
@@ -1710,19 +1730,20 @@ export default function ProfileScreen() {
           <View
             style={{
               flexDirection: "row",
+              flexWrap: "wrap",
               paddingHorizontal: hPad,
               gap: 24,
               marginBottom: 8,
             }}
           >
             {/* Left column */}
-            <View style={{ flex: 1 }}>
+            <View style={{ flex: 1, minWidth: 300 }}>
               {renderAdminSection()}
               {renderSecuritySection()}
               {renderSupportSection()}
             </View>
             {/* Right column */}
-            <View style={{ flex: 1 }}>
+            <View style={{ flex: 1, minWidth: 300 }}>
               {renderPreferencesSection()}
               {renderLogoutButton()}
               {renderVersion()}
