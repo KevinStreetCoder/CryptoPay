@@ -307,7 +307,64 @@ These numbers validate the pre-seed pitch metrics. Kenya's stablecoin transactio
 | Miscellaneous | 50,000 | ~380 |
 | **Total** | **~850,000 -- 1,170,000** | **~6,500 -- 9,000** |
 
-VASP license costs (when regulations are published) could add KES 5M -- 10M in minimum capital requirements plus KES 100K -- 500K in application fees.
+### VASP License Costs (Regulations Published March 2026)
+
+The **Virtual Asset Service Providers Act, 2025** was signed into law October 15, 2025. Draft VASP Regulations 2026 were published by Treasury on **March 17, 2026** — public comment deadline is **April 10, 2026**.
+
+CryptoPay classifies as a **Virtual Asset Payment Processor** under CBK oversight.
+
+| Item | Cost |
+|------|------|
+| Minimum paid-up capital (payment processor) | **KES 50 million (~$385,000)** |
+| Initial licensing fee | KES 100,000 — KES 2 million |
+| Annual renewal | Same as initial OR 0.15% of gross turnover (whichever higher) |
+| 10% excise duty on service fees | Ongoing, remitted monthly to KRA |
+| Legal/compliance setup | $20,000 — $100,000+ |
+| Insurance coverage | Variable |
+
+**Key compliance requirements:**
+- Company limited by shares registered in Kenya
+- Physical office in Kenya
+- KYC/CDD/AML/CFT systems (FATF compliant)
+- Suspicious Transaction Reporting to FRC
+- Travel Rule compliance
+- Client fund segregation
+- Regular audits
+- Cybersecurity infrastructure
+- Business continuity plans
+- Data Protection Act 2019 compliance
+
+**Penalties for non-compliance:** Up to KES 10M fines + 10 years imprisonment (individuals), KES 20M (corporates).
+
+**Critical deadline:** Submit public comments by **April 10, 2026** advocating for tiered licensing for startups.
+
+### Next Steps — Legal & Business
+
+| # | Action | Deadline | Status |
+|---|--------|----------|--------|
+| 1 | Submit public comments on draft VASP regulations | April 10, 2026 | TODO |
+| 2 | Join Virtual Asset Association of Kenya (VAAK) | ASAP | TODO |
+| 3 | Complete business registration (BN-B8S6JP89 pending) | Awaiting BRS | Submitted March 15 |
+| 4 | Obtain D-U-N-S number for Google Play Organization account | After BRS approval | Blocked |
+| 5 | Apply for M-Pesa production Paybill keys | After business registration | Blocked |
+| 6 | Begin VASP license application prep (KYC/AML systems) | Q2 2026 | TODO |
+| 7 | Engage compliance lawyer for VASP application | Q2 2026 | TODO |
+| 8 | Plan capital raise for KES 50M requirement | Q2-Q3 2026 | TODO |
+| 9 | Establish physical office in Kenya | Before license application | TODO |
+| 10 | Register with KRA as excise duty collector | Before go-live | TODO |
+
+### M-Pesa Integration Reference
+
+**Official Daraja docs:** https://developer.safaricom.co.ke
+**Community Next.js integration guide:** https://mpesa-nextjs-docs.vercel.app/application
+
+Key Safaricom callback IPs for whitelist:
+```
+196.201.214.200, 196.201.214.206, 196.201.213.114,
+196.201.214.207, 196.201.214.208, 196.201.213.44,
+196.201.212.127, 196.201.212.138, 196.201.212.129,
+196.201.212.136, 196.201.212.74,  196.201.212.69
+```
 
 ---
 
