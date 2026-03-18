@@ -1343,33 +1343,71 @@ export default function LandingPage() {
   );
 
   // ═══════════════════════════════════════════════════════════════════════
-  // SECTION 10: TESTIMONIALS — slide-left reveal
+  // SECTION 10: TESTIMONIALS — premium card design
   // ═══════════════════════════════════════════════════════════════════════
   const testimonialsSection = (
-    <View style={{ paddingVertical: isMobile ? 48 : 72, ...(isWeb ? { background: "linear-gradient(180deg, #060E1F 0%, #0A1628 100%)" } as any : { backgroundColor: "#060E1F" }) }}>
+    <View style={{
+      paddingVertical: isMobile ? 56 : 88, position: "relative", overflow: "hidden",
+      ...(isWeb ? { background: "linear-gradient(180deg, #060E1F 0%, #0C1A2E 50%, #0A1628 100%)" } as any : { backgroundColor: "#060E1F" }),
+    }}>
+      {/* Decorative glow */}
+      {isWeb && <View style={{ position: "absolute", top: "20%", left: "50%", width: 600, height: 400, borderRadius: 200, ...(isWeb ? { background: "radial-gradient(circle, rgba(16,185,129,0.03) 0%, transparent 70%)", transform: "translateX(-50%)" } as any : {}) } as any} />}
       <Section>
         <RevealOnScroll variant="slide-left">
-          <View style={{ alignItems: "center", marginBottom: isMobile ? 28 : 44 }}>
-            <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_700Bold", textTransform: "uppercase", letterSpacing: 3, marginBottom: 10 }}>Testimonials</Text>
-            <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 26 : 38, fontFamily: "DMSans_700Bold", textAlign: "center", letterSpacing: -1 }}>Real people, real payments</Text>
-            <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_500Medium", fontStyle: "italic", marginTop: 8 }}>From our early access program</Text>
+          <View style={{ flexDirection: isDesktop ? "row" : "column", alignItems: "center", justifyContent: "space-between", marginBottom: isMobile ? 36 : 56, gap: 20 }}>
+            <SvgIllustration uri={ILLUSTRATIONS.community} size={isMobile ? 70 : 130} style={{ opacity: 0.75 }} />
+            <View style={{ alignItems: isDesktop ? "flex-start" : "center", flex: 1 }}>
+              <Text style={{ color: tc.primary[400], fontSize: 13, fontFamily: "DMSans_700Bold", textTransform: "uppercase", letterSpacing: 3, marginBottom: 12 }}>Testimonials</Text>
+              <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 28 : 42, fontFamily: "DMSans_700Bold", textAlign: isDesktop ? "left" : "center", letterSpacing: -1, lineHeight: isMobile ? 36 : 52 }}>
+                Real people, real payments
+              </Text>
+              <Text style={{ color: tc.textSecondary, fontSize: isMobile ? 15 : 17, fontFamily: "DMSans_400Regular", marginTop: 10, textAlign: isDesktop ? "left" : "center", lineHeight: isMobile ? 23 : 26 }}>
+                Hear from our early access users across Kenya and the diaspora.
+              </Text>
+            </View>
           </View>
         </RevealOnScroll>
+
         <View style={{ position: "relative" }} {...(isWeb ? { onMouseEnter: () => setTestimonialHovered(true), onMouseLeave: () => setTestimonialHovered(false) } as any : {})}>
-          <View style={{ overflow: "hidden", marginHorizontal: isMobile ? 0 : 36 }}>
+          <View style={{ overflow: "hidden", marginHorizontal: isMobile ? 0 : 44 }}>
             <View style={{ flexDirection: "row", ...(isWeb ? { transition: "transform 0.5s cubic-bezier(0.4,0,0.2,1)", transform: `translateX(-${currentSlide * (100 / slidesPerView)}%)` } as any : {}) } as any}>
               {TESTIMONIALS.map((t, i) => (
-                <View key={i} style={{ width: `${100 / slidesPerView}%` as any, paddingHorizontal: 8, flexShrink: 0 }}>
-                  <View ref={(ref: any) => { if (isWeb && ref instanceof HTMLElement) ref.className = "cpay-testimonial"; }} style={{ backgroundColor: "rgba(12,26,46,0.6)", borderRadius: 18, borderWidth: 1, borderColor: "rgba(255,255,255,0.05)", padding: isMobile ? 22 : 26, height: "100%", ...(isWeb ? { backdropFilter: "blur(8px)" } as any : {}) } as any}>
-                    <Text style={{ color: t.color, fontSize: 28, fontFamily: "DMSans_700Bold", lineHeight: 28, marginBottom: 14 }}>{"\u201C"}</Text>
-                    <Text style={{ color: tc.textSecondary, fontSize: 15, fontFamily: "DMSans_400Regular", lineHeight: 24, marginBottom: 20, minHeight: 72 }}>{t.quote}</Text>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: "auto" } as any}>
-                      <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: t.color + "18", borderWidth: 1, borderColor: t.color + "25", alignItems: "center", justifyContent: "center" }}>
-                        <Text style={{ color: t.color, fontSize: 14, fontFamily: "DMSans_700Bold" }}>{t.initials}</Text>
+                <View key={i} style={{ width: `${100 / slidesPerView}%` as any, paddingHorizontal: 10, flexShrink: 0 }}>
+                  <View
+                    ref={(ref: any) => { if (isWeb && ref instanceof HTMLElement) ref.className = "cpay-testimonial"; }}
+                    style={{
+                      backgroundColor: "rgba(12,26,46,0.7)", borderRadius: 22,
+                      borderWidth: 1, borderColor: t.color + "15",
+                      padding: isMobile ? 28 : 36, height: "100%",
+                      borderLeftWidth: 3, borderLeftColor: t.color + "40",
+                      ...(isWeb ? { backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" } as any : {}),
+                    } as any}
+                  >
+                    {/* Large decorative quote mark */}
+                    <Text style={{ color: t.color, fontSize: isMobile ? 40 : 52, fontFamily: "DMSans_700Bold", lineHeight: isMobile ? 40 : 52, marginBottom: 16, opacity: 0.6 }}>
+                      {"\u201C"}
+                    </Text>
+                    {/* Quote text — bigger, more readable */}
+                    <Text style={{
+                      color: tc.textPrimary, fontSize: isMobile ? 16 : 18,
+                      fontFamily: "DMSans_500Medium", lineHeight: isMobile ? 26 : 30,
+                      marginBottom: 28, minHeight: isMobile ? 80 : 90,
+                    }}>
+                      {t.quote}
+                    </Text>
+                    {/* Author — larger, clearer */}
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 14, marginTop: "auto", paddingTop: 16, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.04)" } as any}>
+                      <View style={{
+                        width: 48, height: 48, borderRadius: 24,
+                        backgroundColor: t.color + "18", borderWidth: 2, borderColor: t.color + "30",
+                        alignItems: "center", justifyContent: "center",
+                        ...(isWeb ? { boxShadow: `0 4px 16px ${t.color}20` } as any : {}),
+                      }}>
+                        <Text style={{ color: t.color, fontSize: 16, fontFamily: "DMSans_700Bold" }}>{t.initials}</Text>
                       </View>
                       <View>
-                        <Text style={{ color: tc.textPrimary, fontSize: 14, fontFamily: "DMSans_600SemiBold" }}>{t.name}</Text>
-                        <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_400Regular" }}>{t.role}</Text>
+                        <Text style={{ color: tc.textPrimary, fontSize: 16, fontFamily: "DMSans_700Bold" }}>{t.name}</Text>
+                        <Text style={{ color: tc.textSecondary, fontSize: 14, fontFamily: "DMSans_500Medium", marginTop: 2 }}>{t.role}</Text>
                       </View>
                     </View>
                   </View>
@@ -1377,12 +1415,38 @@ export default function LandingPage() {
               ))}
             </View>
           </View>
-          {currentSlide > 0 && <Pressable onPress={() => setCurrentSlide((p) => Math.max(0, p - 1))} style={{ position: "absolute", left: isMobile ? -2 : 0, top: "50%", marginTop: -20, width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.06)", borderWidth: 1, borderColor: "rgba(255,255,255,0.1)", alignItems: "center", justifyContent: "center", zIndex: 10, ...(isWeb ? { backdropFilter: "blur(8px)", cursor: "pointer" } as any : {}) } as any}><Ionicons name="chevron-back" size={20} color="#fff" /></Pressable>}
-          {currentSlide < maxSlide && <Pressable onPress={() => setCurrentSlide((p) => Math.min(maxSlide, p + 1))} style={{ position: "absolute", right: isMobile ? -2 : 0, top: "50%", marginTop: -20, width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.06)", borderWidth: 1, borderColor: "rgba(255,255,255,0.1)", alignItems: "center", justifyContent: "center", zIndex: 10, ...(isWeb ? { backdropFilter: "blur(8px)", cursor: "pointer" } as any : {}) } as any}><Ionicons name="chevron-forward" size={20} color="#fff" /></Pressable>}
+          {/* Navigation arrows */}
+          {currentSlide > 0 && (
+            <Pressable onPress={() => setCurrentSlide((p) => Math.max(0, p - 1))} style={{
+              position: "absolute", left: isMobile ? -4 : 0, top: "50%", marginTop: -24,
+              width: 48, height: 48, borderRadius: 24,
+              backgroundColor: "rgba(16,185,129,0.1)", borderWidth: 1, borderColor: "rgba(16,185,129,0.2)",
+              alignItems: "center", justifyContent: "center", zIndex: 10,
+              ...(isWeb ? { backdropFilter: "blur(12px)", cursor: "pointer", transition: "all 0.2s ease", boxShadow: "0 4px 16px rgba(0,0,0,0.3)" } as any : {}),
+            } as any}>
+              <Ionicons name="chevron-back" size={22} color={tc.primary[400]} />
+            </Pressable>
+          )}
+          {currentSlide < maxSlide && (
+            <Pressable onPress={() => setCurrentSlide((p) => Math.min(maxSlide, p + 1))} style={{
+              position: "absolute", right: isMobile ? -4 : 0, top: "50%", marginTop: -24,
+              width: 48, height: 48, borderRadius: 24,
+              backgroundColor: "rgba(16,185,129,0.1)", borderWidth: 1, borderColor: "rgba(16,185,129,0.2)",
+              alignItems: "center", justifyContent: "center", zIndex: 10,
+              ...(isWeb ? { backdropFilter: "blur(12px)", cursor: "pointer", transition: "all 0.2s ease", boxShadow: "0 4px 16px rgba(0,0,0,0.3)" } as any : {}),
+            } as any}>
+              <Ionicons name="chevron-forward" size={22} color={tc.primary[400]} />
+            </Pressable>
+          )}
         </View>
-        <View style={{ flexDirection: "row", justifyContent: "center", gap: 6, marginTop: 24 }}>
+        {/* Dots */}
+        <View style={{ flexDirection: "row", justifyContent: "center", gap: 8, marginTop: 32 }}>
           {Array.from({ length: maxSlide + 1 }).map((_, i) => (
-            <Pressable key={i} onPress={() => setCurrentSlide(i)} style={{ width: currentSlide === i ? 20 : 7, height: 7, borderRadius: 4, backgroundColor: currentSlide === i ? tc.primary[500] : "rgba(255,255,255,0.12)", ...(isWeb ? { transition: "all 0.3s ease", cursor: "pointer" } as any : {}) } as any} />
+            <Pressable key={i} onPress={() => setCurrentSlide(i)} style={{
+              width: currentSlide === i ? 28 : 8, height: 8, borderRadius: 4,
+              backgroundColor: currentSlide === i ? tc.primary[500] : "rgba(255,255,255,0.1)",
+              ...(isWeb ? { transition: "all 0.3s cubic-bezier(0.4,0,0.2,1)", cursor: "pointer" } as any : {}),
+            } as any} />
           ))}
         </View>
       </Section>
@@ -1390,27 +1454,45 @@ export default function LandingPage() {
   );
 
   // ═══════════════════════════════════════════════════════════════════════
-  // SECTION 11: FAQ — fade-in reveal, smooth height
+  // SECTION 11: FAQ — two-column layout on desktop
   // ═══════════════════════════════════════════════════════════════════════
   const faqSection = (
-    <View style={{ paddingVertical: isMobile ? 48 : 72, ...(isWeb ? { background: "linear-gradient(180deg, #0A1628 0%, #060E1F 100%)" } as any : { backgroundColor: "#0A1628" }) }}>
+    <View style={{
+      paddingVertical: isMobile ? 56 : 88,
+      ...(isWeb ? { background: "linear-gradient(180deg, #0A1628 0%, #081420 50%, #060E1F 100%)", borderTop: "1px solid rgba(255,255,255,0.03)" } as any : { backgroundColor: "#0A1628" }),
+    }}>
       <Section>
-        <RevealOnScroll variant="fade-in">
-          <View style={{ flexDirection: isDesktop ? "row" : "column", alignItems: "center", justifyContent: "center", gap: isDesktop ? 32 : 16, marginBottom: isMobile ? 32 : 48 }}>
-            <View style={{ alignItems: isDesktop ? "flex-start" : "center", flex: isDesktop ? 1 : undefined }}>
-              <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_700Bold", textTransform: "uppercase", letterSpacing: 3, marginBottom: 10 }}>FAQ</Text>
-              <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 26 : 38, fontFamily: "DMSans_700Bold", textAlign: isDesktop ? "left" : "center", letterSpacing: -1 }}>Common questions</Text>
+        <RevealOnScroll variant="fade-up">
+          <View style={{ flexDirection: isDesktop ? "row" : "column", alignItems: isDesktop ? "flex-start" : "center", gap: isDesktop ? 60 : 32, marginBottom: isMobile ? 36 : 0 }}>
+            {/* Left: heading + illustration (sticky on desktop) */}
+            <View style={{ alignItems: isDesktop ? "flex-start" : "center", ...(isDesktop ? { position: "sticky" as any, top: 120, width: 320 } : {}) }}>
+              <Text style={{ color: tc.primary[400], fontSize: 13, fontFamily: "DMSans_700Bold", textTransform: "uppercase", letterSpacing: 3, marginBottom: 12 }}>FAQ</Text>
+              <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 28 : 40, fontFamily: "DMSans_700Bold", textAlign: isDesktop ? "left" : "center", letterSpacing: -1, lineHeight: isMobile ? 36 : 50 }}>
+                Common questions
+              </Text>
+              <Text style={{ color: tc.textSecondary, fontSize: isMobile ? 15 : 17, fontFamily: "DMSans_400Regular", lineHeight: isMobile ? 23 : 26, marginTop: 12, textAlign: isDesktop ? "left" : "center" }}>
+                Everything you need to know about paying bills with crypto through CryptoPay.
+              </Text>
+              <View style={{ marginTop: 24 }}>
+                <SvgIllustration uri={ILLUSTRATIONS.questions} size={isMobile ? 100 : 200} style={{ opacity: 0.75 }} />
+              </View>
+              {isDesktop && (
+                <View style={{ marginTop: 24 }}>
+                  <SvgIllustration uri={ILLUSTRATIONS.safe} size={140} style={{ opacity: 0.6 }} />
+                </View>
+              )}
             </View>
-            <SvgIllustration uri={ILLUSTRATIONS.questions} size={isMobile ? 80 : 160} style={{ opacity: 0.75 }} />
+
+            {/* Right: FAQ items — full width */}
+            <View style={{ flex: 1, width: "100%" }}>
+              {FAQ_DATA.map((faq, i) => (
+                <RevealOnScroll key={i} delay={i * 60} variant="fade-up">
+                  <FAQItem question={faq.q} answer={faq.a} tc={tc} index={i} />
+                </RevealOnScroll>
+              ))}
+            </View>
           </View>
         </RevealOnScroll>
-        <View style={{ maxWidth: 720, width: "100%", alignSelf: "center" as any }}>
-          {FAQ_DATA.map((faq, i) => (
-            <RevealOnScroll key={i} delay={i * 60} variant="fade-up">
-              <FAQItem question={faq.q} answer={faq.a} tc={tc} index={i} />
-            </RevealOnScroll>
-          ))}
-        </View>
       </Section>
     </View>
   );
