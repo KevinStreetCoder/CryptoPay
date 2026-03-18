@@ -941,9 +941,9 @@ export default function LandingPage() {
             {isDesktop && <SvgIllustration uri={ILLUSTRATIONS.finance} size={100} style={{ opacity: 0.7, flexShrink: 0 }} />}
             <View style={{ alignItems: isDesktop ? "flex-start" : "center", flex: 1 }}>
               <Text style={{ color: tc.primary[400], fontSize: 13, fontFamily: "DMSans_700Bold", textTransform: "uppercase", letterSpacing: 3, marginBottom: 12 }}>Supported Services</Text>
-              <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 28 : 40, fontFamily: "DMSans_700Bold", textAlign: isDesktop ? "left" : "center", letterSpacing: -1 }}>Pay anything in Kenya</Text>
+              <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 28 : 40, fontFamily: "DMSans_700Bold", textAlign: isDesktop ? "left" : "center", letterSpacing: -1 }}>Every bill, every provider</Text>
               <Text style={{ color: tc.textSecondary, fontSize: isMobile ? 15 : 17, fontFamily: "DMSans_400Regular", lineHeight: isMobile ? 23 : 26, marginTop: 10, textAlign: isDesktop ? "left" : "center", maxWidth: 500 }}>
-                Electricity, water, TV, airtime, school fees, tax — any Paybill or Till number in Kenya.
+                From KPLC electricity tokens to school fees, DSTV subscriptions to Safaricom airtime — if it has a Paybill or Till number, you can pay it with crypto.
               </Text>
             </View>
             {isDesktop && <SvgIllustration uri={ILLUSTRATIONS.onlineWorld} size={100} style={{ opacity: 0.7, flexShrink: 0 }} />}
@@ -1155,8 +1155,8 @@ export default function LandingPage() {
             <SvgIllustration uri={ILLUSTRATIONS.fastLoading} size={isMobile ? 70 : 140} style={{ opacity: 0.75 }} />
             <View style={{ alignItems: isDesktop ? "flex-start" : "center", flex: isDesktop ? 1 : undefined }}>
               <Text style={{ color: tc.primary[400], fontSize: 12, fontFamily: "DMSans_700Bold", textTransform: "uppercase", letterSpacing: 3, marginBottom: 12 }}>How It Works</Text>
-              <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 28 : 42, fontFamily: "DMSans_700Bold", textAlign: isDesktop ? "left" : "center", letterSpacing: -1, lineHeight: isMobile ? 36 : 52 }}>Three steps. Thirty seconds.</Text>
-              <Text style={{ color: tc.textSecondary, fontSize: isMobile ? 15 : 17, fontFamily: "DMSans_400Regular", textAlign: isDesktop ? "left" : "center", marginTop: 12, maxWidth: 480 }}>No middlemen. No manual steps. Just tap and pay.</Text>
+              <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 28 : 42, fontFamily: "DMSans_700Bold", textAlign: isDesktop ? "left" : "center", letterSpacing: -1, lineHeight: isMobile ? 36 : 52 }}>Simple as sending a text message</Text>
+              <Text style={{ color: tc.textSecondary, fontSize: isMobile ? 15 : 17, fontFamily: "DMSans_400Regular", textAlign: isDesktop ? "left" : "center", marginTop: 12, maxWidth: 480 }}>Deposit, pick a bill, confirm. Your M-Pesa payment arrives before you put your phone down.</Text>
             </View>
           </View>
         </RevealOnScroll>
@@ -1215,7 +1215,7 @@ export default function LandingPage() {
             <SvgIllustration uri={ILLUSTRATIONS.wallet} size={isMobile ? 70 : 140} style={{ opacity: 0.8 }} />
             <View style={{ alignItems: isDesktop ? "flex-start" : "center" }}>
               <Text style={{ color: tc.primary[400], fontSize: 12, fontFamily: "DMSans_700Bold", textTransform: "uppercase", letterSpacing: 3, marginBottom: 12 }}>Features</Text>
-              <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 28 : 42, fontFamily: "DMSans_700Bold", textAlign: isDesktop ? "left" : "center", letterSpacing: -1, lineHeight: isMobile ? 36 : 52 }}>Built for how Kenya{"\n"}actually pays</Text>
+              <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 28 : 42, fontFamily: "DMSans_700Bold", textAlign: isDesktop ? "left" : "center", letterSpacing: -1, lineHeight: isMobile ? 36 : 52 }}>Everything you need{"\n"}to pay bills with crypto</Text>
             </View>
             <SvgIllustration uri={ILLUSTRATIONS.secureData} size={isMobile ? 70 : 140} style={{ opacity: 0.8 }} />
           </View>
@@ -1293,7 +1293,7 @@ export default function LandingPage() {
         <RevealOnScroll variant="slide-left">
           <View style={{ alignItems: "center", marginBottom: isMobile ? 28 : 40 }}>
             <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_700Bold", textTransform: "uppercase", letterSpacing: 3, marginBottom: 10 }}>Supported Chains</Text>
-            <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 26 : 36, fontFamily: "DMSans_700Bold", textAlign: "center", letterSpacing: -1 }}>Five blockchains. Your choice.</Text>
+            <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 26 : 36, fontFamily: "DMSans_700Bold", textAlign: "center", letterSpacing: -1 }}>Use the crypto you already hold</Text>
           </View>
         </RevealOnScroll>
         <View style={{ flexDirection: isMobile ? "column" : "row", gap: isMobile ? 10 : 14, justifyContent: "center" }}>
@@ -1337,10 +1337,10 @@ export default function LandingPage() {
             <View style={{ alignItems: isDesktop ? "flex-start" : "center", flex: isDesktop ? 1 : undefined }}>
               <Text style={{ color: "#F59E0B", fontSize: 13, fontFamily: "DMSans_700Bold", textTransform: "uppercase", letterSpacing: 3, marginBottom: 12 }}>Pricing</Text>
               <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 30 : 44, fontFamily: "DMSans_700Bold", textAlign: isDesktop ? "left" : "center", letterSpacing: -1, lineHeight: isMobile ? 38 : 54 }}>
-                Honest pricing.{"\n"}No surprises.
+                You'll always know{"\n"}what you're paying
               </Text>
               <Text style={{ color: tc.textSecondary, fontSize: isMobile ? 15 : 17, fontFamily: "DMSans_400Regular", lineHeight: isMobile ? 23 : 26, marginTop: 12, textAlign: isDesktop ? "left" : "center", maxWidth: 440 }}>
-                We believe in transparent fees. What you see on the confirmation screen is exactly what you pay.
+                No hidden spreads, no surprise deductions. The rate on your screen is the rate you get — locked for 90 seconds while you decide.
               </Text>
             </View>
           </View>
@@ -1459,10 +1459,10 @@ export default function LandingPage() {
             <View style={{ alignItems: isDesktop ? "flex-start" : "center", flex: isDesktop ? 1 : undefined }}>
               <Text style={{ color: "#818CF8", fontSize: 13, fontFamily: "DMSans_700Bold", textTransform: "uppercase", letterSpacing: 3, marginBottom: 12 }}>Compare</Text>
               <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 28 : 42, fontFamily: "DMSans_700Bold", textAlign: isDesktop ? "left" : "center", letterSpacing: -1, lineHeight: isMobile ? 36 : 52 }}>
-                How we stack up
+                See the difference yourself
               </Text>
               <Text style={{ color: tc.textSecondary, fontSize: isMobile ? 15 : 17, fontFamily: "DMSans_400Regular", lineHeight: isMobile ? 23 : 26, marginTop: 10, textAlign: isDesktop ? "left" : "center", maxWidth: 440 }}>
-                Side-by-side so you can decide for yourself. No marketing spin.
+                We put the numbers next to each other. You decide what makes sense for your money.
               </Text>
             </View>
             <SvgIllustration uri={ILLUSTRATIONS.target} size={isMobile ? 80 : 140} style={{ opacity: 0.75 }} />
@@ -1550,10 +1550,10 @@ export default function LandingPage() {
             <View style={{ alignItems: isDesktop ? "flex-start" : "center", flex: 1 }}>
               <Text style={{ color: tc.primary[400], fontSize: 13, fontFamily: "DMSans_700Bold", textTransform: "uppercase", letterSpacing: 3, marginBottom: 12 }}>Testimonials</Text>
               <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 28 : 42, fontFamily: "DMSans_700Bold", textAlign: isDesktop ? "left" : "center", letterSpacing: -1, lineHeight: isMobile ? 36 : 52 }}>
-                Real people, real payments
+                People who switched are not going back
               </Text>
               <Text style={{ color: tc.textSecondary, fontSize: isMobile ? 15 : 17, fontFamily: "DMSans_400Regular", marginTop: 10, textAlign: isDesktop ? "left" : "center", lineHeight: isMobile ? 23 : 26 }}>
-                Hear from our early access users across Kenya and the diaspora.
+                Once you pay your first bill in 30 seconds, P2P trading feels like dial-up internet.
               </Text>
             </View>
           </View>
@@ -1659,10 +1659,10 @@ export default function LandingPage() {
             <View style={{ alignItems: isDesktop ? "flex-start" : "center", ...(isDesktop ? { position: "sticky" as any, top: 120, width: 320 } : {}) }}>
               <Text style={{ color: tc.primary[400], fontSize: 13, fontFamily: "DMSans_700Bold", textTransform: "uppercase", letterSpacing: 3, marginBottom: 12 }}>FAQ</Text>
               <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 28 : 40, fontFamily: "DMSans_700Bold", textAlign: isDesktop ? "left" : "center", letterSpacing: -1, lineHeight: isMobile ? 36 : 50 }}>
-                Common questions
+                Got questions? We've got answers
               </Text>
               <Text style={{ color: tc.textSecondary, fontSize: isMobile ? 15 : 17, fontFamily: "DMSans_400Regular", lineHeight: isMobile ? 23 : 26, marginTop: 12, textAlign: isDesktop ? "left" : "center" }}>
-                Everything you need to know about paying bills with crypto through CryptoPay.
+                First-timers ask these the most. If yours isn't here, email support@cpay.co.ke and we'll reply the same day.
               </Text>
               <View style={{ marginTop: 24 }}>
                 <SvgIllustration uri={ILLUSTRATIONS.questions} size={isMobile ? 100 : 200} style={{ opacity: 0.75 }} />
@@ -1731,7 +1731,7 @@ export default function LandingPage() {
               )}
             </Text>
             <Text style={{ color: tc.textSecondary, fontSize: isMobile ? 16 : 19, fontFamily: "DMSans_400Regular", textAlign: "center", lineHeight: isMobile ? 25 : 30, maxWidth: 520, marginBottom: 36 }}>
-              Set up takes 2 minutes. Deposit crypto, pick a bill, confirm with your PIN. Watch it hit M-Pesa before you finish reading this.
+              Two minutes to set up. Pick a bill, confirm with your PIN, and your M-Pesa receipt arrives before you put your phone down. Seriously.
             </Text>
 
             {/* 3 value props */}
