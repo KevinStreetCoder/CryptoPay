@@ -517,6 +517,39 @@ export default function LandingPage() {
     };
     addSchema("faq", { "@context": "https://schema.org", "@type": "FAQPage", mainEntity: FAQ_DATA.map(f => ({ "@type": "Question", name: f.q, acceptedAnswer: { "@type": "Answer", text: f.a } })) });
     addSchema("org", { "@context": "https://schema.org", "@type": "Organization", name: "CryptoPay", url: "https://cpay.co.ke", description: "Pay any M-Pesa Paybill or Till number directly from cryptocurrency.", sameAs: ["https://twitter.com/CPayKenya", "https://t.me/cryptopaykenya"] });
+
+    // ── Font preloader: force Ionicons + DM Sans to load reliably ──────
+    // This bypasses Cloudflare QUIC partial-content errors by using
+    // @font-face with explicit src + link preload in the head
+    const fontFixId = "cpay-font-preload";
+    if (!document.getElementById(fontFixId)) {
+      // Find the actual Ionicons font URL from the page assets
+      const ioniconsEl = Array.from(document.querySelectorAll('style')).find(s => s.textContent?.includes('Ionicons'));
+      const ioniconsMatch = document.querySelector('link[href*="Ionicons"]') as HTMLLinkElement;
+      // Also search for the font URL in existing @font-face rules
+      let ioniconsUrl = "";
+      for (const sheet of Array.from(document.styleSheets)) {
+        try {
+          for (const rule of Array.from(sheet.cssRules || [])) {
+            if (rule instanceof CSSFontFaceRule && rule.cssText.includes("Ionicons")) {
+              const m = rule.cssText.match(/url\(["']?([^"')]+)["']?\)/);
+              if (m) ioniconsUrl = m[1];
+            }
+          }
+        } catch {}
+      }
+      if (ioniconsUrl) {
+        // Add a preload link to force the browser to download the full file eagerly
+        const preload = document.createElement("link");
+        preload.id = fontFixId;
+        preload.rel = "preload";
+        preload.as = "font";
+        preload.type = "font/ttf";
+        preload.crossOrigin = "anonymous";
+        preload.href = ioniconsUrl;
+        document.head.appendChild(preload);
+      }
+    }
   }, []);
 
   // ── CSS Animations ─────────────────────────────────────────────────────
@@ -885,16 +918,16 @@ export default function LandingPage() {
     <View style={{ paddingVertical: isMobile ? 36 : 64, ...(isWeb ? { background: "linear-gradient(180deg, #0A1628 0%, #081420 100%)", borderTop: "1px solid rgba(16,185,129,0.06)" } as any : { backgroundColor: "#0A1628" }) }}>
       <Section>
         <RevealOnScroll variant="slide-right">
-          <View style={{ flexDirection: isDesktop ? "row" : "column", alignItems: "center", justifyContent: "space-between", marginBottom: isMobile ? 28 : 40, gap: 16 }}>
-            <SvgIllustration uri={ILLUSTRATIONS.finance} size={isMobile ? 60 : 120} style={{ opacity: 0.7 }} />
+          <View style={{ flexDirection: isDesktop ? "row" : "column", alignItems: "center", justifyContent: "center", marginBottom: isMobile ? 28 : 44, gap: isDesktop ? 32 : 16, overflow: "hidden" }}>
+            {isDesktop && <SvgIllustration uri={ILLUSTRATIONS.finance} size={100} style={{ opacity: 0.7, flexShrink: 0 }} />}
             <View style={{ alignItems: isDesktop ? "flex-start" : "center", flex: 1 }}>
-              <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_700Bold", textTransform: "uppercase", letterSpacing: 3, marginBottom: 10 }}>Supported Services</Text>
-              <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 26 : 38, fontFamily: "DMSans_700Bold", textAlign: isDesktop ? "left" : "center", letterSpacing: -1 }}>Pay anything in Kenya</Text>
-              <Text style={{ color: tc.textSecondary, fontSize: isMobile ? 15 : 17, fontFamily: "DMSans_400Regular", lineHeight: isMobile ? 23 : 26, marginTop: 10, textAlign: isDesktop ? "left" : "center", maxWidth: 480 }}>
+              <Text style={{ color: tc.primary[400], fontSize: 13, fontFamily: "DMSans_700Bold", textTransform: "uppercase", letterSpacing: 3, marginBottom: 12 }}>Supported Services</Text>
+              <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 28 : 40, fontFamily: "DMSans_700Bold", textAlign: isDesktop ? "left" : "center", letterSpacing: -1 }}>Pay anything in Kenya</Text>
+              <Text style={{ color: tc.textSecondary, fontSize: isMobile ? 15 : 17, fontFamily: "DMSans_400Regular", lineHeight: isMobile ? 23 : 26, marginTop: 10, textAlign: isDesktop ? "left" : "center", maxWidth: 500 }}>
                 Electricity, water, TV, airtime, school fees, tax — any Paybill or Till number in Kenya.
               </Text>
             </View>
-            <SvgIllustration uri={ILLUSTRATIONS.onlineWorld} size={isMobile ? 60 : 120} style={{ opacity: 0.7 }} />
+            {isDesktop && <SvgIllustration uri={ILLUSTRATIONS.onlineWorld} size={100} style={{ opacity: 0.7, flexShrink: 0 }} />}
           </View>
         </RevealOnScroll>
 
