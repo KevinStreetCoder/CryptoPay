@@ -1,6 +1,6 @@
 # CryptoPay — Development Progress
 
-**Last updated:** 2026-03-18
+**Last updated:** 2026-03-19
 
 > See also: [ROADMAP.md](./ROADMAP.md) for strategic vision, fundraising, and expansion plans.
 > See also: [SYSTEM-DESIGN.md](./SYSTEM-DESIGN.md) for technical architecture and liquidity engine design.
@@ -91,6 +91,34 @@
 | Min touch targets | ✅ Done | `minHeight: 48` on buttons, `minWidth/minHeight: 44` on icon buttons |
 | Button accessibility states | ✅ Done | `accessibilityState={{ disabled, busy }}` on all Button components |
 | Progress indicator a11y | ✅ Done | Step indicators in register screen have `accessibilityRole="progressbar"` with value |
+
+---
+
+## Landing Page Creative Redesign V2 — IMPLEMENTED ✅
+
+**Last updated:** 2026-03-19
+
+Complete rewrite of `mobile/app/landing.tsx` (4,969 → 1,290 lines). Inspired by Stripe, Ramp, Mercury, Revolut, Nubank.
+
+| Change | Status | Details |
+|--------|--------|---------|
+| Hero mockup centered | ✅ Done | Always stacked layout (never side-by-side), mockup 500-580px wide, centered below text |
+| Gradient text animation | ✅ Done | "Settled in seconds" with animated gradient (emerald → amber → emerald) |
+| 3D mockup hover | ✅ Done | `cpay-tilt-float` + `cpay-glow-border` CSS keyframes on hero mockup |
+| Scroll-reveal variants | ✅ Done | 5 variants: fade-up, slide-left, slide-right, scale-up, fade-in |
+| Real CDN images | ✅ Done | 7 Unsplash photos (crypto, Nairobi skyline, mobile payment, data viz, speed) |
+| Bento feature grid | ✅ Done | CSS Grid 2-col layout, large cards span 2 columns |
+| FAQ smooth height | ✅ Done | CSS `max-height` + `opacity` transition (0.4s cubic-bezier) on web |
+| Human copy rewrite | ✅ Done | All AI buzzwords removed — conversational Kenya-specific copy |
+| Section variety | ✅ Done | 13 sections with different backgrounds (gradients, radials, image overlays, borders) |
+| Per-section animations | ✅ Done | 11 CSS keyframes, 6 custom CSS classes, different reveal per section |
+| Oversized stat numbers | ✅ Done | 40-56px numbers with hover glow effect, animated counters |
+| Service provider carousel | ✅ Done | Infinite CSS scroll, 2 rows, pause on hover |
+| Problem split-screen | ✅ Done | Red-tinted "old way" slides left vs green "CryptoPay" slides right |
+| Testimonial carousel | ✅ Done | Auto-advance, prev/next arrows, dot navigation |
+| Sticky mobile CTA | ✅ Done | Fixed bottom bar with backdrop blur |
+| SEO + JSON-LD schemas | ✅ Done | FAQ + Organization schemas, OpenGraph, Twitter cards, canonical |
+| Responsive all sizes | ✅ Done | Mobile 375, Tablet 768, Laptop 1024-1366, XL 1920+ |
 
 ---
 
