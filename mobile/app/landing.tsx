@@ -1321,42 +1321,122 @@ export default function LandingPage() {
   );
 
   // ═══════════════════════════════════════════════════════════════════════
-  // SECTION 8: PRICING — scale-up reveal
+  // SECTION 8: PRICING — with illustrations + visual comparison
   // ═══════════════════════════════════════════════════════════════════════
   const pricingSection = (
     <View ref={(ref) => { sectionRefs.current["pricing"] = ref; }} style={{
-      paddingVertical: isMobile ? 48 : 80,
-      ...(isWeb ? { background: "radial-gradient(ellipse at center top, rgba(16,185,129,0.05) 0%, transparent 50%), linear-gradient(180deg, #0A1628 0%, #060E1F 100%)" } as any : { backgroundColor: "#0A1628" }),
+      paddingVertical: isMobile ? 56 : 96, position: "relative", overflow: "hidden",
+      ...(isWeb ? { background: "radial-gradient(ellipse at center top, rgba(245,158,11,0.04) 0%, transparent 40%), linear-gradient(180deg, #0A1628 0%, #0D1825 50%, #060E1F 100%)" } as any : { backgroundColor: "#0A1628" }),
     }}>
+      {/* Background accent */}
+      {isWeb && <View style={{ position: "absolute", top: "10%", right: "5%", width: 300, height: 300, borderRadius: 150, backgroundColor: "#F59E0B", opacity: 0.02, ...(isWeb ? { filter: "blur(100px)" } as any : {}) } as any} />}
       <Section>
         <RevealOnScroll variant="fade-up">
-          <View style={{ alignItems: "center", marginBottom: isMobile ? 32 : 48 }}>
-            <Text style={{ color: "#F59E0B", fontSize: 12, fontFamily: "DMSans_700Bold", textTransform: "uppercase", letterSpacing: 3, marginBottom: 12 }}>Pricing</Text>
-            <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 28 : 42, fontFamily: "DMSans_700Bold", textAlign: "center", letterSpacing: -1 }}>Honest pricing. No surprises.</Text>
-          </View>
-        </RevealOnScroll>
-        <RevealOnScroll delay={150} variant="scale-up">
-          <View style={{
-            backgroundColor: "rgba(12,26,46,0.7)", borderRadius: 24, borderWidth: 1, borderColor: "rgba(16,185,129,0.12)",
-            padding: isMobile ? 32 : 48, alignItems: "center", maxWidth: 640, alignSelf: "center" as any, width: "100%",
-            ...(isWeb ? { backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", boxShadow: "0 8px 48px rgba(16,185,129,0.05)" } as any : {}),
-          }}>
-            <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 40 : 56, fontFamily: "DMSans_700Bold", letterSpacing: -2, textAlign: "center" }}>1.5%</Text>
-            <Text style={{ color: tc.textSecondary, fontSize: isMobile ? 16 : 20, fontFamily: "DMSans_400Regular", textAlign: "center", marginBottom: 4 }}>conversion spread</Text>
-            <Text style={{ color: tc.textSecondary, fontSize: isMobile ? 16 : 20, fontFamily: "DMSans_400Regular", textAlign: "center" }}>+ KES 10 flat fee</Text>
-            <Text style={{ color: tc.primary[400], fontSize: 16, fontFamily: "DMSans_700Bold", marginTop: 16 }}>That's it. Nothing hidden.</Text>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 20, backgroundColor: "rgba(16,185,129,0.06)", borderRadius: 999, paddingVertical: 8, paddingHorizontal: 18, borderWidth: 1, borderColor: "rgba(16,185,129,0.15)" }}>
-              <Ionicons name="gift" size={16} color={tc.primary[400]} /><Text style={{ color: tc.primary[300], fontSize: 13, fontFamily: "DMSans_600SemiBold" }}>First KES 5,000 — zero fees</Text>
+          <View style={{ flexDirection: isDesktop ? "row" : "column", alignItems: "center", justifyContent: "center", gap: isDesktop ? 40 : 20, marginBottom: isMobile ? 36 : 56 }}>
+            <SvgIllustration uri={ILLUSTRATIONS.finance} size={isMobile ? 70 : 130} style={{ opacity: 0.75 }} />
+            <View style={{ alignItems: isDesktop ? "flex-start" : "center", flex: isDesktop ? 1 : undefined }}>
+              <Text style={{ color: "#F59E0B", fontSize: 13, fontFamily: "DMSans_700Bold", textTransform: "uppercase", letterSpacing: 3, marginBottom: 12 }}>Pricing</Text>
+              <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 30 : 44, fontFamily: "DMSans_700Bold", textAlign: isDesktop ? "left" : "center", letterSpacing: -1, lineHeight: isMobile ? 38 : 54 }}>
+                Honest pricing.{"\n"}No surprises.
+              </Text>
+              <Text style={{ color: tc.textSecondary, fontSize: isMobile ? 15 : 17, fontFamily: "DMSans_400Regular", lineHeight: isMobile ? 23 : 26, marginTop: 12, textAlign: isDesktop ? "left" : "center", maxWidth: 440 }}>
+                We believe in transparent fees. What you see on the confirmation screen is exactly what you pay.
+              </Text>
             </View>
           </View>
         </RevealOnScroll>
-        <RevealOnScroll delay={300} variant="fade-up">
-          <View style={{ flexDirection: isMobile ? "column" : "row", gap: isMobile ? 12 : 18, marginTop: 28, justifyContent: "center" }}>
-            {[{ name: "CryptoPay", fee: "1.5%", hl: true }, { name: "Binance P2P", fee: "3-8%", hl: false }, { name: "Manual OTC", fee: "5-10%", hl: false }].map((item) => (
-              <View key={item.name} style={{ flex: isMobile ? undefined : 1, maxWidth: isMobile ? undefined : 200, backgroundColor: item.hl ? "rgba(16,185,129,0.05)" : "rgba(255,255,255,0.02)", borderRadius: 16, borderWidth: item.hl ? 2 : 1, borderColor: item.hl ? "rgba(16,185,129,0.2)" : "rgba(255,255,255,0.05)", padding: 20, alignItems: "center" }}>
-                <Text style={{ color: item.hl ? tc.primary[400] : tc.textMuted, fontSize: 13, fontFamily: "DMSans_600SemiBold", marginBottom: 6 }}>{item.name}</Text>
-                <Text style={{ color: item.hl ? tc.textPrimary : tc.textMuted, fontSize: 26, fontFamily: "DMSans_700Bold", letterSpacing: -0.5 }}>{item.fee}</Text>
+
+        {/* Main pricing card — premium glass */}
+        <RevealOnScroll delay={150} variant="scale-up">
+          <View
+            ref={(ref: any) => { if (isWeb && ref instanceof HTMLElement) ref.className = "cpay-pricing-card"; }}
+            style={{
+              backgroundColor: "rgba(12,26,46,0.75)", borderRadius: 28, borderWidth: 1.5,
+              borderColor: "rgba(16,185,129,0.15)", padding: isMobile ? 36 : 56,
+              alignItems: "center", maxWidth: 700, alignSelf: "center" as any, width: "100%",
+              position: "relative", overflow: "hidden",
+              ...(isWeb ? { backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", boxShadow: "0 12px 60px rgba(16,185,129,0.06)" } as any : {}),
+            } as any}
+          >
+            {/* Decorative gradient sweep inside card */}
+            {isWeb && <View style={{ position: "absolute", top: -50, right: -50, width: 200, height: 200, borderRadius: 100, backgroundColor: "#10B981", opacity: 0.04, ...(isWeb ? { filter: "blur(60px)" } as any : {}) } as any} />}
+            {isWeb && <View style={{ position: "absolute", bottom: -30, left: -30, width: 150, height: 150, borderRadius: 75, backgroundColor: "#F59E0B", opacity: 0.03, ...(isWeb ? { filter: "blur(50px)" } as any : {}) } as any} />}
+
+            <View style={{ flexDirection: isDesktop ? "row" : "column", alignItems: "center", gap: isDesktop ? 48 : 24, zIndex: 1, width: "100%" }}>
+              {/* Left: the big number */}
+              <View style={{ alignItems: "center" }}>
+                <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 56 : 80, fontFamily: "DMSans_700Bold", letterSpacing: -3 }}>
+                  1.5<Text style={{ color: tc.primary[400] }}>%</Text>
+                </Text>
+                <Text style={{ color: tc.textSecondary, fontSize: isMobile ? 16 : 18, fontFamily: "DMSans_500Medium", marginTop: 4 }}>conversion spread</Text>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12 }}>
+                  <View style={{ width: 32, height: 2, backgroundColor: "rgba(255,255,255,0.1)", borderRadius: 1 }} />
+                  <Text style={{ color: tc.textMuted, fontSize: 15, fontFamily: "DMSans_400Regular" }}>plus</Text>
+                  <View style={{ width: 32, height: 2, backgroundColor: "rgba(255,255,255,0.1)", borderRadius: 1 }} />
+                </View>
+                <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 28 : 36, fontFamily: "DMSans_700Bold", marginTop: 8 }}>
+                  KES 10
+                </Text>
+                <Text style={{ color: tc.textSecondary, fontSize: isMobile ? 14 : 16, fontFamily: "DMSans_500Medium" }}>flat fee per transaction</Text>
               </View>
+
+              {/* Right: benefits list */}
+              {isDesktop && (
+                <View style={{ flex: 1, gap: 16 }}>
+                  {[
+                    { icon: "checkmark-circle" as const, text: "Rate locked for 90 seconds — no slippage" },
+                    { icon: "eye" as const, text: "See exact amount before confirming" },
+                    { icon: "shield-checkmark" as const, text: "No hidden charges, ever" },
+                    { icon: "gift" as const, text: "First KES 5,000 — zero fees" },
+                  ].map((b) => (
+                    <View key={b.text} style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                      <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: "rgba(16,185,129,0.1)", alignItems: "center", justifyContent: "center" }}>
+                        <Ionicons name={b.icon} size={16} color={tc.primary[400]} />
+                      </View>
+                      <Text style={{ color: tc.textSecondary, fontSize: 15, fontFamily: "DMSans_500Medium", flex: 1 }}>{b.text}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+
+            {/* Free tier badge */}
+            <View style={{
+              flexDirection: "row", alignItems: "center", gap: 8, marginTop: 28,
+              backgroundColor: "rgba(16,185,129,0.08)", borderRadius: 999,
+              paddingVertical: 10, paddingHorizontal: 22, borderWidth: 1, borderColor: "rgba(16,185,129,0.2)",
+              ...(isWeb ? { boxShadow: "0 4px 20px rgba(16,185,129,0.08)" } as any : {}),
+            }}>
+              <Ionicons name="gift" size={18} color={tc.primary[400]} />
+              <Text style={{ color: tc.primary[300], fontSize: 15, fontFamily: "DMSans_600SemiBold" }}>First KES 5,000 — zero fees</Text>
+            </View>
+          </View>
+        </RevealOnScroll>
+
+        {/* Fee comparison cards */}
+        <RevealOnScroll delay={300} variant="fade-up">
+          <View style={{ flexDirection: isMobile ? "column" : "row", gap: isMobile ? 14 : 20, marginTop: 36, justifyContent: "center" }}>
+            {[
+              { name: "CryptoPay", fee: "1.5%", hl: true, desc: "Transparent" },
+              { name: "Binance P2P", fee: "3-8%", hl: false, desc: "Hidden spreads" },
+              { name: "Manual OTC", fee: "5-10%", hl: false, desc: "Negotiated" },
+            ].map((item) => (
+              <Pressable key={item.name} style={({ hovered }: any) => ({
+                flex: isMobile ? undefined : 1, maxWidth: isMobile ? undefined : 240,
+                backgroundColor: item.hl ? "rgba(16,185,129,0.06)" : "rgba(255,255,255,0.02)",
+                borderRadius: 20, borderWidth: item.hl ? 2 : 1,
+                borderColor: item.hl ? "rgba(16,185,129,0.25)" : "rgba(255,255,255,0.05)",
+                padding: isMobile ? 24 : 28, alignItems: "center",
+                ...(isWeb ? {
+                  transition: "all 0.3s ease", cursor: "default",
+                  transform: hovered ? "translateY(-4px)" : "none",
+                  boxShadow: item.hl && hovered ? "0 12px 40px rgba(16,185,129,0.1)" : "none",
+                } as any : {}),
+              }) as any}>
+                <Text style={{ color: item.hl ? tc.primary[400] : tc.textMuted, fontSize: 14, fontFamily: "DMSans_600SemiBold", marginBottom: 8 }}>{item.name}</Text>
+                <Text style={{ color: item.hl ? tc.textPrimary : tc.textMuted, fontSize: 32, fontFamily: "DMSans_700Bold", letterSpacing: -1 }}>{item.fee}</Text>
+                <Text style={{ color: item.hl ? tc.primary[300] : tc.textMuted, fontSize: 13, fontFamily: "DMSans_500Medium", marginTop: 6 }}>{item.desc}</Text>
+              </Pressable>
             ))}
           </View>
         </RevealOnScroll>
@@ -1365,41 +1445,89 @@ export default function LandingPage() {
   );
 
   // ═══════════════════════════════════════════════════════════════════════
-  // SECTION 9: COMPARISON — slide-right reveal
+  // SECTION 9: COMPARISON — with illustrations + hover effects
   // ═══════════════════════════════════════════════════════════════════════
   const comparisonSection = (
-    <View style={{ paddingVertical: isMobile ? 48 : 72, ...(isWeb ? { background: "linear-gradient(180deg, #081420 0%, #0C1C30 50%, #060E1F 100%)", borderTop: "1px solid rgba(255,255,255,0.03)" } as any : { backgroundColor: "#0C1C30" }) }}>
+    <View style={{
+      paddingVertical: isMobile ? 56 : 88, position: "relative", overflow: "hidden",
+      ...(isWeb ? { background: "linear-gradient(180deg, #081420 0%, #0C1C30 50%, #060E1F 100%)", borderTop: "1px solid rgba(99,102,241,0.06)" } as any : { backgroundColor: "#0C1C30" }),
+    }}>
+      {isWeb && <View style={{ position: "absolute", bottom: "10%", left: "10%", width: 250, height: 250, borderRadius: 125, backgroundColor: "#6366F1", opacity: 0.02, ...(isWeb ? { filter: "blur(80px)" } as any : {}) } as any} />}
       <Section>
         <RevealOnScroll variant="slide-right">
-          <View style={{ alignItems: "center", marginBottom: isMobile ? 28 : 44 }}>
-            <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_700Bold", textTransform: "uppercase", letterSpacing: 3, marginBottom: 10 }}>Compare</Text>
-            <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 26 : 38, fontFamily: "DMSans_700Bold", textAlign: "center", letterSpacing: -1 }}>How we stack up</Text>
+          <View style={{ flexDirection: isDesktop ? "row" : "column", alignItems: "center", justifyContent: "center", gap: isDesktop ? 40 : 20, marginBottom: isMobile ? 32 : 52 }}>
+            <View style={{ alignItems: isDesktop ? "flex-start" : "center", flex: isDesktop ? 1 : undefined }}>
+              <Text style={{ color: "#818CF8", fontSize: 13, fontFamily: "DMSans_700Bold", textTransform: "uppercase", letterSpacing: 3, marginBottom: 12 }}>Compare</Text>
+              <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 28 : 42, fontFamily: "DMSans_700Bold", textAlign: isDesktop ? "left" : "center", letterSpacing: -1, lineHeight: isMobile ? 36 : 52 }}>
+                How we stack up
+              </Text>
+              <Text style={{ color: tc.textSecondary, fontSize: isMobile ? 15 : 17, fontFamily: "DMSans_400Regular", lineHeight: isMobile ? 23 : 26, marginTop: 10, textAlign: isDesktop ? "left" : "center", maxWidth: 440 }}>
+                Side-by-side so you can decide for yourself. No marketing spin.
+              </Text>
+            </View>
+            <SvgIllustration uri={ILLUSTRATIONS.target} size={isMobile ? 80 : 140} style={{ opacity: 0.75 }} />
           </View>
         </RevealOnScroll>
+
         <RevealOnScroll delay={150} variant="fade-up">
           <ScrollView horizontal={isMobile} showsHorizontalScrollIndicator={false}>
-            <View style={{ minWidth: isMobile ? 620 : ("100%" as any), backgroundColor: "rgba(12,26,46,0.5)", borderRadius: 20, borderWidth: 1, borderColor: "rgba(255,255,255,0.05)", overflow: "hidden", ...(isWeb ? { backdropFilter: "blur(8px)" } as any : {}) }}>
-              <View style={{ flexDirection: "row", borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.06)" }}>
-                <View style={{ flex: 1.3, padding: 16 }}><Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_700Bold", textTransform: "uppercase", letterSpacing: 1 }}>Feature</Text></View>
-                <View style={{ flex: 1.2, padding: 16, backgroundColor: "rgba(16,185,129,0.04)", borderLeftWidth: 1, borderLeftColor: "rgba(16,185,129,0.1)", borderRightWidth: 1, borderRightColor: "rgba(16,185,129,0.1)" }}>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}><Ionicons name="flash" size={13} color={tc.primary[400]} /><Text style={{ color: tc.primary[400], fontSize: 13, fontFamily: "DMSans_700Bold" }}>CryptoPay</Text></View>
+            <View style={{
+              minWidth: isMobile ? 640 : ("100%" as any),
+              backgroundColor: "rgba(12,26,46,0.6)", borderRadius: 24,
+              borderWidth: 1, borderColor: "rgba(255,255,255,0.06)", overflow: "hidden",
+              ...(isWeb ? { backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" } as any : {}),
+            }}>
+              {/* Header row */}
+              <View style={{ flexDirection: "row", borderBottomWidth: 2, borderBottomColor: "rgba(255,255,255,0.06)", backgroundColor: "rgba(255,255,255,0.01)" }}>
+                <View style={{ flex: 1.3, padding: isMobile ? 14 : 20 }}>
+                  <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_700Bold", textTransform: "uppercase", letterSpacing: 1.5 }}>Feature</Text>
                 </View>
-                <View style={{ flex: 1, padding: 16 }}><Text style={{ color: tc.textSecondary, fontSize: 13, fontFamily: "DMSans_600SemiBold" }}>Binance P2P</Text></View>
-                <View style={{ flex: 1, padding: 16 }}><Text style={{ color: tc.textSecondary, fontSize: 13, fontFamily: "DMSans_600SemiBold" }}>Manual OTC</Text></View>
-              </View>
-              {COMPARISON_ROWS.map((row, i) => (
-                <View key={row.label} style={{ flexDirection: "row", borderBottomWidth: i < COMPARISON_ROWS.length - 1 ? 1 : 0, borderBottomColor: "rgba(255,255,255,0.03)" }}>
-                  <View style={{ flex: 1.3, padding: 14, justifyContent: "center" }}><Text style={{ color: tc.textPrimary, fontSize: 13, fontFamily: "DMSans_500Medium" }}>{row.label}</Text></View>
-                  <View style={{ flex: 1.2, padding: 14, backgroundColor: "rgba(16,185,129,0.02)", borderLeftWidth: 1, borderLeftColor: "rgba(16,185,129,0.06)", borderRightWidth: 1, borderRightColor: "rgba(16,185,129,0.06)", flexDirection: "row", alignItems: "center", gap: 6 }}>
-                    <Ionicons name="checkmark-circle" size={14} color={tc.primary[400]} /><Text style={{ color: tc.primary[300], fontSize: 13, fontFamily: "DMSans_600SemiBold", flex: 1 }}>{row.cp}</Text>
+                <View style={{ flex: 1.2, padding: isMobile ? 14 : 20, backgroundColor: "rgba(16,185,129,0.05)", borderLeftWidth: 1, borderLeftColor: "rgba(16,185,129,0.12)", borderRightWidth: 1, borderRightColor: "rgba(16,185,129,0.12)" }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <Image source={APP_LOGO} style={{ width: 20, height: 20, borderRadius: 6 }} resizeMode="cover" />
+                    <Text style={{ color: tc.primary[400], fontSize: 14, fontFamily: "DMSans_700Bold" }}>CryptoPay</Text>
                   </View>
-                  <View style={{ flex: 1, padding: 14, justifyContent: "center" }}><Text style={{ color: tc.textMuted, fontSize: 13, fontFamily: "DMSans_400Regular" }}>{row.p2p}</Text></View>
-                  <View style={{ flex: 1, padding: 14, justifyContent: "center" }}><Text style={{ color: tc.textMuted, fontSize: 13, fontFamily: "DMSans_400Regular" }}>{row.otc}</Text></View>
+                </View>
+                <View style={{ flex: 1, padding: isMobile ? 14 : 20 }}>
+                  <Text style={{ color: tc.textSecondary, fontSize: 14, fontFamily: "DMSans_600SemiBold" }}>Binance P2P</Text>
+                </View>
+                <View style={{ flex: 1, padding: isMobile ? 14 : 20 }}>
+                  <Text style={{ color: tc.textSecondary, fontSize: 14, fontFamily: "DMSans_600SemiBold" }}>Manual OTC</Text>
+                </View>
+              </View>
+
+              {/* Data rows */}
+              {COMPARISON_ROWS.map((row, i) => (
+                <View key={row.label} style={{
+                  flexDirection: "row",
+                  borderBottomWidth: i < COMPARISON_ROWS.length - 1 ? 1 : 0,
+                  borderBottomColor: "rgba(255,255,255,0.04)",
+                  ...(isWeb ? { transition: "background-color 0.2s ease" } as any : {}),
+                }}>
+                  <View style={{ flex: 1.3, padding: isMobile ? 14 : 18, justifyContent: "center" }}>
+                    <Text style={{ color: tc.textPrimary, fontSize: 14, fontFamily: "DMSans_600SemiBold" }}>{row.label}</Text>
+                  </View>
+                  <View style={{
+                    flex: 1.2, padding: isMobile ? 14 : 18,
+                    backgroundColor: "rgba(16,185,129,0.03)",
+                    borderLeftWidth: 1, borderLeftColor: "rgba(16,185,129,0.08)",
+                    borderRightWidth: 1, borderRightColor: "rgba(16,185,129,0.08)",
+                    flexDirection: "row", alignItems: "center", gap: 8,
+                  }}>
+                    <Ionicons name="checkmark-circle" size={15} color={tc.primary[400]} />
+                    <Text style={{ color: tc.primary[300], fontSize: 14, fontFamily: "DMSans_600SemiBold", flex: 1 }}>{row.cp}</Text>
+                  </View>
+                  <View style={{ flex: 1, padding: isMobile ? 14 : 18, justifyContent: "center" }}>
+                    <Text style={{ color: tc.textMuted, fontSize: 14, fontFamily: "DMSans_400Regular" }}>{row.p2p}</Text>
+                  </View>
+                  <View style={{ flex: 1, padding: isMobile ? 14 : 18, justifyContent: "center" }}>
+                    <Text style={{ color: tc.textMuted, fontSize: 14, fontFamily: "DMSans_400Regular" }}>{row.otc}</Text>
+                  </View>
                 </View>
               ))}
             </View>
           </ScrollView>
-          {isMobile && <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_400Regular", textAlign: "center", marginTop: 10 }}>Swipe to see full comparison {"\u2192"}</Text>}
+          {isMobile && <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_400Regular", textAlign: "center", marginTop: 12 }}>Swipe to see full comparison {"\u2192"}</Text>}
         </RevealOnScroll>
       </Section>
     </View>
@@ -1561,47 +1689,91 @@ export default function LandingPage() {
   );
 
   // ═══════════════════════════════════════════════════════════════════════
-  // SECTION 12: CTA — scale-up + background image
+  // SECTION 12: CTA — premium with illustrations + animated elements
   // ═══════════════════════════════════════════════════════════════════════
   const ctaSection = (
     <View style={{
-      paddingVertical: isMobile ? 56 : 80, alignItems: "center", position: "relative", overflow: "hidden",
-      ...(isWeb ? { background: "radial-gradient(ellipse at center, rgba(16,185,129,0.06) 0%, transparent 50%), linear-gradient(180deg, #0E1D35 0%, #0A1628 60%, #060E1F 100%)", borderTop: "1px solid rgba(16,185,129,0.06)" } as any : { backgroundColor: "#0E1D35" }),
+      paddingVertical: isMobile ? 64 : 100, position: "relative", overflow: "hidden",
+      ...(isWeb ? { background: "radial-gradient(ellipse at center, rgba(16,185,129,0.08) 0%, transparent 40%), linear-gradient(180deg, #0E1D35 0%, #0C1A2E 40%, #060E1F 100%)", borderTop: "1px solid rgba(16,185,129,0.08)" } as any : { backgroundColor: "#0E1D35" }),
     }}>
-      {/* Data viz background */}
-      {isWeb && !isMobile && <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, opacity: 0.03, ...(isWeb ? { backgroundImage: `url(${CDN_IMAGES.dataViz})`, backgroundSize: "cover", backgroundPosition: "center" } as any : {}) } as any} />}
-      {isWeb && <View style={{ position: "absolute", top: "30%", left: "50%", width: 500, height: 500, borderRadius: 250, ...(isWeb ? { background: "radial-gradient(circle, rgba(16,185,129,0.05) 0%, transparent 70%)", transform: "translateX(-50%)" } as any : {}) } as any} />}
+      {/* Multiple background effects */}
+      {isWeb && <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, opacity: 0.03, ...(isWeb ? { backgroundImage: `url(${CDN_IMAGES.dataViz})`, backgroundSize: "cover", backgroundPosition: "center" } as any : {}) } as any} />}
+      {isWeb && <View style={{ position: "absolute", top: "20%", left: "50%", width: 600, height: 600, borderRadius: 300, ...(isWeb ? { background: "radial-gradient(circle, rgba(16,185,129,0.06) 0%, transparent 60%)", transform: "translateX(-50%)", animation: "cpay-aurora 20s ease infinite" } as any : {}) } as any} />}
+      {isWeb && <View style={{ position: "absolute", bottom: -100, right: -100, width: 400, height: 400, borderRadius: 200, backgroundColor: "#F59E0B", opacity: 0.02, ...(isWeb ? { filter: "blur(100px)" } as any : {}) } as any} />}
+
       <Section>
         <RevealOnScroll variant="scale-up">
-          <View style={{ alignItems: "center", zIndex: 1 }}>
-            {/* Illustrations flanking CTA on desktop */}
-            {isDesktop && (
-              <View style={{ flexDirection: "row", justifyContent: "center", gap: 40, marginBottom: 20 }}>
-                <SvgIllustration uri={ILLUSTRATIONS.onlineWorld} size={100} style={{ opacity: 0.6 }} />
-                <SvgIllustration uri={ILLUSTRATIONS.success} size={100} style={{ opacity: 0.6 }} />
+          <View style={{
+            alignItems: "center", zIndex: 1,
+            backgroundColor: "rgba(12,26,46,0.5)", borderRadius: 32,
+            borderWidth: 1, borderColor: "rgba(16,185,129,0.1)",
+            padding: isMobile ? 36 : 64, maxWidth: 900, alignSelf: "center" as any, width: "100%",
+            ...(isWeb ? { backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", boxShadow: "0 20px 80px rgba(0,0,0,0.3)" } as any : {}),
+          }}>
+            {/* Illustrations row */}
+            <View style={{ flexDirection: "row", justifyContent: "center", gap: isMobile ? 16 : 40, marginBottom: isMobile ? 24 : 32 }}>
+              <SvgIllustration uri={ILLUSTRATIONS.onlineWorld} size={isMobile ? 60 : 100} style={{ opacity: 0.7 }} />
+              <View style={{
+                width: isMobile ? 64 : 80, height: isMobile ? 64 : 80, borderRadius: isMobile ? 20 : 24,
+                backgroundColor: tc.primary[500], alignItems: "center", justifyContent: "center",
+                ...(isWeb ? { boxShadow: `0 16px 48px ${tc.primary[500]}50`, animation: "cpay-float 4s ease-in-out infinite" } as any : {}),
+              }}>
+                <Ionicons name="flash" size={isMobile ? 28 : 36} color="#fff" />
               </View>
-            )}
-            <View style={{ width: 64, height: 64, borderRadius: 18, backgroundColor: tc.primary[500], alignItems: "center", justifyContent: "center", marginBottom: 28, ...(isWeb ? { boxShadow: `0 12px 40px ${tc.primary[500]}40` } as any : {}) }}>
-              <Ionicons name="flash" size={30} color="#fff" />
+              <SvgIllustration uri={ILLUSTRATIONS.success} size={isMobile ? 60 : 100} style={{ opacity: 0.7 }} />
             </View>
-            <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 28 : 42, fontFamily: "DMSans_700Bold", textAlign: "center", letterSpacing: -1, lineHeight: isMobile ? 36 : 52, marginBottom: 16 }}>Try it yourself</Text>
-            <Text style={{ color: tc.textSecondary, fontSize: isMobile ? 16 : 18, fontFamily: "DMSans_400Regular", textAlign: "center", lineHeight: isMobile ? 24 : 28, maxWidth: 480, marginBottom: 36 }}>
-              Your first payment takes 2 minutes to set up. Deposit crypto, pick a bill, and watch it hit M-Pesa in 30 seconds.
+
+            <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 30 : 46, fontFamily: "DMSans_700Bold", textAlign: "center", letterSpacing: -1.5, lineHeight: isMobile ? 38 : 56, marginBottom: 16 }}>
+              {isWeb ? (
+                <>Ready to <span className="cpay-gradient-headline">ditch P2P?</span></>
+              ) : (
+                <>Ready to <Text style={{ color: tc.primary[400] }}>ditch P2P?</Text></>
+              )}
             </Text>
-            <Pressable onPress={navigateToRegister} style={({ hovered, pressed }: any) => ({
-              backgroundColor: hovered ? tc.primary[400] : tc.primary[500], borderRadius: 999,
-              paddingVertical: 18, paddingHorizontal: 40, flexDirection: "row", alignItems: "center", gap: 10,
-              minWidth: isMobile ? undefined : 260, justifyContent: "center", opacity: pressed ? 0.9 : 1,
-              ...(isWeb ? { cursor: "pointer", transition: "all 0.25s ease", boxShadow: hovered ? "0 12px 40px rgba(16,185,129,0.45)" : "0 6px 20px rgba(16,185,129,0.25)", transform: hovered ? "translateY(-2px)" : "none" } as any : {}),
-              ...(isMobile ? { width: "100%", maxWidth: 360 } : {}),
-            })}>
-              <Ionicons name="rocket" size={18} color="#fff" /><Text style={{ color: "#fff", fontSize: 16, fontFamily: "DMSans_700Bold" }}>Create Free Account</Text>
-            </Pressable>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 14, backgroundColor: "rgba(245,158,11,0.06)", borderRadius: 999, paddingVertical: 7, paddingHorizontal: 14, borderWidth: 1, borderColor: "rgba(245,158,11,0.15)" }}>
-              <Ionicons name="time" size={13} color="#F59E0B" /><Text style={{ color: "#F59E0B", fontSize: 12, fontFamily: "DMSans_600SemiBold" }}>Limited beta spots available</Text>
+            <Text style={{ color: tc.textSecondary, fontSize: isMobile ? 16 : 19, fontFamily: "DMSans_400Regular", textAlign: "center", lineHeight: isMobile ? 25 : 30, maxWidth: 520, marginBottom: 36 }}>
+              Set up takes 2 minutes. Deposit crypto, pick a bill, confirm with your PIN. Watch it hit M-Pesa before you finish reading this.
+            </Text>
+
+            {/* 3 value props */}
+            <View style={{ flexDirection: isMobile ? "column" : "row", gap: isMobile ? 12 : 24, marginBottom: 32, width: "100%" }}>
+              {[
+                { icon: "timer-outline" as const, text: "2 min setup", color: tc.primary[400] },
+                { icon: "flash" as const, text: "30 sec payments", color: "#F59E0B" },
+                { icon: "gift" as const, text: "Free for first KES 5K", color: "#8B5CF6" },
+              ].map((v) => (
+                <View key={v.text} style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, backgroundColor: "rgba(255,255,255,0.03)", borderRadius: 14, paddingVertical: 14, paddingHorizontal: 16, borderWidth: 1, borderColor: "rgba(255,255,255,0.05)" }}>
+                  <Ionicons name={v.icon} size={18} color={v.color} />
+                  <Text style={{ color: tc.textPrimary, fontSize: 14, fontFamily: "DMSans_600SemiBold" }}>{v.text}</Text>
+                </View>
+              ))}
             </View>
-            <Pressable onPress={navigateToLogin} style={({ hovered }: any) => ({ marginTop: 18, paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8, backgroundColor: hovered ? "rgba(255,255,255,0.03)" : "transparent", ...(isWeb ? { cursor: "pointer", transition: "all 0.2s ease" } as any : {}) })}>
-              <Text style={{ color: tc.textMuted, fontSize: 14, fontFamily: "DMSans_500Medium" }}>Already have an account? <Text style={{ color: tc.primary[300], fontFamily: "DMSans_600SemiBold" }}>Sign In</Text></Text>
+
+            {/* CTA button with ripple */}
+            <Pressable
+              ref={(ref: any) => { if (isWeb && ref instanceof HTMLElement) ref.className = "cpay-cta-ripple"; }}
+              onPress={navigateToRegister}
+              style={({ hovered, pressed }: any) => ({
+                backgroundColor: hovered ? tc.primary[400] : tc.primary[500], borderRadius: 999,
+                paddingVertical: 20, paddingHorizontal: 48, flexDirection: "row", alignItems: "center", gap: 12,
+                justifyContent: "center", opacity: pressed ? 0.9 : 1,
+                transform: [{ scale: pressed ? 0.96 : hovered ? 1.04 : 1 }],
+                ...(isWeb ? { cursor: "pointer", transition: "all 0.3s cubic-bezier(0.34,1.56,0.64,1)", boxShadow: hovered ? "0 16px 48px rgba(16,185,129,0.5)" : "0 8px 24px rgba(16,185,129,0.3)" } as any : {}),
+                ...(isMobile ? { width: "100%", maxWidth: 400 } : { minWidth: 300 }),
+              }) as any}
+            >
+              <Ionicons name="rocket" size={20} color="#fff" />
+              <Text style={{ color: "#fff", fontSize: 18, fontFamily: "DMSans_700Bold" }}>Create Free Account</Text>
+            </Pressable>
+
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 16, backgroundColor: "rgba(245,158,11,0.06)", borderRadius: 999, paddingVertical: 8, paddingHorizontal: 18, borderWidth: 1, borderColor: "rgba(245,158,11,0.15)" }}>
+              <Ionicons name="time" size={14} color="#F59E0B" />
+              <Text style={{ color: "#F59E0B", fontSize: 13, fontFamily: "DMSans_600SemiBold" }}>Limited beta spots available</Text>
+            </View>
+
+            <Pressable onPress={navigateToLogin} style={({ hovered }: any) => ({ marginTop: 18, paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8, backgroundColor: hovered ? "rgba(255,255,255,0.04)" : "transparent", ...(isWeb ? { cursor: "pointer", transition: "all 0.2s ease" } as any : {}) })}>
+              <Text style={{ color: tc.textMuted, fontSize: 15, fontFamily: "DMSans_500Medium" }}>
+                Already have an account? <Text style={{ color: tc.primary[300], fontFamily: "DMSans_600SemiBold" }}>Sign In</Text>
+              </Text>
             </Pressable>
           </View>
         </RevealOnScroll>
