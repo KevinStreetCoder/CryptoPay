@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import {
   View,
   Text,
@@ -24,7 +24,13 @@ import { colors, getThemeColors, getThemeShadows } from "../../src/constants/the
 import { useThemeMode } from "../../src/stores/theme";
 import { GlassCard } from "../../src/components/GlassCard";
 import { useLocale } from "../../src/hooks/useLocale";
-import { WalletConnectDeposit } from "../../src/components/WalletConnectDeposit";
+// Lazy import — WalletConnect modules crash if loaded before AppKit context is ready
+// Expo Router eagerly imports all route files at startup, so static import crashes
+const LazyWalletConnectDeposit = React.lazy(() =>
+  import("../../src/components/WalletConnectDeposit").then(mod => ({
+    default: mod.WalletConnectDeposit,
+  }))
+);
 
 const isWeb = Platform.OS === "web";
 const useNative = Platform.OS !== "web";
@@ -766,15 +772,17 @@ export default function DepositScreen() {
                 </View>
               </View>
 
-              <WalletConnectDeposit
-                depositAddress={ethDepositAddress}
-                onDepositInitiated={(txHash, token, amt) => {
-                  toast.success(
-                    "Deposit Sent",
-                    `${amt} ${token} will be credited after confirmation.`
-                  );
-                }}
-              />
+              <Suspense fallback={<View style={{ padding: 20, alignItems: "center" }}><Text style={{ color: tc.textMuted, fontSize: 13 }}>Loading wallet connect...</Text></View>}>
+                <LazyWalletConnectDeposit
+                  depositAddress={ethDepositAddress}
+                  onDepositInitiated={(txHash, token, amt) => {
+                    toast.success(
+                      "Deposit Sent",
+                      `${amt} ${token} will be credited after confirmation.`
+                    );
+                  }}
+                />
+              </Suspense>
             </View>
 
             {/* Divider */}
