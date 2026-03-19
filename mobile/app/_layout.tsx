@@ -21,23 +21,12 @@ import { LanguageProvider } from "../src/contexts/LanguageContext";
 import { OnboardingModal, ONBOARDING_COMPLETED_KEY } from "./onboarding";
 import { AppTourProvider, triggerAppTour } from "../src/components/AppTour";
 
-// WalletConnect AppKit — gracefully degrade if not available (Expo Go)
-let AppKitModal: React.ComponentType | null = null;
-let initAppKit: (() => any) | null = null;
-
-try {
-  const appkitConfig = require("../src/config/appkit");
-  initAppKit = appkitConfig.initAppKit;
-
-  // Only load the native AppKit modal on non-web platforms
-  // On web, AppKit uses a web modal that doesn't need this component
-  if (Platform.OS !== "web") {
-    const appkitRN = require("@reown/appkit-react-native");
-    AppKitModal = appkitRN.AppKit;
-  }
-} catch {
-  // AppKit not available — Expo Go or missing dependencies
-}
+// WalletConnect AppKit — DISABLED until WalletConnect integration is needed
+// The AppKit module-level imports crash on Android with:
+// "AppKit instance is not yet available in context"
+// Re-enable when WalletConnect deposit flow is production-ready
+// let AppKitModal: React.ComponentType | null = null;
+// let initAppKit: (() => any) | null = null;
 
 // Hide native splash quickly — our animated LoadingScreen takes over
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -203,17 +192,9 @@ function RootNavigator() {
   );
 }
 
-// Initialize AppKit once at module level
-// initAppKit() returns null if PROJECT_ID is missing — guard <AppKit /> on success
-let appKitReady = false;
-if (initAppKit) {
-  try {
-    const result = initAppKit();
-    appKitReady = result != null;
-  } catch {
-    // Silently fail — WalletConnect won't be available
-  }
-}
+// AppKit/WalletConnect disabled on mobile — users deposit via manual addresses
+// Re-enable when WalletConnect native support is needed
+// let appKitReady = false;
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
@@ -243,7 +224,7 @@ export default function RootLayout() {
               <AppTourProvider>
                 <RootNavigator />
               </AppTourProvider>
-              {appKitReady && AppKitModal && <AppKitModal />}
+              {/* AppKit disabled on mobile — WalletConnect uses manual deposit addresses instead */}
             </ToastProvider>
           </LanguageProvider>
         </QueryClientProvider>
