@@ -28,6 +28,14 @@ export function PinInput({ length = 6, onComplete, error, testID }: PinInputProp
   // Total width of all boxes + gaps — used to constrain the container
   const totalWidth = (boxSize * length) + (gap * (length - 1));
 
+  // Auto-focus on native with delay (web uses autoFocus prop)
+  useEffect(() => {
+    if (Platform.OS !== "web") {
+      const timer = setTimeout(() => inputRef.current?.focus(), 300);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
   // Reset PIN when error changes to true so user can retry
   useEffect(() => {
     if (error) {
@@ -111,12 +119,12 @@ export function PinInput({ length = 6, onComplete, error, testID }: PinInputProp
         onChangeText={handleChange}
         keyboardType="number-pad"
         maxLength={length}
-        autoFocus
+        autoFocus={Platform.OS === "web"}
         style={{
           position: "absolute",
           opacity: 0,
-          height: 1,
-          width: 1,
+          height: Platform.OS === "android" ? 48 : 1,
+          width: Platform.OS === "android" ? "100%" : 1,
           ...(Platform.OS === "web" ? { outline: "none", border: "none", caretColor: "transparent" } as any : {}),
         }}
         secureTextEntry

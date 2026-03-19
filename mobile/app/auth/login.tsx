@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   useWindowDimensions,
   Image,
+  InteractionManager,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -511,10 +512,11 @@ export default function LoginScreen() {
                   placeholderTextColor={tc.textMuted}
                   keyboardType="phone-pad"
                   maxLength={10}
-                  autoFocus
-                  onFocus={() => setPhoneFocused(true)}
-                  onBlur={() => setPhoneFocused(false)}
+                  autoFocus={Platform.OS === "web"}
+                  onFocus={() => InteractionManager.runAfterInteractions(() => setPhoneFocused(true))}
+                  onBlur={() => InteractionManager.runAfterInteractions(() => setPhoneFocused(false))}
                   onSubmitEditing={handlePhoneSubmit}
+                  blurOnSubmit={false}
                   style={{
                     flex: 1,
                     color: tc.textPrimary,
@@ -902,7 +904,7 @@ export default function LoginScreen() {
           }}
         >
           <KeyboardAvoidingView
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
             style={{ flex: 1 }}
           >
             {formContent}
@@ -916,7 +918,7 @@ export default function LoginScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={{ flex: 1 }}
       >
         {formContent}
