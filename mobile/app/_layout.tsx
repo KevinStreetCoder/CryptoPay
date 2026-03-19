@@ -28,9 +28,8 @@ import { AppTourProvider, triggerAppTour } from "../src/components/AppTour";
 // React tree is mounted. AppKit is initialized on-demand when the user
 // navigates to the deposit screen via React.lazy() in deposit.tsx.
 
-// Hide native splash quickly — our animated LoadingScreen takes over
+// Prevent native splash from hiding until we're ready
 SplashScreen.preventAutoHideAsync().catch(() => {});
-setTimeout(() => SplashScreen.hideAsync().catch(() => {}), 500);
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -57,6 +56,11 @@ function RootNavigator() {
   const tc = getThemeColors(isDark);
   const { expoPushToken } = usePushNotifications();
 
+  // Hide native splash as soon as RootNavigator mounts (LoadingScreen takes over)
+  useEffect(() => {
+    SplashScreen.hideAsync().catch(() => {});
+  }, []);
+
   useEffect(() => {
     const init = async () => {
       try {
@@ -79,7 +83,6 @@ function RootNavigator() {
         console.warn("App init failed or timed out:", e);
       }
       setAppReady(true);
-      await SplashScreen.hideAsync().catch(() => {});
     };
     init();
   }, [bootstrap]);
@@ -210,7 +213,11 @@ export default function RootLayout() {
   }, []);
 
   if (!fontsLoaded && !fontTimeout) {
-    return null;
+    return (
+      <View style={{ flex: 1, backgroundColor: '#060E1F' }}>
+        <LoadingScreen status="Loading fonts..." />
+      </View>
+    );
   }
 
   return (

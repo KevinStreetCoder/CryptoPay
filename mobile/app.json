@@ -8,7 +8,7 @@
     "userInterfaceStyle": "dark",
     "scheme": "cryptopay",
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#060E1F"
     },
@@ -105,6 +105,7 @@
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE"
       ],
+      "softwareKeyboardLayoutMode": "pan",
       "allowBackup": false,
       "intentFilters": [
         {
