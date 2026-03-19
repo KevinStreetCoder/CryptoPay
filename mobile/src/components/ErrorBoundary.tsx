@@ -85,7 +85,7 @@ function ErrorFallbackUI({ error, onRetry }: { error: Error | null; onRetry: () 
       </Text>
 
       {/* Error details (dev only) */}
-      {__DEV__ && error && (
+      {error && (
         <View
           style={{
             backgroundColor: tc.dark.card,
