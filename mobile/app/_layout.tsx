@@ -202,7 +202,14 @@ export default function RootLayout() {
     DMSans_700Bold,
   });
 
-  if (!fontsLoaded) {
+  // Font timeout: don't block the app forever if fonts fail to load
+  const [fontTimeout, setFontTimeout] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setFontTimeout(true), 5000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (!fontsLoaded && !fontTimeout) {
     return null;
   }
 
