@@ -287,13 +287,13 @@ function ProfileInfoChip({
           ) : null}
         </View>
         <Text
-          numberOfLines={1}
+          numberOfLines={value.length > 30 ? 1 : 2}
           ellipsizeMode="tail"
           style={{
             color: tc.textPrimary,
             fontSize: 14,
             fontFamily: "DMSans_500Medium",
-            ...(Platform.OS === "web" ? { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } as any : {}),
+            ...(value.length > 30 && Platform.OS === "web" ? { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } as any : {}),
           }}
         >
           {value}
@@ -1533,11 +1533,11 @@ export default function ProfileScreen() {
                         >
                           <Ionicons name="shield-checkmark" size={18} color={colors.success} />
                         </View>
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                          <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_500Medium" }} numberOfLines={1}>
+                        <View style={{ flex: 1, minWidth: 80 }}>
+                          <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_500Medium" }}>
                             {t("kyc.currentLevel")}
                           </Text>
-                          <Text style={{ color: colors.success, fontSize: 14, fontFamily: "DMSans_700Bold", marginTop: 1 }} numberOfLines={1}>
+                          <Text style={{ color: colors.success, fontSize: 13, fontFamily: "DMSans_700Bold", marginTop: 1 }}>
                             {t("profile.identityVerified")}
                           </Text>
                         </View>
@@ -1677,14 +1677,14 @@ export default function ProfileScreen() {
                     >
                       <Ionicons name="shield-checkmark" size={20} color={colors.success} />
                     </View>
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_500Medium" }} numberOfLines={1}>
+                    <View style={{ flex: 1, minWidth: 100 }}>
+                      <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_500Medium" }}>
                         {t("kyc.currentLevel")}
                       </Text>
-                      <Text style={{ color: colors.success, fontSize: 15, fontFamily: "DMSans_700Bold", marginTop: 2 }} numberOfLines={1}>
+                      <Text style={{ color: colors.success, fontSize: 14, fontFamily: "DMSans_700Bold", marginTop: 2 }}>
                         {t("profile.identityVerified")}
                       </Text>
-                      <Text style={{ color: tc.textSecondary, fontSize: 11, fontFamily: "DMSans_400Regular", marginTop: 1 }} numberOfLines={1}>
+                      <Text style={{ color: tc.textSecondary, fontSize: 11, fontFamily: "DMSans_400Regular", marginTop: 1 }}>
                         {t("kyc.enhancedDd")} — {currentTier?.limit}
                       </Text>
                     </View>
