@@ -98,6 +98,10 @@ api.interceptors.response.use(
           refresh,
         });
         await storage.setItemAsync("access_token", data.access);
+        // Save rotated refresh token — backend blacklists the old one
+        if (data.refresh) {
+          await storage.setItemAsync("refresh_token", data.refresh);
+        }
         originalRequest.headers.Authorization = `Bearer ${data.access}`;
         return api(originalRequest);
       } catch {
