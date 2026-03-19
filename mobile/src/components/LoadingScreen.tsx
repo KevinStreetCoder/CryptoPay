@@ -6,7 +6,7 @@ import { useThemeMode } from "../stores/theme";
 
 const useNative = Platform.OS !== "web";
 
-export function LoadingScreen() {
+export function LoadingScreen({ status }: { status?: string }) {
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
   const pulseAnim = useRef(new Animated.Value(0.6)).current;
@@ -145,7 +145,7 @@ export function LoadingScreen() {
           }} />
         </View>
         <Text style={{ color: tc.textMuted, fontSize: 12, fontWeight: "400", marginTop: 12, opacity: 0.6 }}>
-          Setting things up...
+          {status || "Setting things up..."}
         </Text>
       </View>
     </View>

@@ -69,9 +69,8 @@
       "package": "ke.co.cryptopay.app",
       "versionCode": 1,
       "adaptiveIcon": {
-        "backgroundColor": "#060E1F",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
+        "backgroundColor": "#10B981",
+        "foregroundImage": "./assets/icon.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "permissions": [
