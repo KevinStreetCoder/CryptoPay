@@ -99,8 +99,6 @@ CSRF_TRUSTED_ORIGINS = [
     "https://www.cpay.co.ke",
     "https://api.cpay.co.ke",
     "https://app.cpay.co.ke",
-    "http://localhost:8000",
-    "http://localhost:8081",
 ]
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
