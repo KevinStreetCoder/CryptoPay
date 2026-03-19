@@ -569,8 +569,8 @@ export default function RegisterScreen() {
                   keyboardType="phone-pad"
                   maxLength={10}
                   autoFocus={Platform.OS === "web"}
-                  onFocus={() => InteractionManager.runAfterInteractions(() => setPhoneFocused(true))}
-                  onBlur={() => InteractionManager.runAfterInteractions(() => setPhoneFocused(false))}
+                  onFocus={Platform.OS === "web" ? () => setPhoneFocused(true) : undefined}
+                  onBlur={Platform.OS === "web" ? () => setPhoneFocused(false) : undefined}
                   onSubmitEditing={handleSendOTP}
                   blurOnSubmit={false}
                   style={{
