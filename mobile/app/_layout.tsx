@@ -61,6 +61,7 @@ function RootNavigator() {
   const segments = useSegments();
   const router = useRouter();
   const [appReady, setAppReady] = useState(false);
+  const [initStatus, setInitStatus] = useState("Starting...");
   const [showOnboarding, setShowOnboarding] = useState(false);
 
   const { isDark } = useThemeMode();
@@ -70,13 +71,22 @@ function RootNavigator() {
   useEffect(() => {
     const init = async () => {
       try {
+        setInitStatus("Connecting...");
         // Race bootstrap against a 8s timeout — don't hang forever
         await Promise.race([
-          Promise.all([bootstrap(), initTheme(), initPrivacy()]),
-          new Promise((_, reject) => setTimeout(() => reject(new Error("Init timeout")), 8000)),
+          Promise.all([
+            bootstrap().then(() => setInitStatus("Authenticated")),
+            initTheme(),
+            initPrivacy(),
+          ]),
+          new Promise((_, reject) => setTimeout(() => {
+            setInitStatus("Taking longer than usual...");
+            reject(new Error("Init timeout"));
+          }, 8000)),
         ]);
-      } catch (e) {
+      } catch (e: any) {
         // Timeout or error — proceed anyway (user will land on login screen)
+        setInitStatus(e?.message === "Init timeout" ? "Ready" : `Error: ${e?.message?.slice(0, 50)}`);
         console.warn("App init failed or timed out:", e);
       }
       setAppReady(true);
@@ -148,7 +158,7 @@ function RootNavigator() {
   }, []);
 
   if (!appReady) {
-    return <LoadingScreen />;
+    return <LoadingScreen status={initStatus} />;
   }
 
   const inAuthGroup = segments[0] === "auth";
