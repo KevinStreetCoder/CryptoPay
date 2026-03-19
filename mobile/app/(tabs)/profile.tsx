@@ -502,7 +502,7 @@ export default function ProfileScreen() {
     router.replace("/auth/login");
   };
 
-  const hPad = isLargeDesktop ? 48 : isDesktop ? 32 : 16;
+  const hPad = isLargeDesktop ? 32 : isDesktop ? 20 : 16;
   const dividerColor = isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.06)";
 
   // Shared card style
@@ -1276,7 +1276,7 @@ export default function ProfileScreen() {
         contentContainerStyle={{
           paddingBottom: 40,
           ...(isDesktop
-            ? { paddingHorizontal: 48 }
+            ? { paddingHorizontal: 24 }
             : {}),
         }}
       >
