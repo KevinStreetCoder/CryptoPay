@@ -23,25 +23,52 @@ import { colors, getThemeColors, getThemeShadows } from "../constants/theme";
 import { useThemeMode } from "../stores/theme";
 import { useToast } from "./Toast";
 import { useWalletDeposit } from "../hooks/useWalletDeposit";
-import { DEPOSIT_NETWORKS, DepositNetwork, appKitInitialized } from "../config/appkit";
 
 const isWeb = Platform.OS === "web";
 
-// Try to import AppKit hooks — gracefully degrade if not available
-let useAppKit: any;
-let useAppKitAccount: any;
-let useAppKitProvider: any;
-let appKitAvailable = false;
+// AppKit imports are done LAZILY inside the component to avoid
+// crashing the app at module load time. The @reown/appkit-react-native
+// module registers React context hooks at import time that throw
+// "AppKit instance is not yet available in context" if no provider exists.
+let _appKitLoaded = false;
+let _appKitAvailable = false;
+let _appKitInitialized = false;
+let _useAppKit: any;
+let _useAppKitAccount: any;
+let _useAppKitProvider: any;
+let _AppKitModal: any;
+let __DEPOSIT_NETWORKS: any[] = [];
 
-try {
-  const appKit = require("@reown/appkit-react-native");
-  useAppKit = appKit.useAppKit;
-  useAppKitAccount = appKit.useAppKitAccount;
-  useAppKitProvider = appKit.useAppKitProvider;
-  appKitAvailable = true;
-} catch {
-  // AppKit not available (e.g., Expo Go or missing native modules)
+function ensureAppKitLoaded() {
+  if (_appKitLoaded) return _appKitAvailable;
+  _appKitLoaded = true;
+  try {
+    // Import and initialize AppKit on first use
+    const appkitConfig = require("../config/appkit");
+    __DEPOSIT_NETWORKS = appkitConfig._DEPOSIT_NETWORKS || [];
+    _appKitInitialized = appkitConfig.appKitInitialized || false;
+
+    // Initialize if not already done
+    if (!_appKitInitialized && appkitConfig.initAppKit) {
+      try {
+        const result = appkitConfig.initAppKit();
+        _appKitInitialized = result != null;
+      } catch {}
+    }
+
+    const appKit = require("@reown/appkit-react-native");
+    _useAppKit = appKit.useAppKit;
+    _useAppKitAccount = appKit.useAppKitAccount;
+    _useAppKitProvider = appKit.useAppKitProvider;
+    _AppKitModal = appKit.AppKit;
+    _appKitAvailable = true;
+  } catch {
+    _appKitAvailable = false;
+  }
+  return _appKitAvailable;
 }
+
+type DepositNetwork = { id: string; name: string; chainId: number; tokens: string[] };
 
 const TOKEN_OPTIONS = [
   { symbol: "USDT", name: "Tether", decimals: 6, color: "#26A17B" },
@@ -59,16 +86,16 @@ interface Props {
  * This avoids conditional hook calls (Rules of Hooks violation).
  */
 export function WalletConnectDeposit(props: Props) {
-  // AppKit hooks only work on native (iOS/Android) — on web, show fallback
-  const ready = appKitAvailable && appKitInitialized && Platform.OS !== "web";
+  // Load AppKit lazily on first render of this component
+  const isReady = ensureAppKitLoaded() && _appKitInitialized && Platform.OS !== "web";
 
-  if (ready) {
-    // Wrap in try-catch error boundary — AppKit context may not be ready
-    try {
-      return <WalletConnectDepositInner {...props} />;
-    } catch {
-      return <WalletConnectFallback />;
-    }
+  if (isReady) {
+    return (
+      <>
+        <WalletConnectDepositInner {...props} />
+        {_AppKitModal && <_AppKitModal />}
+      </>
+    );
   }
 
   return <WalletConnectFallback />;
@@ -135,12 +162,12 @@ function WalletConnectDepositInner({ depositAddress, onDepositInitiated }: Props
 
   const [selectedToken, setSelectedToken] = useState(TOKEN_OPTIONS[0]);
   const [amount, setAmount] = useState("");
-  const [selectedNetwork, setSelectedNetwork] = useState<DepositNetwork>(DEPOSIT_NETWORKS[0]);
+  const [selectedNetwork, setSelectedNetwork] = useState<DepositNetwork>(_DEPOSIT_NETWORKS[0]);
 
   // Hooks always called — this component only renders when AppKit is ready
-  const appKit = useAppKit();
-  const account = useAppKitAccount();
-  const providerHook = useAppKitProvider("eip155");
+  const appKit = _useAppKit();
+  const account = _useAppKitAccount();
+  const providerHook = _useAppKitProvider("eip155");
 
   const { address, isConnected } = account;
   const { provider } = providerHook;
@@ -359,7 +386,7 @@ function WalletConnectDepositInner({ depositAddress, onDepositInitiated }: Props
           </View>
 
           {/* Network Selector (for ERC-20 only) */}
-          {selectedToken.symbol !== "ETH" && DEPOSIT_NETWORKS.length > 1 && (
+          {selectedToken.symbol !== "ETH" && _DEPOSIT_NETWORKS.length > 1 && (
             <View style={{ gap: 8 }}>
               <Text
                 style={{
@@ -373,7 +400,7 @@ function WalletConnectDepositInner({ depositAddress, onDepositInitiated }: Props
                 Network
               </Text>
               <View style={{ flexDirection: "row", gap: 8 }}>
-                {DEPOSIT_NETWORKS.filter((n) =>
+                {_DEPOSIT_NETWORKS.filter((n) =>
                   n.tokens.includes(selectedToken.symbol)
                 ).map((network) => {
                   const active = selectedNetwork.chainId === network.chainId;

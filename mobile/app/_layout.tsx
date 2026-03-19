@@ -21,30 +21,12 @@ import { LanguageProvider } from "../src/contexts/LanguageContext";
 import { OnboardingModal, ONBOARDING_COMPLETED_KEY } from "./onboarding";
 import { AppTourProvider, triggerAppTour } from "../src/components/AppTour";
 
-// WalletConnect AppKit — gracefully degrade if not available
-let AppKitModal: React.ComponentType | null = null;
-let initAppKit: (() => any) | null = null;
-let appKitReady = false;
-
-try {
-  const appkitConfig = require("../src/config/appkit");
-  initAppKit = appkitConfig.initAppKit;
-
-  if (Platform.OS !== "web") {
-    const appkitRN = require("@reown/appkit-react-native");
-    AppKitModal = appkitRN.AppKit;
-  }
-
-  // Initialize AppKit — wrapped in try-catch for safety
-  if (initAppKit) {
-    const result = initAppKit();
-    appKitReady = result != null;
-  }
-} catch (e) {
-  // AppKit init failed — WalletConnect won't be available but app works fine
-  console.warn("AppKit init failed (non-fatal):", e);
-  appKitReady = false;
-}
+// WalletConnect AppKit — initialized LAZILY inside deposit screen only
+// DO NOT import appkit.ts or @reown/appkit-react-native here.
+// Their module-level side effects register React context hooks that crash
+// with "AppKit instance is not yet available in context" before the
+// React tree is mounted. AppKit is initialized on-demand when the user
+// navigates to the deposit screen via React.lazy() in deposit.tsx.
 
 // Hide native splash quickly — our animated LoadingScreen takes over
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -210,7 +192,7 @@ function RootNavigator() {
   );
 }
 
-// AppKit initialization moved to the top-level try-catch block above
+// AppKit initialized lazily in deposit screen
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
@@ -240,11 +222,7 @@ export default function RootLayout() {
               <AppTourProvider>
                 <RootNavigator />
               </AppTourProvider>
-              {appKitReady && AppKitModal && (
-                <ErrorBoundary fallback={null}>
-                  <AppKitModal />
-                </ErrorBoundary>
-              )}
+              {/* AppKit modal renders lazily inside deposit screen */}
             </ToastProvider>
           </LanguageProvider>
         </QueryClientProvider>
