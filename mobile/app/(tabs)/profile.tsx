@@ -725,22 +725,22 @@ export default function ProfileScreen() {
 
   // ── Edit Profile / Verify Identity action buttons ──
   const renderActionButtons = () => (
-    <View style={{ flexDirection: isDesktop ? "column" : "row", gap: 10, marginTop: isDesktop ? 0 : 20 }}>
+    <View style={{ flexDirection: isDesktop ? "column" : "column", gap: 10, marginTop: isDesktop ? 0 : 20, width: "100%" }}>
       {isMaxTier ? (
         /* ── Verified status badge for max-tier users ── */
         <View
           style={{
-            flex: isDesktop ? undefined : 1,
+            width: "100%",
             flexDirection: "row",
             alignItems: "center",
-            justifyContent: "center",
             gap: 10,
             paddingVertical: 12,
-            paddingHorizontal: 16,
+            paddingHorizontal: 14,
             borderRadius: 14,
             backgroundColor: colors.success + "18",
             borderWidth: 1,
             borderColor: colors.success + "40",
+            overflow: "hidden" as const,
             ...(isWeb ? { transition: "all 0.3s ease" } as any : {}),
           }}
           accessibilityLabel="Identity Verified"
