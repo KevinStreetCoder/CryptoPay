@@ -513,8 +513,8 @@ export default function LoginScreen() {
                   keyboardType="phone-pad"
                   maxLength={10}
                   autoFocus={Platform.OS === "web"}
-                  onFocus={() => InteractionManager.runAfterInteractions(() => setPhoneFocused(true))}
-                  onBlur={() => InteractionManager.runAfterInteractions(() => setPhoneFocused(false))}
+                  onFocus={Platform.OS === "web" ? () => setPhoneFocused(true) : undefined}
+                  onBlur={Platform.OS === "web" ? () => setPhoneFocused(false) : undefined}
                   onSubmitEditing={handlePhoneSubmit}
                   blurOnSubmit={false}
                   style={{
