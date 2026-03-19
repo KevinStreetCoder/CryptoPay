@@ -63,7 +63,12 @@ export function WalletConnectDeposit(props: Props) {
   const ready = appKitAvailable && appKitInitialized && Platform.OS !== "web";
 
   if (ready) {
-    return <WalletConnectDepositInner {...props} />;
+    // Wrap in try-catch error boundary — AppKit context may not be ready
+    try {
+      return <WalletConnectDepositInner {...props} />;
+    } catch {
+      return <WalletConnectFallback />;
+    }
   }
 
   return <WalletConnectFallback />;

@@ -21,12 +21,30 @@ import { LanguageProvider } from "../src/contexts/LanguageContext";
 import { OnboardingModal, ONBOARDING_COMPLETED_KEY } from "./onboarding";
 import { AppTourProvider, triggerAppTour } from "../src/components/AppTour";
 
-// WalletConnect AppKit — DISABLED until WalletConnect integration is needed
-// The AppKit module-level imports crash on Android with:
-// "AppKit instance is not yet available in context"
-// Re-enable when WalletConnect deposit flow is production-ready
-// let AppKitModal: React.ComponentType | null = null;
-// let initAppKit: (() => any) | null = null;
+// WalletConnect AppKit — gracefully degrade if not available
+let AppKitModal: React.ComponentType | null = null;
+let initAppKit: (() => any) | null = null;
+let appKitReady = false;
+
+try {
+  const appkitConfig = require("../src/config/appkit");
+  initAppKit = appkitConfig.initAppKit;
+
+  if (Platform.OS !== "web") {
+    const appkitRN = require("@reown/appkit-react-native");
+    AppKitModal = appkitRN.AppKit;
+  }
+
+  // Initialize AppKit — wrapped in try-catch for safety
+  if (initAppKit) {
+    const result = initAppKit();
+    appKitReady = result != null;
+  }
+} catch (e) {
+  // AppKit init failed — WalletConnect won't be available but app works fine
+  console.warn("AppKit init failed (non-fatal):", e);
+  appKitReady = false;
+}
 
 // Hide native splash quickly — our animated LoadingScreen takes over
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -192,9 +210,7 @@ function RootNavigator() {
   );
 }
 
-// AppKit/WalletConnect disabled on mobile — users deposit via manual addresses
-// Re-enable when WalletConnect native support is needed
-// let appKitReady = false;
+// AppKit initialization moved to the top-level try-catch block above
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
@@ -224,7 +240,11 @@ export default function RootLayout() {
               <AppTourProvider>
                 <RootNavigator />
               </AppTourProvider>
-              {/* AppKit disabled on mobile — WalletConnect uses manual deposit addresses instead */}
+              {appKitReady && AppKitModal && (
+                <ErrorBoundary fallback={null}>
+                  <AppKitModal />
+                </ErrorBoundary>
+              )}
             </ToastProvider>
           </LanguageProvider>
         </QueryClientProvider>
