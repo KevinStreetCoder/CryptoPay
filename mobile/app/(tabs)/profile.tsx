@@ -1230,9 +1230,7 @@ export default function ProfileScreen() {
             ? colors.error + "40"
             : colors.error + "20",
         marginBottom: 16,
-        maxWidth: isDesktop ? 360 : undefined,
         width: "100%",
-        alignSelf: isDesktop ? "center" as const : undefined,
         ...(isWeb ? { cursor: "pointer", transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)" } as any : {}),
         transform: [{ scale: pressed ? 0.98 : 1 }],
       })}
@@ -1421,7 +1419,7 @@ export default function ProfileScreen() {
             /* Desktop: horizontal layout — avatar+name | info chips & KYC | actions */
             <View style={{ flexDirection: "row", gap: 32 }}>
               {/* Left: Avatar + Name + Phone */}
-              <View style={{ alignItems: "center", minWidth: 180 }}>
+              <View style={{ alignItems: "center", minWidth: 180, flex: 1 }}>
                 {renderAvatar(96)}
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 16, marginBottom: 8 }}>
                   <Text
@@ -1491,7 +1489,7 @@ export default function ProfileScreen() {
               <View style={{ width: 1, backgroundColor: tc.glass.border, marginVertical: 4 }} />
 
               {/* Right: Info chips + KYC status (fills remaining space) */}
-              <View style={{ flex: 1, justifyContent: "center" }}>
+              <View style={{ flex: 2, justifyContent: "center" }}>
                 {/* Info chips row */}
                 <View style={{ flexDirection: "row", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
                   <View style={{ flex: 1, minWidth: 200 }}>
@@ -1737,13 +1735,13 @@ export default function ProfileScreen() {
             }}
           >
             {/* Left column */}
-            <View style={{ flex: 1, minWidth: 300 }}>
+            <View style={{ flex: 1, minWidth: 280 }}>
               {renderAdminSection()}
               {renderSecuritySection()}
               {renderSupportSection()}
             </View>
             {/* Right column */}
-            <View style={{ flex: 1, minWidth: 300 }}>
+            <View style={{ flex: 1, minWidth: 280 }}>
               {renderPreferencesSection()}
               {renderLogoutButton()}
               {renderVersion()}
