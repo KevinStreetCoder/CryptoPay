@@ -14,7 +14,7 @@ const GOOGLE_WEB_CLIENT_ID =
 const GOOGLE_ANDROID_CLIENT_ID =
   Constants.expoConfig?.extra?.googleAndroidClientId ||
   process.env.GOOGLE_ANDROID_CLIENT_ID ||
-  "797403635202-bbokau8cna2nju3omuaktls8ko0ptv4c.apps.googleusercontent.com";
+  "797403635202-rr8vc02i4ba7j5hs1iqp7nev845pb69t.apps.googleusercontent.com";
 const GOOGLE_IOS_CLIENT_ID =
   Constants.expoConfig?.extra?.googleIosClientId ||
   process.env.GOOGLE_IOS_CLIENT_ID ||
