@@ -13,6 +13,7 @@
     "@expo/metro-runtime": "~55.0.6",
     "@expo/vector-icons": "^15.0.2",
     "@lottiefiles/dotlottie-react": "^0.13.5",
+    "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/netinfo": "11.5.2",
     "@reown/appkit-ethers-react-native": "^2.0.2",
     "@reown/appkit-react-native": "^2.0.2",

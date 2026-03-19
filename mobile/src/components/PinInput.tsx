@@ -18,21 +18,15 @@ export function PinInput({ length = 6, onComplete, error, testID }: PinInputProp
   const inputRef = useRef<TextInput>(null);
   const { width: screenWidth } = useWindowDimensions();
 
-  // Responsive box sizing
-  // The PIN lives inside a card (maxWidth ~460px, padding ~32px each side = ~396px inner)
-  // 6 boxes + 5 gaps must fit within that inner width
-  const gap = 10;
-  const totalGaps = (length - 1) * gap;
-  // On mobile: use screen width minus generous padding
-  // On tablet/desktop: cap to 340px (fits inside any card up to 460px with padding)
-  const innerWidth = screenWidth < 768
-    ? Math.min(screenWidth - 80, 340)
-    : 340;
-  const available = innerWidth - totalGaps;
-  const boxSize = Math.max(32, Math.min(50, Math.floor(available / length)));
+  // Fixed box sizes — simple and reliable across all screen sizes
+  const isMobile = screenWidth < 768;
+  const gap = isMobile ? 8 : 10;
+  const boxSize = isMobile ? Math.min(44, Math.floor((screenWidth - 80) / length - gap)) : 46;
   const boxHeight = Math.round(boxSize * 1.15);
-  const boxRadius = Math.max(10, Math.round(boxSize * 0.26));
-  const dotSize = Math.max(10, Math.round(boxSize * 0.26));
+  const boxRadius = 12;
+  const dotSize = 12;
+  // Total width of all boxes + gaps — used to constrain the container
+  const totalWidth = (boxSize * length) + (gap * (length - 1));
 
   // Reset PIN when error changes to true so user can retry
   useEffect(() => {
@@ -60,7 +54,7 @@ export function PinInput({ length = 6, onComplete, error, testID }: PinInputProp
       accessibilityRole="none"
       accessibilityLabel={`PIN entry, ${pin.length} of ${length} digits entered`}
     >
-      <View style={{ flexDirection: "row", justifyContent: "center", gap, maxWidth: "100%", flexShrink: 1, alignSelf: "center" }}>
+      <View style={{ flexDirection: "row", justifyContent: "center", gap, width: totalWidth, maxWidth: "100%", alignSelf: "center" }}>
         {Array.from({ length }).map((_, i) => {
           const isFilled = pin.length > i;
           const isActive = pin.length === i;
