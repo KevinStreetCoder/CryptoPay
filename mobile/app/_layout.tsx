@@ -39,7 +39,9 @@ try {
   // AppKit not available — Expo Go or missing dependencies
 }
 
+// Hide native splash quickly — our animated LoadingScreen takes over
 SplashScreen.preventAutoHideAsync().catch(() => {});
+setTimeout(() => SplashScreen.hideAsync().catch(() => {}), 500);
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -67,7 +69,16 @@ function RootNavigator() {
 
   useEffect(() => {
     const init = async () => {
-      await Promise.all([bootstrap(), initTheme(), initPrivacy()]);
+      try {
+        // Race bootstrap against a 8s timeout — don't hang forever
+        await Promise.race([
+          Promise.all([bootstrap(), initTheme(), initPrivacy()]),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("Init timeout")), 8000)),
+        ]);
+      } catch (e) {
+        // Timeout or error — proceed anyway (user will land on login screen)
+        console.warn("App init failed or timed out:", e);
+      }
       setAppReady(true);
       await SplashScreen.hideAsync().catch(() => {});
     };
@@ -205,7 +216,7 @@ export default function RootLayout() {
   // Font timeout: don't block the app forever if fonts fail to load
   const [fontTimeout, setFontTimeout] = useState(false);
   useEffect(() => {
-    const timer = setTimeout(() => setFontTimeout(true), 5000);
+    const timer = setTimeout(() => setFontTimeout(true), 3000);
     return () => clearTimeout(timer);
   }, []);
 

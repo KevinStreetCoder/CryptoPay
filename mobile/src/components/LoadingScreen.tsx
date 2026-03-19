@@ -107,7 +107,7 @@ export function LoadingScreen() {
         style={{
           color: tc.textPrimary,
           fontSize: 24,
-          fontFamily: "DMSans_700Bold",
+          fontWeight: "700",
           marginTop: 20,
           letterSpacing: -0.5,
         }}
@@ -119,12 +119,35 @@ export function LoadingScreen() {
         style={{
           color: tc.textMuted,
           fontSize: 13,
-          fontFamily: "DMSans_400Regular",
+          fontWeight: "400",
           marginTop: 6,
         }}
       >
-        Secure. Fast. Seamless.
+        Pay bills with crypto, instantly.
       </Text>
+
+      {/* Loading indicator */}
+      <View style={{ marginTop: 32, alignItems: "center" }}>
+        <View style={{
+          width: 160, height: 3, borderRadius: 2,
+          backgroundColor: "rgba(16, 185, 129, 0.15)",
+          overflow: "hidden",
+        }}>
+          <Animated.View style={{
+            width: "40%", height: "100%", borderRadius: 2,
+            backgroundColor: tc.primary[500],
+            transform: [{
+              translateX: rotateAnim.interpolate({
+                inputRange: [0, 0.5, 1],
+                outputRange: [-64, 96, -64],
+              }),
+            }],
+          }} />
+        </View>
+        <Text style={{ color: tc.textMuted, fontSize: 12, fontWeight: "400", marginTop: 12, opacity: 0.6 }}>
+          Setting things up...
+        </Text>
+      </View>
     </View>
   );
 }
