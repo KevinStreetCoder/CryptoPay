@@ -1,153 +1,175 @@
 import { useEffect, useRef } from "react";
-import { View, Text, Animated, Easing, Platform } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { View, Text, Animated, Easing, Platform, Image, useWindowDimensions } from "react-native";
 import { getThemeColors } from "../constants/theme";
 import { useThemeMode } from "../stores/theme";
 
 const useNative = Platform.OS !== "web";
+const APP_LOGO = require("../../assets/icon.png");
 
 export function LoadingScreen({ status }: { status?: string }) {
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
-  const pulseAnim = useRef(new Animated.Value(0.6)).current;
+  const { width } = useWindowDimensions();
+  const isMobile = width < 768;
+
+  const pulseAnim = useRef(new Animated.Value(0.7)).current;
   const rotateAnim = useRef(new Animated.Value(0)).current;
+  const fadeIn = useRef(new Animated.Value(0)).current;
+  const slideUp = useRef(new Animated.Value(20)).current;
+  const ring1 = useRef(new Animated.Value(0)).current;
+  const ring2 = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Pulse animation
+    // Entrance animation
+    Animated.parallel([
+      Animated.timing(fadeIn, { toValue: 1, duration: 800, easing: Easing.out(Easing.cubic), useNativeDriver: useNative }),
+      Animated.timing(slideUp, { toValue: 0, duration: 800, easing: Easing.out(Easing.cubic), useNativeDriver: useNative }),
+    ]).start();
+
+    // Logo pulse
     Animated.loop(
       Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 1000,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: useNative,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 0.6,
-          duration: 1000,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: useNative,
-        }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 1200, easing: Easing.inOut(Easing.ease), useNativeDriver: useNative }),
+        Animated.timing(pulseAnim, { toValue: 0.7, duration: 1200, easing: Easing.inOut(Easing.ease), useNativeDriver: useNative }),
       ])
     ).start();
 
-    // Subtle rotate animation for the glow ring
+    // Spinner rotation
     Animated.loop(
-      Animated.timing(rotateAnim, {
-        toValue: 1,
-        duration: 3000,
-        easing: Easing.linear,
-        useNativeDriver: useNative,
-      })
+      Animated.timing(rotateAnim, { toValue: 1, duration: 2000, easing: Easing.linear, useNativeDriver: useNative })
     ).start();
-  }, [pulseAnim, rotateAnim]);
 
-  const spin = rotateAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0deg", "360deg"],
-  });
+    // Expanding ring 1
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(ring1, { toValue: 1, duration: 2000, easing: Easing.out(Easing.cubic), useNativeDriver: useNative }),
+        Animated.timing(ring1, { toValue: 0, duration: 0, useNativeDriver: useNative }),
+      ])
+    ).start();
+
+    // Expanding ring 2 (staggered)
+    setTimeout(() => {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(ring2, { toValue: 1, duration: 2000, easing: Easing.out(Easing.cubic), useNativeDriver: useNative }),
+          Animated.timing(ring2, { toValue: 0, duration: 0, useNativeDriver: useNative }),
+        ])
+      ).start();
+    }, 1000);
+  }, []);
+
+  const spin = rotateAnim.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] });
 
   return (
-    <View
+    <Animated.View
       style={{
         flex: 1,
         backgroundColor: tc.dark.bg,
         alignItems: "center",
         justifyContent: "center",
+        opacity: fadeIn,
       }}
     >
-      {/* Rotating glow ring */}
-      <Animated.View
-        style={{
-          position: "absolute",
-          width: 100,
-          height: 100,
-          borderRadius: 50,
-          borderWidth: 2,
-          borderColor: "rgba(16, 185, 129, 0.1)",
-          borderTopColor: "rgba(16, 185, 129, 0.5)",
-          transform: [{ rotate: spin }],
-        }}
-      />
+      {/* Background ambient glow */}
+      <View style={{
+        position: "absolute", width: 300, height: 300, borderRadius: 150,
+        backgroundColor: tc.primary[500], opacity: 0.04,
+        ...(Platform.OS === "web" ? { filter: "blur(80px)" } as any : {}),
+      }} />
 
-      {/* Logo — matches sidebar/login flash icon */}
-      <Animated.View
-        style={{
-          width: 56,
-          height: 56,
-          borderRadius: 16,
-          backgroundColor: tc.primary[500],
-          alignItems: "center",
-          justifyContent: "center",
-          opacity: pulseAnim,
-          transform: [
-            {
-              scale: pulseAnim.interpolate({
-                inputRange: [0.6, 1],
-                outputRange: [0.96, 1.04],
-              }),
-            },
-          ],
-          ...(Platform.OS === "web"
-            ? { boxShadow: "0 8px 24px rgba(16, 185, 129, 0.35)" }
-            : {
-                shadowColor: "#10B981",
-                shadowOffset: { width: 0, height: 6 },
-                shadowOpacity: 0.35,
-                shadowRadius: 16,
-                elevation: 8,
-              }) as any,
-        }}
-      >
-        <Ionicons name="flash" size={28} color="#fff" />
+      {/* Expanding pulse rings */}
+      <Animated.View style={{
+        position: "absolute", width: 120, height: 120, borderRadius: 60,
+        borderWidth: 1.5, borderColor: tc.primary[500],
+        opacity: ring1.interpolate({ inputRange: [0, 1], outputRange: [0.4, 0] }),
+        transform: [{ scale: ring1.interpolate({ inputRange: [0, 1], outputRange: [1, 2.5] }) }],
+      }} />
+      <Animated.View style={{
+        position: "absolute", width: 120, height: 120, borderRadius: 60,
+        borderWidth: 1, borderColor: tc.primary[500],
+        opacity: ring2.interpolate({ inputRange: [0, 1], outputRange: [0.3, 0] }),
+        transform: [{ scale: ring2.interpolate({ inputRange: [0, 1], outputRange: [1, 2] }) }],
+      }} />
+
+      {/* Spinning ring */}
+      <Animated.View style={{
+        position: "absolute", width: 110, height: 110, borderRadius: 55,
+        borderWidth: 2.5, borderColor: "rgba(16, 185, 129, 0.08)",
+        borderTopColor: tc.primary[500] + "80",
+        borderRightColor: tc.primary[500] + "30",
+        transform: [{ rotate: spin }],
+      }} />
+
+      {/* App Logo — using actual icon */}
+      <Animated.View style={{
+        transform: [
+          { translateY: slideUp },
+          { scale: pulseAnim.interpolate({ inputRange: [0.7, 1], outputRange: [0.95, 1.05] }) },
+        ],
+      }}>
+        <Image
+          source={APP_LOGO}
+          style={{
+            width: 72, height: 72, borderRadius: 20,
+            ...(Platform.OS === "web"
+              ? { boxShadow: "0 12px 32px rgba(16, 185, 129, 0.4)" }
+              : {
+                  shadowColor: "#10B981",
+                  shadowOffset: { width: 0, height: 8 },
+                  shadowOpacity: 0.4,
+                  shadowRadius: 20,
+                  elevation: 12,
+                }) as any,
+          }}
+          resizeMode="cover"
+        />
       </Animated.View>
 
       {/* Brand name */}
-      <Text
-        style={{
-          color: tc.textPrimary,
-          fontSize: 24,
-          fontWeight: "700",
-          marginTop: 20,
-          letterSpacing: -0.5,
-        }}
-      >
-        CryptoPay
-      </Text>
-
-      <Text
-        style={{
-          color: tc.textMuted,
-          fontSize: 13,
-          fontWeight: "400",
-          marginTop: 6,
-        }}
-      >
-        Pay bills with crypto, instantly.
-      </Text>
+      <Animated.View style={{ transform: [{ translateY: slideUp }], marginTop: 24, alignItems: "center" }}>
+        <Text style={{ color: tc.textPrimary, fontSize: 26, fontWeight: "700", letterSpacing: -0.5 }}>
+          CryptoPay
+        </Text>
+        <Text style={{ color: tc.textMuted, fontSize: 14, fontWeight: "400", marginTop: 6, textAlign: "center" }}>
+          Pay bills with crypto, instantly.
+        </Text>
+      </Animated.View>
 
       {/* Loading indicator */}
-      <View style={{ marginTop: 32, alignItems: "center" }}>
+      <Animated.View style={{ marginTop: 40, alignItems: "center", opacity: fadeIn, transform: [{ translateY: slideUp }] }}>
+        {/* Progress bar */}
         <View style={{
-          width: 160, height: 3, borderRadius: 2,
-          backgroundColor: "rgba(16, 185, 129, 0.15)",
-          overflow: "hidden",
+          width: isMobile ? 200 : 240, height: 3, borderRadius: 2,
+          backgroundColor: "rgba(16, 185, 129, 0.12)", overflow: "hidden",
         }}>
           <Animated.View style={{
-            width: "40%", height: "100%", borderRadius: 2,
+            width: "35%", height: "100%", borderRadius: 2,
             backgroundColor: tc.primary[500],
             transform: [{
               translateX: rotateAnim.interpolate({
                 inputRange: [0, 0.5, 1],
-                outputRange: [-64, 96, -64],
+                outputRange: [-80, isMobile ? 120 : 160, -80],
               }),
             }],
           }} />
         </View>
-        <Text style={{ color: tc.textMuted, fontSize: 12, fontWeight: "400", marginTop: 12, opacity: 0.6 }}>
-          {status || "Setting things up..."}
+
+        {/* Status text */}
+        <Text style={{
+          color: tc.textMuted, fontSize: 13, fontWeight: "400",
+          marginTop: 16, opacity: 0.7, textAlign: "center",
+        }}>
+          {status || "Opening CryptoPay..."}
         </Text>
-      </View>
-    </View>
+
+        {/* Version */}
+        <Text style={{
+          color: tc.textMuted, fontSize: 11, fontWeight: "400",
+          marginTop: 8, opacity: 0.3,
+        }}>
+          v1.0.0
+        </Text>
+      </Animated.View>
+    </Animated.View>
   );
 }
