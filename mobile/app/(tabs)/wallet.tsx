@@ -203,13 +203,14 @@ export default function WalletScreen() {
         URL.revokeObjectURL(url);
         toast.success("Exported", "CSV file downloaded");
       } else {
-        // Native: share the CSV content via Share API
+        // Native: write CSV to cache dir and share as file attachment
         const { Share } = require("react-native");
-        await Share.share({
-          message: data,
-          title: "CryptoPay Transactions",
-        });
-        toast.success("Exported", "CSV file ready");
+        const { cacheDirectory, writeAsStringAsync, EncodingType } = require("expo-file-system");
+        const fileName = `cryptopay_transactions_${new Date().toISOString().split("T")[0]}.csv`;
+        const filePath = `${cacheDirectory}${fileName}`;
+        await writeAsStringAsync(filePath, data, { encoding: EncodingType.UTF8 });
+        await Share.share({ url: filePath, title: "CryptoPay Transactions" });
+        toast.success("Exported", "CSV file ready to share");
       }
     } catch {
       toast.error("Export Failed", "Could not export transactions. Please try again.");
