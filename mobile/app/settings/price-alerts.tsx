@@ -39,11 +39,13 @@ function AlertCard({
   tc,
   ts,
   onDelete,
+  onReactivate,
 }: {
   alert: PriceAlert;
   isDesktop: boolean;
   tc: ReturnType<typeof getThemeColors>;
   ts: ReturnType<typeof getThemeShadows>;
+  onReactivate?: (alert: PriceAlert) => void;
   onDelete: (id: string) => void;
 }) {
   const directionColor = alert.direction === "above" ? colors.success : colors.error;
@@ -174,7 +176,7 @@ function AlertCard({
         )}
       </View>
 
-      {/* Triggered info */}
+      {/* Triggered info + Reactivate button */}
       {alert.triggered_at && (
         <Text
           style={{
@@ -191,7 +193,35 @@ function AlertCard({
             hour: "2-digit",
             minute: "2-digit",
           })}
+          {alert.trigger_count > 1 ? ` (${alert.trigger_count}x)` : ""}
         </Text>
+      )}
+
+      {/* Reactivate button for triggered alerts */}
+      {!alert.is_active && alert.triggered_at && onReactivate && (
+        <Pressable
+          onPress={() => onReactivate(alert)}
+          style={({ pressed }: any) => ({
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 6,
+            marginLeft: 58,
+            marginTop: 8,
+            paddingHorizontal: 14,
+            paddingVertical: 8,
+            borderRadius: 10,
+            backgroundColor: colors.primary[500] + "15",
+            borderWidth: 1,
+            borderColor: colors.primary[500] + "30",
+            alignSelf: "flex-start",
+            opacity: pressed ? 0.7 : 1,
+          })}
+        >
+          <Ionicons name="refresh-outline" size={14} color={colors.primary[400]} />
+          <Text style={{ color: colors.primary[400], fontSize: 13, fontFamily: "DMSans_600SemiBold" }}>
+            Reactivate
+          </Text>
+        </Pressable>
       )}
     </View>
   );
@@ -744,6 +774,16 @@ export default function PriceAlertsScreen() {
     }
   };
 
+  const handleReactivate = async (alert: PriceAlert) => {
+    try {
+      const { data } = await ratesApi.reactivateAlert(alert.id);
+      setAlerts((prev) => prev.map((a) => a.id === alert.id ? data : a));
+      toast.success("Reactivated", "Alert is active again");
+    } catch {
+      toast.error("Error", "Failed to reactivate alert");
+    }
+  };
+
   const handleDelete = async (id: string) => {
     const confirmDelete = () => {
       ratesApi.deleteAlert(id).then(() => {
@@ -840,6 +880,7 @@ export default function PriceAlertsScreen() {
                       tc={tc}
                       ts={ts}
                       onDelete={handleDelete}
+                      onReactivate={handleReactivate}
                     />
                   </View>
                 ))}
@@ -881,7 +922,7 @@ export default function PriceAlertsScreen() {
       onPress={() => setShowModal(true)}
       style={({ pressed, hovered }: any) => ({
         position: "absolute",
-        bottom: isDesktop ? 32 : 24,
+        bottom: isDesktop ? 32 : 80,
         right: isDesktop ? 48 : 20,
         width: 56,
         height: 56,
