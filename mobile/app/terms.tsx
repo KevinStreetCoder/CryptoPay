@@ -1,17 +1,22 @@
-import { useEffect } from "react";
-import { useRouter } from "expo-router";
+import { View } from "react-native";
+import { getThemeColors } from "../src/constants/theme";
+import { useThemeMode } from "../src/stores/theme";
+
+// Lazy import the terms screen to avoid duplicating 700 lines of legal content
+const TermsScreen = require("./settings/terms").default;
 
 /**
  * Public route: /terms
- * Redirects to the full Terms & Privacy screen with the terms tab active.
- * This URL is linked from email templates, app store listings, and legal docs.
+ * Renders terms of service directly — accessible without login.
+ * Required by Google OAuth consent screen and app store listings.
  */
-export default function TermsRedirect() {
-  const router = useRouter();
+export default function TermsPage() {
+  const { isDark } = useThemeMode();
+  const tc = getThemeColors(isDark);
 
-  useEffect(() => {
-    router.replace("/settings/terms?tab=terms" as any);
-  }, [router]);
-
-  return null;
+  return (
+    <View style={{ flex: 1, backgroundColor: tc.dark.bg }}>
+      <TermsScreen />
+    </View>
+  );
 }
