@@ -23,7 +23,19 @@ async function getDeviceInfo() {
       deviceId = `web-${Date.now()}`;
     }
   } else {
-    deviceId = `${Device.brand}-${Device.modelId || Device.modelName}-${Device.osVersion}`;
+    // Use a stable persistent device ID on native
+    try {
+      const { storage } = require("../utils/storage");
+      const stored = await storage.getItemAsync("cryptopay_device_id");
+      if (stored) {
+        deviceId = stored;
+      } else {
+        deviceId = `${Device.brand || "android"}-${Device.modelId || Device.modelName || "device"}-${Date.now()}`;
+        await storage.setItemAsync("cryptopay_device_id", deviceId);
+      }
+    } catch {
+      deviceId = `${Device.brand}-${Device.modelId || Device.modelName}-${Device.osVersion}`;
+    }
   }
 
   return { device_id: deviceId, device_name: deviceName, platform };

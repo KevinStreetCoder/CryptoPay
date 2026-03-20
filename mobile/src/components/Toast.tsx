@@ -42,27 +42,27 @@ export function useToast(): ToastContextType {
 const TOAST_CONFIG: Record<ToastType, { icon: string; bg: string; border: string; color: string }> = {
   success: {
     icon: "checkmark-circle",
-    bg: "rgba(16, 185, 129, 0.12)",
-    border: "rgba(16, 185, 129, 0.3)",
-    color: "#10B981",
+    bg: "#0C2818",
+    border: "rgba(16, 185, 129, 0.4)",
+    color: "#34D399",
   },
   error: {
     icon: "alert-circle",
-    bg: "rgba(239, 68, 68, 0.12)",
-    border: "rgba(239, 68, 68, 0.3)",
-    color: "#EF4444",
+    bg: "#2D1114",
+    border: "rgba(239, 68, 68, 0.4)",
+    color: "#F87171",
   },
   warning: {
     icon: "warning",
-    bg: "rgba(245, 158, 11, 0.12)",
-    border: "rgba(245, 158, 11, 0.3)",
-    color: "#F59E0B",
+    bg: "#2D2006",
+    border: "rgba(245, 158, 11, 0.4)",
+    color: "#FBBF24",
   },
   info: {
     icon: "information-circle",
-    bg: "rgba(59, 130, 246, 0.12)",
-    border: "rgba(59, 130, 246, 0.3)",
-    color: "#3B82F6",
+    bg: "#0C1A2D",
+    border: "rgba(59, 130, 246, 0.4)",
+    color: "#60A5FA",
   },
 };
 
@@ -133,28 +133,34 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
           backgroundColor: config.bg,
           borderWidth: 1,
           borderColor: config.border,
-          borderRadius: 14,
-          paddingHorizontal: 16,
-          paddingVertical: 12,
-          marginHorizontal: 16,
+          borderRadius: 16,
+          paddingHorizontal: 18,
+          paddingVertical: 14,
+          marginHorizontal: 10,
           gap: 12,
           ...(Platform.OS === "web" ? {
-            maxWidth: 440,
+            maxWidth: 460,
             width: "100%",
-            boxShadow: "0 8px 32px rgba(0,0,0,0.3)",
-            backdropFilter: "blur(12px)",
-          } as any : {}),
+            boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+          } as any : {
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.4,
+            shadowRadius: 12,
+            elevation: 10,
+          }),
         }}
         accessibilityRole="alert"
         accessibilityLabel={`${toast.type}: ${toast.title}${toast.message ? `. ${toast.message}` : ""}`}
       >
-        <Ionicons name={config.icon as any} size={22} color={config.color} />
+        <Ionicons name={config.icon as any} size={24} color={config.color} />
         <View style={{ flex: 1 }}>
           <Text
             style={{
-              color: "#FFFFFF",
-              fontSize: 14,
+              color: "#F1F5F9",
+              fontSize: 15,
               fontFamily: "DMSans_600SemiBold",
+              lineHeight: 20,
             }}
             maxFontSizeMultiplier={1.3}
           >
@@ -163,10 +169,11 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
           {toast.message && (
             <Text
               style={{
-                color: "#94A3B8",
-                fontSize: 12,
+                color: "#CBD5E1",
+                fontSize: 13,
                 fontFamily: "DMSans_400Regular",
-                marginTop: 2,
+                marginTop: 3,
+                lineHeight: 18,
               }}
               maxFontSizeMultiplier={1.3}
             >
@@ -174,7 +181,7 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
             </Text>
           )}
         </View>
-        <Ionicons name="close" size={16} color="#64748B" />
+        <Ionicons name="close" size={18} color="#94A3B8" />
       </Pressable>
     </Animated.View>
   );
