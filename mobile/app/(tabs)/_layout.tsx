@@ -89,10 +89,11 @@ function TabIcon({
         justifyContent: "center",
         transform: [{ scale: scaleAnim }],
         position: "relative",
-        paddingHorizontal: 14,
+        paddingHorizontal: 12,
         paddingVertical: 6,
-        minWidth: 48,
+        minWidth: 56,
         minHeight: 42,
+        flex: 1,
       }}
     >
       {/* Pulsing badge for pending deposits */}
@@ -117,7 +118,7 @@ function TabIcon({
         numberOfLines={1}
         style={{
           color,
-          fontSize: 10,
+          fontSize: 11,
           fontFamily: focused ? "DMSans_600SemiBold" : "DMSans_500Medium",
           marginTop: 2,
           letterSpacing: 0.3,
@@ -190,6 +191,7 @@ export default function TabLayout() {
         tabBarInactiveTintColor: isDark ? "#556B82" : "#94A3B8",
         tabBarShowLabel: false,
         tabBarItemStyle: {
+          flex: 1,
           paddingVertical: 0,
           justifyContent: "center" as const,
           alignItems: "center" as const,
@@ -247,7 +249,7 @@ export default function TabLayout() {
           tabBarIcon: ({ color, focused }) => (
             <TabIcon
               name={focused ? "person" : "person-outline"}
-              label="Profile"
+              label="Me"
               color={color}
               focused={focused}
             />

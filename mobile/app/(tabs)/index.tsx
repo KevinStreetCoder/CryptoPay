@@ -1273,7 +1273,7 @@ function HomeScreenContent() {
           }
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{
-            paddingBottom: 32,
+            paddingBottom: Platform.OS === "android" ? 80 : 32,
           }}
         >
           {/* Header */}

@@ -2296,7 +2296,7 @@ export default function WalletScreen() {
           )}
         </View>
 
-        <View style={{ height: 32 }} />
+        <View style={{ height: Platform.OS === "android" ? 80 : 32 }} />
       </ScrollView>
 
       {/* Mobile Deposit Modal */}
