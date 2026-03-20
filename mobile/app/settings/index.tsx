@@ -343,21 +343,17 @@ function ProfileCard({
   router: any;
 }) {
   const { t } = useLocale();
-  const AVATAR_COLORS = ["#10B981", "#F59E0B", "#3B82F6", "#8B5CF6", "#EC4899", "#EF4444", "#6366F1", "#14B8A6"];
+  const AVATAR_COLORS = ["#10B981", "#3B82F6", "#8B5CF6", "#EC4899", "#6366F1", "#14B8A6", "#F59E0B", "#EF4444"];
+  const ADMIN_GOLD = "#D4AF37";
   const avatarIdentifier = user?.id?.toString() || user?.phone || "user";
   let avatarHash = 0;
   for (let i = 0; i < avatarIdentifier.length; i++) avatarHash = avatarIdentifier.charCodeAt(i) + ((avatarHash << 5) - avatarHash);
-  const avatarBgColor = AVATAR_COLORS[Math.abs(avatarHash) % AVATAR_COLORS.length];
-
-  const rawInitials = (user?.full_name || "")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((n: string) => n[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
-  const initials = rawInitials || "";
+  const isAdmin = user?.is_staff || user?.is_superuser;
+  const avatarBgColor = isAdmin ? ADMIN_GOLD : AVATAR_COLORS[Math.abs(avatarHash) % AVATAR_COLORS.length];
+  const tierBorderColor = isAdmin ? ADMIN_GOLD : (user?.kyc_tier ?? 0) >= 1 ? "#10B981" : avatarBgColor;
+  const avatarBgHex = avatarBgColor.replace("#", "");
+  const avatarName = encodeURIComponent(user?.full_name || user?.phone?.slice(-4) || "U");
+  const generatedAvatarUrl = `https://ui-avatars.com/api/?name=${avatarName}&size=128&background=${avatarBgHex}&color=fff&bold=true&font-size=0.38&rounded=true&format=png`;
 
   return (
     <Pressable
@@ -394,44 +390,18 @@ function ProfileCard({
         const avatarUrl = user?.avatar_url
           ? (user.avatar_url.startsWith("http") ? user.avatar_url : `${config.apiUrl.replace(/\/api\/v1\/?$/, "")}${user.avatar_url.startsWith("/") ? "" : "/"}${user.avatar_url}`)
           : null;
-        return avatarUrl ? (
+        const displayAvatarUrl = avatarUrl || generatedAvatarUrl;
+        return (
           <Image
-            source={{ uri: avatarUrl }}
+            source={{ uri: displayAvatarUrl }}
             style={{
               width: avatarSize,
               height: avatarSize,
               borderRadius: isDesktop ? 20 : 18,
               borderWidth: 2,
-              borderColor: colors.primary[500] + "40",
+              borderColor: tierBorderColor + "50",
             }}
           />
-        ) : (
-          <View
-            style={{
-              width: avatarSize,
-              height: avatarSize,
-              borderRadius: isDesktop ? 20 : 18,
-              backgroundColor: avatarBgColor + "25",
-              alignItems: "center",
-              justifyContent: "center",
-              borderWidth: 2,
-              borderColor: avatarBgColor + "50",
-            }}
-          >
-            {initials ? (
-              <Text
-                style={{
-                  color: avatarBgColor,
-                  fontSize: isDesktop ? 24 : 20,
-                  fontFamily: "DMSans_700Bold",
-                }}
-              >
-                {initials}
-              </Text>
-            ) : (
-              <Ionicons name="person" size={isDesktop ? 28 : 24} color={avatarBgColor} />
-            )}
-          </View>
         );
       })()}
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Platform } from "react-native";
 import * as LocalAuthentication from "expo-local-authentication";
 
 interface BiometricAuthState {
@@ -31,20 +32,20 @@ export function useBiometricAuth(): UseBiometricAuthReturn {
           await LocalAuthentication.supportedAuthenticationTypesAsync();
 
         let biometricType: BiometricAuthState["biometricType"] = "none";
-        if (
-          types.includes(
-            LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION
-          )
-        ) {
-          biometricType = "face";
-        } else if (
-          types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)
-        ) {
-          biometricType = "fingerprint";
-        } else if (
-          types.includes(LocalAuthentication.AuthenticationType.IRIS)
-        ) {
-          biometricType = "iris";
+        const hasFingerprint = types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT);
+        const hasFace = types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION);
+        const hasIris = types.includes(LocalAuthentication.AuthenticationType.IRIS);
+
+        // On Android, prioritize fingerprint (more common/reliable)
+        // On iOS, prioritize Face ID (newer iPhones)
+        if (Platform.OS === "android") {
+          if (hasFingerprint) biometricType = "fingerprint";
+          else if (hasFace) biometricType = "face";
+          else if (hasIris) biometricType = "iris";
+        } else {
+          if (hasFace) biometricType = "face";
+          else if (hasFingerprint) biometricType = "fingerprint";
+          else if (hasIris) biometricType = "iris";
         }
 
         if (mounted) {
