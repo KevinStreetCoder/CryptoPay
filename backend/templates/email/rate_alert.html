@@ -1,0 +1,47 @@
+{% extends "email/base.html" %}
+
+{% block title %}CPay Rate Alert — {{ currency }}/KES{% endblock %}
+
+{% block content %}
+<h2>Rate Alert Triggered</h2>
+
+<p>Hi {{ full_name|default:"there" }}, your price alert for <strong>{{ currency }}/KES</strong> has been triggered.</p>
+
+<div class="info-card">
+  <table role="presentation">
+    <tr>
+      <td class="label">Currency Pair</td>
+      <td class="value">{{ currency }}/KES</td>
+    </tr>
+    <tr>
+      <td class="label">Direction</td>
+      <td class="value" style="color: {% if direction == 'above' %}#10B981{% else %}#ef4444{% endif %};">
+        {% if direction == 'above' %}⬆ Risen Above{% else %}⬇ Dropped Below{% endif %}
+      </td>
+    </tr>
+    <tr>
+      <td class="label">Your Target</td>
+      <td class="value">KES {{ target_rate }}</td>
+    </tr>
+    <tr>
+      <td class="label">Current Rate</td>
+      <td class="value" style="color: #10B981; font-size: 18px;">KES {{ current_rate }}</td>
+    </tr>
+  </table>
+</div>
+
+<div style="background-color: #1a2a0a; border: 1px solid #10B981; border-radius: 8px; padding: 16px 20px; margin: 20px 0;">
+  <p style="color: #86efac; margin: 0; font-family: -apple-system, sans-serif; font-size: 14px;">
+    This alert has been automatically deactivated. Set a new alert in the app to continue monitoring.
+  </p>
+</div>
+
+<div style="text-align: center; margin: 28px 0 8px 0;">
+  <a href="https://cpay.co.ke" class="btn">Open CryptoPay</a>
+</div>
+
+<p style="font-size: 13px; color: #94a3b8; margin-top: 24px;">
+  You're receiving this because you set a price alert on CryptoPay.
+  Manage your alerts in Settings → Price Alerts.
+</p>
+{% endblock %}

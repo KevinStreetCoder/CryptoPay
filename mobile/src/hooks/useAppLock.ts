@@ -79,7 +79,11 @@ export function useAppLock(biometricEnabled: boolean, isAuthenticated: boolean) 
     const lastActive = await getLastActive();
     const elapsed = (Date.now() - lastActive) / 1000;
 
-    if (lastActive === 0 || elapsed >= timeout) {
+    // Minimum 5 seconds before locking — prevents lock on brief transitions
+    // like image picker, permission dialogs, share sheet, etc.
+    const effectiveTimeout = Math.max(timeout, 5);
+
+    if (lastActive === 0 || elapsed >= effectiveTimeout) {
       setLocked(true);
     }
   }, [biometricEnabled, isAuthenticated]);

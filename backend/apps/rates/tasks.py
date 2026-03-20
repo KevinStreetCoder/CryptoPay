@@ -138,21 +138,27 @@ def _send_rate_alert_notification(notif):
         f"KES {target_rate:,.2f}. Current rate: KES {current_rate:,.2f}."
     )
 
-    # Email notification
+    # Email notification (themed HTML template)
     try:
-        from apps.core.tasks import send_email_task
+        from django.core.mail import send_mail
         from django.template.loader import render_to_string
+        from django.conf import settings as django_settings
 
         if user.email:
-            html_content = (
-                f"<h2>CryptoPay Rate Alert</h2>"
-                f"<p>{message}</p>"
-                f"<p>Log in to CryptoPay to take action.</p>"
-            )
-            send_email_task.delay(
-                subject=f"CPay Rate Alert - {currency}/KES",
-                html_content=html_content,
-                recipient_email=user.email,
+            html_content = render_to_string("email/rate_alert.html", {
+                "full_name": user.full_name or user.phone,
+                "currency": currency,
+                "direction": direction,
+                "target_rate": f"{target_rate:,.2f}",
+                "current_rate": f"{current_rate:,.2f}",
+            })
+            send_mail(
+                f"CPay Rate Alert — {currency}/KES",
+                message,
+                django_settings.DEFAULT_FROM_EMAIL,
+                [user.email],
+                html_message=html_content,
+                fail_silently=True,
             )
     except Exception as e:
         logger.warning(f"Failed to send rate alert email to {user}: {e}")
