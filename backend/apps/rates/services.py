@@ -61,7 +61,7 @@ class RateService:
         # Try CoinGecko first (batch request = 1 API call for all currencies)
         try:
             url = "https://api.coingecko.com/api/v3/simple/price"
-            params = {"ids": all_ids, "vs_currencies": "usd"}
+            params = {"ids": all_ids, "vs_currencies": "usd", "include_24hr_change": "true"}
             headers = {}
             if getattr(settings, "COINGECKO_API_KEY", ""):
                 headers["x-cg-demo-api-key"] = settings.COINGECKO_API_KEY
@@ -78,6 +78,10 @@ class RateService:
                     ExchangeRate.objects.create(
                         pair=f"{currency}/USD", rate=rate, source="coingecko",
                     )
+                    # Cache 24h price change for frontend display
+                    change_24h = data[coin_id].get("usd_24h_change")
+                    if change_24h is not None:
+                        cache.set(f"rate:change24h:{currency}", str(round(change_24h, 2)), timeout=CRYPTO_RATE_CACHE_TTL)
 
             fetched = True
             # Set debounce lock — don't call again for 55 seconds
@@ -210,6 +214,9 @@ class RateService:
 
         is_stale = bool(cache.get("rate:stale"))
 
+        # Get 24h change from cache (set by batch rate refresh)
+        change_24h = cache.get(f"rate:change24h:{currency}")
+
         return {
             "currency": currency,
             "crypto_usd": str(crypto_usd),
@@ -221,6 +228,7 @@ class RateService:
             "excise_duty_percent": settings.EXCISE_DUTY_PERCENT,
             "rate_freshness": "stale" if is_stale else "live",
             "rate_stale": is_stale,
+            "change_24h": change_24h or "0",
         }
 
     @staticmethod

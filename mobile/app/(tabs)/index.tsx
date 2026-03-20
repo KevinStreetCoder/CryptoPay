@@ -1274,7 +1274,7 @@ function HomeScreenContent() {
     .map((r) => ({
       symbol: r.currency,
       rate: parseFloat(r.kes_rate),
-      change24h: parseFloat(r.spread) || 0,
+      change24h: parseFloat((r as any).change_24h || r.spread) || 0,
     }));
 
   const firstName = user?.full_name?.split(" ")[0] || "there";
