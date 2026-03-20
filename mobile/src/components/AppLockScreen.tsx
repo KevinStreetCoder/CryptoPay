@@ -1,4 +1,4 @@
-import { View, Text, Platform, Pressable, Keyboard } from "react-native";
+import { View, Text, Platform, Pressable, Keyboard, KeyboardAvoidingView, ScrollView } from "react-native";
 import { useState, useEffect, useCallback } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, getThemeColors } from "../constants/theme";
@@ -81,15 +81,23 @@ export function AppLockScreen({ onUnlock, userPhone }: AppLockScreenProps) {
         : "Biometric";
 
   return (
-    <View
-      style={{
-        flex: 1,
-        backgroundColor: tc.dark.bg,
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 32,
-      }}
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: tc.dark.bg }}
+      behavior="padding"
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 24}
     >
+      <ScrollView
+        contentContainerStyle={{
+          flexGrow: 1,
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 32,
+          paddingBottom: 80,
+        }}
+        keyboardShouldPersistTaps="handled"
+        bounces={false}
+        showsVerticalScrollIndicator={false}
+      >
       {mode === "biometric" ? (
         <>
           {/* Biometric mode */}
@@ -299,6 +307,7 @@ export function AppLockScreen({ onUnlock, userPhone }: AppLockScreenProps) {
           )}
         </>
       )}
-    </View>
+    </ScrollView>
+    </KeyboardAvoidingView>
   );
 }

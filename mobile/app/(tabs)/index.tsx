@@ -1280,11 +1280,12 @@ function HomeScreenContent() {
   const initials = getInitials(user?.full_name);
   const isAdmin = user?.is_staff || user?.is_superuser;
   const avatarBgColor = getAvatarColor(user?.id?.toString() || user?.phone || "user", isAdmin);
-  // Unique seed per user — phone ensures uniqueness, name adds variety
-  const avatarSeed = encodeURIComponent(`${user?.phone || "u"}-${user?.full_name || ""}`);
   // Tier-based border: gold=admin, green=verified(T1+), default=primary
   const tierBorderColor = isAdmin ? ADMIN_GOLD : (user?.kyc_tier ?? 0) >= 1 ? "#10B981" : avatarBgColor;
-  const diceBearUrl = `https://api.dicebear.com/9.x/adventurer-neutral/png?seed=${avatarSeed}&size=96&backgroundColor=transparent`;
+  // UI Avatars: reliable PNG generation that works on all platforms including Android
+  const avatarBgHex = avatarBgColor.replace("#", "");
+  const avatarName = encodeURIComponent(user?.full_name || user?.phone?.slice(-4) || "U");
+  const generatedAvatarUrl = `https://ui-avatars.com/api/?name=${avatarName}&size=96&background=${avatarBgHex}&color=fff&bold=true&font-size=0.4&rounded=true&format=png`;
   const { unreadCount } = useUnreadCount(allTx);
 
   /* ─── MOBILE LAYOUT (unchanged) ─── */
@@ -1351,7 +1352,6 @@ function HomeScreenContent() {
                     justifyContent: "center",
                     borderWidth: 2,
                     borderColor: tierBorderColor + "50",
-                    overflow: "hidden",
                     ...(Platform.OS !== "web"
                       ? {
                           shadowColor: avatarBgColor,
@@ -1364,8 +1364,8 @@ function HomeScreenContent() {
                   }}
                 >
                   <Image
-                    source={{ uri: diceBearUrl }}
-                    style={{ width: 34, height: 34 }}
+                    source={{ uri: generatedAvatarUrl }}
+                    style={{ width: 46, height: 46, borderRadius: 15 }}
                   />
                 </View>
               )}
@@ -2102,12 +2102,11 @@ function HomeScreenContent() {
                   justifyContent: "center",
                   borderWidth: 1,
                   borderColor: avatarBgColor + "40",
-                  overflow: "hidden",
                 }}
               >
                 <Image
-                  source={{ uri: diceBearUrl }}
-                  style={{ width: 34, height: 34 }}
+                  source={{ uri: generatedAvatarUrl }}
+                  style={{ width: 44, height: 44, borderRadius: 14 }}
                 />
               </View>
             )}

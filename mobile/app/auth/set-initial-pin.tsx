@@ -318,7 +318,7 @@ export default function SetInitialPinScreen() {
         }}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          behavior="padding"
           style={{ flex: 1, width: "100%", justifyContent: "center" }}
         >
           {formContent}
@@ -330,7 +330,7 @@ export default function SetInitialPinScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior="padding"
         style={{ flex: 1 }}
       >
         {formContent}

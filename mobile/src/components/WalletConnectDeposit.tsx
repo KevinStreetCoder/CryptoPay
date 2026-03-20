@@ -9,7 +9,7 @@
  * - "Deposit" button that triggers an ERC-20/ETH transfer
  */
 
-import { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -85,16 +85,32 @@ interface Props {
  * Public export — renders the connected version only when AppKit is ready.
  * This avoids conditional hook calls (Rules of Hooks violation).
  */
+/** Error boundary to catch AppKit context errors at runtime */
+class AppKitErrorBoundary extends React.Component<
+  { children: React.ReactNode; fallback: React.ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+  static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidCatch(error: Error) {
+    console.warn("AppKit error caught:", error.message);
+  }
+  render() {
+    if (this.state.hasError) return this.props.fallback;
+    return this.props.children;
+  }
+}
+
 export function WalletConnectDeposit(props: Props) {
   // Load AppKit lazily on first render of this component
   const isReady = ensureAppKitLoaded() && _appKitInitialized && Platform.OS !== "web";
 
   if (isReady) {
     return (
-      <>
+      <AppKitErrorBoundary fallback={<WalletConnectFallback />}>
         <WalletConnectDepositInner {...props} />
         {_AppKitModal && <_AppKitModal />}
-      </>
+      </AppKitErrorBoundary>
     );
   }
 

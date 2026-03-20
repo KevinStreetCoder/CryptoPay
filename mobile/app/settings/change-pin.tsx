@@ -400,7 +400,7 @@ export default function ChangePinScreen() {
         </View>
 
         <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          behavior="padding"
           style={{ flex: 1, width: "100%", justifyContent: "center" }}
         >
           {formContent}
@@ -453,7 +453,7 @@ export default function ChangePinScreen() {
       </View>
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior="padding"
         style={{ flex: 1 }}
       >
         {formContent}

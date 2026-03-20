@@ -549,10 +549,11 @@ export default function ProfileScreen() {
   const isAdmin = user?.is_staff || user?.is_superuser;
   const avatarBgColor = getAvatarColor(avatarIdentifier, isAdmin);
   const initials = getInitials(user?.full_name);
-  // DiceBear avatar: unique human-like cartoon per user, tier-colored borders
-  const avatarSeed = encodeURIComponent(`${user?.phone || "u"}-${user?.full_name || ""}`);
   const tierBorderColor = isAdmin ? ADMIN_GOLD : (user?.kyc_tier ?? 0) >= 1 ? "#10B981" : avatarBgColor;
-  const diceBearUrl = `https://api.dicebear.com/9.x/adventurer-neutral/png?seed=${avatarSeed}&size=128&backgroundColor=transparent`;
+  // UI Avatars: reliable PNG with initials, works on all platforms
+  const avatarBgHex = avatarBgColor.replace("#", "");
+  const avatarName = encodeURIComponent(user?.full_name || user?.phone?.slice(-4) || "U");
+  const generatedAvatarUrl = `https://ui-avatars.com/api/?name=${avatarName}&size=128&background=${avatarBgHex}&color=fff&bold=true&font-size=0.38&rounded=true&format=png`;
 
   const renderAvatar = (size: number) => (
     <Pressable
@@ -591,10 +592,11 @@ export default function ProfileScreen() {
           }}
         >
           <Image
-            source={{ uri: diceBearUrl }}
+            source={{ uri: generatedAvatarUrl }}
             style={{
-              width: size * 0.75,
-              height: size * 0.75,
+              width: size,
+              height: size,
+              borderRadius: size * 0.32,
             }}
           />
         </View>
