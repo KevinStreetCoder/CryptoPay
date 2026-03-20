@@ -105,9 +105,19 @@ function getGreeting(): { textKey: string; icon: string; emoji: string } {
   return { textKey: "home.goodNight", icon: "moon-outline", emoji: "" };
 }
 
+const AVATAR_COLORS = ["#10B981", "#3B82F6", "#8B5CF6", "#EC4899", "#6366F1", "#14B8A6", "#F59E0B", "#EF4444"];
+const ADMIN_GOLD = "#D4AF37";
+
+function getAvatarColor(identifier: string, isAdmin?: boolean): string {
+  if (isAdmin) return ADMIN_GOLD;
+  let hash = 0;
+  for (let i = 0; i < identifier.length; i++) hash = identifier.charCodeAt(i) + ((hash << 5) - hash);
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+
 function getInitials(name: string | undefined): string {
-  if (!name) return "U";
-  const parts = name.trim().split(/\s+/);
+  if (!name || !name.trim()) return "U";
+  const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
   return parts[0][0].toUpperCase();
 }
@@ -566,8 +576,7 @@ function PortfolioChart({
         {isWeb ? (
           <View
             ref={chartRef}
-            onMouseMove={handleChartMouse as any}
-            onMouseLeave={handleChartLeave as any}
+            {...({ onMouseMove: handleChartMouse, onMouseLeave: handleChartLeave } as any)}
             style={{
               position: "absolute",
               left: 0,
@@ -1228,14 +1237,27 @@ function HomeScreenContent() {
         const kesValue = (amt * kesRate).toFixed(2);
         return {
           id: d.id,
-          type: "DEPOSIT" as const,
+          type: "DEPOSIT",
           status: "completed",
           source_currency: d.currency,
           source_amount: d.amount,
           dest_currency: "KES",
           dest_amount: kesValue,
+          exchange_rate: "",
+          fee_amount: "0",
+          fee_currency: "KES",
+          mpesa_paybill: "",
+          mpesa_till: "",
+          mpesa_account: "",
+          mpesa_phone: "",
+          mpesa_receipt: "",
+          excise_duty_amount: "0",
+          chain: "",
+          tx_hash: "",
+          confirmations: 0,
           created_at: d.credited_at || d.created_at,
-        };
+          completed_at: d.credited_at || null,
+        } satisfies Transaction;
       });
     return [...allTx, ...creditedDeposits];
   }, [allTx, blockchainDeposits, rates]);
@@ -1256,6 +1278,8 @@ function HomeScreenContent() {
 
   const firstName = user?.full_name?.split(" ")[0] || "there";
   const initials = getInitials(user?.full_name);
+  const isAdmin = user?.is_staff || user?.is_superuser;
+  const avatarBgColor = getAvatarColor(user?.id?.toString() || user?.phone || "user", isAdmin);
   const { unreadCount } = useUnreadCount(allTx);
 
   /* ─── MOBILE LAYOUT (unchanged) ─── */
@@ -1273,8 +1297,9 @@ function HomeScreenContent() {
           }
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{
-            paddingBottom: Platform.OS === "android" ? 80 : 32,
+            paddingBottom: Platform.OS === "android" ? 100 : 40,
           }}
+          keyboardShouldPersistTaps="handled"
         >
           {/* Header */}
           <TourStep nameKey="tour.step5Title" textKey="tour.step5Text" order={5}>
@@ -1296,18 +1321,18 @@ function HomeScreenContent() {
                   style={{
                     width: 46,
                     height: 46,
-                    borderRadius: 23,
+                    borderRadius: 15,
                     borderWidth: 2,
-                    borderColor: colors.primary[500] + "50",
+                    borderColor: isAdmin ? ADMIN_GOLD + "60" : colors.primary[500] + "50",
                     ...(Platform.OS !== "web"
                       ? {
-                          shadowColor: colors.primary[400],
+                          shadowColor: isAdmin ? ADMIN_GOLD : colors.primary[400],
                           shadowOffset: { width: 0, height: 2 },
                           shadowOpacity: 0.3,
                           shadowRadius: 8,
                           elevation: 4,
                         }
-                      : { boxShadow: "0 2px 8px rgba(52, 211, 153, 0.3)" } as any),
+                      : { boxShadow: `0 2px 8px ${isAdmin ? "rgba(212, 175, 55, 0.3)" : "rgba(52, 211, 153, 0.3)"}` } as any),
                   }}
                 />
               ) : (
@@ -1315,24 +1340,26 @@ function HomeScreenContent() {
                   style={{
                     width: 46,
                     height: 46,
-                    borderRadius: 23,
-                    backgroundColor: colors.primary[500],
+                    borderRadius: 15,
+                    backgroundColor: avatarBgColor + "25",
                     alignItems: "center",
                     justifyContent: "center",
+                    borderWidth: 2,
+                    borderColor: avatarBgColor + "50",
                     ...(Platform.OS !== "web"
                       ? {
-                          shadowColor: colors.primary[400],
+                          shadowColor: avatarBgColor,
                           shadowOffset: { width: 0, height: 2 },
-                          shadowOpacity: 0.3,
+                          shadowOpacity: 0.25,
                           shadowRadius: 8,
                           elevation: 4,
                         }
-                      : { boxShadow: "0 2px 8px rgba(52, 211, 153, 0.3)" } as any),
+                      : { boxShadow: `0 2px 8px ${avatarBgColor}40` } as any),
                   }}
                 >
                   <Text
                     style={{
-                      color: "#FFFFFF",
+                      color: avatarBgColor,
                       fontSize: 17,
                       fontFamily: "DMSans_700Bold",
                       letterSpacing: 0.5,
@@ -2061,7 +2088,7 @@ function HomeScreenContent() {
                   height: 44,
                   borderRadius: 14,
                   borderWidth: 2,
-                  borderColor: colors.primary[500] + "40",
+                  borderColor: isAdmin ? ADMIN_GOLD + "50" : colors.primary[500] + "40",
                 }}
               />
             ) : (
@@ -2070,16 +2097,16 @@ function HomeScreenContent() {
                   width: 44,
                   height: 44,
                   borderRadius: 14,
-                  backgroundColor: colors.primary[500] + "25",
+                  backgroundColor: avatarBgColor + "25",
                   alignItems: "center",
                   justifyContent: "center",
                   borderWidth: 1,
-                  borderColor: colors.primary[500] + "35",
+                  borderColor: avatarBgColor + "40",
                 }}
               >
                 <Text
                   style={{
-                    color: colors.primary[400],
+                    color: avatarBgColor,
                     fontSize: 16,
                     fontFamily: "DMSans_700Bold",
                   }}

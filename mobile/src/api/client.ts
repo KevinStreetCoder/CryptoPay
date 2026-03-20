@@ -50,6 +50,17 @@ export function forceResetSessionExpired() {
   _sessionExpired = false;
 }
 
+/** Manually refresh the access token using stored refresh token */
+export async function refreshAccessToken(): Promise<void> {
+  const refresh = await storage.getItemAsync("refresh_token");
+  if (!refresh) throw new Error("No refresh token");
+  const { data } = await axios.post(`${BASE_URL}/auth/token/refresh/`, { refresh });
+  await storage.setItemAsync("access_token", data.access);
+  if (data.refresh) {
+    await storage.setItemAsync("refresh_token", data.refresh);
+  }
+}
+
 api.interceptors.request.use(async (cfg) => {
   const isPublicAuth = AUTH_ENDPOINTS.some((ep) => cfg.url?.includes(ep));
   const isAuthWithToken = AUTH_WITH_TOKEN.some((ep) => cfg.url?.includes(ep));

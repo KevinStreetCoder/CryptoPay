@@ -7,12 +7,14 @@ import { useFonts, DMSans_400Regular, DMSans_500Medium, DMSans_600SemiBold, DMSa
 import { Ionicons } from "@expo/vector-icons";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { useAuth } from "../src/stores/auth";
+import { useAuth, isBiometricEnabled } from "../src/stores/auth";
 import { ErrorBoundary } from "../src/components/ErrorBoundary";
 import { NetworkStatus } from "../src/components/NetworkStatus";
 import { LoadingScreen } from "../src/components/LoadingScreen";
 import { ToastProvider } from "../src/components/Toast";
 import { DashboardLayout } from "../src/components/WebSidebar";
+import { AppLockScreen } from "../src/components/AppLockScreen";
+import { useAppLock } from "../src/hooks/useAppLock";
 import { usePushNotifications } from "../src/hooks/usePushNotifications";
 import { storage } from "../src/utils/storage";
 import { initTheme, useThemeMode } from "../src/stores/theme";
@@ -52,10 +54,21 @@ function RootNavigator() {
   const [appReady, setAppReady] = useState(false);
   const [initStatus, setInitStatus] = useState("Starting...");
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [biometricOn, setBiometricOn] = useState(false);
 
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
   const { expoPushToken } = usePushNotifications();
+
+  // App lock: monitors background/foreground transitions
+  const { locked, unlock } = useAppLock(biometricOn, !!user);
+
+  // Check biometric setting when user changes
+  useEffect(() => {
+    if (user) {
+      isBiometricEnabled().then(setBiometricOn);
+    }
+  }, [user]);
 
   // Hide native splash as soon as RootNavigator mounts (LoadingScreen takes over)
   useEffect(() => {
@@ -176,6 +189,16 @@ function RootNavigator() {
       <Stack.Screen name="settings" options={{ animation: "slide_from_bottom" }} />
     </Stack>
   );
+
+  // Show lock screen overlay when app is locked
+  if (locked && user) {
+    return (
+      <View style={{ flex: 1, backgroundColor: tc.dark.bg }}>
+        <StatusBar style={isDark ? "light" : "dark"} />
+        <AppLockScreen onUnlock={unlock} />
+      </View>
+    );
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: tc.dark.bg }}>

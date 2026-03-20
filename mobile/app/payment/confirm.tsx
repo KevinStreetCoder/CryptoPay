@@ -15,6 +15,8 @@ import { paymentsApi } from "../../src/api/payments";
 import { normalizeError } from "../../src/utils/apiErrors";
 import { useScreenSecurity } from "../../src/hooks/useScreenSecurity";
 import { useTransactionPoller } from "../../src/hooks/useTransactionPoller";
+import { useBiometricAuth } from "../../src/hooks/useBiometricAuth";
+import { isBiometricEnabled } from "../../src/stores/auth";
 import { CURRENCIES, CurrencyCode, colors } from "../../src/constants/theme";
 import { getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
@@ -231,8 +233,15 @@ export default function ConfirmPaymentScreen() {
   const { pollTransaction, cancel: cancelPoll } = useTransactionPoller();
   const [pinError, setPinError] = useState(false);
   const [quoteExpired, setQuoteExpired] = useState(false);
+  const biometric = useBiometricAuth();
+  const [biometricOn, setBiometricOn] = useState(false);
 
   useScreenSecurity(step === "pin");
+
+  // Check biometric setting
+  useEffect(() => {
+    isBiometricEnabled().then(setBiometricOn);
+  }, []);
 
   const handleQuoteExpired = useCallback(() => {
     setQuoteExpired(true);
@@ -242,8 +251,20 @@ export default function ConfirmPaymentScreen() {
     toast.error("Quote Expired", "The rate lock has expired. Please get a new quote.");
   }, [toast]);
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (quoteExpired) return;
+
+    // If biometric is enabled, try biometric auth first
+    if (biometricOn && biometric.isAvailable && Platform.OS !== "web") {
+      const success = await biometric.authenticate("Authorize Payment");
+      if (success) {
+        // Biometric approved — use a special PIN bypass marker
+        // The backend still requires PIN, so fall through to PIN entry
+        setStep("pin");
+        return;
+      }
+    }
+
     setStep("pin");
   };
 

@@ -77,9 +77,34 @@ export function useAuth() {
           }
         }
 
-        const { data } = await authApi.getProfile();
-        _user = data;
-        notify();
+        try {
+          const { data } = await authApi.getProfile();
+          _user = data;
+          notify();
+        } catch (profileErr: any) {
+          // Profile fetch failed — try refreshing the token before giving up
+          const refreshToken = await storage.getItemAsync("refresh_token");
+          if (refreshToken) {
+            try {
+              const { refreshAccessToken } = require("../api/client");
+              await refreshAccessToken();
+              // Retry profile fetch with new token
+              const { data } = await authApi.getProfile();
+              _user = data;
+              notify();
+            } catch {
+              // Refresh also failed — clear everything
+              await storage.deleteItemAsync("access_token");
+              await storage.deleteItemAsync("refresh_token");
+              _user = null;
+              notify();
+            }
+          } else {
+            await storage.deleteItemAsync("access_token");
+            _user = null;
+            notify();
+          }
+        }
       }
     } catch {
       await storage.deleteItemAsync("access_token");

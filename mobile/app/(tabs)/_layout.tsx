@@ -89,10 +89,10 @@ function TabIcon({
         justifyContent: "center",
         transform: [{ scale: scaleAnim }],
         position: "relative",
-        paddingHorizontal: 12,
+        paddingHorizontal: 14,
         paddingVertical: 6,
-        minWidth: 56,
-        minHeight: 42,
+        minWidth: 60,
+        minHeight: 44,
         flex: 1,
       }}
     >
@@ -116,12 +116,15 @@ function TabIcon({
       <Ionicons name={name} size={22} color={color} />
       <Text
         numberOfLines={1}
+        ellipsizeMode="clip"
         style={{
           color,
           fontSize: 11,
           fontFamily: focused ? "DMSans_600SemiBold" : "DMSans_500Medium",
           marginTop: 2,
           letterSpacing: 0.3,
+          textAlign: "center",
+          minWidth: 40,
         }}
       >
         {label}
