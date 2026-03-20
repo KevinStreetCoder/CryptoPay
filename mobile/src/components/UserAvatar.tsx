@@ -1,17 +1,12 @@
 /**
- * UserAvatar — guaranteed to render on ALL Android devices.
+ * UserAvatar — colored circle with initial letter.
  *
- * Uploaded photo: expo-image with native caching.
- * No photo: colored circle with Ionicons person icon.
- *   Icons are bundled font glyphs — they ALWAYS render on Android.
- *   No Text, no SVG, no remote URL — just a native font icon.
- *
- * Tier borders: gold=admin, green=verified.
+ * Uses system font only (no fontFamily) — custom DMSans fonts
+ * don't load on BlueStacks and some Android devices.
  */
 
-import { View } from "react-native";
+import { View, Text } from "react-native";
 import { Image } from "expo-image";
-import { Ionicons } from "@expo/vector-icons";
 import { config } from "../constants/config";
 
 const COLORS = ["#10B981", "#3B82F6", "#8B5CF6", "#EC4899", "#6366F1", "#14B8A6", "#F59E0B", "#EF4444"];
@@ -22,6 +17,11 @@ function pickColor(id: string, admin?: boolean): string {
   let h = 0;
   for (let i = 0; i < id.length; i++) h = id.charCodeAt(i) + ((h << 5) - h);
   return COLORS[Math.abs(h) % COLORS.length];
+}
+
+function getInitial(name?: string): string {
+  if (name && name.trim()) return name.trim()[0].toUpperCase();
+  return "U";
 }
 
 function resolveUrl(url: string | null | undefined): string | null {
@@ -56,7 +56,6 @@ export function UserAvatar({
   const r = borderRadius ?? Math.round(size * 0.32);
   const resolved = resolveUrl(avatarUrl);
 
-  // Uploaded avatar — expo-image
   if (resolved) {
     return (
       <Image
@@ -64,7 +63,7 @@ export function UserAvatar({
         style={{
           width: size, height: size, borderRadius: r,
           borderWidth, borderColor: border + "60",
-          backgroundColor: bg + "30",
+          backgroundColor: bg,
         }}
         contentFit="cover"
         cachePolicy="memory-disk"
@@ -73,17 +72,22 @@ export function UserAvatar({
     );
   }
 
-  // Fallback — colored circle with person icon (Ionicons font glyph = always renders)
-  const iconSize = Math.round(size * 0.5);
+  const letter = getInitial(fullName);
+  const fs = Math.round(size * 0.4);
 
   return (
     <View style={{
       width: size, height: size, borderRadius: r,
       borderWidth, borderColor: border + "60",
       backgroundColor: bg,
-      justifyContent: "center", alignItems: "center",
+      alignItems: "center", justifyContent: "center",
     }}>
-      <Ionicons name="person" size={iconSize} color="rgba(255,255,255,0.9)" />
+      <Text
+        allowFontScaling={false}
+        style={{ color: "#FFF", fontSize: fs, fontWeight: "bold" }}
+      >
+        {letter}
+      </Text>
     </View>
   );
 }
