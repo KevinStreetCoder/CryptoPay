@@ -52,30 +52,8 @@ export function useAuth() {
     try {
       const token = await storage.getItemAsync("access_token");
       if (token) {
-        // Check biometric preference
+        // Always load the user profile — lock screen handles auth gating
         _biometricEnabled = await isBiometricEnabled();
-
-        // If biometric is enabled on native, require auth before proceeding
-        if (_biometricEnabled && Platform.OS !== "web") {
-          const LocalAuth = require("expo-local-authentication");
-          const compatible = await LocalAuth.hasHardwareAsync();
-          const enrolled = await LocalAuth.isEnrolledAsync();
-
-          if (compatible && enrolled) {
-            const result = await LocalAuth.authenticateAsync({
-              promptMessage: "Unlock CryptoPay",
-              cancelLabel: "Use PIN",
-              disableDeviceFallback: false,
-              fallbackLabel: "Enter PIN",
-            });
-
-            if (!result.success) {
-              // Biometric failed — don't auto-login, force PIN entry
-              setLoading(false);
-              return;
-            }
-          }
-        }
 
         try {
           const { data } = await authApi.getProfile();

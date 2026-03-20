@@ -38,10 +38,12 @@ async function setLastActive(): Promise<void> {
 
 /**
  * Hook that monitors app state and determines when the lock screen should show.
+ * Locks on cold start AND on background→foreground transitions.
  * Only active on native platforms (iOS/Android).
  */
 export function useAppLock(biometricEnabled: boolean, isAuthenticated: boolean) {
   const [locked, setLocked] = useState(false);
+  const [initialCheckDone, setInitialCheckDone] = useState(false);
   const appState = useRef<AppStateStatus>(AppState.currentState);
   const lockTimeoutRef = useRef<LockTimeout>(0);
 
@@ -51,6 +53,24 @@ export function useAppLock(biometricEnabled: boolean, isAuthenticated: boolean) 
       lockTimeoutRef.current = t;
     });
   }, []);
+
+  // Lock on cold start when biometric is enabled and user is authenticated
+  useEffect(() => {
+    if (initialCheckDone || !biometricEnabled || !isAuthenticated || Platform.OS === "web") return;
+
+    (async () => {
+      lockTimeoutRef.current = await getLockTimeout();
+      const timeout = lockTimeoutRef.current;
+      const lastActive = await getLastActive();
+      const elapsed = (Date.now() - lastActive) / 1000;
+
+      // Lock if: no last active (fresh open), or elapsed > timeout
+      if (lastActive === 0 || elapsed >= timeout) {
+        setLocked(true);
+      }
+      setInitialCheckDone(true);
+    })();
+  }, [biometricEnabled, isAuthenticated, initialCheckDone]);
 
   const checkAndLock = useCallback(async () => {
     if (!biometricEnabled || !isAuthenticated || Platform.OS === "web") return;
@@ -69,6 +89,7 @@ export function useAppLock(biometricEnabled: boolean, isAuthenticated: boolean) 
     setLastActive();
   }, []);
 
+  // Monitor background→foreground transitions
   useEffect(() => {
     if (Platform.OS === "web" || !biometricEnabled || !isAuthenticated) return;
 
