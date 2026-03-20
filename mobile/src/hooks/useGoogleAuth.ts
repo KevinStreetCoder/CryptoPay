@@ -21,14 +21,35 @@ const GOOGLE_IOS_CLIENT_ID =
   process.env.GOOGLE_IOS_CLIENT_ID ||
   "";
 
+// EAS project ID for auth proxy redirect
+const PROJECT_ID =
+  Constants.expoConfig?.extra?.eas?.projectId || "3ca5c56b-30ff-454d-ad81-801f8d888db8";
+
+/**
+ * Build the correct redirect URI per platform:
+ * - Web: standard redirect to auth/google/callback
+ * - Android/iOS standalone (EAS): use Expo auth proxy via projectId
+ *   This generates https://auth.expo.io which Google accepts as a valid redirect.
+ *   The custom scheme (cryptopay://) does NOT work with Google OAuth.
+ */
+function getRedirectUri(): string {
+  if (Platform.OS === "web") {
+    return makeRedirectUri({ path: "auth/google/callback" });
+  }
+  // For native (Android/iOS), use the Expo auth proxy
+  // This generates: https://auth.expo.io/@anonymous/cryptopay
+  // which must be added to Google Cloud Console as an authorized redirect URI
+  return makeRedirectUri({
+    native: `${Constants.expoConfig?.scheme ?? "cryptopay"}://`,
+  } as any);
+}
+
 /**
  * Hook that wraps expo-auth-session Google provider.
  * Returns the Google ID token on success.
  */
 export function useGoogleAuth() {
-  const redirectUri = Platform.OS === "web"
-    ? makeRedirectUri({ path: "auth/google/callback" })
-    : undefined;
+  const redirectUri = getRedirectUri();
 
   const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
     webClientId: GOOGLE_WEB_CLIENT_ID,
@@ -37,13 +58,22 @@ export function useGoogleAuth() {
     redirectUri,
   });
 
+  // Wrap promptAsync to pass useProxy on native platforms
+  const wrappedPromptAsync = () => {
+    if (Platform.OS === "web") {
+      return promptAsync();
+    }
+    // On native, use the Expo auth proxy so Google gets an https:// redirect
+    return promptAsync({ useProxy: true } as any);
+  };
+
   return {
     /** Whether the Google auth request is ready to prompt */
     ready: !!request,
     /** The auth response (check response?.type === "success") */
     response,
     /** Trigger Google Sign-In prompt */
-    promptAsync,
+    promptAsync: wrappedPromptAsync,
     /** Extract the id_token from a successful response */
     getIdToken: (): string | null => {
       if (response?.type === "success") {
