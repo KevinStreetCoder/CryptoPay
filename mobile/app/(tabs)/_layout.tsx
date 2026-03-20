@@ -2,6 +2,7 @@ import { Tabs } from "expo-router";
 import { View, Text, Platform, useWindowDimensions, Animated } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRef, useEffect } from "react";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, getThemeColors } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
 import { usePendingDeposits } from "../../src/components/DepositTracker";
@@ -113,9 +114,10 @@ function TabIcon({
       )}
       <Ionicons name={name} size={22} color={color} />
       <Text
+        numberOfLines={1}
         style={{
           color,
-          fontSize: 11,
+          fontSize: 10,
           fontFamily: focused ? "DMSans_600SemiBold" : "DMSans_500Medium",
           marginTop: 2,
           letterSpacing: 0.3,
@@ -138,6 +140,10 @@ export default function TabLayout() {
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
   const { hasPending: hasPendingDeposits } = usePendingDeposits();
+  const insets = useSafeAreaInsets();
+
+  const bottomPadding = isWeb ? 12 : Platform.OS === "android" ? Math.max(insets.bottom, 8) : insets.bottom;
+  const tabBarHeight = (isWeb ? 72 : Platform.OS === "android" ? 60 : 88) + bottomPadding;
 
   return (
     <Tabs
@@ -153,8 +159,8 @@ export default function TabLayout() {
                 ? "rgba(255, 255, 255, 0.06)"
                 : "rgba(0, 0, 0, 0.06)",
               borderTopWidth: 1,
-              height: isWeb ? 72 : Platform.OS === "android" ? 68 : 88,
-              paddingBottom: isWeb ? 12 : Platform.OS === "android" ? 6 : 28,
+              height: tabBarHeight,
+              paddingBottom: bottomPadding,
               paddingTop: Platform.OS === "android" ? 4 : 6,
               paddingHorizontal: isWeb ? 40 : 0,
               position: "relative" as const,

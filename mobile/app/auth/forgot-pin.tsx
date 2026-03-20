@@ -308,9 +308,9 @@ export default function ForgotPINScreen() {
                   placeholderTextColor={tc.textMuted}
                   keyboardType="phone-pad"
                   maxLength={10}
-                  autoFocus
-                  onFocus={() => setPhoneFocused(true)}
-                  onBlur={() => setPhoneFocused(false)}
+                  autoFocus={Platform.OS === "web"}
+                  onFocus={Platform.OS === "web" ? () => setPhoneFocused(true) : undefined}
+                  onBlur={Platform.OS === "web" ? () => setPhoneFocused(false) : undefined}
                   onSubmitEditing={handleRequestOTP}
                   style={{
                     flex: 1,
