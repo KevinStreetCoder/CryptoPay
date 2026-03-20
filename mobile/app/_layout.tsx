@@ -195,7 +195,7 @@ function RootNavigator() {
     return (
       <View style={{ flex: 1, backgroundColor: tc.dark.bg }}>
         <StatusBar style={isDark ? "light" : "dark"} />
-        <AppLockScreen onUnlock={unlock} />
+        <AppLockScreen onUnlock={unlock} userPhone={user?.phone} />
       </View>
     );
   }
