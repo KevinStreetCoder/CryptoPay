@@ -791,10 +791,10 @@ export default function LandingPage() {
               </Text>
             </Pressable>
             <View style={{ flexDirection: "row", gap: 12, marginTop: 14, justifyContent: isDesktop ? "flex-start" : "center" }}>
-              <Pressable onPress={() => { const u = "https://play.google.com/store/apps/details?id=com.cpay.cryptopay"; if (isWeb) (window as any).open(u, "_blank"); else Linking.openURL(u); }}
+              <Pressable onPress={() => { const u = "https://cpay.co.ke/download/cryptopay.apk"; if (isWeb) { const a = document.createElement("a"); a.href = u; a.download = "CryptoPay.apk"; a.click(); } else Linking.openURL(u); }}
                 style={({ hovered }: any) => ({ flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: hovered ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.03)", borderWidth: 1, borderColor: "rgba(255,255,255,0.1)", borderRadius: 12, paddingVertical: 8, paddingHorizontal: 14, ...(isWeb ? { cursor: "pointer", transition: "all 0.2s ease" } as any : {}) })}>
                 <Image source={STORE_ICONS.googlePlay} style={{ width: 20, height: 20 }} resizeMode="contain" />
-                <View><Text style={{ color: tc.textMuted, fontSize: 8, fontFamily: "DMSans_400Regular" }}>GET IT ON</Text><Text style={{ color: tc.textPrimary, fontSize: 12, fontFamily: "DMSans_600SemiBold" }}>Google Play</Text></View>
+                <View><Text style={{ color: tc.textMuted, fontSize: 8, fontFamily: "DMSans_400Regular" }}>DOWNLOAD</Text><Text style={{ color: tc.textPrimary, fontSize: 12, fontFamily: "DMSans_600SemiBold" }}>Android APK</Text></View>
               </Pressable>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "rgba(255,255,255,0.02)", borderWidth: 1, borderColor: "rgba(255,255,255,0.06)", borderRadius: 12, paddingVertical: 8, paddingHorizontal: 14, opacity: 0.5 }}>
                 <Image source={STORE_ICONS.appStore} style={{ width: 20, height: 20, opacity: 0.7 }} resizeMode="contain" />

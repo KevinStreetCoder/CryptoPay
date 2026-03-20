@@ -177,12 +177,14 @@ export default function RegisterScreen() {
   const tc = getThemeColors(isDark);
   const [step, setStep] = useState<Step>("phone");
   const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [pin, setPin] = useState("");
   const [fullName, setFullName] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [phoneFocused, setPhoneFocused] = useState(false);
+  const [emailFocused, setEmailFocused] = useState(false);
   const [nameFocused, setNameFocused] = useState(false);
   const { width } = useWindowDimensions();
   const { ready: googleReady, response: googleResponse, promptAsync } = useGoogleAuth();
@@ -290,9 +292,15 @@ export default function RegisterScreen() {
     }
     setLoading(true);
     try {
-      await authApi.requestOTP(phone);
+      const { data } = await authApi.requestOTP(phone, email || undefined);
       animateTransition("otp");
-      toast.success("Code Sent", "Check your SMS for the verification code");
+      if (data?.email_fallback) {
+        toast.success("Code Sent", data.message || "Verification code sent to your email");
+      } else {
+        toast.success("Code Sent", email
+          ? "Check your SMS and email for the verification code"
+          : "Check your SMS for the verification code");
+      }
     } catch (err: unknown) {
       const appError = normalizeError(err);
       toast.error(appError.title, appError.message);
@@ -318,7 +326,7 @@ export default function RegisterScreen() {
     setPin(pinValue);
     setLoading(true);
     try {
-      await register(phone, pinValue, otp, fullName || undefined);
+      await register(phone, pinValue, otp, fullName || undefined, email || undefined);
       router.replace("/(tabs)");
     } catch (err: unknown) {
       const appError = normalizeError(err);
@@ -521,7 +529,7 @@ export default function RegisterScreen() {
                     }}
                     maxFontSizeMultiplier={1.3}
                   >
-                    We'll send a verification code to confirm your number
+                    We'll send a verification code to your email
                   </Text>
                 </View>
               )}
@@ -589,6 +597,53 @@ export default function RegisterScreen() {
                   maxFontSizeMultiplier={1.3}
                 />
               </View>
+
+              {/* Email field — for OTP delivery fallback */}
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  backgroundColor: tc.dark.elevated,
+                  borderRadius: 18,
+                  borderWidth: 2,
+                  borderColor: emailFocused
+                    ? "rgba(255, 255, 255, 0.14)"
+                    : "rgba(255, 255, 255, 0.08)",
+                  paddingHorizontal: 16,
+                  marginTop: 12,
+                  ...(Platform.OS === 'web' ? { transition: 'border-color 0.2s ease, box-shadow 0.2s ease' } as any : {}),
+                  ...(emailFocused && Platform.OS === 'web' ? { boxShadow: '0 0 0 3px rgba(16, 185, 129, 0.15)' } as any : {}),
+                }}
+              >
+                <Ionicons name="mail-outline" size={18} color={tc.textMuted} style={{ marginRight: 10 }} />
+                <TextInput
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="Email (for verification code)"
+                  placeholderTextColor={tc.textMuted}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  onFocus={Platform.OS === "web" ? () => setEmailFocused(true) : undefined}
+                  onBlur={Platform.OS === "web" ? () => setEmailFocused(false) : undefined}
+                  onSubmitEditing={handleSendOTP}
+                  blurOnSubmit={false}
+                  style={{
+                    flex: 1,
+                    color: tc.textPrimary,
+                    fontSize: 15,
+                    fontFamily: "DMSans_400Regular",
+                    paddingVertical: 14,
+                    ...(isWeb ? ({ outlineStyle: "none" } as any) : {}),
+                  }}
+                  accessibilityLabel="Email address"
+                  accessibilityHint="Enter your email to receive verification code"
+                  maxFontSizeMultiplier={1.3}
+                />
+              </View>
+              <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_400Regular", marginTop: 6, marginLeft: 4, lineHeight: 15 }}>
+                Verification code will be sent to your email
+              </Text>
 
               <Pressable
                 onPress={handleSendOTP}

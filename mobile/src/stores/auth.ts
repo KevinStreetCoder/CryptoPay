@@ -105,12 +105,13 @@ export function useAuth() {
   }, []);
 
   const register = useCallback(
-    async (phone: string, pin: string, otp: string, fullName?: string) => {
+    async (phone: string, pin: string, otp: string, fullName?: string, email?: string) => {
       const { data } = await authApi.register({
         phone,
         pin,
         otp,
         full_name: fullName,
+        email,
       });
       await storage.setItemAsync("access_token", data.tokens.access);
       await storage.setItemAsync("refresh_token", data.tokens.refresh);

@@ -1280,8 +1280,11 @@ function HomeScreenContent() {
   const initials = getInitials(user?.full_name);
   const isAdmin = user?.is_staff || user?.is_superuser;
   const avatarBgColor = getAvatarColor(user?.id?.toString() || user?.phone || "user", isAdmin);
-  const diceBearSeed = encodeURIComponent(user?.full_name || user?.phone || "user");
-  const diceBearUrl = `https://api.dicebear.com/9.x/bottts-neutral/png?seed=${diceBearSeed}&size=96&backgroundColor=transparent`;
+  // Unique seed per user — phone ensures uniqueness, name adds variety
+  const avatarSeed = encodeURIComponent(`${user?.phone || "u"}-${user?.full_name || ""}`);
+  // Tier-based border: gold=admin, green=verified(T1+), default=primary
+  const tierBorderColor = isAdmin ? ADMIN_GOLD : (user?.kyc_tier ?? 0) >= 1 ? "#10B981" : avatarBgColor;
+  const diceBearUrl = `https://api.dicebear.com/9.x/adventurer-neutral/png?seed=${avatarSeed}&size=96&backgroundColor=transparent`;
   const { unreadCount } = useUnreadCount(allTx);
 
   /* ─── MOBILE LAYOUT (unchanged) ─── */
@@ -1325,16 +1328,16 @@ function HomeScreenContent() {
                     height: 46,
                     borderRadius: 15,
                     borderWidth: 2,
-                    borderColor: isAdmin ? ADMIN_GOLD + "60" : colors.primary[500] + "50",
+                    borderColor: tierBorderColor + "60",
                     ...(Platform.OS !== "web"
                       ? {
-                          shadowColor: isAdmin ? ADMIN_GOLD : colors.primary[400],
+                          shadowColor: tierBorderColor,
                           shadowOffset: { width: 0, height: 2 },
                           shadowOpacity: 0.3,
                           shadowRadius: 8,
                           elevation: 4,
                         }
-                      : { boxShadow: `0 2px 8px ${isAdmin ? "rgba(212, 175, 55, 0.3)" : "rgba(52, 211, 153, 0.3)"}` } as any),
+                      : { boxShadow: `0 2px 8px ${tierBorderColor}50` } as any),
                   }}
                 />
               ) : (
@@ -1347,7 +1350,7 @@ function HomeScreenContent() {
                     alignItems: "center",
                     justifyContent: "center",
                     borderWidth: 2,
-                    borderColor: avatarBgColor + "45",
+                    borderColor: tierBorderColor + "50",
                     overflow: "hidden",
                     ...(Platform.OS !== "web"
                       ? {

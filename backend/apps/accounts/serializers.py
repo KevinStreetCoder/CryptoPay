@@ -36,6 +36,7 @@ class RegisterSerializer(serializers.Serializer):
     pin = serializers.CharField(min_length=6, max_length=6, write_only=True)
     otp = serializers.CharField(max_length=6, write_only=True)
     full_name = serializers.CharField(max_length=NAME_MAX_LENGTH, required=False, default="")
+    email = serializers.EmailField(required=False, default="")
 
     def validate_phone(self, value):
         # Normalize Kenyan phone: 07XX → +2547XX
@@ -86,6 +87,7 @@ class LoginSerializer(serializers.Serializer):
 
 class RequestOTPSerializer(serializers.Serializer):
     phone = serializers.CharField(max_length=15)
+    email = serializers.EmailField(required=False, default="")
 
     def validate_phone(self, value):
         value = value.strip().replace(" ", "")

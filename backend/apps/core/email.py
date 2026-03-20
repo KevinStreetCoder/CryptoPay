@@ -82,6 +82,42 @@ def send_sms(phone, message):
     return sms_sent
 
 
+def send_otp_to_email(email, otp_code, phone=""):
+    """Send OTP verification code to an email address (standalone, no user required).
+
+    Used when SMS delivery fails — email is the fallback OTP channel.
+
+    Args:
+        email: str, recipient email address.
+        otp_code: str, the 6-digit OTP code.
+        phone: str, optional phone number for context.
+
+    Returns:
+        bool: True if email was sent successfully.
+    """
+    if not email:
+        return False
+
+    try:
+        html = render_to_string("email/otp.html", {
+            "full_name": phone or "there",
+            "otp_code": otp_code,
+        })
+        send_mail(
+            f"CryptoPay — Your verification code is {otp_code}",
+            f"Your CPay verification code is: {otp_code}. Expires in 5 minutes.",
+            settings.DEFAULT_FROM_EMAIL,
+            [email],
+            html_message=html,
+            fail_silently=False,
+        )
+        logger.info(f"OTP email sent to {email}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send OTP email to {email}: {e}")
+        return False
+
+
 def send_otp_email(user, otp_code):
     """Send OTP verification email directly.
 
