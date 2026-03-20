@@ -17,6 +17,7 @@ class Transaction(models.Model):
         SEND_MPESA = "SEND_MPESA"
         KES_DEPOSIT = "KES_DEPOSIT"
         KES_DEPOSIT_C2B = "KES_DEPOSIT_C2B"
+        SWAP = "SWAP"
         INTERNAL_TRANSFER = "INTERNAL_TRANSFER"
         FEE = "FEE"
 

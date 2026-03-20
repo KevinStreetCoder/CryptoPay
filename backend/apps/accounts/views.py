@@ -61,10 +61,10 @@ class RequestOTPView(APIView):
 
         phone = serializer.validated_data["phone"]
 
-        # Rate limit: max 3 OTP requests per phone per 10 minutes
+        # Rate limit: max 5 OTP requests per phone per 10 minutes
         rate_key = f"otp_rate:{phone}"
         attempts = cache.get(rate_key, 0)
-        if attempts >= 3:
+        if attempts >= 5:
             return Response(
                 {"error": "Too many OTP requests. Wait 10 minutes."},
                 status=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -341,18 +341,22 @@ class LoginView(APIView):
         device_name = serializer.validated_data.get("device_name", "")
         platform = serializer.validated_data.get("platform", "")
 
+        # If user already provided OTP (from PIN challenge or security challenge),
+        # skip device detection — they already proved their identity via OTP
+        otp_already_verified = bool(otp)
+
         security_challenge = False
         challenge_reasons = []
 
-        # Check for new/unknown device
-        if device_id:
+        # Check for new/unknown device (skip if OTP already verified)
+        if device_id and not otp_already_verified:
             known_device = Device.objects.filter(user=user, device_id=device_id).exists()
             if not known_device:
                 security_challenge = True
                 challenge_reasons.append("new_device")
 
-        # Check for IP change
-        if client_ip and user.last_login_ip and client_ip != user.last_login_ip:
+        # Check for IP change (skip if OTP already verified)
+        if client_ip and user.last_login_ip and client_ip != user.last_login_ip and not otp_already_verified:
             security_challenge = True
             challenge_reasons.append("ip_changed")
 

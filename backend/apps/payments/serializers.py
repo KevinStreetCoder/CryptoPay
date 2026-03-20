@@ -182,6 +182,30 @@ class WithdrawSerializer(serializers.Serializer):
         return data
 
 
+class SwapSerializer(serializers.Serializer):
+    """Crypto-to-crypto swap request."""
+
+    from_currency = serializers.ChoiceField(choices=["USDT", "USDC", "BTC", "ETH", "SOL"])
+    to_currency = serializers.ChoiceField(choices=["USDT", "USDC", "BTC", "ETH", "SOL"])
+    amount = serializers.DecimalField(max_digits=28, decimal_places=8)
+    pin = serializers.CharField(min_length=6, max_length=6, write_only=True)
+
+    def validate_pin(self, value):
+        return _validate_pin(value)
+
+    def validate_amount(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Amount must be positive.")
+        return value
+
+    def validate(self, data):
+        if data["from_currency"] == data["to_currency"]:
+            raise serializers.ValidationError({
+                "to_currency": "Cannot swap to the same currency."
+            })
+        return data
+
+
 class SavedPaybillSerializer(serializers.ModelSerializer):
     """Serializer for user-saved paybills."""
 

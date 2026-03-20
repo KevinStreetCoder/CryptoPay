@@ -9,6 +9,7 @@ urlpatterns = [
     path("pay-till/", views.PayTillView.as_view(), name="pay-till"),
     path("send-mpesa/", views.SendMpesaView.as_view(), name="send-mpesa"),
     path("buy-crypto/", views.BuyCryptoView.as_view(), name="buy-crypto"),
+    path("swap/", views.SwapView.as_view(), name="swap"),
     path("deposit/quote/", views.DepositQuoteView.as_view(), name="deposit-quote"),
     path("deposit/<uuid:transaction_id>/status/", views.DepositStatusView.as_view(), name="deposit-status"),
     path("<uuid:transaction_id>/status/", views.DepositStatusView.as_view(), name="transaction-status"),

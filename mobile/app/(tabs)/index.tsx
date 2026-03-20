@@ -658,10 +658,10 @@ function TransactionSummary({ transactions, tc, ts }: { transactions: Transactio
       color: colors.accent,
       icon: "swap-horizontal-outline",
       count: transactions.filter(
-        (t) => t.type === "BUY" || t.type === "SELL"
+        (t) => t.type === "BUY" || t.type === "SELL" || t.type === "SWAP"
       ).length,
       total: transactions
-        .filter((t) => t.type === "BUY" || t.type === "SELL")
+        .filter((t) => t.type === "BUY" || t.type === "SELL" || t.type === "SWAP")
         .reduce((sum, t) => sum + getTxKesAmount(t), 0),
     },
   ];
@@ -1558,6 +1558,12 @@ function HomeScreenContent() {
                 color={colors.accent}
                 onPress={() => router.push("/payment/send")}
               />
+              <QuickAction
+                icon="swap-horizontal-outline"
+                label="Swap"
+                color={colors.crypto.ETH}
+                onPress={() => router.push("/payment/swap")}
+              />
             </View>
           </View>
 
@@ -2323,6 +2329,13 @@ function HomeScreenContent() {
               description={t("home.sendDesc")}
               color={colors.accent}
               onPress={() => router.push("/payment/send")}
+            />
+            <DesktopQuickActionCard
+              icon="swap-horizontal-outline"
+              label="Swap"
+              description="Convert between crypto"
+              color={colors.crypto.ETH}
+              onPress={() => router.push("/payment/swap")}
             />
           </View>
         </View>

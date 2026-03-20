@@ -70,6 +70,7 @@ function getTxTypeConfig(tc: ReturnType<typeof getThemeColors>) {
     SEND_MPESA: { icon: "phone-portrait-outline", label: "Send M-Pesa", color: colors.accent },
     BUY: { icon: "swap-horizontal-outline", label: "Buy", color: colors.primary[400] },
     SELL: { icon: "swap-vertical-outline", label: "Sell", color: colors.accentDark },
+    SWAP: { icon: "swap-horizontal-outline", label: "Swap", color: colors.crypto.ETH },
     FEE: { icon: "pricetag-outline", label: "Fee", color: tc.dark.muted },
   } as Record<string, { icon: string; label: string; color: string }>;
 }
