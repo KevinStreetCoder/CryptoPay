@@ -8,8 +8,12 @@ class RateAlertSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = RateAlert
-        fields = ("id", "currency", "target_rate", "direction", "is_active", "triggered_at", "created_at")
-        read_only_fields = ("id", "is_active", "triggered_at", "created_at")
+        fields = (
+            "id", "currency", "target_rate", "direction", "is_active",
+            "triggered_at", "trigger_count", "last_triggered_at",
+            "expires_at", "cooldown_minutes", "created_at",
+        )
+        read_only_fields = ("id", "is_active", "triggered_at", "trigger_count", "last_triggered_at", "created_at")
 
     def validate_target_rate(self, value):
         if value <= 0:

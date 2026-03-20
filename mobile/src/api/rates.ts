@@ -59,13 +59,21 @@ export interface PriceAlert {
   direction: "above" | "below";
   is_active: boolean;
   triggered_at: string | null;
+  trigger_count: number;
+  last_triggered_at: string | null;
+  expires_at: string | null;
+  cooldown_minutes: number;
   created_at: string;
 }
+
+export type AlertDuration = "1d" | "7d" | "30d" | "90d" | "forever";
 
 export interface CreateAlertPayload {
   currency: string;
   target_rate: string;
   direction: "above" | "below";
+  expires_at?: string | null;
+  cooldown_minutes?: number;
 }
 
 export const ratesApi = {
