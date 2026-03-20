@@ -1828,24 +1828,31 @@ class ForgotPINView(APIView):
         cache.set(f"pin_reset_otp:{phone}", otp, timeout=300)
         cache.set(rate_key, attempts + 1, timeout=3600)  # 1 hour window
 
-        if use_email and user.email:
-            # Send OTP via email
-            try:
-                from apps.core.email import send_otp_email
-                send_otp_email(user, otp)
-                response_data["channel"] = "email"
-            except Exception as e:
-                logger.error(f"PIN reset email failed: {e}")
-        else:
-            # Send OTP via SMS (eSMS Africa primary, AT fallback)
-            from apps.core.email import send_sms
-            sent = send_sms(
-                phone,
-                f"Your CPay PIN reset code is: {otp}. Do not share this code. Expires in 5 minutes.",
-            )
-            if not sent:
-                logger.error(f"PIN reset SMS failed for {phone[:7]}***")
-            response_data["channel"] = "sms"
+        # Send OTP to BOTH SMS and email for maximum delivery reliability
+        from apps.core.email import send_sms, send_otp_to_email
+
+        channels = []
+        # SMS
+        sms_sent = send_sms(
+            phone,
+            f"Your CPay PIN reset code is: {otp}. Do not share this code. Expires in 5 minutes.",
+        )
+        if sms_sent:
+            channels.append("sms")
+
+        # Email (if user has one)
+        if user.email:
+            email_sent = send_otp_to_email(user.email, otp, phone)
+            if email_sent:
+                channels.append("email")
+
+        if not channels:
+            logger.error(f"PIN reset OTP delivery failed for {phone[:7]}***")
+
+        response_data["channels"] = channels
+        # Tell user if 2FA will be required
+        if user.totp_enabled:
+            response_data["totp_enabled"] = True
 
         if settings.DEBUG:
             response_data["dev_otp"] = otp
@@ -1909,6 +1916,30 @@ class VerifyPINResetOTPView(APIView):
         cache.delete(f"pin_reset_otp:{phone}")
         cache.delete(otp_attempt_key)
 
+        # If user has TOTP enabled, require TOTP code or backup code
+        if user.totp_enabled:
+            totp_code = request.data.get("totp_code", "")
+            if not totp_code:
+                return Response(
+                    {
+                        "error": "Authenticator code required",
+                        "totp_required": True,
+                        "message": "This account has 2FA enabled. Enter your authenticator code to continue.",
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            # Verify TOTP or backup code
+            from apps.accounts.totp import verify_totp, verify_backup_code
+            totp_valid = verify_totp(user.totp_secret, totp_code) if user.totp_secret else False
+            if not totp_valid:
+                # Try backup code
+                backup_valid = verify_backup_code(user, totp_code)
+                if not backup_valid:
+                    return Response(
+                        {"error": "Invalid authenticator or backup code", "totp_required": True},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
         # Invalidate any previous unused tokens for this user
         PINResetToken.objects.filter(user=user, is_used=False).update(is_used=True)
 
@@ -1920,6 +1951,7 @@ class VerifyPINResetOTPView(APIView):
             action="PIN_RESET_OTP_VERIFIED",
             entity_type="user",
             entity_id=str(user.id),
+            details={"totp_verified": user.totp_enabled},
             ip_address=self._get_client_ip(request),
         )
 
