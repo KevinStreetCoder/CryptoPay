@@ -80,12 +80,19 @@ def _check_rate_alerts():
             return
 
         # Fetch all active alerts
+        now = timezone.now()
         active_alerts = RateAlert.objects.filter(is_active=True).select_related("user")
 
-        triggered_ids = []
+        deactivate_ids = []
+        update_alerts = []
         notifications = []
 
         for alert in active_alerts:
+            # Check if alert has expired
+            if alert.expires_at and now > alert.expires_at:
+                deactivate_ids.append(alert.id)
+                continue
+
             current_rate = current_kes_rates.get(alert.currency)
             if current_rate is None:
                 continue
@@ -96,22 +103,36 @@ def _check_rate_alerts():
             elif alert.direction == "below" and current_rate <= alert.target_rate:
                 should_trigger = True
 
-            if should_trigger:
-                triggered_ids.append(alert.id)
-                notifications.append({
-                    "user": alert.user,
-                    "currency": alert.currency,
-                    "direction": alert.direction,
-                    "target_rate": alert.target_rate,
-                    "current_rate": current_rate,
-                })
+            if not should_trigger:
+                continue
 
-        # Mark alerts as triggered
-        if triggered_ids:
-            RateAlert.objects.filter(id__in=triggered_ids).update(
-                is_active=False,
-                triggered_at=timezone.now(),
-            )
+            # Check cooldown — don't re-trigger too frequently
+            cooldown = alert.cooldown_minutes or 60
+            if alert.last_triggered_at:
+                elapsed = (now - alert.last_triggered_at).total_seconds() / 60
+                if elapsed < cooldown:
+                    continue
+
+            # This alert should fire
+            update_alerts.append(alert)
+            notifications.append({
+                "user": alert.user,
+                "currency": alert.currency,
+                "direction": alert.direction,
+                "target_rate": alert.target_rate,
+                "current_rate": current_rate,
+            })
+
+        # Update triggered alerts (recurring — keep active, just update counters)
+        for alert in update_alerts:
+            alert.triggered_at = now
+            alert.last_triggered_at = now
+            alert.trigger_count = (alert.trigger_count or 0) + 1
+            alert.save(update_fields=["triggered_at", "last_triggered_at", "trigger_count"])
+
+        # Deactivate expired alerts
+        if deactivate_ids:
+            RateAlert.objects.filter(id__in=deactivate_ids).update(is_active=False)
 
         # Send notifications
         for notif in notifications:

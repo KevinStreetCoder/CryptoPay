@@ -44,6 +44,10 @@ class RateAlert(models.Model):
     direction = models.CharField(max_length=10, choices=Direction.choices)
     is_active = models.BooleanField(default=True, db_index=True)
     triggered_at = models.DateTimeField(null=True, blank=True)
+    trigger_count = models.PositiveIntegerField(default=0, help_text="How many times this alert has fired")
+    last_triggered_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True, help_text="Alert auto-deactivates after this time")
+    cooldown_minutes = models.PositiveIntegerField(default=60, help_text="Min minutes between re-triggers")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

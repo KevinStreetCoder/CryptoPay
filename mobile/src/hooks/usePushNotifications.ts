@@ -206,6 +206,12 @@ function handleNotificationResponse(data: Record<string, unknown>) {
     case "device_login":
       router.push("/settings/devices" as any);
       break;
+    case "rate_alert": {
+      // Deep link to home dashboard (shows crypto charts)
+      const currency = data.currency as string | undefined;
+      router.push("/(tabs)" as any);
+      break;
+    }
     default:
       // Fallback: navigate to home
       router.push("/(tabs)" as any);
