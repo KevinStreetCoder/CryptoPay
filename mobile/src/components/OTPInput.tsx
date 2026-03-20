@@ -41,9 +41,10 @@ export function OTPInput({
 
   const isMobile = screenWidth < 768;
   const isVerySmall = screenWidth < 360;
-  const cellGap = isVerySmall ? 6 : isMobile ? 8 : 10;
+  const cellGap = isVerySmall ? 4 : isMobile ? 8 : 10;
   const maxCellContainerWidth = isMobile ? Math.min(screenWidth - 48, 340) : 380;
-  const cellWidth = isMobile ? Math.min(50, Math.floor(maxCellContainerWidth / length - cellGap)) : 50;
+  const rawCellWidth = isMobile ? Math.min(50, Math.floor(maxCellContainerWidth / length - cellGap)) : 50;
+  const cellWidth = Math.min(rawCellWidth, Math.floor((screenWidth - 80) / length - cellGap));
   const cellHeight = isMobile ? Math.min(58, Math.round(cellWidth * 1.16)) : 58;
 
   const [code, setCode] = useState<string[]>(Array(length).fill(""));
@@ -146,7 +147,7 @@ export function OTPInput({
       ) : null}
 
       {/* OTP Cells */}
-      <View style={{ flexDirection: "row", gap: cellGap, marginBottom: 16, maxWidth: "100%", alignSelf: "center" }}>
+      <View style={{ flexDirection: "row", gap: cellGap, marginBottom: 16, maxWidth: "100%", alignSelf: "center", overflow: "hidden" as const }}>
         {Array.from({ length }).map((_, index) => {
           const isFocused = focusedIndex === index;
           const isFilled = !!code[index];

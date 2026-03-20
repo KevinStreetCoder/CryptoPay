@@ -127,10 +127,18 @@ function MenuItem({ icon, label, subtitle, onPress, danger, iconBg, iconColor, t
   );
 }
 
+const AVATAR_COLORS = ["#10B981", "#F59E0B", "#3B82F6", "#8B5CF6", "#EC4899", "#EF4444", "#6366F1", "#14B8A6"];
+
+function getAvatarColor(identifier: string): string {
+  let hash = 0;
+  for (let i = 0; i < identifier.length; i++) hash = identifier.charCodeAt(i) + ((hash << 5) - hash);
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+
 function getInitials(name: string | undefined): string {
-  if (!name || !name.trim()) return "?";
+  if (!name || !name.trim()) return "";
   const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
+  if (parts.length === 0) return "";
   return parts
     .map((n) => n[0])
     .join("")
@@ -523,6 +531,10 @@ export default function ProfileScreen() {
   };
 
   // ── Avatar component (shared between layouts) ──
+  const avatarIdentifier = user?.id?.toString() || user?.phone || "user";
+  const avatarBgColor = getAvatarColor(avatarIdentifier);
+  const initials = getInitials(user?.full_name);
+
   const renderAvatar = (size: number) => (
     <Pressable
       onPress={handlePickAvatar}
@@ -551,23 +563,27 @@ export default function ProfileScreen() {
             width: size,
             height: size,
             borderRadius: size * 0.32,
-            backgroundColor: colors.primary[500] + "18",
+            backgroundColor: avatarBgColor + "25",
             alignItems: "center",
             justifyContent: "center",
             borderWidth: 3,
-            borderColor: colors.primary[500] + "30",
-            ...ts.glow(colors.primary[500], 0.15),
+            borderColor: avatarBgColor + "50",
+            ...ts.glow(avatarBgColor, 0.15),
           }}
         >
-          <Text
-            style={{
-              color: colors.primary[400],
-              fontSize: size * 0.32,
-              fontFamily: "DMSans_700Bold",
-            }}
-          >
-            {getInitials(user?.full_name)}
-          </Text>
+          {initials ? (
+            <Text
+              style={{
+                color: avatarBgColor,
+                fontSize: size * 0.32,
+                fontFamily: "DMSans_700Bold",
+              }}
+            >
+              {initials}
+            </Text>
+          ) : (
+            <Ionicons name="person" size={size * 0.4} color={avatarBgColor} />
+          )}
         </View>
       )}
       {/* Camera badge */}

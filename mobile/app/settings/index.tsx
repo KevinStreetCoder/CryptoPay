@@ -343,12 +343,21 @@ function ProfileCard({
   router: any;
 }) {
   const { t } = useLocale();
-  const initials = (user?.full_name || "U")
-    .split(" ")
+  const AVATAR_COLORS = ["#10B981", "#F59E0B", "#3B82F6", "#8B5CF6", "#EC4899", "#EF4444", "#6366F1", "#14B8A6"];
+  const avatarIdentifier = user?.id?.toString() || user?.phone || "user";
+  let avatarHash = 0;
+  for (let i = 0; i < avatarIdentifier.length; i++) avatarHash = avatarIdentifier.charCodeAt(i) + ((avatarHash << 5) - avatarHash);
+  const avatarBgColor = AVATAR_COLORS[Math.abs(avatarHash) % AVATAR_COLORS.length];
+
+  const rawInitials = (user?.full_name || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
     .map((n: string) => n[0])
     .join("")
     .toUpperCase()
     .slice(0, 2);
+  const initials = rawInitials || "";
 
   return (
     <Pressable
@@ -402,22 +411,26 @@ function ProfileCard({
               width: avatarSize,
               height: avatarSize,
               borderRadius: isDesktop ? 20 : 18,
-              backgroundColor: colors.primary[500] + "20",
+              backgroundColor: avatarBgColor + "25",
               alignItems: "center",
               justifyContent: "center",
               borderWidth: 2,
-              borderColor: colors.primary[500] + "40",
+              borderColor: avatarBgColor + "50",
             }}
           >
-            <Text
-              style={{
-                color: colors.primary[400],
-                fontSize: isDesktop ? 24 : 20,
-                fontFamily: "DMSans_700Bold",
-              }}
-            >
-              {initials}
-            </Text>
+            {initials ? (
+              <Text
+                style={{
+                  color: avatarBgColor,
+                  fontSize: isDesktop ? 24 : 20,
+                  fontFamily: "DMSans_700Bold",
+                }}
+              >
+                {initials}
+              </Text>
+            ) : (
+              <Ionicons name="person" size={isDesktop ? 28 : 24} color={avatarBgColor} />
+            )}
           </View>
         );
       })()}
