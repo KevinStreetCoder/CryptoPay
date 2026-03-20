@@ -82,6 +82,9 @@ export interface KYCDocument {
 }
 
 export const authApi = {
+  /** Verify PIN for app lock screen (authenticated, no device/OTP checks) */
+  verifyPin: (pin: string) => api.post<{ verified: boolean }>("/auth/verify-pin/", { pin }),
+
   requestOTP: (phone: string, email?: string) =>
     api.post("/auth/otp/", { phone, ...(email ? { email } : {}) }),
 

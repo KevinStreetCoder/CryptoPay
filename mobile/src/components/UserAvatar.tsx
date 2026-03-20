@@ -1,27 +1,49 @@
 /**
- * UserAvatar — production-ready avatar component using expo-image.
+ * UserAvatar — modern fintech-style avatar (Revolut/Cash App inspired).
  *
- * Uses expo-image (not RN Image) for reliable remote URL loading on Android.
- * Falls back to ui-avatars.com generated PNG when no uploaded avatar exists.
- * Tier-colored borders: gold=admin, green=verified, primary=default.
+ * Uploaded avatar: rendered via expo-image with native caching.
+ * No avatar: colorful circle with bold initials + decorative inner ring.
+ * Tier-colored: gold border=admin, green=verified, primary=default.
+ *
+ * No network dependency for fallback — renders locally.
  */
 
-import { View } from "react-native";
+import { View, Text } from "react-native";
 import { Image } from "expo-image";
-import { colors } from "../constants/theme";
 import { config } from "../constants/config";
 
-const AVATAR_COLORS = ["#10B981", "#3B82F6", "#8B5CF6", "#EC4899", "#6366F1", "#14B8A6", "#F59E0B", "#EF4444"];
+// Vibrant gradient-inspired solid colors for avatar backgrounds
+const AVATAR_PALETTES = [
+  { bg: "#10B981", accent: "#34D399" },  // Emerald
+  { bg: "#3B82F6", accent: "#60A5FA" },  // Blue
+  { bg: "#8B5CF6", accent: "#A78BFA" },  // Purple
+  { bg: "#EC4899", accent: "#F472B6" },  // Pink
+  { bg: "#6366F1", accent: "#818CF8" },  // Indigo
+  { bg: "#14B8A6", accent: "#2DD4BF" },  // Teal
+  { bg: "#F59E0B", accent: "#FBBF24" },  // Amber
+  { bg: "#EF4444", accent: "#F87171" },  // Red
+];
 const ADMIN_GOLD = "#D4AF37";
+const ADMIN_ACCENT = "#F5D77A";
 
-function getAvatarColor(identifier: string, isAdmin?: boolean): string {
-  if (isAdmin) return ADMIN_GOLD;
+function getPalette(identifier: string, isAdmin?: boolean) {
+  if (isAdmin) return { bg: ADMIN_GOLD, accent: ADMIN_ACCENT };
   let hash = 0;
   for (let i = 0; i < identifier.length; i++) hash = identifier.charCodeAt(i) + ((hash << 5) - hash);
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+  return AVATAR_PALETTES[Math.abs(hash) % AVATAR_PALETTES.length];
 }
 
-function resolveAvatarUrl(url: string | null | undefined): string | null {
+function getInitials(name?: string, phone?: string): string {
+  if (name && name.trim()) {
+    const parts = name.trim().split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    if (parts.length === 1) return parts[0][0].toUpperCase();
+  }
+  if (phone && phone.length >= 4) return phone.slice(-2);
+  return "U";
+}
+
+function resolveUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   if (url.startsWith("http://") || url.startsWith("https://")) return url;
   const base = config.apiUrl.replace(/\/api\/v1\/?$/, "");
@@ -55,18 +77,36 @@ export function UserAvatar({
 }: UserAvatarProps) {
   const isAdmin = isStaff || isSuperuser;
   const identifier = userId || phone || "user";
-  const bgColor = getAvatarColor(identifier, isAdmin);
-  const borderColor = isAdmin ? ADMIN_GOLD : kycTier >= 1 ? "#10B981" : bgColor;
+  const palette = getPalette(identifier, isAdmin);
+  const borderClr = isAdmin ? ADMIN_GOLD : kycTier >= 1 ? "#10B981" : palette.bg;
   const radius = borderRadius ?? Math.round(size * 0.32);
+  const resolved = resolveUrl(avatarUrl);
+  const initials = getInitials(fullName, phone);
+  const fontSize = size * (initials.length > 1 ? 0.33 : 0.40);
 
-  const resolvedUrl = resolveAvatarUrl(avatarUrl);
+  // Uploaded avatar — use expo-image for reliable cross-platform rendering
+  if (resolved) {
+    return (
+      <Image
+        source={{ uri: resolved }}
+        style={{
+          width: size,
+          height: size,
+          borderRadius: radius,
+          borderWidth,
+          borderColor: borderClr + "60",
+          backgroundColor: palette.bg + "30",
+        }}
+        contentFit="cover"
+        cachePolicy="memory-disk"
+        transition={200}
+      />
+    );
+  }
 
-  // Generate fallback avatar URL from ui-avatars.com
-  const bgHex = bgColor.replace("#", "");
-  const name = encodeURIComponent(fullName || phone?.slice(-4) || "U");
-  const fallbackUrl = `https://ui-avatars.com/api/?name=${name}&size=${size * 2}&background=${bgHex}&color=fff&bold=true&font-size=0.38&rounded=true&format=png`;
-
-  const imageUrl = resolvedUrl || fallbackUrl;
+  // Generated avatar — modern fintech style with decorative elements
+  const ringSize = size * 0.75;
+  const ringBorder = Math.max(1, size * 0.03);
 
   return (
     <View
@@ -75,23 +115,49 @@ export function UserAvatar({
         height: size,
         borderRadius: radius,
         borderWidth,
-        borderColor: borderColor + "55",
+        borderColor: borderClr + "60",
+        backgroundColor: palette.bg,
+        alignItems: "center",
+        justifyContent: "center",
         overflow: "hidden",
-        backgroundColor: bgColor + "15",
       }}
     >
-      <Image
-        source={{ uri: imageUrl }}
+      {/* Decorative inner ring — adds depth like Revolut avatars */}
+      <View
         style={{
-          width: size - borderWidth * 2,
-          height: size - borderWidth * 2,
-          borderRadius: radius > 2 ? radius - 2 : radius,
+          position: "absolute",
+          width: ringSize,
+          height: ringSize,
+          borderRadius: ringSize / 2,
+          borderWidth: ringBorder,
+          borderColor: palette.accent + "30",
         }}
-        contentFit="cover"
-        cachePolicy="memory-disk"
-        placeholder={null}
-        transition={200}
       />
+      {/* Subtle top-left highlight for 3D feel */}
+      <View
+        style={{
+          position: "absolute",
+          top: -size * 0.15,
+          left: -size * 0.15,
+          width: size * 0.6,
+          height: size * 0.6,
+          borderRadius: size * 0.3,
+          backgroundColor: "rgba(255,255,255,0.12)",
+        }}
+      />
+      {/* Initials */}
+      <Text
+        style={{
+          color: "#FFFFFF",
+          fontSize,
+          fontFamily: "DMSans_700Bold",
+          letterSpacing: initials.length > 1 ? 1.5 : 0.5,
+          includeFontPadding: false,
+          textAlignVertical: "center",
+        }}
+      >
+        {initials}
+      </Text>
     </View>
   );
 }

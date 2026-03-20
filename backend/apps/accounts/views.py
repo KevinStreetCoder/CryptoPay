@@ -1036,6 +1036,44 @@ class ChangePINView(APIView):
         return request.META.get("REMOTE_ADDR")
 
 
+class VerifyPINView(APIView):
+    """Verify user's PIN without triggering device/OTP checks.
+
+    Used by the app lock screen to verify PIN locally.
+    Requires authentication (valid JWT token).
+    Rate limited to prevent brute force.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        pin = request.data.get("pin", "")
+        if not pin or len(pin) != 6:
+            return Response(
+                {"error": "PIN must be 6 digits"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Rate limit: max 5 PIN verify attempts per minute
+        rate_key = f"pin_verify:{request.user.id}"
+        attempts = cache.get(rate_key, 0)
+        if attempts >= 5:
+            return Response(
+                {"error": "Too many attempts. Wait a minute."},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+
+        if request.user.check_pin(pin):
+            cache.delete(rate_key)
+            return Response({"verified": True})
+
+        cache.set(rate_key, attempts + 1, timeout=60)
+        return Response(
+            {"error": "Incorrect PIN", "verified": False},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+
 class KYCDocumentListView(APIView):
     """List and upload KYC documents for identity verification."""
 

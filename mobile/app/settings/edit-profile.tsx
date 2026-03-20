@@ -23,6 +23,8 @@ import { useThemeMode } from "../../src/stores/theme";
 import { config } from "../../src/constants/config";
 import { normalizeError } from "../../src/utils/apiErrors";
 import { useLocale } from "../../src/hooks/useLocale";
+import { Image as ExpoImage } from "expo-image";
+import { UserAvatar } from "../../src/components/UserAvatar";
 
 const isWeb = Platform.OS === "web";
 
@@ -178,8 +180,8 @@ function EditFormStep({
           accessibilityLabel="Change profile photo"
         >
           {displayAvatar ? (
-            <Image
-              source={{ uri: displayAvatar }}
+            <ExpoImage
+              source={displayAvatar}
               style={{
                 width: avatarSize,
                 height: avatarSize,
@@ -187,30 +189,17 @@ function EditFormStep({
                 borderWidth: 3,
                 borderColor: colors.primary[500] + "50",
               }}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              transition={200}
             />
           ) : (
-            <View
-              style={{
-                width: avatarSize,
-                height: avatarSize,
-                borderRadius: avatarSize / 2,
-                backgroundColor: colors.primary[500] + "20",
-                alignItems: "center",
-                justifyContent: "center",
-                borderWidth: 3,
-                borderColor: colors.primary[500] + "50",
-              }}
-            >
-              <Text
-                style={{
-                  color: colors.primary[400],
-                  fontSize: isDesktop ? 36 : 30,
-                  fontFamily: "DMSans_700Bold",
-                }}
-              >
-                {initials}
-              </Text>
-            </View>
+            <UserAvatar
+              fullName={fullName}
+              size={avatarSize}
+              borderRadius={avatarSize / 2}
+              borderWidth={3}
+            />
           )}
           {/* Camera badge */}
           <View
