@@ -691,15 +691,7 @@ class SwapView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Check sufficient balance
-        if from_wallet.available_balance < source_amount:
-            return Response(
-                {"error": f"Insufficient {from_currency} balance. "
-                          f"Available: {from_wallet.available_balance}, required: {source_amount}"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # Get cross-rate via KES intermediary
+        # Get cross-rate via KES intermediary (BEFORE atomic block — read-only)
         from apps.rates.services import RateService
 
         try:
@@ -718,9 +710,6 @@ class SwapView(APIView):
         fee_amount = (source_amount * self.SWAP_FEE_PERCENT / Decimal("100")).quantize(Decimal("0.00000001"))
         net_source = source_amount - fee_amount  # amount that actually converts
 
-        # KES equivalent of the fee (for the transaction record)
-        fee_kes = (fee_amount * from_kes_rate).quantize(Decimal("0.01"))
-
         # Destination amount
         dest_amount = (net_source * cross_rate).quantize(Decimal("0.00000001"))
 
@@ -730,13 +719,29 @@ class SwapView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Atomic execution: lock → debit → credit → Transaction record
+        # ═══════════════════════════════════════════════════════════
+        # ATOMIC EXECUTION — all balance checks and mutations inside
+        # the atomic block with select_for_update() to prevent races.
+        # ═══════════════════════════════════════════════════════════
         from django.db import transaction as db_transaction
         from apps.wallets.services import InsufficientBalanceError, WalletService
+        from apps.wallets.models import Wallet
 
         try:
             with db_transaction.atomic():
-                # Create the transaction record first (for idempotent ledger entries)
+                # Lock BOTH wallets inside atomic block (prevents race conditions)
+                locked_from = Wallet.objects.select_for_update().get(id=from_wallet.id)
+                locked_to = Wallet.objects.select_for_update().get(id=to_wallet.id)
+
+                # Balance check INSIDE lock (prevents concurrent overdraw)
+                if locked_from.available_balance < source_amount:
+                    return Response(
+                        {"error": f"Insufficient {from_currency} balance. "
+                                  f"Available: {locked_from.available_balance}"},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                # Create the transaction record (for idempotent ledger entries)
                 tx = Transaction.objects.create(
                     idempotency_key=f"swap-{user.id}-{timezone.now().timestamp()}",
                     user=user,
@@ -746,8 +751,9 @@ class SwapView(APIView):
                     dest_currency=to_currency,
                     dest_amount=dest_amount,
                     exchange_rate=cross_rate,
-                    fee_amount=fee_kes,
-                    fee_currency="KES",
+                    # FIX: store fee in source currency (not KES) for correct ledger
+                    fee_amount=fee_amount,
+                    fee_currency=from_currency,
                     status=Transaction.Status.PROCESSING,
                     ip_address=self._get_client_ip(request),
                     saga_data={
@@ -756,25 +762,46 @@ class SwapView(APIView):
                         "cross_rate": str(cross_rate),
                         "fee_percent": str(self.SWAP_FEE_PERCENT),
                         "fee_source_amount": str(fee_amount),
+                        "fee_kes": str((fee_amount * from_kes_rate).quantize(Decimal("0.01"))),
                         "net_source_amount": str(net_source),
                     },
                 )
 
-                # Debit source wallet (full amount including fee)
+                # Debit FULL source amount from user (includes fee)
                 WalletService.debit(
-                    from_wallet.id,
+                    locked_from.id,
                     source_amount,
                     tx.id,
                     f"Swap {source_amount} {from_currency} → {to_currency}",
                 )
 
-                # Credit destination wallet
+                # Credit destination wallet (converted amount, fee excluded)
                 WalletService.credit(
-                    to_wallet.id,
+                    locked_to.id,
                     dest_amount,
                     tx.id,
                     f"Swap receive {dest_amount} {to_currency} from {from_currency}",
                 )
+
+                # Collect swap fee into system/admin wallet
+                # The fee was already deducted from user (source_amount = net + fee)
+                # Credit it to system wallet for proper accounting
+                if fee_amount > 0:
+                    try:
+                        system_fee_wallet = Wallet.objects.select_for_update().filter(
+                            user__is_superuser=True,
+                            currency=from_currency,
+                        ).first()
+                        if system_fee_wallet:
+                            system_fee_wallet.balance += fee_amount
+                            system_fee_wallet.save(update_fields=["balance"])
+                        else:
+                            logger.warning(
+                                f"No system wallet for {from_currency}. "
+                                f"Swap fee {fee_amount} {from_currency} not collected."
+                            )
+                    except Exception as e:
+                        logger.error(f"Swap fee collection failed for tx {tx.id}: {e}")
 
                 # Mark completed
                 tx.status = Transaction.Status.COMPLETED

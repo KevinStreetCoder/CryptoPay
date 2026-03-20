@@ -81,6 +81,16 @@ const TYPE_CONFIG: Record<
     label: "Sell",
     color: colors.accentDark,
   },
+  SWAP: {
+    icon: "swap-horizontal-outline",
+    label: "Swap",
+    color: colors.crypto?.ETH || "#627EEA",
+    getSubtitle: (tx) => {
+      const srcAmt = parseFloat(tx.source_amount || "0");
+      const destAmt = parseFloat(tx.dest_amount || "0");
+      return `${srcAmt} ${tx.source_currency} → ${destAmt > 0 ? destAmt.toFixed(6) : ""} ${tx.dest_currency}`;
+    },
+  },
   KES_DEPOSIT: {
     icon: "arrow-down-circle-outline",
     label: "KES Deposit",
