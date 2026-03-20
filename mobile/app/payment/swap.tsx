@@ -372,28 +372,39 @@ export default function SwapScreen() {
             <View
               style={{ alignItems: "center", paddingVertical: 20, gap: 16 }}
             >
-              <GlassCard style={{ width: "100%", padding: 16 }}>
+              <View
+                style={{
+                  width: "100%",
+                  backgroundColor: tc.dark.card,
+                  borderRadius: 16,
+                  padding: 16,
+                  borderWidth: 1,
+                  borderColor: tc.glass.border,
+                }}
+              >
                 <View
                   style={{
                     flexDirection: "row",
                     justifyContent: "space-between",
-                    marginBottom: 8,
+                    alignItems: "center",
+                    marginBottom: 10,
                   }}
                 >
                   <Text
+                    allowFontScaling={false}
                     style={{
                       color: tc.textMuted,
                       fontSize: 13,
-                      fontFamily: "DMSans_500Medium",
                     }}
                   >
                     Swap
                   </Text>
                   <Text
+                    allowFontScaling={false}
                     style={{
                       color: colors.primary[400],
                       fontSize: 15,
-                      fontFamily: "DMSans_700Bold",
+                      fontWeight: "bold",
                     }}
                   >
                     {amount} {fromCurrency}
@@ -403,28 +414,30 @@ export default function SwapScreen() {
                   style={{
                     flexDirection: "row",
                     justifyContent: "space-between",
+                    alignItems: "center",
                   }}
                 >
                   <Text
+                    allowFontScaling={false}
                     style={{
                       color: tc.textMuted,
                       fontSize: 13,
-                      fontFamily: "DMSans_500Medium",
                     }}
                   >
                     Receive
                   </Text>
                   <Text
+                    allowFontScaling={false}
                     style={{
                       color: colors.success,
                       fontSize: 15,
-                      fontFamily: "DMSans_700Bold",
+                      fontWeight: "bold",
                     }}
                   >
                     {destAmount.toFixed(toDecimals)} {toCurrency}
                   </Text>
                 </View>
-              </GlassCard>
+              </View>
 
               <View
                 style={{
