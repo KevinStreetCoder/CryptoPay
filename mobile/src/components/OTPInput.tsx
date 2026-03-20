@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from "react";
-import { View, Text, TextInput, Pressable, Platform } from "react-native";
+import { View, Text, TextInput, Pressable, Platform, useWindowDimensions } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, getThemeColors } from "../constants/theme";
 import { useThemeMode } from "../stores/theme";
@@ -37,6 +37,14 @@ export function OTPInput({
 }: OTPInputProps) {
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
+  const { width: screenWidth } = useWindowDimensions();
+
+  const isMobile = screenWidth < 768;
+  const isVerySmall = screenWidth < 360;
+  const cellGap = isVerySmall ? 6 : isMobile ? 8 : 10;
+  const maxCellContainerWidth = isMobile ? Math.min(screenWidth - 48, 340) : 380;
+  const cellWidth = isMobile ? Math.min(50, Math.floor(maxCellContainerWidth / length - cellGap)) : 50;
+  const cellHeight = isMobile ? Math.min(58, Math.round(cellWidth * 1.16)) : 58;
 
   const [code, setCode] = useState<string[]>(Array(length).fill(""));
   const [focusedIndex, setFocusedIndex] = useState(autoFocus ? 0 : -1);
@@ -138,7 +146,7 @@ export function OTPInput({
       ) : null}
 
       {/* OTP Cells */}
-      <View style={{ flexDirection: "row", gap: 10, marginBottom: 16 }}>
+      <View style={{ flexDirection: "row", gap: cellGap, marginBottom: 16, maxWidth: "100%", alignSelf: "center" }}>
         {Array.from({ length }).map((_, index) => {
           const isFocused = focusedIndex === index;
           const isFilled = !!code[index];
@@ -159,9 +167,9 @@ export function OTPInput({
               autoFocus={autoFocus && index === 0}
               editable={!loading}
               style={{
-                width: 50,
-                height: 58,
-                borderRadius: 14,
+                width: cellWidth,
+                height: cellHeight,
+                borderRadius: isVerySmall ? 10 : 14,
                 backgroundColor: hasError
                   ? colors.error + "08"
                   : isFocused
@@ -178,7 +186,7 @@ export function OTPInput({
                       ? colors.primary[400] + "30"
                       : tc.glass.border,
                 color: hasError ? colors.error : tc.textPrimary,
-                fontSize: 22,
+                fontSize: isVerySmall ? 18 : 22,
                 fontFamily: "DMSans_700Bold",
                 textAlign: "center",
                 ...(isWeb

@@ -347,6 +347,12 @@ export default function ProfileScreen() {
   const [avatarUri, setAvatarUri] = useState<string | null>(resolveAvatarUrl(user?.avatar_url));
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
+  // Sync avatar when user data updates (e.g., after login or profile refresh)
+  useEffect(() => {
+    const resolved = resolveAvatarUrl(user?.avatar_url);
+    if (resolved !== avatarUri) setAvatarUri(resolved);
+  }, [user?.avatar_url]);
+
   const handleVerifyEmail = async () => {
     if (!user?.email) {
       router.push("/settings/edit-profile" as any);

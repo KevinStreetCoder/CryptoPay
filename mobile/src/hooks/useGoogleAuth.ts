@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { Platform } from "react-native";
 import * as Google from "expo-auth-session/providers/google";
 import * as WebBrowser from "expo-web-browser";
 import { makeRedirectUri } from "expo-auth-session";
@@ -25,7 +26,9 @@ const GOOGLE_IOS_CLIENT_ID =
  * Returns the Google ID token on success.
  */
 export function useGoogleAuth() {
-  const redirectUri = makeRedirectUri({ scheme: "cryptopay", path: "auth" });
+  const redirectUri = Platform.OS === "web"
+    ? makeRedirectUri({ path: "auth/google/callback" })
+    : undefined;
 
   const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
     webClientId: GOOGLE_WEB_CLIENT_ID,

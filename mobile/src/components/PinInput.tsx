@@ -20,11 +20,13 @@ export function PinInput({ length = 6, onComplete, error, testID }: PinInputProp
 
   // Fixed box sizes — simple and reliable across all screen sizes
   const isMobile = screenWidth < 768;
-  const gap = isMobile ? 8 : 10;
-  const boxSize = isMobile ? Math.min(44, Math.floor((screenWidth - 80) / length - gap)) : 46;
+  const isVerySmall = screenWidth < 360;
+  const gap = isVerySmall ? 6 : isMobile ? 8 : 10;
+  const maxContainerWidth = isMobile ? Math.min(screenWidth - 60, 300) : 340;
+  const boxSize = isMobile ? Math.min(44, Math.floor((maxContainerWidth) / length - gap)) : 46;
   const boxHeight = Math.round(boxSize * 1.15);
   const boxRadius = 12;
-  const dotSize = 12;
+  const dotSize = isVerySmall ? 10 : 12;
   // Total width of all boxes + gaps — used to constrain the container
   const totalWidth = (boxSize * length) + (gap * (length - 1));
 
