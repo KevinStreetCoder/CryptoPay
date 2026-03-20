@@ -48,6 +48,20 @@ class RateAlert(models.Model):
     last_triggered_at = models.DateTimeField(null=True, blank=True)
     expires_at = models.DateTimeField(null=True, blank=True, help_text="Alert auto-deactivates after this time")
     cooldown_minutes = models.PositiveIntegerField(default=60, help_text="Min minutes between re-triggers")
+    # Scheduled routine alerts — send rate summary at specific times
+    schedule_type = models.CharField(
+        max_length=10, blank=True, default="",
+        help_text="Routine schedule: daily, weekly, monthly, or empty for price-trigger only",
+    )
+    schedule_hour = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        help_text="Hour of day to send (0-23, EAT timezone)",
+    )
+    schedule_day = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        help_text="Day of week (0=Mon..6=Sun) for weekly, or day of month (1-28) for monthly",
+    )
+    last_scheduled_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
