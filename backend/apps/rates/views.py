@@ -159,16 +159,64 @@ class RateAlertListCreateView(APIView):
         return Response(RateAlertSerializer(alert).data, status=status.HTTP_201_CREATED)
 
 
-class RateAlertDeleteView(APIView):
-    """DELETE — Remove a rate alert."""
+class RateAlertDetailView(APIView):
+    """
+    PATCH  — Edit an alert (target_rate, direction, duration, cooldown, schedule).
+    DELETE — Remove a rate alert.
+    POST   — Reactivate a triggered/expired alert with updated settings.
+    """
 
     permission_classes = [IsAuthenticated]
 
-    def delete(self, request, pk):
+    def _get_alert(self, request, pk):
         try:
-            alert = RateAlert.objects.get(id=pk, user=request.user)
+            return RateAlert.objects.get(id=pk, user=request.user)
         except RateAlert.DoesNotExist:
-            return Response({"error": "Rate alert not found."}, status=status.HTTP_404_NOT_FOUND)
+            return None
+
+    def patch(self, request, pk):
+        alert = self._get_alert(request, pk)
+        if not alert:
+            return Response({"error": "Alert not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = RateAlertSerializer(alert, data=request.data, partial=True, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(RateAlertSerializer(alert).data)
+
+    def post(self, request, pk):
+        """Reactivate a triggered or expired alert — optionally update settings."""
+        alert = self._get_alert(request, pk)
+        if not alert:
+            return Response({"error": "Alert not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Apply any updated fields
+        updatable = ["target_rate", "direction", "expires_at", "cooldown_minutes",
+                     "schedule_type", "schedule_hour", "schedule_day"]
+        for field in updatable:
+            if field in request.data:
+                setattr(alert, field, request.data[field])
+
+        # Reactivate
+        alert.is_active = True
+        alert.triggered_at = None
+        alert.last_triggered_at = None
+        alert.trigger_count = 0
+        alert.last_scheduled_at = None
+
+        # Reset expiry if new duration provided
+        if "expires_at" in request.data and request.data["expires_at"]:
+            alert.expires_at = request.data["expires_at"]
+        elif "expires_at" in request.data and not request.data["expires_at"]:
+            alert.expires_at = None  # forever
+
+        alert.save()
+        return Response(RateAlertSerializer(alert).data)
+
+    def delete(self, request, pk):
+        alert = self._get_alert(request, pk)
+        if not alert:
+            return Response({"error": "Alert not found."}, status=status.HTTP_404_NOT_FOUND)
 
         alert.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)

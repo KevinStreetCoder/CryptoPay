@@ -63,10 +63,15 @@ export interface PriceAlert {
   last_triggered_at: string | null;
   expires_at: string | null;
   cooldown_minutes: number;
+  schedule_type: string;
+  schedule_hour: number | null;
+  schedule_day: number | null;
+  last_scheduled_at: string | null;
   created_at: string;
 }
 
 export type AlertDuration = "1d" | "7d" | "30d" | "90d" | "forever";
+export type ScheduleType = "" | "daily" | "weekly" | "monthly";
 
 export interface CreateAlertPayload {
   currency: string;
@@ -74,7 +79,14 @@ export interface CreateAlertPayload {
   direction: "above" | "below";
   expires_at?: string | null;
   cooldown_minutes?: number;
+  schedule_type?: string;
+  schedule_hour?: number | null;
+  schedule_day?: number | null;
 }
+
+export type UpdateAlertPayload = Partial<CreateAlertPayload> & {
+  is_active?: boolean;
+};
 
 export const ratesApi = {
   getRate: (currency: string) =>
@@ -89,6 +101,8 @@ export const ratesApi = {
   // Price Alerts
   getAlerts: () => api.get<PriceAlert[]>("/rates/alerts/"),
   createAlert: (data: CreateAlertPayload) => api.post<PriceAlert>("/rates/alerts/", data),
+  updateAlert: (id: string, data: UpdateAlertPayload) => api.patch<PriceAlert>(`/rates/alerts/${id}/`, data),
+  reactivateAlert: (id: string, data?: UpdateAlertPayload) => api.post<PriceAlert>(`/rates/alerts/${id}/`, data || {}),
   deleteAlert: (id: string) => api.delete(`/rates/alerts/${id}/`),
 };
 
