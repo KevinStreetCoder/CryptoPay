@@ -15,6 +15,7 @@ import {
   Pressable,
   Platform,
   useWindowDimensions,
+  KeyboardAvoidingView,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -538,6 +539,10 @@ export default function WithdrawScreen() {
   // ── Form Step (main) ──
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={{ flex: 1 }}
+      >
       <ScrollView
         style={{ flex: 1 }}
         keyboardShouldPersistTaps="handled"
@@ -970,6 +975,7 @@ export default function WithdrawScreen() {
           </View>
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

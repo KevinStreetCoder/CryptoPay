@@ -1,9 +1,9 @@
 import { View, Text, Pressable, StyleSheet, useWindowDimensions, Platform } from "react-native";
-import { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { Wallet } from "../api/wallets";
 import { CURRENCIES, CurrencyCode, colors, shadows, getThemeColors, getThemeShadows } from "../constants/theme";
 import { useThemeMode } from "../stores/theme";
+import { useBalanceVisibility } from "../stores/balance";
 import { CryptoLogo } from "./CryptoLogo";
 
 const isWeb = Platform.OS === "web";
@@ -16,7 +16,7 @@ export function BalanceCard({ wallets }: BalanceCardProps) {
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
   const ts = getThemeShadows(isDark);
-  const [hidden, setHidden] = useState(false);
+  const { balanceHidden: hidden, toggleBalance } = useBalanceVisibility();
   const { width: screenWidth } = useWindowDimensions();
   const isSmall = screenWidth < 380;
 
@@ -65,7 +65,7 @@ export function BalanceCard({ wallets }: BalanceCardProps) {
           TOTAL BALANCE
         </Text>
         <Pressable
-          onPress={() => setHidden(!hidden)}
+          onPress={toggleBalance}
           hitSlop={12}
           style={styles.eyeButton}
           accessibilityRole="button"

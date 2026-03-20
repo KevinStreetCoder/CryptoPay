@@ -1010,8 +1010,8 @@ export default function RegisterScreen() {
                   autoFocus={Platform.OS === "web"}
                   autoCapitalize="words"
                   maxLength={50}
-                  onFocus={() => setNameFocused(true)}
-                  onBlur={() => setNameFocused(false)}
+                  onFocus={Platform.OS === "web" ? () => setNameFocused(true) : undefined}
+                  onBlur={Platform.OS === "web" ? () => setNameFocused(false) : undefined}
                   onSubmitEditing={handleNameSubmit}
                   style={{
                     flex: 1,

@@ -10,6 +10,7 @@ import {
   Platform,
   useWindowDimensions,
   ActivityIndicator,
+  KeyboardAvoidingView,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
@@ -349,6 +350,10 @@ export default function BuyCryptoScreen() {
           </Text>
         </View>
 
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={{ flex: 1 }}
+        >
         <ScrollView
           style={{ flex: 1 }}
           contentContainerStyle={{
@@ -732,6 +737,7 @@ export default function BuyCryptoScreen() {
             />
           </View>
         </ScrollView>
+        </KeyboardAvoidingView>
       </SafeAreaView>
     );
   }
