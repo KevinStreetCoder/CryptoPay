@@ -214,17 +214,49 @@ def _get_master_seed() -> bytes:
     Get the master seed for HD wallet derivation.
 
     Priority order:
-      1. WALLET_MASTER_SEED env var (hex-encoded 64-byte seed) — direct seed
-      2. WALLET_MNEMONIC env var (BIP-39 24-word phrase) — derive seed via BIP-39
-      3. Fallback: PBKDF2 from SECRET_KEY (development only, NOT for production)
+      1. KMS_ENABLED + WALLET_ENCRYPTED_SEED — decrypt via KMS envelope encryption
+      2. WALLET_MASTER_SEED env var (hex-encoded 64-byte seed) — direct seed
+      3. WALLET_MNEMONIC env var (BIP-39 24-word phrase) — derive seed via BIP-39
+      4. Fallback: PBKDF2 from SECRET_KEY (development only, NOT for production)
 
-    In production, use either:
+    In production, use KMS encryption:
+      - Encrypt with: python manage.py encrypt_wallet_seed
+      - Set KMS_ENABLED=True, WALLET_ENCRYPTED_SEED=<blob>
+
+    Or use plaintext (less secure):
       - A BIP-39 mnemonic stored in WALLET_MNEMONIC (preferred, human-readable backup)
       - The hex seed in WALLET_MASTER_SEED (derived from mnemonic, for KMS/HSM storage)
 
     Generate a mnemonic with: python manage.py generate_wallet_seed
     """
-    # Option 1: Direct hex seed (highest priority)
+    # Option 0: KMS envelope encryption (highest priority)
+    kms_enabled = getattr(settings, "KMS_ENABLED", False)
+    encrypted_seed = getattr(settings, "WALLET_ENCRYPTED_SEED", "")
+
+    if kms_enabled and encrypted_seed:
+        from apps.blockchain.kms import get_kms_manager
+
+        try:
+            cached_manager = get_kms_manager()
+            seed = cached_manager.get_seed(encrypted_seed)
+            logger.info("Using KMS-encrypted seed for HD wallet derivation.")
+            return seed
+        except Exception as e:
+            logger.error("KMS seed decryption failed: %s", e)
+            raise RuntimeError(
+                f"KMS seed decryption failed: {e}. "
+                "Check KMS_KEY_ID, AWS credentials, and WALLET_ENCRYPTED_SEED. "
+                "If the KMS key was rotated, re-encrypt with: "
+                "python manage.py encrypt_wallet_seed"
+            ) from e
+
+    if kms_enabled and not encrypted_seed:
+        raise RuntimeError(
+            "KMS_ENABLED=True but WALLET_ENCRYPTED_SEED is not set. "
+            "Encrypt your seed with: python manage.py encrypt_wallet_seed"
+        )
+
+    # Option 1: Direct hex seed
     master_seed_hex = getattr(settings, "WALLET_MASTER_SEED", "")
     if master_seed_hex:
         seed = bytes.fromhex(master_seed_hex)

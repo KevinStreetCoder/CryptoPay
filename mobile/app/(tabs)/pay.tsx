@@ -1,13 +1,16 @@
-import { useState } from "react";
-import { View, Text, Pressable, ScrollView, Platform, useWindowDimensions, Image } from "react-native";
+import { useState, useCallback } from "react";
+import { View, Text, Pressable, ScrollView, Platform, useWindowDimensions, Image, Alert, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { colors, getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
 import { SectionHeader } from "../../src/components/SectionHeader";
 import { SERVICE_LOGOS } from "../../src/constants/logos";
 import { useLocale } from "../../src/hooks/useLocale";
+import { paymentsApi, SavedPaybill } from "../../src/api/payments";
+import { useToast } from "../../src/components/Toast";
 
 const isWeb = Platform.OS === "web";
 
@@ -253,12 +256,62 @@ export default function PayScreen() {
   const tc = getThemeColors(isDark);
   const ts = getThemeShadows(isDark);
   const { t } = useLocale();
+  const toast = useToast();
+  const queryClient = useQueryClient();
 
   const isDesktop = isWeb && width >= 900;
   const isLargeDesktop = isWeb && width >= 1200;
   const hPad = isLargeDesktop ? 48 : isDesktop ? 32 : 16;
 
   const textColor = isDark ? "#FFFFFF" : tc.textPrimary;
+
+  // Fetch saved paybills
+  const { data: savedPaybills, isLoading: savedLoading } = useQuery<SavedPaybill[]>({
+    queryKey: ["savedPaybills"],
+    queryFn: async () => {
+      const { data } = await paymentsApi.savedPaybills();
+      return data;
+    },
+  });
+
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const handleDeleteSavedPaybill = useCallback(async (id: string) => {
+    setDeletingId(id);
+    try {
+      await paymentsApi.deleteSavedPaybill(id);
+      queryClient.invalidateQueries({ queryKey: ["savedPaybills"] });
+      toast.success("Removed", "Saved paybill deleted");
+    } catch {
+      toast.error("Error", "Could not delete saved paybill");
+    } finally {
+      setDeletingId(null);
+    }
+  }, [queryClient, toast]);
+
+  const handleSavedPaybillPress = (bill: SavedPaybill) => {
+    router.push(
+      `/payment/paybill?prefill=${bill.paybill_number}&account=${encodeURIComponent(bill.account_number)}&name=${encodeURIComponent(bill.label || "Saved Bill")}` as any
+    );
+  };
+
+  const handleSavedPaybillLongPress = (bill: SavedPaybill) => {
+    if (isWeb) {
+      // On web, confirm via window.confirm
+      if (typeof window !== "undefined" && window.confirm(`Delete saved paybill "${bill.label || bill.paybill_number}"?`)) {
+        handleDeleteSavedPaybill(bill.id);
+      }
+    } else {
+      Alert.alert(
+        "Delete Saved Paybill",
+        `Remove "${bill.label || bill.paybill_number}"?`,
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Delete", style: "destructive", onPress: () => handleDeleteSavedPaybill(bill.id) },
+        ]
+      );
+    }
+  };
 
   const handleServicePress = (service: ServiceProvider) => {
     if (service.paybill) {
@@ -497,6 +550,178 @@ export default function PayScreen() {
               </Pressable>
             ))}
           </View>
+        </View>
+
+        {/* ── Saved Paybills ────────────────────────────────────────── */}
+        <View style={{ paddingHorizontal: hPad, marginTop: 32 }}>
+          <SectionHeader
+            title="Saved Paybills"
+            icon="bookmark-outline"
+            iconColor={colors.primary[400]}
+            count={savedPaybills?.length || 0}
+          />
+          {savedLoading ? (
+            <View style={{ paddingVertical: 20, alignItems: "center" }}>
+              <ActivityIndicator size="small" color={colors.primary[400]} />
+            </View>
+          ) : !savedPaybills || savedPaybills.length === 0 ? (
+            <View
+              style={{
+                backgroundColor: tc.dark.card,
+                borderRadius: 16,
+                padding: 24,
+                alignItems: "center",
+                borderWidth: 1,
+                borderColor: tc.glass.border,
+              }}
+            >
+              <Ionicons name="bookmark-outline" size={28} color={tc.textMuted} style={{ marginBottom: 10 }} />
+              <Text
+                style={{
+                  color: tc.textMuted,
+                  fontSize: 13,
+                  fontFamily: "DMSans_400Regular",
+                  textAlign: "center",
+                  lineHeight: 19,
+                }}
+              >
+                No saved paybills yet. They'll appear here after your first payment.
+              </Text>
+            </View>
+          ) : (
+            <View
+              style={{
+                flexDirection: isDesktop ? "row" : "column",
+                flexWrap: isDesktop ? "wrap" : undefined,
+                gap: isDesktop ? 14 : 10,
+              }}
+            >
+              {savedPaybills.map((bill) => (
+                <Pressable
+                  key={bill.id}
+                  onPress={() => handleSavedPaybillPress(bill)}
+                  onLongPress={() => handleSavedPaybillLongPress(bill)}
+                  style={({ pressed, hovered }: any) => ({
+                    flexDirection: "row",
+                    alignItems: "center",
+                    backgroundColor: hovered ? tc.dark.elevated : tc.dark.card,
+                    borderRadius: 16,
+                    paddingHorizontal: isDesktop ? 18 : 14,
+                    paddingVertical: isDesktop ? 14 : 12,
+                    gap: 12,
+                    borderWidth: 1,
+                    borderColor: hovered ? colors.primary[400] + "40" : tc.glass.border,
+                    opacity: pressed ? 0.85 : deletingId === bill.id ? 0.5 : 1,
+                    transform: [{ scale: pressed ? 0.97 : hovered ? 1.01 : 1 }],
+                    ...(isDesktop
+                      ? {
+                          width: `calc(33.333% - ${(14 * 2) / 3}px)` as any,
+                          minWidth: 200,
+                        }
+                      : {}),
+                    ...(isWeb
+                      ? ({
+                          cursor: "pointer",
+                          transition: "all 0.2s ease",
+                        } as any)
+                      : {}),
+                    ...(hovered
+                      ? {
+                          ...ts.sm,
+                          ...(isWeb
+                            ? ({
+                                boxShadow: `0 2px 12px ${colors.primary[400]}20, 0 2px 8px rgba(0,0,0,0.15)`,
+                              } as any)
+                            : {}),
+                        }
+                      : {}),
+                  })}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Pay ${bill.label || bill.paybill_number}`}
+                >
+                  {/* Icon */}
+                  <View
+                    style={{
+                      width: isDesktop ? 40 : 36,
+                      height: isDesktop ? 40 : 36,
+                      borderRadius: isDesktop ? 12 : 10,
+                      backgroundColor: colors.primary[400] + "18",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexShrink: 0,
+                    }}
+                  >
+                    <Ionicons name="bookmark" size={isDesktop ? 20 : 18} color={colors.primary[400]} />
+                  </View>
+
+                  {/* Details */}
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text
+                      style={{
+                        color: tc.textPrimary,
+                        fontSize: isDesktop ? 14 : 13,
+                        fontFamily: "DMSans_600SemiBold",
+                      }}
+                      numberOfLines={1}
+                    >
+                      {bill.label || "Saved Bill"}
+                    </Text>
+                    <Text
+                      style={{
+                        color: tc.textMuted,
+                        fontSize: isDesktop ? 12 : 11,
+                        fontFamily: "DMSans_400Regular",
+                        marginTop: 1,
+                      }}
+                      numberOfLines={1}
+                    >
+                      {bill.paybill_number} / {bill.account_number}
+                    </Text>
+                    {bill.last_used_at && (
+                      <Text
+                        style={{
+                          color: tc.dark.muted,
+                          fontSize: 10,
+                          fontFamily: "DMSans_400Regular",
+                          marginTop: 2,
+                        }}
+                      >
+                        Last used {new Date(bill.last_used_at).toLocaleDateString("en-KE", { day: "numeric", month: "short" })}
+                      </Text>
+                    )}
+                  </View>
+
+                  {/* Delete button (visible on desktop hover or always on mobile via long press) */}
+                  {isDesktop && (
+                    <Pressable
+                      onPress={(e) => {
+                        e.stopPropagation?.();
+                        handleSavedPaybillLongPress(bill);
+                      }}
+                      hitSlop={8}
+                      style={({ hovered }: any) => ({
+                        width: 28,
+                        height: 28,
+                        borderRadius: 8,
+                        backgroundColor: hovered ? tc.dark.elevated : "transparent",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        ...(isWeb ? { cursor: "pointer" } as any : {}),
+                      })}
+                      accessibilityRole="button"
+                      accessibilityLabel="Delete saved paybill"
+                    >
+                      <Ionicons name="trash-outline" size={14} color={tc.textMuted} />
+                    </Pressable>
+                  )}
+
+                  {!isDesktop && (
+                    <Ionicons name="chevron-forward" size={16} color={tc.textMuted} />
+                  )}
+                </Pressable>
+              ))}
+            </View>
+          )}
         </View>
 
         {/* ── Popular Services ───────────────────────────────────────── */}

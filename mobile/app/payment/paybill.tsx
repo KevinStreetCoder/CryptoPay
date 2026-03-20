@@ -32,13 +32,14 @@ const CRYPTO_OPTIONS: CurrencyCode[] = ["USDT", "USDC", "BTC", "ETH", "SOL"];
 
 export default function PayBillScreen() {
   const router = useRouter();
-  const { prefill, name: prefillName } = useLocalSearchParams<{ prefill?: string; name?: string }>();
+  const { prefill, name: prefillName, account: prefillAccount } = useLocalSearchParams<{ prefill?: string; name?: string; account?: string }>();
   const { width } = useWindowDimensions();
   const isWeb = Platform.OS === "web";
   const isDesktop = isWeb && width >= 768;
   const { data: wallets } = useWallets();
   const [paybillNumber, setPaybillNumber] = useState(prefill || "");
-  const [accountNumber, setAccountNumber] = useState("");
+  const [accountNumber, setAccountNumber] = useState(prefillAccount || "");
+  const [saveLabel, setSaveLabel] = useState(prefillName || "");
   const [amount, setAmount] = useState("");
   const [selectedCrypto, setSelectedCrypto] = useState<CurrencyCode>("USDT");
   const [quote, setQuote] = useState<Quote | null>(null);
@@ -77,6 +78,7 @@ export default function PayBillScreen() {
   const handleSelectSavedBill = (bill: SavedPaybill) => {
     setPaybillNumber(bill.paybill_number);
     setAccountNumber(bill.account_number);
+    setSaveLabel(bill.label || "");
     setQuote(null);
   };
 
@@ -148,6 +150,7 @@ export default function PayBillScreen() {
         rate: quote.exchange_rate,
         fee: quote.fee_kes,
         excise_duty: quote.excise_duty_kes || "0",
+        save_label: saveLabel,
       },
     });
   };
@@ -407,6 +410,32 @@ export default function PayBillScreen() {
                 }}
                 accessibilityLabel="Account Number"
                 testID="account-number-input"
+                maxFontSizeMultiplier={1.3}
+              />
+
+              {/* Save Label */}
+              <SectionHeader title="Save as (optional)" icon="bookmark-outline" iconColor={colors.primary[400]} />
+              <TextInput
+                value={saveLabel}
+                onChangeText={setSaveLabel}
+                placeholder="e.g. KPLC Home, DSTV"
+                placeholderTextColor={tc.dark.muted}
+                onFocus={() => setFocusedField("label")}
+                onBlur={() => setFocusedField(null)}
+                style={{
+                  backgroundColor: tc.dark.card,
+                  color: tc.textPrimary,
+                  fontSize: 15,
+                  borderRadius: 16,
+                  borderWidth: 1,
+                  borderColor: inputBorderColor("label"),
+                  paddingHorizontal: 16,
+                  paddingVertical: 12,
+                  marginBottom: 20,
+                  ...(isWeb ? { outlineStyle: "none", transition: "border-color 0.15s ease, box-shadow 0.15s ease" } as any : {}),
+                  ...inputFocusGlow("label"),
+                }}
+                accessibilityLabel="Save label for this paybill"
                 maxFontSizeMultiplier={1.3}
               />
 

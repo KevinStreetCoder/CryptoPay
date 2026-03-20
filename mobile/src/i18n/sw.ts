@@ -374,6 +374,8 @@ const sw: Translations = {
     securitySettingsDesc: "2FA, uthibitisho wa barua pepe, urejeshaji",
     notifications: "Arifa",
     notificationsDesc: "Arifa za miamala, amana, matangazo",
+    priceAlerts: "Arifa za Bei",
+    priceAlertsDesc: "Pata arifa bei za crypto zinapofikia lengo",
     language: "Lugha",
     languageDesc: "Kiingereza, Kiswahili",
     defaultCurrency: "Sarafu ya Chaguo-msingi",

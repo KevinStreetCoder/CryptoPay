@@ -451,6 +451,16 @@ WALLET_MNEMONIC = env("WALLET_MNEMONIC", default="")
 # Option 2: Hex-encoded seed (64 bytes / 128 hex chars, for KMS/HSM storage)
 WALLET_MASTER_SEED = env("WALLET_MASTER_SEED", default="")
 
+# --- KMS Envelope Encryption ---
+# When KMS_ENABLED=True, the app decrypts WALLET_ENCRYPTED_SEED at runtime
+# instead of reading plaintext WALLET_MASTER_SEED / WALLET_MNEMONIC.
+# Encrypt with: python manage.py encrypt_wallet_seed
+KMS_ENABLED = env.bool("KMS_ENABLED", default=False)
+KMS_KEY_ID = env("KMS_KEY_ID", default="")           # AWS KMS key ARN or alias
+KMS_REGION = env("KMS_REGION", default="af-south-1")  # AWS region (Cape Town)
+KMS_SEED_CACHE_TTL = env.int("KMS_SEED_CACHE_TTL", default=300)  # Cache TTL in seconds
+WALLET_ENCRYPTED_SEED = env("WALLET_ENCRYPTED_SEED", default="")  # Encrypted blob from encrypt_wallet_seed
+
 # Platform hot wallet addresses (destination for on-chain sweeps).
 # Derived from WALLET_MNEMONIC at index 0, but explicitly set here for
 # safety — prevents funds being sent to a derivation mismatch address.

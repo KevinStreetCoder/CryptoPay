@@ -50,6 +50,24 @@ export interface Quote {
   excise_duty_percent: number;
 }
 
+// ── Price Alerts ─────────────────────────────────────────────────────────────
+
+export interface PriceAlert {
+  id: string;
+  currency: string;
+  target_rate: string;
+  direction: "above" | "below";
+  is_active: boolean;
+  triggered_at: string | null;
+  created_at: string;
+}
+
+export interface CreateAlertPayload {
+  currency: string;
+  target_rate: string;
+  direction: "above" | "below";
+}
+
 export const ratesApi = {
   getRate: (currency: string) =>
     api.get<RateApiResponse>("/rates/", { params: { currency } }),
@@ -59,6 +77,11 @@ export const ratesApi = {
     api.post<Quote>("/rates/quote/", data),
   getRateHistory: (currency: string, period: string = "7d") =>
     api.get<RateHistoryResponse>("/rates/history/", { params: { currency, period } }),
+
+  // Price Alerts
+  getAlerts: () => api.get<PriceAlert[]>("/rates/alerts/"),
+  createAlert: (data: CreateAlertPayload) => api.post<PriceAlert>("/rates/alerts/", data),
+  deleteAlert: (id: string) => api.delete(`/rates/alerts/${id}/`),
 };
 
 // Normalize API response to the Rate shape used by the app

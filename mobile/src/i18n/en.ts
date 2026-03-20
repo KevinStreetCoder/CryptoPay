@@ -372,6 +372,8 @@ const en = {
     securitySettingsDesc: "2FA, email verification, recovery",
     notifications: "Notifications",
     notificationsDesc: "Transaction alerts, deposits, promotions",
+    priceAlerts: "Price Alerts",
+    priceAlertsDesc: "Get notified at target crypto prices",
     language: "Language",
     languageDesc: "English, Swahili",
     defaultCurrency: "Default Currency",

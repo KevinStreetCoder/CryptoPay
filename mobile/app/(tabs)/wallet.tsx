@@ -27,7 +27,7 @@ import { ratesApi, Rate, normalizeRate } from "../../src/api/rates";
 import { walletsApi } from "../../src/api/wallets";
 import { CURRENCIES, CurrencyCode, colors, getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
-import { getTxKesAmount, getTxRecipient } from "../../src/api/payments";
+import { getTxKesAmount, getTxRecipient, paymentsApi } from "../../src/api/payments";
 import { usePhonePrivacy } from "../../src/utils/privacy";
 import { useBalanceVisibility } from "../../src/stores/balance";
 import { SectionHeader } from "../../src/components/SectionHeader";
@@ -174,6 +174,49 @@ export default function WalletScreen() {
   const { hasPending: hasPendingDeposits } = usePendingDeposits();
   const queryClient = useQueryClient();
   const toast = useToast();
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportCSV = useCallback(async () => {
+    setExporting(true);
+    try {
+      // Default to last 30 days
+      const dateTo = new Date();
+      const dateFrom = new Date();
+      dateFrom.setDate(dateFrom.getDate() - 30);
+      const params = {
+        date_from: dateFrom.toISOString().split("T")[0],
+        date_to: dateTo.toISOString().split("T")[0],
+      };
+
+      const { data } = await paymentsApi.exportTransactions(params);
+
+      if (Platform.OS === "web") {
+        // Web: trigger browser download via blob URL
+        const blob = new Blob([data], { type: "text/csv" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "cryptopay_transactions.csv";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast.success("Exported", "CSV file downloaded");
+      } else {
+        // Native: share the CSV content via Share API
+        const { Share } = require("react-native");
+        await Share.share({
+          message: data,
+          title: "CryptoPay Transactions",
+        });
+        toast.success("Exported", "CSV file ready");
+      }
+    } catch {
+      toast.error("Export Failed", "Could not export transactions. Please try again.");
+    } finally {
+      setExporting(false);
+    }
+  }, [toast]);
 
   // Modal slide-up animation
   const modalSlide = useRef(new Animated.Value(400)).current;
@@ -1801,13 +1844,53 @@ export default function WalletScreen() {
 
             {/* ── Transaction History ── */}
             <View style={{ paddingHorizontal: hPad, marginBottom: 32 }}>
-              <SectionHeader
-                title={t("wallet.recentActivity")}
-                uppercase={false}
-                icon="time-outline"
-                iconColor={tc.textSecondary}
-                count={transactions.length}
-              />
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                <View style={{ flex: 1 }}>
+                  <SectionHeader
+                    title={t("wallet.recentActivity")}
+                    uppercase={false}
+                    icon="time-outline"
+                    iconColor={tc.textSecondary}
+                    count={transactions.length}
+                  />
+                </View>
+                {transactions.length > 0 && (
+                  <Pressable
+                    onPress={handleExportCSV}
+                    disabled={exporting}
+                    style={({ pressed, hovered }: any) => ({
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 6,
+                      paddingHorizontal: 14,
+                      paddingVertical: 8,
+                      borderRadius: 10,
+                      backgroundColor: hovered ? tc.dark.elevated : tc.dark.card,
+                      borderWidth: 1,
+                      borderColor: hovered ? colors.primary[400] + "40" : tc.glass.border,
+                      opacity: pressed ? 0.85 : exporting ? 0.6 : 1,
+                      ...(isWeb ? { cursor: exporting ? "wait" : "pointer", transition: "all 0.15s ease" } as any : {}),
+                    })}
+                    accessibilityRole="button"
+                    accessibilityLabel="Export transactions as CSV"
+                  >
+                    {exporting ? (
+                      <ActivityIndicator size={14} color={colors.primary[400]} />
+                    ) : (
+                      <Ionicons name="download-outline" size={14} color={colors.primary[400]} />
+                    )}
+                    <Text
+                      style={{
+                        color: colors.primary[400],
+                        fontSize: 12,
+                        fontFamily: "DMSans_600SemiBold",
+                      }}
+                    >
+                      {exporting ? "Exporting..." : "Export CSV"}
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
 
               {txLoading ? (
                 <TransactionSkeleton />
@@ -2230,13 +2313,52 @@ export default function WalletScreen() {
         {/* Transaction History */}
         <View style={{ marginTop: 20 }}>
           <View style={{ paddingHorizontal: hPad }}>
-            <SectionHeader
-              title={t("wallet.recentActivity")}
-              uppercase={false}
-              icon="time-outline"
-              iconColor={tc.textSecondary}
-              count={transactions.length}
-            />
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+              <View style={{ flex: 1 }}>
+                <SectionHeader
+                  title={t("wallet.recentActivity")}
+                  uppercase={false}
+                  icon="time-outline"
+                  iconColor={tc.textSecondary}
+                  count={transactions.length}
+                />
+              </View>
+              {transactions.length > 0 && (
+                <Pressable
+                  onPress={handleExportCSV}
+                  disabled={exporting}
+                  style={({ pressed }) => ({
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 5,
+                    paddingHorizontal: 12,
+                    paddingVertical: 7,
+                    borderRadius: 10,
+                    backgroundColor: tc.dark.card,
+                    borderWidth: 1,
+                    borderColor: tc.glass.border,
+                    opacity: pressed ? 0.85 : exporting ? 0.6 : 1,
+                  })}
+                  accessibilityRole="button"
+                  accessibilityLabel="Export transactions as CSV"
+                >
+                  {exporting ? (
+                    <ActivityIndicator size={12} color={colors.primary[400]} />
+                  ) : (
+                    <Ionicons name="download-outline" size={13} color={colors.primary[400]} />
+                  )}
+                  <Text
+                    style={{
+                      color: colors.primary[400],
+                      fontSize: 11,
+                      fontFamily: "DMSans_600SemiBold",
+                    }}
+                  >
+                    {exporting ? "..." : "Export"}
+                  </Text>
+                </Pressable>
+              )}
+            </View>
           </View>
 
           {txLoading ? (

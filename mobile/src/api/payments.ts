@@ -163,4 +163,10 @@ export const paymentsApi = {
   savePaybill: (data: { paybill_number: string; account_number: string; label?: string }) =>
     api.post<SavedPaybill>("/payments/saved-paybills/", data),
   deleteSavedPaybill: (id: string) => api.delete(`/payments/saved-paybills/${id}/`),
+  // Transaction CSV Export
+  exportTransactions: (params?: { date_from?: string; date_to?: string; type?: string }) =>
+    api.get("/payments/transactions/export/", {
+      params,
+      responseType: "blob",
+    }),
 };
