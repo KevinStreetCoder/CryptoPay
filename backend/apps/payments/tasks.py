@@ -88,3 +88,73 @@ def check_pending_mpesa_payments():
                 tx.failure_reason = "Pending: awaiting M-Pesa callback (>3 min)."
                 tx.save(update_fields=["failure_reason", "updated_at"])
                 logger.warning(f"Transaction {tx.id} flagged — no M-Pesa callback after 3 min")
+
+
+@shared_task
+def cleanup_stuck_transactions():
+    """
+    Find transactions stuck in PROCESSING for >2 hours and auto-fail them.
+    Unlocks any locked funds. Runs every hour via Celery Beat.
+
+    Covers: withdrawals, swaps, and any other transaction type that
+    gets stuck in PROCESSING without completing or failing.
+    """
+    from datetime import timedelta
+
+    from django.db import transaction as db_transaction
+    from django.utils import timezone
+
+    cutoff = timezone.now() - timedelta(hours=2)
+    stuck = Transaction.objects.filter(
+        status=Transaction.Status.PROCESSING,
+        updated_at__lt=cutoff,
+    )
+
+    for tx in stuck:
+        try:
+            with db_transaction.atomic():
+                # Lock the transaction row
+                tx_locked = Transaction.objects.select_for_update().get(id=tx.id)
+                if tx_locked.status != Transaction.Status.PROCESSING:
+                    continue  # Already resolved
+
+                # Try to unlock any locked funds
+                saga_data = tx_locked.saga_data or {}
+                locked_wallet_id = saga_data.get("locked_wallet_id")
+                locked_amount = saga_data.get("locked_amount")
+
+                if locked_wallet_id and locked_amount:
+                    try:
+                        from apps.wallets.services import WalletService
+                        from decimal import Decimal
+                        WalletService.unlock_funds(locked_wallet_id, Decimal(locked_amount))
+                        logger.info(f"Unlocked {locked_amount} for stuck tx {tx.id}")
+                    except Exception as unlock_err:
+                        logger.critical(
+                            f"Failed to unlock funds for tx {tx.id}: {unlock_err}. "
+                            f"MANUAL INTERVENTION REQUIRED."
+                        )
+
+                tx_locked.status = Transaction.Status.FAILED
+                tx_locked.failure_reason = (
+                    f"Auto-failed: stuck in PROCESSING for >2 hours. "
+                    f"Any locked funds have been returned to your wallet."
+                )
+                tx_locked.save(update_fields=["status", "failure_reason", "updated_at"])
+
+            logger.warning(f"Auto-failed stuck transaction {tx.id} (type={tx.type})")
+
+            # Send admin alert
+            try:
+                from apps.core.email import send_admin_alert
+                send_admin_alert(
+                    f"Stuck transaction auto-failed: {tx.id}",
+                    f"Transaction {tx.id} ({tx.type}) was stuck in PROCESSING "
+                    f"for >2 hours and has been auto-failed. User: {tx.user.phone}. "
+                    f"Amount: {tx.source_amount} {tx.source_currency}.",
+                )
+            except Exception:
+                pass
+
+        except Exception as e:
+            logger.error(f"Failed to cleanup stuck tx {tx.id}: {e}")

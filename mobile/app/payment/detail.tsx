@@ -57,6 +57,7 @@ const TYPE_CONFIG: Record<string, { icon: string; label: string; color: string }
   SEND_MPESA: { icon: "send-outline", label: "Send M-Pesa", color: colors.accent },
   BUY: { icon: "add-circle-outline", label: "Buy Crypto", color: "#10B981" },
   SELL: { icon: "swap-vertical-outline", label: "Sell", color: colors.accentDark },
+  SWAP: { icon: "swap-horizontal-outline", label: "Swap", color: "#627EEA" },
   FEE: { icon: "pricetag-outline", label: "Fee", color: colors.dark.muted },
   KES_DEPOSIT: { icon: "arrow-down-circle-outline", label: "KES Deposit", color: colors.success },
   KES_DEPOSIT_C2B: { icon: "arrow-down-circle-outline", label: "KES Deposit (Paybill)", color: colors.success },

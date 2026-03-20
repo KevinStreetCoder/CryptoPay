@@ -40,12 +40,14 @@ function AlertCard({
   ts,
   onDelete,
   onReactivate,
+  onEdit,
 }: {
   alert: PriceAlert;
   isDesktop: boolean;
   tc: ReturnType<typeof getThemeColors>;
   ts: ReturnType<typeof getThemeShadows>;
   onReactivate?: (alert: PriceAlert) => void;
+  onEdit?: (alert: PriceAlert) => void;
   onDelete: (id: string) => void;
 }) {
   const directionColor = alert.direction === "above" ? colors.success : colors.error;
@@ -54,16 +56,19 @@ function AlertCard({
   const cryptoColor = colors.crypto[alert.currency] || colors.primary[400];
 
   return (
-    <View
-      style={{
+    <Pressable
+      onPress={() => onEdit?.(alert)}
+      style={({ pressed }: any) => ({
         backgroundColor: tc.dark.card,
         borderRadius: 16,
         padding: isDesktop ? 18 : 16,
         borderWidth: 1,
         borderColor: alert.is_active ? tc.glass.border : tc.glass.highlight,
-        opacity: alert.is_active ? 1 : 0.6,
+        opacity: pressed ? 0.8 : alert.is_active ? 1 : 0.6,
         ...ts.sm,
-      }}
+      })}
+      accessibilityRole="button"
+      accessibilityLabel={`Edit ${alert.currency} alert`}
     >
       <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
         {/* Currency icon */}
@@ -223,7 +228,7 @@ function AlertCard({
           </Text>
         </Pressable>
       )}
-    </View>
+    </Pressable>
   );
 }
 
@@ -233,6 +238,7 @@ function CreateAlertModal({
   visible,
   onClose,
   onCreate,
+  editingAlert,
   isDesktop,
   tc,
   ts,
@@ -240,10 +246,12 @@ function CreateAlertModal({
   visible: boolean;
   onClose: () => void;
   onCreate: (data: CreateAlertPayload) => void;
+  editingAlert?: PriceAlert | null;
   isDesktop: boolean;
   tc: ReturnType<typeof getThemeColors>;
   ts: ReturnType<typeof getThemeShadows>;
 }) {
+  const isEditing = !!editingAlert;
   const [currency, setCurrency] = useState("BTC");
   const [targetRate, setTargetRate] = useState("");
   const [direction, setDirection] = useState<"above" | "below">("above");
@@ -285,9 +293,24 @@ function CreateAlertModal({
     });
   };
 
-  // Reset on close
+  // Pre-fill when editing, reset on close
   useEffect(() => {
-    if (!visible) {
+    if (visible && editingAlert) {
+      setCurrency(editingAlert.currency);
+      setTargetRate(editingAlert.target_rate);
+      setDirection(editingAlert.direction);
+      setCooldown(editingAlert.cooldown_minutes || 60);
+      // Determine duration from expires_at
+      if (!editingAlert.expires_at) {
+        setDuration("forever");
+      } else {
+        const daysLeft = Math.round((new Date(editingAlert.expires_at).getTime() - Date.now()) / (86400000));
+        if (daysLeft <= 2) setDuration("1d");
+        else if (daysLeft <= 10) setDuration("7d");
+        else if (daysLeft <= 60) setDuration("30d");
+        else setDuration("90d");
+      }
+    } else if (!visible) {
       setCurrency("BTC");
       setTargetRate("");
       setDirection("above");
@@ -295,7 +318,7 @@ function CreateAlertModal({
       setCooldown(60);
       setSubmitting(false);
     }
-  }, [visible]);
+  }, [visible, editingAlert]);
 
   const cryptoColor = colors.crypto[currency] || colors.primary[400];
   const isValid = targetRate && !isNaN(Number(targetRate)) && Number(targetRate) > 0;
@@ -340,7 +363,7 @@ function CreateAlertModal({
                 letterSpacing: -0.3,
               }}
             >
-              New Price Alert
+              {isEditing ? "Edit Alert" : "New Price Alert"}
             </Text>
             <Pressable
               onPress={onClose}
@@ -640,7 +663,7 @@ function CreateAlertModal({
                   fontFamily: "DMSans_600SemiBold",
                 }}
               >
-                Create Alert
+                {isEditing ? "Save Changes" : "Create Alert"}
               </Text>
             )}
           </Pressable>
@@ -804,6 +827,26 @@ export default function PriceAlertsScreen() {
     }
   };
 
+  const [editingAlert, setEditingAlert] = useState<PriceAlert | null>(null);
+
+  const handleEdit = (alert: PriceAlert) => {
+    setEditingAlert(alert);
+    setShowModal(true);
+  };
+
+  const handleUpdate = async (payload: CreateAlertPayload) => {
+    if (!editingAlert) return;
+    try {
+      const { data } = await ratesApi.updateAlert(editingAlert.id, payload);
+      setAlerts((prev) => prev.map((a) => a.id === editingAlert.id ? data : a));
+      setShowModal(false);
+      setEditingAlert(null);
+      toast.success("Updated", "Alert settings saved");
+    } catch {
+      toast.error("Error", "Failed to update alert");
+    }
+  };
+
   const activeAlerts = alerts.filter((a) => a.is_active);
   const triggeredAlerts = alerts.filter((a) => !a.is_active);
 
@@ -848,6 +891,7 @@ export default function PriceAlertsScreen() {
                       tc={tc}
                       ts={ts}
                       onDelete={handleDelete}
+                      onEdit={handleEdit}
                     />
                   </View>
                 ))}
@@ -1008,8 +1052,9 @@ export default function PriceAlertsScreen() {
         {fab}
         <CreateAlertModal
           visible={showModal}
-          onClose={() => setShowModal(false)}
-          onCreate={handleCreate}
+          onClose={() => { setShowModal(false); setEditingAlert(null); }}
+          onCreate={editingAlert ? handleUpdate : handleCreate}
+          editingAlert={editingAlert}
           isDesktop={isDesktop}
           tc={tc}
           ts={ts}

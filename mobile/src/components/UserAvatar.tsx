@@ -2,12 +2,17 @@
  * UserAvatar — bulletproof avatar for Android + iOS + Web.
  *
  * Uploaded photo: expo-image with native caching.
- * No photo: renders initials as SVG data URI via expo-image
- *           (bypasses Android Text rendering issues entirely).
+ * No photo: renders initials via react-native-svg (SvgXml).
+ *   This bypasses BOTH:
+ *   - RN Text rendering bug on Android (fontWeight invisible)
+ *   - expo-image SVG data URI bug on Android release builds
+ *
  * Tier borders: gold=admin, green=verified.
  */
 
+import { View, Platform } from "react-native";
 import { Image } from "expo-image";
+import { SvgXml } from "react-native-svg";
 import { config } from "../constants/config";
 
 const COLORS = ["#10B981", "#3B82F6", "#8B5CF6", "#EC4899", "#6366F1", "#14B8A6", "#F59E0B", "#EF4444"];
@@ -37,20 +42,6 @@ function resolveUrl(url: string | null | undefined): string | null {
   return `${base}${url.startsWith("/") ? "" : "/"}${url}`;
 }
 
-/**
- * Generate an SVG data URI with initials on a colored background.
- * This renders via expo-image's native SVG decoder — no React Native
- * Text component involved, so it works on ALL Android devices.
- */
-function generateAvatarSvg(letters: string, bgColor: string, size: number): string {
-  const fontSize = Math.round(size * (letters.length > 1 ? 0.38 : 0.45));
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
-    <rect width="${size}" height="${size}" fill="${bgColor}" rx="${Math.round(size * 0.15)}"/>
-    <text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" fill="white" font-size="${fontSize}" font-weight="700" font-family="Arial,Helvetica,sans-serif" letter-spacing="1">${letters}</text>
-  </svg>`;
-  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
-}
-
 interface Props {
   avatarUrl?: string | null;
   fullName?: string;
@@ -75,25 +66,42 @@ export function UserAvatar({
   const border = admin ? ADMIN_GOLD : kycTier >= 1 ? "#10B981" : bg;
   const r = borderRadius ?? Math.round(size * 0.32);
   const resolved = resolveUrl(avatarUrl);
-  const letters = getInitials(fullName, phone);
 
-  // Use uploaded avatar or generated SVG — both rendered via expo-image
-  const imageSource = resolved || generateAvatarSvg(letters, bg, size * 2);
+  // Uploaded avatar — expo-image with native caching
+  if (resolved) {
+    return (
+      <Image
+        source={{ uri: resolved }}
+        style={{
+          width: size, height: size, borderRadius: r,
+          borderWidth, borderColor: border + "60",
+          backgroundColor: bg + "30",
+        }}
+        contentFit="cover"
+        cachePolicy="memory-disk"
+        transition={150}
+      />
+    );
+  }
+
+  // Generated avatar — react-native-svg renders natively on Android
+  const letters = getInitials(fullName, phone);
+  const fontSize = Math.round(size * (letters.length > 1 ? 0.36 : 0.44));
+  const svgSize = size - borderWidth * 2;
+  const rx = Math.max(0, r - borderWidth);
+
+  const xml = `<svg xmlns="http://www.w3.org/2000/svg" width="${svgSize}" height="${svgSize}" viewBox="0 0 ${svgSize} ${svgSize}">
+  <rect width="${svgSize}" height="${svgSize}" fill="${bg}" rx="${rx}"/>
+  <text x="${svgSize / 2}" y="${svgSize * 0.55}" text-anchor="middle" dominant-baseline="middle" fill="white" font-size="${fontSize}" font-weight="700" font-family="sans-serif" letter-spacing="1">${letters}</text>
+</svg>`;
 
   return (
-    <Image
-      source={imageSource}
-      style={{
-        width: size,
-        height: size,
-        borderRadius: r,
-        borderWidth,
-        borderColor: border + "60",
-        backgroundColor: bg + "30",
-      }}
-      contentFit="cover"
-      cachePolicy="memory-disk"
-      transition={150}
-    />
+    <View style={{
+      width: size, height: size, borderRadius: r,
+      borderWidth, borderColor: border + "60",
+      overflow: "hidden",
+    }}>
+      <SvgXml xml={xml} width={svgSize} height={svgSize} />
+    </View>
   );
 }

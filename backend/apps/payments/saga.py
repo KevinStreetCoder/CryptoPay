@@ -121,17 +121,51 @@ class PaymentSaga:
             self.tx.save(update_fields=["saga_data"])
 
     def compensate_convert(self):
-        """Reverse Step 2: Credit back the crypto."""
-        if self.tx.saga_data.get("conversion_completed"):
-            wallet_id = self.tx.saga_data["locked_wallet_id"]
-            amount = Decimal(self.tx.saga_data["locked_amount"])
-            WalletService.credit(
-                wallet_id,
-                amount,
-                self.tx.id,
-                f"Reversal: conversion for tx {self.tx.id}",
-            )
-            logger.info(f"Compensated: reversed conversion for tx {self.tx.id}")
+        """Reverse Step 2: Credit back the crypto with retry logic.
+
+        CRITICAL: If this fails, user permanently loses funds.
+        Retries 3 times with exponential backoff before alerting admins.
+        """
+        if not self.tx.saga_data.get("conversion_completed"):
+            return
+
+        wallet_id = self.tx.saga_data["locked_wallet_id"]
+        amount = Decimal(self.tx.saga_data["locked_amount"])
+
+        import time
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                WalletService.credit(
+                    wallet_id,
+                    amount,
+                    self.tx.id,
+                    f"Reversal: conversion for tx {self.tx.id}",
+                )
+                logger.info(f"Compensated: reversed conversion for tx {self.tx.id}")
+                return
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    wait = 2 ** attempt
+                    logger.warning(
+                        f"Compensation retry {attempt + 1}/{max_retries} for tx {self.tx.id}: {e}"
+                    )
+                    time.sleep(wait)
+                else:
+                    logger.critical(
+                        f"COMPENSATION FAILED for tx {self.tx.id}. "
+                        f"User {self.tx.user.phone} lost {amount} {self.tx.source_currency}. "
+                        f"MANUAL CREDIT REQUIRED."
+                    )
+                    try:
+                        from apps.core.email import send_admin_alert
+                        send_admin_alert(
+                            f"CRITICAL: Fund loss — compensation failed tx {self.tx.id}",
+                            f"User {self.tx.user.phone} lost {amount} {self.tx.source_currency}. "
+                            f"Wallet {wallet_id}. Manual credit required immediately.",
+                        )
+                    except Exception:
+                        pass
 
     def step_initiate_mpesa(self):
         """Step 3: Call M-Pesa API — B2B for paybill/till, B2C for send-to-phone."""
