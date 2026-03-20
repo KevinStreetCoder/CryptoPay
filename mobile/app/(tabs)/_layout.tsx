@@ -151,10 +151,11 @@ export default function TabLayout() {
                 ? "rgba(255, 255, 255, 0.06)"
                 : "rgba(0, 0, 0, 0.06)",
               borderTopWidth: 1,
-              height: isWeb ? 72 : 88,
-              paddingBottom: isWeb ? 12 : 28,
+              height: isWeb ? 72 : Platform.OS === "android" ? 64 : 88,
+              paddingBottom: isWeb ? 12 : Platform.OS === "android" ? 8 : 28,
               paddingTop: 8,
               paddingHorizontal: isWeb ? 40 : 0,
+              position: "relative" as const,
               ...(isWeb
                 ? {
                     boxShadow: isDark

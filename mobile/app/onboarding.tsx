@@ -124,7 +124,7 @@ function MobileSlide({ item, width, tc }: { item: Slide; width: number; tc: Retu
       <GlassCard
         glowColor={item.iconColor}
         glowOpacity={0.2}
-        style={{ paddingVertical: 40, paddingHorizontal: 28, alignItems: "center" } as any}
+        style={{ paddingVertical: 28, paddingHorizontal: 24, alignItems: "center" } as any}
       >
         <View
           style={[
@@ -135,7 +135,7 @@ function MobileSlide({ item, width, tc }: { item: Slide; width: number; tc: Retu
             },
           ]}
         >
-          <Ionicons name={item.icon} size={72} color={item.iconColor} />
+          <Ionicons name={item.icon} size={48} color={item.iconColor} />
         </View>
         <Text style={[s.mobileTitle, { color: tc.textPrimary }]}>{item.title}</Text>
         <Text style={[s.mobileDesc, { color: tc.textSecondary }]}>{item.description}</Text>
@@ -521,12 +521,12 @@ const s = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.06)",
   },
   iconCircleLarge: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
+    width: 96,
+    height: 96,
+    borderRadius: 48,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 36,
+    marginBottom: 24,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.06)",
   },
@@ -574,7 +574,8 @@ const s = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 40,
+    paddingHorizontal: 28,
+    maxHeight: "70%",
   },
   mobileTitle: {
     fontSize: 26,
