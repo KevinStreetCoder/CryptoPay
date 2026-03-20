@@ -308,8 +308,10 @@ class RateAlertTriggerTest(TestCase):
         _check_rate_alerts()
 
         alert.refresh_from_db()
-        self.assertFalse(alert.is_active)
+        # Recurring alerts stay active — just update trigger_count
+        self.assertTrue(alert.is_active)
         self.assertIsNotNone(alert.triggered_at)
+        self.assertEqual(alert.trigger_count, 1)
         mock_notify.assert_called_once()
 
     @patch("apps.rates.tasks._send_rate_alert_notification")
@@ -325,8 +327,9 @@ class RateAlertTriggerTest(TestCase):
         _check_rate_alerts()
 
         alert.refresh_from_db()
-        self.assertFalse(alert.is_active)
+        self.assertTrue(alert.is_active)  # Recurring — stays active
         self.assertIsNotNone(alert.triggered_at)
+        self.assertEqual(alert.trigger_count, 1)
         mock_notify.assert_called_once()
 
     @patch("apps.rates.tasks._send_rate_alert_notification")
@@ -390,10 +393,13 @@ class RateAlertTriggerTest(TestCase):
 
     @patch("apps.core.tasks.send_push_task.delay")
     @patch("apps.core.tasks.send_sms_task.delay")
-    @patch("apps.core.tasks.send_email_task.delay")
+    @patch("django.core.mail.send_mail")
     def test_notification_sends_push_email_sms(self, mock_email, mock_sms, mock_push):
         """Triggering an alert should send push, email, and SMS notifications."""
         from .tasks import _send_rate_alert_notification
+
+        self.user.email = "test@example.com"
+        self.user.save(update_fields=["email"])
 
         _send_rate_alert_notification({
             "user": self.user,
