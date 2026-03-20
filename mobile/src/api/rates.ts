@@ -10,6 +10,7 @@ export interface RateApiResponse {
   flat_fee_kes: number;
   rate_freshness?: "live" | "stale";
   rate_stale?: boolean;
+  change_24h?: string;
 }
 
 // Normalized rate used throughout the app
@@ -107,12 +108,13 @@ export const ratesApi = {
 };
 
 // Normalize API response to the Rate shape used by the app
-export function normalizeRate(raw: RateApiResponse): Rate {
+export function normalizeRate(raw: RateApiResponse): Rate & { change_24h?: string } {
   return {
     currency: raw.currency,
     usd_rate: raw.crypto_usd || "0",
     kes_rate: raw.final_rate || raw.raw_rate || "0",
     spread: String(raw.spread_percent ?? 0),
+    change_24h: raw.change_24h || "0",
     updated_at: new Date().toISOString(),
   };
 }

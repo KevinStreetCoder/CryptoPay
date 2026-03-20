@@ -141,8 +141,8 @@ def _check_rate_alerts():
         for notif in notifications:
             _send_rate_alert_notification(notif)
 
-        if triggered_ids:
-            logger.info(f"Triggered {len(triggered_ids)} rate alerts")
+        if update_alerts:
+            logger.info(f"Triggered {len(update_alerts)} rate alerts")
 
     except Exception as e:
         logger.warning(f"Failed to check rate alerts: {e}")
