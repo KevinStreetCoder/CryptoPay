@@ -45,6 +45,7 @@ import {
 import { CryptoLogo } from "../../src/components/CryptoLogo";
 import { useDeposits } from "../../src/components/DepositTracker";
 import { useLocale } from "../../src/hooks/useLocale";
+import { UserAvatar } from "../../src/components/UserAvatar";
 import { cacheRates, getCachedRates, rateAge } from "../../src/utils/rateCache";
 import { config } from "../../src/constants/config";
 
@@ -1321,54 +1322,17 @@ function HomeScreenContent() {
           >
             <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
               {/* Avatar */}
-              {resolveAvatarUrl(user?.avatar_url) ? (
-                <Image
-                  source={{ uri: resolveAvatarUrl(user?.avatar_url)! }}
-                  style={{
-                    width: 46,
-                    height: 46,
-                    borderRadius: 15,
-                    borderWidth: 2,
-                    borderColor: tierBorderColor + "60",
-                    ...(Platform.OS !== "web"
-                      ? {
-                          shadowColor: tierBorderColor,
-                          shadowOffset: { width: 0, height: 2 },
-                          shadowOpacity: 0.3,
-                          shadowRadius: 8,
-                          elevation: 4,
-                        }
-                      : { boxShadow: `0 2px 8px ${tierBorderColor}50` } as any),
-                  }}
-                />
-              ) : (
-                <View
-                  style={{
-                    width: 46,
-                    height: 46,
-                    borderRadius: 15,
-                    backgroundColor: avatarBgColor + "20",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    borderWidth: 2,
-                    borderColor: tierBorderColor + "50",
-                    ...(Platform.OS !== "web"
-                      ? {
-                          shadowColor: avatarBgColor,
-                          shadowOffset: { width: 0, height: 2 },
-                          shadowOpacity: 0.25,
-                          shadowRadius: 8,
-                          elevation: 4,
-                        }
-                      : { boxShadow: `0 2px 8px ${avatarBgColor}40` } as any),
-                  }}
-                >
-                  <Image
-                    source={{ uri: generatedAvatarUrl }}
-                    style={{ width: 46, height: 46, borderRadius: 15 }}
-                  />
-                </View>
-              )}
+              <UserAvatar
+                avatarUrl={user?.avatar_url}
+                fullName={user?.full_name}
+                phone={user?.phone}
+                userId={user?.id}
+                isStaff={user?.is_staff}
+                isSuperuser={user?.is_superuser}
+                kycTier={user?.kyc_tier}
+                size={46}
+                borderRadius={15}
+              />
               <View>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                   <Ionicons name={getGreeting().icon as any} size={14} color={tc.textMuted} />
@@ -2080,36 +2044,17 @@ function HomeScreenContent() {
               ...(Platform.OS === "web" ? { cursor: "pointer", transition: "all 0.15s ease" } as any : {}),
             })}
           >
-            {resolveAvatarUrl(user?.avatar_url) ? (
-              <Image
-                source={{ uri: resolveAvatarUrl(user?.avatar_url)! }}
-                style={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: 14,
-                  borderWidth: 2,
-                  borderColor: isAdmin ? ADMIN_GOLD + "50" : colors.primary[500] + "40",
-                }}
-              />
-            ) : (
-              <View
-                style={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: 14,
-                  backgroundColor: avatarBgColor + "20",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  borderWidth: 1,
-                  borderColor: avatarBgColor + "40",
-                }}
-              >
-                <Image
-                  source={{ uri: generatedAvatarUrl }}
-                  style={{ width: 44, height: 44, borderRadius: 14 }}
-                />
-              </View>
-            )}
+            <UserAvatar
+              avatarUrl={user?.avatar_url}
+              fullName={user?.full_name}
+              phone={user?.phone}
+              userId={user?.id}
+              isStaff={user?.is_staff}
+              isSuperuser={user?.is_superuser}
+              kycTier={user?.kyc_tier}
+              size={44}
+              borderRadius={14}
+            />
           </Pressable>
           </View>
           </TourStep>

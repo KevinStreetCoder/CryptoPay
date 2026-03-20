@@ -21,6 +21,7 @@ import { getLockTimeout, setLockTimeout, LOCK_TIMEOUT_OPTIONS, LockTimeout } fro
 import { useToast } from "../../src/components/Toast";
 import { usePhonePrivacy, maskPhone } from "../../src/utils/privacy";
 import { useLocale } from "../../src/hooks/useLocale";
+import { UserAvatar } from "../../src/components/UserAvatar";
 import { colors, getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
 import { SectionHeader } from "../../src/components/SectionHeader";
@@ -566,41 +567,18 @@ export default function ProfileScreen() {
       accessibilityRole="button"
       accessibilityLabel="Change profile photo"
     >
-      {avatarUri ? (
-        <Image
-          source={{ uri: avatarUri }}
-          style={{
-            width: size,
-            height: size,
-            borderRadius: size * 0.32,
-            borderWidth: 3,
-            borderColor: tierBorderColor + "50",
-          }}
-        />
-      ) : (
-        <View
-          style={{
-            width: size,
-            height: size,
-            borderRadius: size * 0.32,
-            backgroundColor: avatarBgColor + "20",
-            alignItems: "center",
-            justifyContent: "center",
-            borderWidth: 3,
-            borderColor: tierBorderColor + "50",
-            overflow: "hidden",
-          }}
-        >
-          <Image
-            source={{ uri: generatedAvatarUrl }}
-            style={{
-              width: size,
-              height: size,
-              borderRadius: size * 0.32,
-            }}
-          />
-        </View>
-      )}
+      <UserAvatar
+        avatarUrl={avatarUri}
+        fullName={user?.full_name}
+        phone={user?.phone}
+        userId={user?.id}
+        isStaff={user?.is_staff}
+        isSuperuser={user?.is_superuser}
+        kycTier={user?.kyc_tier}
+        size={size}
+        borderRadius={Math.round(size * 0.32)}
+        borderWidth={3}
+      />
       {/* Camera badge */}
       <View
         style={{
