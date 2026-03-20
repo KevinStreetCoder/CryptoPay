@@ -1,12 +1,12 @@
 /**
- * UserAvatar — reliable avatar for all platforms.
+ * UserAvatar — bulletproof avatar for Android + iOS + Web.
  *
  * Uploaded photo: expo-image with native caching.
- * No photo: colored circle with bold white initials.
+ * No photo: renders initials as SVG data URI via expo-image
+ *           (bypasses Android Text rendering issues entirely).
  * Tier borders: gold=admin, green=verified.
  */
 
-import { View, Text, Platform } from "react-native";
 import { Image } from "expo-image";
 import { config } from "../constants/config";
 
@@ -20,7 +20,7 @@ function pickColor(id: string, admin?: boolean): string {
   return COLORS[Math.abs(h) % COLORS.length];
 }
 
-function initials(name?: string, phone?: string): string {
+function getInitials(name?: string, phone?: string): string {
   if (name && name.trim()) {
     const p = name.trim().split(/\s+/).filter(Boolean);
     if (p.length >= 2) return (p[0][0] + p[1][0]).toUpperCase();
@@ -35,6 +35,20 @@ function resolveUrl(url: string | null | undefined): string | null {
   if (url.startsWith("http")) return url;
   const base = config.apiUrl.replace(/\/api\/v1\/?$/, "");
   return `${base}${url.startsWith("/") ? "" : "/"}${url}`;
+}
+
+/**
+ * Generate an SVG data URI with initials on a colored background.
+ * This renders via expo-image's native SVG decoder — no React Native
+ * Text component involved, so it works on ALL Android devices.
+ */
+function generateAvatarSvg(letters: string, bgColor: string, size: number): string {
+  const fontSize = Math.round(size * (letters.length > 1 ? 0.38 : 0.45));
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+    <rect width="${size}" height="${size}" fill="${bgColor}" rx="${Math.round(size * 0.15)}"/>
+    <text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" fill="white" font-size="${fontSize}" font-weight="700" font-family="Arial,Helvetica,sans-serif" letter-spacing="1">${letters}</text>
+  </svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
 interface Props {
@@ -61,41 +75,25 @@ export function UserAvatar({
   const border = admin ? ADMIN_GOLD : kycTier >= 1 ? "#10B981" : bg;
   const r = borderRadius ?? Math.round(size * 0.32);
   const resolved = resolveUrl(avatarUrl);
-  const letters = initials(fullName, phone);
-  const fs = Math.round(size * (letters.length > 1 ? 0.33 : 0.40));
+  const letters = getInitials(fullName, phone);
 
-  if (resolved) {
-    return (
-      <Image
-        source={{ uri: resolved }}
-        style={{
-          width: size, height: size, borderRadius: r,
-          borderWidth, borderColor: border + "60",
-          backgroundColor: bg + "30",
-        }}
-        contentFit="cover"
-        cachePolicy="memory-disk"
-        transition={200}
-      />
-    );
-  }
+  // Use uploaded avatar or generated SVG — both rendered via expo-image
+  const imageSource = resolved || generateAvatarSvg(letters, bg, size * 2);
 
   return (
-    <View style={{
-      width: size, height: size, borderRadius: r,
-      borderWidth, borderColor: border + "60",
-      backgroundColor: bg,
-      justifyContent: "center", alignItems: "center",
-    }}>
-      <Text style={{
-        color: "#FFF",
-        fontSize: fs,
-        fontWeight: Platform.OS === "android" ? "bold" : "800",
-        textAlign: "center",
-        includeFontPadding: false,
-      }}>
-        {letters}
-      </Text>
-    </View>
+    <Image
+      source={imageSource}
+      style={{
+        width: size,
+        height: size,
+        borderRadius: r,
+        borderWidth,
+        borderColor: border + "60",
+        backgroundColor: bg + "30",
+      }}
+      contentFit="cover"
+      cachePolicy="memory-disk"
+      transition={150}
+    />
   );
 }

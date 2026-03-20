@@ -175,6 +175,6 @@ export const paymentsApi = {
   exportTransactions: (params?: { date_from?: string; date_to?: string; type?: string }) =>
     api.get("/payments/transactions/export/", {
       params,
-      responseType: "blob",
+      responseType: "text",
     }),
 };

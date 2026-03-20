@@ -355,7 +355,11 @@ export default function WalletScreen() {
   const cryptoWallets = safeWallets.filter((w) => w.currency !== "KES");
   const transactions = txData?.results || [];
 
+  // Use kes_value from backend wallet API (includes spread) — matches BalanceCard
   const totalKES = cryptoWallets.reduce((sum, w) => {
+    const kesVal = (w as any).kes_value ? parseFloat((w as any).kes_value) : 0;
+    if (kesVal > 0) return sum + kesVal;
+    // Fallback to rate calculation if kes_value not available
     const balance = parseFloat(w.balance) || 0;
     const rate = rates?.find((r) => r.currency === w.currency);
     const kesRate = rate ? parseFloat(rate.kes_rate) || 0 : 0;

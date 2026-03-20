@@ -147,7 +147,9 @@ export default function SwapScreen() {
       toast.warning("Invalid Amount", "Enter a valid swap amount");
       return;
     }
-    if (numAmount > availableBalance) {
+    // Allow small floating point rounding (0.01 tolerance for stablecoins, 0.00001 for crypto)
+    const tolerance = ["USDT", "USDC"].includes(fromCurrency) ? 0.01 : 0.00001;
+    if (numAmount > availableBalance + tolerance) {
       toast.warning(
         "Insufficient Balance",
         `You have ${availableBalance.toFixed(fromDecimals)} ${fromCurrency} available`
