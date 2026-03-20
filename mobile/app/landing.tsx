@@ -1798,7 +1798,11 @@ export default function LandingPage() {
           <View style={{ flexDirection: "row", gap: isMobile ? 48 : 64 }}>
             <View style={{ gap: 10 }}>
               <Text style={{ color: tc.textSecondary, fontSize: 11, fontFamily: "DMSans_700Bold", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 4 }}>Legal</Text>
-              {["Privacy Policy", "Terms of Service"].map((l) => <Text key={l} style={{ color: tc.textMuted, fontSize: 13, fontFamily: "DMSans_400Regular" }}>{l}</Text>)}
+              {[{ label: "Privacy Policy", href: "/privacy" }, { label: "Terms of Service", href: "/terms" }].map((l) => (
+                <Pressable key={l.label} onPress={() => { if (isWeb) window.location.href = l.href; else router.push(l.href as any); }}>
+                  <Text style={{ color: tc.textMuted, fontSize: 13, fontFamily: "DMSans_400Regular" }}>{l.label}</Text>
+                </Pressable>
+              ))}
             </View>
             <View style={{ gap: 10 }}>
               <Text style={{ color: tc.textSecondary, fontSize: 11, fontFamily: "DMSans_700Bold", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 4 }}>Support</Text>
