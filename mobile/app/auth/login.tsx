@@ -825,8 +825,8 @@ export default function LoginScreen() {
                 iconColor={securityChallenge ? "#3B82F6" : "#F59E0B"}
                 title={securityChallenge ? "New Device Detected" : "Security Verification"}
                 subtitle={securityChallenge
-                  ? "We detected a login from a new device or location. Enter the 6-digit code sent to your phone to verify."
-                  : "Too many failed attempts. Enter the 6-digit code sent to your phone to continue."}
+                  ? "We detected a login from a new device or location. Enter the 6-digit code sent to your phone or email."
+                  : "Too many failed attempts. Enter the 6-digit code sent to your phone or email."}
               />
 
               <Pressable

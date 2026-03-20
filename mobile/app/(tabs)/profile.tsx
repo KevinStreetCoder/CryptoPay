@@ -549,9 +549,10 @@ export default function ProfileScreen() {
   const isAdmin = user?.is_staff || user?.is_superuser;
   const avatarBgColor = getAvatarColor(avatarIdentifier, isAdmin);
   const initials = getInitials(user?.full_name);
-  // DiceBear avatar: professional cartoon-style generated avatar
-  const diceBearSeed = encodeURIComponent(user?.full_name || user?.phone || "user");
-  const diceBearUrl = `https://api.dicebear.com/9.x/bottts-neutral/png?seed=${diceBearSeed}&size=128&backgroundColor=transparent`;
+  // DiceBear avatar: unique human-like cartoon per user, tier-colored borders
+  const avatarSeed = encodeURIComponent(`${user?.phone || "u"}-${user?.full_name || ""}`);
+  const tierBorderColor = isAdmin ? ADMIN_GOLD : (user?.kyc_tier ?? 0) >= 1 ? "#10B981" : avatarBgColor;
+  const diceBearUrl = `https://api.dicebear.com/9.x/adventurer-neutral/png?seed=${avatarSeed}&size=128&backgroundColor=transparent`;
 
   const renderAvatar = (size: number) => (
     <Pressable
@@ -572,7 +573,7 @@ export default function ProfileScreen() {
             height: size,
             borderRadius: size * 0.32,
             borderWidth: 3,
-            borderColor: isAdmin ? ADMIN_GOLD + "60" : colors.primary[500] + "40",
+            borderColor: tierBorderColor + "50",
           }}
         />
       ) : (
@@ -585,7 +586,7 @@ export default function ProfileScreen() {
             alignItems: "center",
             justifyContent: "center",
             borderWidth: 3,
-            borderColor: avatarBgColor + "50",
+            borderColor: tierBorderColor + "50",
             overflow: "hidden",
           }}
         >

@@ -82,9 +82,10 @@ export interface KYCDocument {
 }
 
 export const authApi = {
-  requestOTP: (phone: string) => api.post("/auth/otp/", { phone }),
+  requestOTP: (phone: string, email?: string) =>
+    api.post("/auth/otp/", { phone, ...(email ? { email } : {}) }),
 
-  register: async (data: { phone: string; pin: string; otp: string; full_name?: string }) => {
+  register: async (data: { phone: string; pin: string; otp: string; full_name?: string; email?: string }) => {
     const device = await getDeviceInfo();
     return api.post<LoginResponse>("/auth/register/", { ...data, ...device });
   },

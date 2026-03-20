@@ -1266,6 +1266,43 @@ External wallet connection allowing users to deposit crypto directly from MetaMa
 
 ---
 
+#### ✅ COMPLETED (March 20, 2026 Session)
+
+| # | Task | Area | Details | Files |
+|---|------|------|---------|-------|
+| 1 | **Biometric app lock on resume** | Frontend | `AppLockScreen` with biometric + PIN fallback. `useAppLock` hook monitors AppState transitions. Locks on cold start + background→foreground. Configurable timeout (immediate/1m/5m/15m/30m) in Profile settings. | `AppLockScreen.tsx`, `useAppLock.ts`, `_layout.tsx`, `profile.tsx` |
+| 2 | **Never logout on biometric fail** | Full stack | Removed biometric gate from `bootstrap()`. User always loaded from token. Lock screen overlay handles auth instead of blocking login. PIN verified via backend login endpoint. | `auth.ts`, `_layout.tsx`, `AppLockScreen.tsx` |
+| 3 | **OTP paste support** | Frontend | `OTPInput` detects multi-digit paste and distributes digits across all cells. `maxLength` changed from 1 to `length`. | `OTPInput.tsx` |
+| 4 | **OTP cell overflow fix** | Frontend | Recalculated cell widths from available screen space (`screenWidth - 64`) to prevent 6th cell from overflowing off screen. | `OTPInput.tsx` |
+| 5 | **DiceBear person avatars** | Frontend | Fallback avatars use DiceBear `adventurer-neutral` API — modern cartoon person figures. Admin users get gold border. Used in home, profile, desktop sidebar. | `index.tsx`, `profile.tsx` |
+| 6 | **Admin user management mobile layout** | Frontend | Replaced cramped table columns with card-based layout on mobile. Desktop keeps row layout with proper column widths. | `admin-users.tsx` |
+| 7 | **OTP dual delivery (SMS + email)** | Backend | `RequestOTPView` sends OTP to both SMS and email simultaneously. Looks up user email if not provided. Only fails if both channels fail. Response includes `channels` array and `email_fallback` flag. | `views.py`, `serializers.py`, `email.py` |
+| 8 | **Email field in registration** | Full stack | Registration accepts optional `email` for OTP delivery. If provided, email is saved on user and marked verified (since OTP was sent to it). | `serializers.py`, `views.py`, `register.tsx`, `auth.ts` |
+| 9 | **Login OTP sends to email too** | Backend | `_send_otp_challenge` now accepts user object and sends OTP email alongside SMS when user has email on file. | `views.py` |
+| 10 | **APK download from landing page** | Frontend + Infra | Play Store button on landing page now downloads APK directly from `cpay.co.ke/download/cryptopay.apk`. Nginx `/download/` location configured with proper Content-Disposition headers. | `landing.tsx`, `cpay.conf` |
+| 11 | **Token refresh on bootstrap** | Frontend | Bootstrap retries with `refreshAccessToken()` before clearing tokens on profile fetch failure. Keeps user logged in across reinstalls. | `auth.ts`, `client.ts` |
+| 12 | **Scroll padding (tab bar overlap)** | Frontend | Increased `paddingBottom` to 100px on Android for all tab screens (home, pay, wallet, profile) so bottom items aren't hidden under tab bar. | `index.tsx`, `pay.tsx`, `wallet.tsx`, `profile.tsx` |
+| 13 | **Keyboard coverage fix** | Frontend | Android `KeyboardAvoidingView` changed from `undefined` to `behavior="height"` in auth screens. | `login.tsx` |
+| 14 | **Tab label visibility** | Frontend | Increased `minWidth: 60`, `textAlign: center`, `minWidth: 40` on label text to prevent truncation. | `_layout.tsx` (tabs) |
+| 15 | **All TypeScript errors fixed (9)** | Frontend | Mouse events, Transaction type satisfaction, WalletConnect variable names. Zero errors on `tsc --noEmit`. | `index.tsx`, `WalletConnectDeposit.tsx` |
+| 16 | **Payment biometric auth** | Frontend | Payment confirm screen prompts biometric before PIN when enabled. | `confirm.tsx` |
+
+#### ⬜ NEXT STEPS (Priority Order)
+
+| # | Task | Area | Priority | Notes |
+|---|------|------|----------|-------|
+| 1 | **BS cert for eSMS sender ID** | Infra | HIGH | Waiting for Business Certificate to get verified sender ID. Until then, SMS may not deliver — email OTP is the fallback. |
+| 2 | **Google Play Store listing** | Deploy | HIGH | Upload AAB to Play Console, set up store listing, screenshots, privacy policy. APK served from VPS in the meantime. |
+| 3 | **M-Pesa go-live** | Backend | HIGH | Switch from sandbox to production Daraja credentials. Requires business shortcode. |
+| 4 | **KYC integration (Smile Identity)** | Full stack | HIGH | Wire up ID verification and selfie capture for Tier 1-2 upgrades. Backend stubs ready. |
+| 5 | **Cloudflare cache purge token** | Infra | MEDIUM | Create Zone > Cache Purge API token for automated deploy cache busting. |
+| 6 | **AWS KMS for wallet seeds** | Backend | MEDIUM | Production wallet seed encryption via AWS KMS or Vault. Currently env var only. |
+| 7 | **Rate alerts / price notifications** | Full stack | LOW | Push notification when a watched crypto crosses a price threshold. |
+| 8 | **Saved paybills / favorites** | Frontend | LOW | Remember frequently used paybill/till numbers. |
+| 9 | **Transaction export (CSV)** | Frontend | LOW | Download transaction history as CSV from wallet screen. |
+
+---
+
 ## Documentation Index
 
 | Document | Purpose | Last Updated |

@@ -75,20 +75,51 @@ class RequestOTPView(APIView):
         cache.set(f"otp:{phone}", otp, timeout=300)  # Valid for 5 minutes
         cache.set(rate_key, attempts + 1, timeout=600)
 
-        # Send OTP via SMS provider (Unimatrix primary, eSMS secondary, AT tertiary)
-        from apps.core.email import send_sms
+        # Send OTP via SMS + email (dual delivery for reliability)
+        from apps.core.email import send_sms, send_otp_to_email
 
         otp_message = f"Your CPay verification code is: {otp}. Expires in 5 minutes."
         sms_sent = send_sms(phone, otp_message)
 
-        if not sms_sent:
-            logger.error(f"All SMS providers failed for {phone[:7]}***")
+        # Also send to email if provided or if user exists with email
+        email = serializer.validated_data.get("email", "")
+        email_sent = False
+        if not email:
+            # Check if existing user has an email on file
+            try:
+                existing_user = User.objects.get(phone=phone)
+                if existing_user.email:
+                    email = existing_user.email
+            except User.DoesNotExist:
+                pass
+
+        if email:
+            email_sent = send_otp_to_email(email, otp, phone)
+
+        if not sms_sent and not email_sent:
+            logger.error(f"All OTP delivery failed for {phone[:7]}***")
             return Response(
                 {"error": "Failed to send verification code. Please try again."},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
-        response_data = {"message": "OTP sent successfully"}
+        # Tell the client which channels succeeded
+        channels = []
+        if sms_sent:
+            channels.append("sms")
+        if email_sent:
+            channels.append("email")
+
+        response_data = {
+            "message": "OTP sent successfully",
+            "channels": channels,
+        }
+        # If email was used (user may not know), hint at it
+        if email_sent and not sms_sent and email:
+            masked_email = email[0] + "***" + email[email.index("@"):]
+            response_data["message"] = f"Verification code sent to {masked_email}"
+            response_data["email_fallback"] = True
+
         return Response(response_data)
 
 
@@ -125,9 +156,16 @@ class RegisterView(APIView):
         cache.delete(otp_attempt_key)  # Clear attempts on success
 
         full_name = serializer.validated_data.get("full_name", "")
+        email = serializer.validated_data.get("email", "")
 
         # Create user
         user = User.objects.create_user(phone=phone, pin=pin, full_name=full_name)
+
+        # Set email if provided (mark as verified since OTP was sent to it)
+        if email:
+            user.email = email
+            user.email_verified = True
+            user.save(update_fields=["email", "email_verified"])
         cache.delete(f"otp:{phone}")
 
         # Create default wallets
@@ -254,7 +292,7 @@ class LoginView(APIView):
             if user.pin_attempts >= 3 and not user.otp_challenge_required:
                 user.otp_challenge_required = True
                 # Auto-send OTP for the challenge
-                self._send_otp_challenge(phone)
+                self._send_otp_challenge(phone, user)
 
             # Progressive lockout: 5 attempts -> 1min, 10 -> 5min, 15 -> 1hr
             lockout_thresholds = {5: 60, 10: 300, 15: 3600}
@@ -330,7 +368,7 @@ class LoginView(APIView):
         if security_challenge:
             if not otp:
                 # Send OTP and require verification
-                self._send_otp_challenge(phone)
+                self._send_otp_challenge(phone, user)
                 AuditLog.objects.create(
                     user=user,
                     action="SECURITY_CHALLENGE",
@@ -428,19 +466,21 @@ class LoginView(APIView):
             },
         })
 
-    def _send_otp_challenge(self, phone):
-        """Auto-send an OTP when challenge is triggered."""
+    def _send_otp_challenge(self, phone, user=None):
+        """Auto-send an OTP when challenge is triggered (SMS + email)."""
         otp = f"{secrets.randbelow(900000) + 100000}"
         cache.set(f"otp:{phone}", otp, timeout=300)
-        # Store on instance so the view can include it in dev responses
         self._last_challenge_otp = otp
 
-        from apps.core.email import send_sms
+        from apps.core.email import send_sms, send_otp_to_email
         send_sms(
             phone,
             f"CPay security: Your verification code is {otp}. "
             f"If you did not attempt to login, please change your PIN immediately.",
         )
+        # Also send via email if user has one
+        if user and user.email:
+            send_otp_to_email(user.email, otp, phone)
 
     def _verify_totp(self, user, code):
         """Verify TOTP code or backup code using the TOTP service."""
