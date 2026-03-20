@@ -563,12 +563,12 @@ export default function ProfileScreen() {
             width: size,
             height: size,
             borderRadius: size * 0.32,
-            backgroundColor: avatarBgColor + "25",
+            backgroundColor: avatarBgColor + "35",
             alignItems: "center",
             justifyContent: "center",
             borderWidth: 3,
-            borderColor: avatarBgColor + "50",
-            ...ts.glow(avatarBgColor, 0.15),
+            borderColor: avatarBgColor + "60",
+            ...(isWeb ? ts.glow(avatarBgColor, 0.15) : {}),
           }}
         >
           {initials ? (
@@ -1297,7 +1297,7 @@ export default function ProfileScreen() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
-          paddingBottom: 40,
+          paddingBottom: Platform.OS === "android" ? 80 : 40,
           ...(isDesktop
             ? { paddingHorizontal: 24 }
             : {}),

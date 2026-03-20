@@ -725,7 +725,7 @@ export default function LoginScreen() {
                 </View>
               )}
 
-              <View style={{ marginTop: isDesktop ? 8 : 24, marginBottom: 8, width: "100%", maxWidth: 340, alignSelf: "center" as any }}>
+              <View style={{ marginTop: isDesktop ? 8 : 24, marginBottom: Platform.OS === "android" ? 100 : 8, width: "100%", maxWidth: 340, alignSelf: "center" as any }}>
                 <PinInput
                   onComplete={handlePinComplete}
                   error={pinError}
