@@ -1,18 +1,17 @@
 /**
- * UserAvatar — bulletproof avatar for Android + iOS + Web.
+ * UserAvatar — guaranteed to render on ALL Android devices.
  *
  * Uploaded photo: expo-image with native caching.
- * No photo: renders initials via react-native-svg (SvgXml).
- *   This bypasses BOTH:
- *   - RN Text rendering bug on Android (fontWeight invisible)
- *   - expo-image SVG data URI bug on Android release builds
+ * No photo: colored circle with Ionicons person icon.
+ *   Icons are bundled font glyphs — they ALWAYS render on Android.
+ *   No Text, no SVG, no remote URL — just a native font icon.
  *
  * Tier borders: gold=admin, green=verified.
  */
 
-import { View, Platform } from "react-native";
+import { View } from "react-native";
 import { Image } from "expo-image";
-import { SvgXml } from "react-native-svg";
+import { Ionicons } from "@expo/vector-icons";
 import { config } from "../constants/config";
 
 const COLORS = ["#10B981", "#3B82F6", "#8B5CF6", "#EC4899", "#6366F1", "#14B8A6", "#F59E0B", "#EF4444"];
@@ -23,16 +22,6 @@ function pickColor(id: string, admin?: boolean): string {
   let h = 0;
   for (let i = 0; i < id.length; i++) h = id.charCodeAt(i) + ((h << 5) - h);
   return COLORS[Math.abs(h) % COLORS.length];
-}
-
-function getInitials(name?: string, phone?: string): string {
-  if (name && name.trim()) {
-    const p = name.trim().split(/\s+/).filter(Boolean);
-    if (p.length >= 2) return (p[0][0] + p[1][0]).toUpperCase();
-    if (p.length === 1) return p[0][0].toUpperCase();
-  }
-  if (phone && phone.length >= 2) return phone.slice(-2);
-  return "U";
 }
 
 function resolveUrl(url: string | null | undefined): string | null {
@@ -67,7 +56,7 @@ export function UserAvatar({
   const r = borderRadius ?? Math.round(size * 0.32);
   const resolved = resolveUrl(avatarUrl);
 
-  // Uploaded avatar — expo-image with native caching
+  // Uploaded avatar — expo-image
   if (resolved) {
     return (
       <Image
@@ -84,24 +73,17 @@ export function UserAvatar({
     );
   }
 
-  // Generated avatar — react-native-svg renders natively on Android
-  const letters = getInitials(fullName, phone);
-  const fontSize = Math.round(size * (letters.length > 1 ? 0.36 : 0.44));
-  const svgSize = size - borderWidth * 2;
-  const rx = Math.max(0, r - borderWidth);
-
-  const xml = `<svg xmlns="http://www.w3.org/2000/svg" width="${svgSize}" height="${svgSize}" viewBox="0 0 ${svgSize} ${svgSize}">
-  <rect width="${svgSize}" height="${svgSize}" fill="${bg}" rx="${rx}"/>
-  <text x="${svgSize / 2}" y="${svgSize * 0.55}" text-anchor="middle" dominant-baseline="middle" fill="white" font-size="${fontSize}" font-weight="700" font-family="sans-serif" letter-spacing="1">${letters}</text>
-</svg>`;
+  // Fallback — colored circle with person icon (Ionicons font glyph = always renders)
+  const iconSize = Math.round(size * 0.5);
 
   return (
     <View style={{
       width: size, height: size, borderRadius: r,
       borderWidth, borderColor: border + "60",
-      overflow: "hidden",
+      backgroundColor: bg,
+      justifyContent: "center", alignItems: "center",
     }}>
-      <SvgXml xml={xml} width={svgSize} height={svgSize} />
+      <Ionicons name="person" size={iconSize} color="rgba(255,255,255,0.9)" />
     </View>
   );
 }
