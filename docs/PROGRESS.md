@@ -1,6 +1,6 @@
 # CryptoPay — Development Progress
 
-**Last updated:** 2026-03-19
+**Last updated:** 2026-03-20
 
 > See also: [ROADMAP.md](./ROADMAP.md) for strategic vision, fundraising, and expansion plans.
 > See also: [SYSTEM-DESIGN.md](./SYSTEM-DESIGN.md) for technical architecture and liquidity engine design.

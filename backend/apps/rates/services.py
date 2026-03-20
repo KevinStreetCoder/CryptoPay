@@ -229,6 +229,7 @@ class RateService:
             "rate_freshness": "stale" if is_stale else "live",
             "rate_stale": is_stale,
             "change_24h": change_24h or "0",
+            "swap_fee_percent": getattr(settings, "SWAP_FEE_PERCENT", 0.5),
         }
 
     @staticmethod

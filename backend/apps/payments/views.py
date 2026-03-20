@@ -656,7 +656,7 @@ class SwapView(APIView):
     permission_classes = [IsNotSuspended]
     throttle_classes = [SwapRateThrottle]
 
-    SWAP_FEE_PERCENT = Decimal("0.5")
+    SWAP_FEE_PERCENT = Decimal(str(getattr(settings, "SWAP_FEE_PERCENT", 0.5)))
 
     def post(self, request):
         serializer = SwapSerializer(data=request.data)

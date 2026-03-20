@@ -486,6 +486,16 @@ WITHDRAWAL_NETWORK_FEES = {
     "solana": {"SOL": "0.01"},
 }
 
+# Custody thresholds — override defaults from custody.py
+# Set via CUSTODY_THRESHOLDS env var as JSON, or configure in admin panel
+# Format: {"USDT": {"hot_min_threshold": "500", "hot_max_threshold": "5000", ...}}
+import json as _json
+_custody_raw = env("CUSTODY_THRESHOLDS", default="")
+CUSTODY_THRESHOLDS = _json.loads(_custody_raw) if _custody_raw else {}
+
+# Swap fee percentage (applied to source amount)
+SWAP_FEE_PERCENT = float(env("SWAP_FEE_PERCENT", default="0.5"))
+
 # Hot wallet private keys for withdrawal broadcasting
 TRON_HOT_WALLET_PRIVATE_KEY = env("TRON_HOT_WALLET_PRIVATE_KEY", default="")
 ETH_HOT_WALLET_PRIVATE_KEY = env("ETH_HOT_WALLET_PRIVATE_KEY", default="")

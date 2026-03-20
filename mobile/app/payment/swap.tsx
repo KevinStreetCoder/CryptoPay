@@ -49,7 +49,8 @@ const isWeb = Platform.OS === "web";
 type SwapCurrency = "USDT" | "USDC" | "BTC" | "ETH" | "SOL";
 
 const CRYPTO_OPTIONS: SwapCurrency[] = ["USDT", "USDC", "BTC", "ETH", "SOL"];
-const SWAP_FEE_PERCENT = 0.5;
+// Default fee — updated from backend rate API response
+let SWAP_FEE_PERCENT = 0.5;
 
 type RateInfo = RateApiResponse;
 
@@ -114,6 +115,10 @@ export default function SwapScreen() {
       ]);
       setFromRate(fromRes.data);
       setToRate(toRes.data);
+      // Sync swap fee from backend
+      if ((fromRes.data as any).swap_fee_percent != null) {
+        SWAP_FEE_PERCENT = parseFloat((fromRes.data as any).swap_fee_percent);
+      }
     } catch {
       // Rates may fail silently; user sees "0" preview
     } finally {
