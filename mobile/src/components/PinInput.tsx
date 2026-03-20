@@ -8,6 +8,7 @@ interface PinInputProps {
   length?: number;
   onComplete: (pin: string) => void;
   error?: boolean;
+  loading?: boolean;
   testID?: string;
 }
 
