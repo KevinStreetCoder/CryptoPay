@@ -1,18 +1,21 @@
 /**
- * UserAvatar — colored circle with initial letter.
+ * UserAvatar — works on ALL platforms including BlueStacks.
  *
- * Uses system font only (no fontFamily) — custom DMSans fonts
- * don't load on BlueStacks and some Android devices.
+ * BlueStacks has a bug where Text inside a View with backgroundColor
+ * renders invisible. This component uses expo-image with a placeimg
+ * URL to generate the avatar server-side, bypassing the bug entirely.
+ *
+ * For uploaded photos: expo-image with native caching.
+ * For generated avatars: placehold.co service (returns PNG with text).
  */
 
-import { View, Text } from "react-native";
 import { Image } from "expo-image";
 import { config } from "../constants/config";
 
-const COLORS = ["#10B981", "#3B82F6", "#8B5CF6", "#EC4899", "#6366F1", "#14B8A6", "#F59E0B", "#EF4444"];
-const ADMIN_GOLD = "#D4AF37";
+const COLORS = ["10B981", "3B82F6", "8B5CF6", "EC4899", "6366F1", "14B8A6", "F59E0B", "EF4444"];
+const ADMIN_GOLD = "D4AF37";
 
-function pickColor(id: string, admin?: boolean): string {
+function pickColorHex(id: string, admin?: boolean): string {
   if (admin) return ADMIN_GOLD;
   let h = 0;
   for (let i = 0; i < id.length; i++) h = id.charCodeAt(i) + ((h << 5) - h);
@@ -51,8 +54,8 @@ export function UserAvatar({
 }: Props) {
   const admin = isStaff || isSuperuser;
   const id = userId || phone || "u";
-  const bg = pickColor(id, admin);
-  const border = admin ? ADMIN_GOLD : kycTier >= 1 ? "#10B981" : bg;
+  const bgHex = pickColorHex(id, admin);
+  const borderHex = admin ? ADMIN_GOLD : kycTier >= 1 ? "10B981" : bgHex;
   const r = borderRadius ?? Math.round(size * 0.32);
   const resolved = resolveUrl(avatarUrl);
 
@@ -62,8 +65,8 @@ export function UserAvatar({
         source={{ uri: resolved }}
         style={{
           width: size, height: size, borderRadius: r,
-          borderWidth, borderColor: border + "60",
-          backgroundColor: bg,
+          borderWidth, borderColor: `#${borderHex}99`,
+          backgroundColor: `#${bgHex}`,
         }}
         contentFit="cover"
         cachePolicy="memory-disk"
@@ -72,22 +75,24 @@ export function UserAvatar({
     );
   }
 
+  // Generate avatar as image via placehold.co (free, no auth, returns PNG)
+  // This renders the letter SERVER-SIDE as a PNG image — bypasses all
+  // Android/BlueStacks Text rendering bugs.
   const letter = getInitial(fullName);
-  const fs = Math.round(size * 0.4);
+  const imgSize = Math.round(size * 2); // 2x for retina
+  const avatarImgUrl = `https://placehold.co/${imgSize}x${imgSize}/${bgHex}/FFFFFF/png?text=${letter}&font=roboto`;
 
   return (
-    <View style={{
-      width: size, height: size, borderRadius: r,
-      borderWidth, borderColor: border + "60",
-      backgroundColor: bg,
-      alignItems: "center", justifyContent: "center",
-    }}>
-      <Text
-        allowFontScaling={false}
-        style={{ color: "#FFF", fontSize: fs, fontWeight: "bold" }}
-      >
-        {letter}
-      </Text>
-    </View>
+    <Image
+      source={{ uri: avatarImgUrl }}
+      style={{
+        width: size, height: size, borderRadius: r,
+        borderWidth, borderColor: `#${borderHex}99`,
+        backgroundColor: `#${bgHex}`,
+      }}
+      contentFit="cover"
+      cachePolicy="memory-disk"
+      transition={200}
+    />
   );
 }
