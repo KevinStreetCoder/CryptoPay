@@ -7,6 +7,7 @@ import { colors, getThemeColors, getThemeShadows } from "../constants/theme";
 import { useThemeMode } from "../stores/theme";
 import { config } from "../constants/config";
 import { TourStep } from "./AppTour";
+import { UserAvatar } from "./UserAvatar";
 
 function resolveAvatarUrl(url: string | null | undefined): string | null {
   if (!url) return null;
@@ -480,39 +481,17 @@ export function WebSidebar() {
         {collapsed ? (
           /* Collapsed: just the avatar */
           <View style={{ alignItems: "center", marginBottom: 10 }}>
-            {resolveAvatarUrl(user?.avatar_url) ? (
-              <Image
-                source={{ uri: resolveAvatarUrl(user?.avatar_url)! }}
-                style={{
-                  width: 42,
-                  height: 42,
-                  borderRadius: 12,
-                  borderWidth: 1.5,
-                  borderColor: colors.primary[500] + "40",
-                }}
-              />
-            ) : (
-              <View
-                style={{
-                  width: 42,
-                  height: 42,
-                  borderRadius: 12,
-                  backgroundColor: colors.primary[500] + "30",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <Text
-                  style={{
-                    color: colors.primary[400],
-                    fontSize: 14,
-                    fontFamily: "DMSans_700Bold",
-                  }}
-                >
-                  {getInitials(user?.full_name)}
-                </Text>
-              </View>
-            )}
+            <UserAvatar
+              avatarUrl={user?.avatar_url}
+              fullName={user?.full_name}
+              phone={user?.phone}
+              userId={user?.id}
+              isStaff={user?.is_staff}
+              isSuperuser={user?.is_superuser}
+              kycTier={user?.kyc_tier}
+              size={42}
+              borderRadius={12}
+            />
           </View>
         ) : (
           /* Expanded: user card — avatar + name only, no phone */
@@ -533,39 +512,17 @@ export function WebSidebar() {
               ...(Platform.OS === "web" ? { cursor: "pointer", transition: "background-color 0.15s ease" } as any : {}),
             })}
           >
-            {resolveAvatarUrl(user?.avatar_url) ? (
-              <Image
-                source={{ uri: resolveAvatarUrl(user?.avatar_url)! }}
-                style={{
-                  width: 38,
-                  height: 38,
-                  borderRadius: 10,
-                  borderWidth: 1.5,
-                  borderColor: colors.primary[500] + "30",
-                }}
-              />
-            ) : (
-              <View
-                style={{
-                  width: 38,
-                  height: 38,
-                  borderRadius: 10,
-                  backgroundColor: colors.primary[500] + "30",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <Text
-                  style={{
-                    color: colors.primary[400],
-                    fontSize: 14,
-                    fontFamily: "DMSans_700Bold",
-                  }}
-                >
-                  {getInitials(user?.full_name)}
-                </Text>
-              </View>
-            )}
+            <UserAvatar
+              avatarUrl={user?.avatar_url}
+              fullName={user?.full_name}
+              phone={user?.phone}
+              userId={user?.id}
+              isStaff={user?.is_staff}
+              isSuperuser={user?.is_superuser}
+              kycTier={user?.kyc_tier}
+              size={38}
+              borderRadius={10}
+            />
             <Text
               style={{
                 flex: 1,

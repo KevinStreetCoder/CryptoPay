@@ -17,6 +17,7 @@ urlpatterns = [
     path("devices/", views.DeviceListView.as_view(), name="devices"),
     path("devices/<uuid:device_id>/", views.DeviceDeleteView.as_view(), name="device-delete"),
     path("change-pin/", views.ChangePINView.as_view(), name="change-pin"),
+    path("verify-pin/", views.VerifyPINView.as_view(), name="verify-pin"),
     path("kyc/documents/", views.KYCDocumentListView.as_view(), name="kyc-documents"),
     path("push-token/", views.RegisterPushTokenView.as_view(), name="push-token"),
     path("kyc/callback/", views.KYCCallbackView.as_view(), name="kyc-callback"),

@@ -57,8 +57,8 @@ export function AppLockScreen({ onUnlock, userPhone }: AppLockScreenProps) {
     setPinError(false);
 
     try {
-      // Verify PIN via login endpoint (re-authenticates the session)
-      await authApi.login({ phone: userPhone, pin });
+      // Verify PIN via dedicated endpoint (no device/OTP checks)
+      await authApi.verifyPin(pin);
       onUnlock();
     } catch {
       setPinError(true);
