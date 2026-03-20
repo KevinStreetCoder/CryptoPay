@@ -12,6 +12,7 @@ import {
   useWindowDimensions,
   Image,
   InteractionManager,
+  Keyboard,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -259,6 +260,7 @@ export default function LoginScreen() {
   };
 
   const handlePinComplete = async (pin: string) => {
+    if (Platform.OS !== "web") Keyboard.dismiss();
     setLoading(true);
     setPinError(false);
     try {
@@ -288,6 +290,7 @@ export default function LoginScreen() {
   };
 
   const handleOtpComplete = async (otp: string) => {
+    if (Platform.OS !== "web") Keyboard.dismiss();
     setLoading(true);
     try {
       await login(phone, pendingPin, otp);

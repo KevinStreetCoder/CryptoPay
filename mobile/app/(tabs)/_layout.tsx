@@ -142,8 +142,10 @@ export default function TabLayout() {
   const { hasPending: hasPendingDeposits } = usePendingDeposits();
   const insets = useSafeAreaInsets();
 
-  const bottomPadding = isWeb ? 12 : Platform.OS === "android" ? Math.max(insets.bottom, 8) : insets.bottom;
-  const tabBarHeight = (isWeb ? 72 : Platform.OS === "android" ? 60 : 88) + bottomPadding;
+  // On Android, insets.bottom is 0 for 3-button nav and small for gesture nav.
+  // We only need minimal padding — never add extra space above the system nav buttons.
+  const bottomPadding = isWeb ? 12 : Platform.OS === "android" ? insets.bottom : insets.bottom;
+  const tabBarHeight = (isWeb ? 72 : Platform.OS === "android" ? 56 : 88) + bottomPadding;
 
   return (
     <Tabs
@@ -163,7 +165,10 @@ export default function TabLayout() {
               paddingBottom: bottomPadding,
               paddingTop: Platform.OS === "android" ? 4 : 6,
               paddingHorizontal: isWeb ? 40 : 0,
-              position: "relative" as const,
+              position: Platform.OS === "android" ? "absolute" as const : "relative" as const,
+              bottom: Platform.OS === "android" ? 0 : undefined,
+              left: Platform.OS === "android" ? 0 : undefined,
+              right: Platform.OS === "android" ? 0 : undefined,
               ...(isWeb
                 ? {
                     boxShadow: isDark
