@@ -1280,6 +1280,8 @@ function HomeScreenContent() {
   const initials = getInitials(user?.full_name);
   const isAdmin = user?.is_staff || user?.is_superuser;
   const avatarBgColor = getAvatarColor(user?.id?.toString() || user?.phone || "user", isAdmin);
+  const diceBearSeed = encodeURIComponent(user?.full_name || user?.phone || "user");
+  const diceBearUrl = `https://api.dicebear.com/9.x/bottts-neutral/png?seed=${diceBearSeed}&size=96&backgroundColor=transparent`;
   const { unreadCount } = useUnreadCount(allTx);
 
   /* ─── MOBILE LAYOUT (unchanged) ─── */
@@ -1341,11 +1343,12 @@ function HomeScreenContent() {
                     width: 46,
                     height: 46,
                     borderRadius: 15,
-                    backgroundColor: avatarBgColor + "25",
+                    backgroundColor: avatarBgColor + "20",
                     alignItems: "center",
                     justifyContent: "center",
                     borderWidth: 2,
-                    borderColor: avatarBgColor + "50",
+                    borderColor: avatarBgColor + "45",
+                    overflow: "hidden",
                     ...(Platform.OS !== "web"
                       ? {
                           shadowColor: avatarBgColor,
@@ -1357,16 +1360,10 @@ function HomeScreenContent() {
                       : { boxShadow: `0 2px 8px ${avatarBgColor}40` } as any),
                   }}
                 >
-                  <Text
-                    style={{
-                      color: avatarBgColor,
-                      fontSize: 17,
-                      fontFamily: "DMSans_700Bold",
-                      letterSpacing: 0.5,
-                    }}
-                  >
-                    {initials}
-                  </Text>
+                  <Image
+                    source={{ uri: diceBearUrl }}
+                    style={{ width: 34, height: 34 }}
+                  />
                 </View>
               )}
               <View>
@@ -2097,22 +2094,18 @@ function HomeScreenContent() {
                   width: 44,
                   height: 44,
                   borderRadius: 14,
-                  backgroundColor: avatarBgColor + "25",
+                  backgroundColor: avatarBgColor + "20",
                   alignItems: "center",
                   justifyContent: "center",
                   borderWidth: 1,
                   borderColor: avatarBgColor + "40",
+                  overflow: "hidden",
                 }}
               >
-                <Text
-                  style={{
-                    color: avatarBgColor,
-                    fontSize: 16,
-                    fontFamily: "DMSans_700Bold",
-                  }}
-                >
-                  {initials}
-                </Text>
+                <Image
+                  source={{ uri: diceBearUrl }}
+                  style={{ width: 34, height: 34 }}
+                />
               </View>
             )}
           </Pressable>

@@ -549,6 +549,9 @@ export default function ProfileScreen() {
   const isAdmin = user?.is_staff || user?.is_superuser;
   const avatarBgColor = getAvatarColor(avatarIdentifier, isAdmin);
   const initials = getInitials(user?.full_name);
+  // DiceBear avatar: professional cartoon-style generated avatar
+  const diceBearSeed = encodeURIComponent(user?.full_name || user?.phone || "user");
+  const diceBearUrl = `https://api.dicebear.com/9.x/bottts-neutral/png?seed=${diceBearSeed}&size=128&backgroundColor=transparent`;
 
   const renderAvatar = (size: number) => (
     <Pressable
@@ -569,7 +572,7 @@ export default function ProfileScreen() {
             height: size,
             borderRadius: size * 0.32,
             borderWidth: 3,
-            borderColor: colors.primary[500] + "40",
+            borderColor: isAdmin ? ADMIN_GOLD + "60" : colors.primary[500] + "40",
           }}
         />
       ) : (
@@ -578,27 +581,21 @@ export default function ProfileScreen() {
             width: size,
             height: size,
             borderRadius: size * 0.32,
-            backgroundColor: avatarBgColor + "35",
+            backgroundColor: avatarBgColor + "20",
             alignItems: "center",
             justifyContent: "center",
             borderWidth: 3,
-            borderColor: avatarBgColor + "60",
-            ...(isWeb ? ts.glow(avatarBgColor, 0.15) : {}),
+            borderColor: avatarBgColor + "50",
+            overflow: "hidden",
           }}
         >
-          {initials ? (
-            <Text
-              style={{
-                color: avatarBgColor,
-                fontSize: size * 0.32,
-                fontFamily: "DMSans_700Bold",
-              }}
-            >
-              {initials}
-            </Text>
-          ) : (
-            <Ionicons name="person" size={size * 0.4} color={avatarBgColor} />
-          )}
+          <Image
+            source={{ uri: diceBearUrl }}
+            style={{
+              width: size * 0.75,
+              height: size * 0.75,
+            }}
+          />
         </View>
       )}
       {/* Camera badge */}

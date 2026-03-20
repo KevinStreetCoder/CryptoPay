@@ -426,22 +426,24 @@ export default function AdminUsersScreen() {
               ...ts.sm,
             }}
           >
-            {/* Header */}
-            <View
-              style={{
-                flexDirection: "row",
-                paddingVertical: 12,
-                paddingHorizontal: 16,
-                backgroundColor: tc.glass.highlight,
-                borderBottomWidth: 1,
-                borderBottomColor: tc.glass.border,
-              }}
-            >
-              <Text style={{ flex: 2, color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_600SemiBold", textTransform: "uppercase", letterSpacing: 0.8 }}>User</Text>
-              <Text style={{ flex: 1, color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_600SemiBold", textTransform: "uppercase", letterSpacing: 0.8 }}>KYC Tier</Text>
-              <Text style={{ flex: 1, color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_600SemiBold", textTransform: "uppercase", letterSpacing: 0.8 }}>Status</Text>
-              <Text style={{ width: isDesktop ? 260 : 180, color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_600SemiBold", textTransform: "uppercase", letterSpacing: 0.8, textAlign: "center" }}>Actions</Text>
-            </View>
+            {/* Header — only on desktop */}
+            {isDesktop && (
+              <View
+                style={{
+                  flexDirection: "row",
+                  paddingVertical: 12,
+                  paddingHorizontal: 16,
+                  backgroundColor: tc.glass.highlight,
+                  borderBottomWidth: 1,
+                  borderBottomColor: tc.glass.border,
+                }}
+              >
+                <Text style={{ flex: 2, color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_600SemiBold", textTransform: "uppercase", letterSpacing: 0.8 }}>User</Text>
+                <Text style={{ flex: 1, color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_600SemiBold", textTransform: "uppercase", letterSpacing: 0.8 }}>KYC Tier</Text>
+                <Text style={{ flex: 1, color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_600SemiBold", textTransform: "uppercase", letterSpacing: 0.8 }}>Status</Text>
+                <Text style={{ width: 260, color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_600SemiBold", textTransform: "uppercase", letterSpacing: 0.8, textAlign: "center" }}>Actions</Text>
+              </View>
+            )}
 
             {users.length === 0 ? (
               <View style={{ padding: 40, alignItems: "center" }}>
@@ -451,6 +453,107 @@ export default function AdminUsersScreen() {
             ) : (
               users.map((u, idx) => {
                 const tierColor = TIER_COLORS[u.kyc_tier] || tc.textMuted;
+                const statusColor = u.is_suspended ? colors.error : u.is_active ? colors.success : tc.textMuted;
+                const statusLabel = u.is_suspended ? "Suspended" : u.is_active ? "Active" : "Inactive";
+
+                if (!isDesktop) {
+                  // ── MOBILE CARD LAYOUT ──
+                  return (
+                    <Pressable
+                      key={u.id}
+                      onPress={() => router.push(`/settings/admin-user-detail?id=${u.id}` as any)}
+                      style={{
+                        paddingVertical: 14,
+                        paddingHorizontal: 16,
+                        borderBottomWidth: idx < users.length - 1 ? 1 : 0,
+                        borderBottomColor: tc.glass.border,
+                      }}
+                    >
+                      {/* Row 1: Name + Status */}
+                      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flex: 1 }}>
+                          <Text numberOfLines={1} style={{ color: tc.textPrimary, fontSize: 15, fontFamily: "DMSans_600SemiBold", flexShrink: 1 }}>
+                            {u.full_name || "No name"}
+                          </Text>
+                          {u.kyc_tier >= 1 && (
+                            <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: colors.primary[500], alignItems: "center", justifyContent: "center" }}>
+                              <Ionicons name="checkmark" size={10} color="#FFFFFF" />
+                            </View>
+                          )}
+                        </View>
+                        <View style={{ backgroundColor: statusColor + "15", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 3 }}>
+                          <Text style={{ color: statusColor, fontSize: 11, fontFamily: "DMSans_600SemiBold" }}>{statusLabel}</Text>
+                        </View>
+                      </View>
+
+                      {/* Row 2: Phone + Tier */}
+                      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                        <Text numberOfLines={1} style={{ color: tc.textMuted, fontSize: 13, fontFamily: "DMSans_400Regular" }}>
+                          {u.phone}{u.email ? ` · ${u.email}` : ""}
+                        </Text>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                          <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: tierColor }} />
+                          <Text style={{ color: tierColor, fontSize: 12, fontFamily: "DMSans_600SemiBold" }}>
+                            T{u.kyc_tier} · {TIER_LABELS[u.kyc_tier]}
+                          </Text>
+                        </View>
+                      </View>
+
+                      {/* Row 3: Actions */}
+                      <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+                        {/* Tier buttons */}
+                        {verifying === u.id ? (
+                          <ActivityIndicator size="small" color={colors.primary[400]} />
+                        ) : (
+                          <View style={{ flexDirection: "row", gap: 4 }}>
+                            {[0, 1, 2, 3].map((t) => (
+                              <Pressable
+                                key={t}
+                                onPress={() => handleVerify(u.id, t)}
+                                disabled={u.kyc_tier === t}
+                                style={{
+                                  width: 30,
+                                  height: 28,
+                                  borderRadius: 8,
+                                  backgroundColor: u.kyc_tier === t ? TIER_COLORS[t] + "30" : tc.dark.elevated,
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  borderWidth: u.kyc_tier === t ? 1.5 : 1,
+                                  borderColor: u.kyc_tier === t ? TIER_COLORS[t] : tc.glass.border,
+                                }}
+                              >
+                                <Text style={{ color: u.kyc_tier === t ? TIER_COLORS[t] : tc.textMuted, fontSize: 11, fontFamily: "DMSans_700Bold" }}>{t}</Text>
+                              </Pressable>
+                            ))}
+                          </View>
+                        )}
+
+                        <View style={{ flex: 1 }} />
+
+                        {/* Suspend/View */}
+                        <Pressable
+                          onPress={() => setSuspendModal({ userId: u.id, phone: u.phone, action: u.is_suspended ? "unsuspend" : "suspend" })}
+                          style={{ flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: (u.is_suspended ? colors.success : colors.error) + "12" }}
+                        >
+                          <Ionicons name={u.is_suspended ? "checkmark-circle-outline" : "ban-outline"} size={14} color={u.is_suspended ? colors.success : colors.error} />
+                          <Text style={{ color: u.is_suspended ? colors.success : colors.error, fontSize: 12, fontFamily: "DMSans_600SemiBold" }}>
+                            {u.is_suspended ? "Restore" : "Suspend"}
+                          </Text>
+                        </Pressable>
+
+                        <Pressable
+                          onPress={() => router.push(`/settings/admin-user-detail?id=${u.id}` as any)}
+                          style={{ flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: colors.primary[500] + "12" }}
+                        >
+                          <Ionicons name="eye-outline" size={14} color={colors.primary[400]} />
+                          <Text style={{ color: colors.primary[400], fontSize: 12, fontFamily: "DMSans_600SemiBold" }}>View</Text>
+                        </Pressable>
+                      </View>
+                    </Pressable>
+                  );
+                }
+
+                // ── DESKTOP ROW LAYOUT ──
                 return (
                   <View
                     key={u.id}
@@ -463,7 +566,7 @@ export default function AdminUsersScreen() {
                       borderBottomColor: tc.glass.border,
                     }}
                   >
-                    {/* User info — clickable to view detail */}
+                    {/* User info */}
                     <Pressable
                       onPress={() => router.push(`/settings/admin-user-detail?id=${u.id}` as any)}
                       style={({ hovered }: any) => ({
@@ -477,72 +580,33 @@ export default function AdminUsersScreen() {
                           {u.full_name || "No name"}
                         </Text>
                         {u.kyc_tier >= 1 && (
-                          <View
-                            style={{
-                              width: 16,
-                              height: 16,
-                              borderRadius: 8,
-                              backgroundColor: colors.primary[500],
-                              alignItems: "center",
-                              justifyContent: "center",
-                            }}
-                          >
+                          <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: colors.primary[500], alignItems: "center", justifyContent: "center" }}>
                             <Ionicons name="checkmark" size={10} color="#FFFFFF" />
                           </View>
                         )}
                       </View>
-                      <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_400Regular", marginTop: 2 }}>
-                        {u.phone}
-                      </Text>
-                      {u.email ? (
-                        <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_400Regular", marginTop: 1 }}>
-                          {u.email}
-                        </Text>
-                      ) : null}
+                      <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_400Regular", marginTop: 2 }}>{u.phone}</Text>
+                      {u.email ? <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_400Regular", marginTop: 1 }}>{u.email}</Text> : null}
                     </Pressable>
 
                     {/* KYC Tier */}
                     <View style={{ flex: 1 }}>
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                         <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: tierColor }} />
-                        <Text style={{ color: tierColor, fontSize: 13, fontFamily: "DMSans_600SemiBold" }}>
-                          Tier {u.kyc_tier}
-                        </Text>
+                        <Text style={{ color: tierColor, fontSize: 13, fontFamily: "DMSans_600SemiBold" }}>Tier {u.kyc_tier}</Text>
                       </View>
-                      <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_400Regular", marginTop: 2 }}>
-                        {TIER_LABELS[u.kyc_tier] || "Unknown"}
-                      </Text>
+                      <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_400Regular", marginTop: 2 }}>{TIER_LABELS[u.kyc_tier]}</Text>
                     </View>
 
                     {/* Status */}
                     <View style={{ flex: 1 }}>
-                      <View
-                        style={{
-                          backgroundColor: u.is_suspended
-                            ? colors.error + "15"
-                            : u.is_active
-                              ? colors.success + "15"
-                              : tc.dark.elevated,
-                          borderRadius: 8,
-                          paddingHorizontal: 10,
-                          paddingVertical: 4,
-                          alignSelf: "flex-start",
-                        }}
-                      >
-                        <Text
-                          style={{
-                            color: u.is_suspended ? colors.error : u.is_active ? colors.success : tc.textMuted,
-                            fontSize: 11,
-                            fontFamily: "DMSans_600SemiBold",
-                          }}
-                        >
-                          {u.is_suspended ? "Suspended" : u.is_active ? "Active" : "Inactive"}
-                        </Text>
+                      <View style={{ backgroundColor: statusColor + "15", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, alignSelf: "flex-start" }}>
+                        <Text style={{ color: statusColor, fontSize: 11, fontFamily: "DMSans_600SemiBold" }}>{statusLabel}</Text>
                       </View>
                     </View>
 
                     {/* Actions */}
-                    <View style={{ width: isDesktop ? 260 : 180, flexDirection: "row", gap: 6, justifyContent: "center", alignItems: "center", flexWrap: "wrap" }}>
+                    <View style={{ width: 260, flexDirection: "row", gap: 6, justifyContent: "center", alignItems: "center", flexWrap: "wrap" }}>
                       {/* Tier buttons */}
                       {verifying === u.id ? (
                         <ActivityIndicator size="small" color={colors.primary[400]} />
