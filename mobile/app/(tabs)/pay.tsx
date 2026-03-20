@@ -509,14 +509,9 @@ export default function PayScreen() {
           />
           <View
             style={{
-              flexDirection: "row",
-              flexWrap: "wrap",
+              flexDirection: isDesktop ? "row" : "column",
+              flexWrap: isDesktop ? "wrap" : undefined,
               gap: isDesktop ? 14 : 10,
-              ...(isDesktop
-                ? {
-                    display: "flex" as any,
-                  }
-                : {}),
             }}
           >
             {POPULAR_SERVICES.map((service) => (
@@ -563,19 +558,20 @@ export default function PayScreen() {
               >
                 <View
                   style={{
-                    width: isDesktop ? 40 : 32,
-                    height: isDesktop ? 40 : 32,
+                    width: isDesktop ? 40 : 36,
+                    height: isDesktop ? 40 : 36,
                     borderRadius: isDesktop ? 12 : 10,
                     backgroundColor: service.bg,
                     alignItems: "center",
                     justifyContent: "center",
                     overflow: "hidden",
+                    flexShrink: 0,
                   }}
                 >
                   <ServiceLogo
                     logos={service.logos}
                     name={service.name}
-                    size={isDesktop ? 34 : 28}
+                    size={isDesktop ? 34 : 30}
                     color={service.color}
                     bg={service.bg}
                   />

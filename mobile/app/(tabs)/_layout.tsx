@@ -90,6 +90,8 @@ function TabIcon({
         position: "relative",
         paddingHorizontal: 14,
         paddingVertical: 6,
+        minWidth: 48,
+        minHeight: 42,
       }}
     >
       {/* Pulsing badge for pending deposits */}
@@ -151,9 +153,9 @@ export default function TabLayout() {
                 ? "rgba(255, 255, 255, 0.06)"
                 : "rgba(0, 0, 0, 0.06)",
               borderTopWidth: 1,
-              height: isWeb ? 72 : Platform.OS === "android" ? 64 : 88,
-              paddingBottom: isWeb ? 12 : Platform.OS === "android" ? 8 : 28,
-              paddingTop: 8,
+              height: isWeb ? 72 : Platform.OS === "android" ? 68 : 88,
+              paddingBottom: isWeb ? 12 : Platform.OS === "android" ? 6 : 28,
+              paddingTop: Platform.OS === "android" ? 4 : 6,
               paddingHorizontal: isWeb ? 40 : 0,
               position: "relative" as const,
               ...(isWeb
@@ -177,7 +179,10 @@ export default function TabLayout() {
         tabBarInactiveTintColor: isDark ? "#556B82" : "#94A3B8",
         tabBarShowLabel: false,
         tabBarItemStyle: {
-          paddingVertical: 4,
+          paddingVertical: 0,
+          justifyContent: "center" as const,
+          alignItems: "center" as const,
+          height: "100%" as any,
         },
       }}
     >

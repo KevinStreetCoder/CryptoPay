@@ -128,9 +128,10 @@ function MenuItem({ icon, label, subtitle, onPress, danger, iconBg, iconColor, t
 }
 
 function getInitials(name: string | undefined): string {
-  if (!name) return "?";
-  return name
-    .split(" ")
+  if (!name || !name.trim()) return "?";
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  return parts
     .map((n) => n[0])
     .join("")
     .toUpperCase()
