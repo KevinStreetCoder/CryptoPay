@@ -90,6 +90,13 @@ export interface DepositQuoteData {
   dest_currency: string;
 }
 
+export interface SwapData {
+  from_currency: string;
+  to_currency: string;
+  amount: string;
+  pin: string;
+}
+
 export interface WithdrawData {
   currency: string;
   amount: string;
@@ -146,6 +153,7 @@ export const paymentsApi = {
   payTill: (data: PayTillData) => api.post<Transaction>("/payments/pay-till/", data),
   sendMpesa: (data: SendMpesaData) => api.post<Transaction>("/payments/send-mpesa/", data),
   buyCrypto: (data: BuyCryptoData) => api.post<Transaction>("/payments/buy-crypto/", data),
+  swap: (data: SwapData) => api.post<Transaction>("/payments/swap/", data),
   history: (page = 1) => api.get<{ results: Transaction[]; count: number }>("/payments/history/", { params: { page } }),
   activity: (params: ActivityParams = {}) =>
     api.get<ActivityResponse>("/payments/activity/", { params: { page: 1, page_size: 20, ...params } }),

@@ -208,6 +208,8 @@ const en = {
     payBillSubtitle: "Utilities, subscriptions & more",
     buyGoodsSubtitle: "Pay merchants via Till number",
     sendMpesaSubtitle: "Send money to any phone number",
+    swapCrypto: "Swap Crypto",
+    swapCryptoSubtitle: "Convert between crypto currencies",
     popularServices: "Popular Services",
     howItWorks: "How It Works",
     trustAndSecurity: "Trust & Security",

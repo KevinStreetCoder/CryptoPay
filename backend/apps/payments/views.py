@@ -35,7 +35,7 @@ from apps.accounts.models import AuditLog
 from .circuit_breaker import PaymentCircuitBreaker, PaymentsPaused
 from .models import SavedPaybill, Transaction
 from .saga import PaymentSaga, SagaError
-from .serializers import BuyCryptoSerializer, DepositQuoteSerializer, PayBillSerializer, PayTillSerializer, SavedPaybillSerializer, SendMpesaSerializer, TransactionSerializer, WithdrawSerializer
+from .serializers import BuyCryptoSerializer, DepositQuoteSerializer, PayBillSerializer, PayTillSerializer, SavedPaybillSerializer, SendMpesaSerializer, SwapSerializer, TransactionSerializer, WithdrawSerializer
 from .services import DailyLimitExceededError, check_daily_limit
 
 logger = logging.getLogger(__name__)
@@ -633,6 +633,203 @@ class BuyCryptoView(APIView):
         return request.META.get("REMOTE_ADDR", "0.0.0.0")
 
 
+class SwapRateThrottle(UserRateThrottle):
+    """Limit swap transactions to 10 per hour per user."""
+    rate = "10/hour"
+
+
+class SwapView(APIView):
+    """Swap between two crypto currencies in the user's wallet.
+
+    POST /api/v1/payments/swap/
+    Body: { from_currency, to_currency, amount, pin }
+
+    Uses the rate engine to derive a cross-rate via KES:
+      from_rate = get_crypto_kes_rate(from_currency)
+      to_rate   = get_crypto_kes_rate(to_currency)
+      cross_rate = from_kes / to_kes
+
+    A 0.5 % swap fee is deducted from the source amount before conversion.
+    The operation is fully atomic: lock → debit source → credit dest → record Transaction.
+    """
+
+    permission_classes = [IsNotSuspended]
+    throttle_classes = [SwapRateThrottle]
+
+    SWAP_FEE_PERCENT = Decimal("0.5")
+
+    def post(self, request):
+        serializer = SwapSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = request.user
+        data = serializer.validated_data
+
+        # Verify PIN with lockout tracking
+        pin_error = _verify_pin_with_lockout(user, data["pin"])
+        if pin_error:
+            return pin_error
+
+        from_currency = data["from_currency"]
+        to_currency = data["to_currency"]
+        source_amount = data["amount"]
+
+        # Look up wallets
+        try:
+            from_wallet = user.wallets.get(currency=from_currency)
+        except Exception:
+            return Response(
+                {"error": f"No {from_currency} wallet found."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            to_wallet = user.wallets.get(currency=to_currency)
+        except Exception:
+            return Response(
+                {"error": f"No {to_currency} wallet found."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Check sufficient balance
+        if from_wallet.available_balance < source_amount:
+            return Response(
+                {"error": f"Insufficient {from_currency} balance. "
+                          f"Available: {from_wallet.available_balance}, required: {source_amount}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Get cross-rate via KES intermediary
+        from apps.rates.services import RateService
+
+        try:
+            from_rate_info = RateService.get_crypto_kes_rate(from_currency)
+            to_rate_info = RateService.get_crypto_kes_rate(to_currency)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        from_kes_rate = Decimal(from_rate_info["final_rate"])  # 1 FROM = X KES
+        to_kes_rate = Decimal(to_rate_info["final_rate"])      # 1 TO = Y KES
+
+        # cross_rate: how many TO tokens per 1 FROM token
+        cross_rate = (from_kes_rate / to_kes_rate).quantize(Decimal("0.00000001"))
+
+        # Calculate fee (deducted from source side)
+        fee_amount = (source_amount * self.SWAP_FEE_PERCENT / Decimal("100")).quantize(Decimal("0.00000001"))
+        net_source = source_amount - fee_amount  # amount that actually converts
+
+        # KES equivalent of the fee (for the transaction record)
+        fee_kes = (fee_amount * from_kes_rate).quantize(Decimal("0.01"))
+
+        # Destination amount
+        dest_amount = (net_source * cross_rate).quantize(Decimal("0.00000001"))
+
+        if dest_amount <= 0:
+            return Response(
+                {"error": "Swap amount too small after fees."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Atomic execution: lock → debit → credit → Transaction record
+        from django.db import transaction as db_transaction
+        from apps.wallets.services import InsufficientBalanceError, WalletService
+
+        try:
+            with db_transaction.atomic():
+                # Create the transaction record first (for idempotent ledger entries)
+                tx = Transaction.objects.create(
+                    idempotency_key=f"swap-{user.id}-{timezone.now().timestamp()}",
+                    user=user,
+                    type=Transaction.Type.SWAP,
+                    source_currency=from_currency,
+                    source_amount=source_amount,
+                    dest_currency=to_currency,
+                    dest_amount=dest_amount,
+                    exchange_rate=cross_rate,
+                    fee_amount=fee_kes,
+                    fee_currency="KES",
+                    status=Transaction.Status.PROCESSING,
+                    ip_address=self._get_client_ip(request),
+                    saga_data={
+                        "from_kes_rate": str(from_kes_rate),
+                        "to_kes_rate": str(to_kes_rate),
+                        "cross_rate": str(cross_rate),
+                        "fee_percent": str(self.SWAP_FEE_PERCENT),
+                        "fee_source_amount": str(fee_amount),
+                        "net_source_amount": str(net_source),
+                    },
+                )
+
+                # Debit source wallet (full amount including fee)
+                WalletService.debit(
+                    from_wallet.id,
+                    source_amount,
+                    tx.id,
+                    f"Swap {source_amount} {from_currency} → {to_currency}",
+                )
+
+                # Credit destination wallet
+                WalletService.credit(
+                    to_wallet.id,
+                    dest_amount,
+                    tx.id,
+                    f"Swap receive {dest_amount} {to_currency} from {from_currency}",
+                )
+
+                # Mark completed
+                tx.status = Transaction.Status.COMPLETED
+                tx.completed_at = timezone.now()
+                tx.save(update_fields=["status", "completed_at", "updated_at"])
+
+        except InsufficientBalanceError:
+            return Response(
+                {"error": "Insufficient balance. Funds may be locked by another transaction."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Audit log
+        AuditLog.objects.create(
+            user=user,
+            action="SWAP",
+            entity_type="transaction",
+            entity_id=str(tx.id),
+            details={
+                "from_currency": from_currency,
+                "to_currency": to_currency,
+                "source_amount": str(source_amount),
+                "dest_amount": str(dest_amount),
+                "cross_rate": str(cross_rate),
+                "fee_percent": str(self.SWAP_FEE_PERCENT),
+            },
+            ip_address=self._get_client_ip(request),
+        )
+
+        # Send notifications (non-critical)
+        try:
+            from apps.core.email import send_transaction_notifications
+            send_transaction_notifications(user, tx)
+        except Exception as e:
+            logger.warning(f"Swap notification failed for tx {tx.id}: {e}")
+
+        # Broadcast updated wallet balance via WebSocket
+        try:
+            from apps.core.broadcast import broadcast_user_balance
+            broadcast_user_balance(user.id)
+        except Exception as e:
+            logger.warning(f"Balance broadcast failed for swap tx {tx.id}: {e}")
+
+        return Response(
+            TransactionSerializer(tx).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    def _get_client_ip(self, request):
+        xff = request.META.get("HTTP_X_FORWARDED_FOR")
+        if xff:
+            return xff.split(",")[0].strip()
+        return request.META.get("REMOTE_ADDR", "0.0.0.0")
+
+
 class DepositQuoteView(APIView):
     """Get a rate-locked quote for KES → crypto deposit."""
 
@@ -801,6 +998,7 @@ class UnifiedActivityView(APIView):
                 "send": ["SEND_MPESA"],
                 "buy": ["BUY"],
                 "withdrawal": ["WITHDRAWAL"],
+                "swap": ["SWAP"],
             }
             allowed_types = type_map.get(type_filter, [type_filter.upper()])
             tx_qs = tx_qs.filter(type__in=allowed_types)
@@ -1329,6 +1527,7 @@ class TransactionExportView(APIView):
                 "send": ["SEND_MPESA"],
                 "buy": ["BUY"],
                 "withdrawal": ["WITHDRAWAL"],
+                "swap": ["SWAP"],
             }
             allowed_types = type_map.get(type_filter, [type_filter.upper()])
             qs = qs.filter(type__in=allowed_types)
@@ -1366,6 +1565,7 @@ class TransactionExportView(APIView):
             "BUY": "Buy Crypto",
             "SELL": "Sell Crypto",
             "FEE": "Fee",
+            "SWAP": "Swap",
             "INTERNAL_TRANSFER": "Internal Transfer",
         }
 

@@ -202,6 +202,15 @@ const PAYMENT_OPTIONS = [
     accentBg: "rgba(245, 158, 11, 0.12)",
     route: "/payment/send" as const,
   },
+  {
+    id: "swap",
+    titleKey: "payment.swapCrypto" as any,
+    subtitleKey: "payment.swapCryptoSubtitle" as any,
+    icon: "swap-horizontal-outline" as const,
+    accent: "#627EEA",
+    accentBg: "rgba(98, 126, 234, 0.12)",
+    route: "/payment/swap" as const,
+  },
 ];
 
 const HOW_IT_WORKS = [

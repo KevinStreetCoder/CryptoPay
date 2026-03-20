@@ -210,6 +210,8 @@ const sw: Translations = {
     payBillSubtitle: "Huduma, usajili na mengineyo",
     buyGoodsSubtitle: "Lipa wafanyabiashara kupitia nambari ya Till",
     sendMpesaSubtitle: "Tuma pesa kwa nambari yoyote ya simu",
+    swapCrypto: "Badilisha Crypto",
+    swapCryptoSubtitle: "Badilisha kati ya sarafu za crypto",
     popularServices: "Huduma Maarufu",
     howItWorks: "Inavyofanya Kazi",
     trustAndSecurity: "Uaminifu na Usalama",
