@@ -15,6 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../src/stores/auth";
 import { useBalanceVisibility } from "../../src/stores/balance";
 import { config } from "../../src/constants/config";
+import { UserAvatar } from "../../src/components/UserAvatar";
 import { colors, getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
 import { SectionHeader } from "../../src/components/SectionHeader";
@@ -385,25 +386,17 @@ function ProfileCard({
       accessibilityLabel="View profile"
     >
       {/* Avatar */}
-      {(() => {
-        const avatarSize = isDesktop ? 64 : 56;
-        const avatarUrl = user?.avatar_url
-          ? (user.avatar_url.startsWith("http") ? user.avatar_url : `${config.apiUrl.replace(/\/api\/v1\/?$/, "")}${user.avatar_url.startsWith("/") ? "" : "/"}${user.avatar_url}`)
-          : null;
-        const displayAvatarUrl = avatarUrl || generatedAvatarUrl;
-        return (
-          <Image
-            source={{ uri: displayAvatarUrl }}
-            style={{
-              width: avatarSize,
-              height: avatarSize,
-              borderRadius: isDesktop ? 20 : 18,
-              borderWidth: 2,
-              borderColor: tierBorderColor + "50",
-            }}
-          />
-        );
-      })()}
+      <UserAvatar
+        avatarUrl={user?.avatar_url}
+        fullName={user?.full_name}
+        phone={user?.phone}
+        userId={user?.id}
+        isStaff={user?.is_staff}
+        isSuperuser={user?.is_superuser}
+        kycTier={user?.kyc_tier}
+        size={isDesktop ? 64 : 56}
+        borderRadius={isDesktop ? 20 : 18}
+      />
 
       {/* Info */}
       <View style={{ flex: 1 }}>
