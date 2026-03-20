@@ -217,12 +217,42 @@ function CreateAlertModal({
   const [currency, setCurrency] = useState("BTC");
   const [targetRate, setTargetRate] = useState("");
   const [direction, setDirection] = useState<"above" | "below">("above");
+  const [duration, setDuration] = useState<string>("30d");
+  const [cooldown, setCooldown] = useState<number>(60);
   const [submitting, setSubmitting] = useState(false);
+
+  const DURATION_OPTIONS = [
+    { label: "1 Day", value: "1d" },
+    { label: "1 Week", value: "7d" },
+    { label: "1 Month", value: "30d" },
+    { label: "3 Months", value: "90d" },
+    { label: "Forever", value: "forever" },
+  ];
+
+  const COOLDOWN_OPTIONS = [
+    { label: "Every time", value: 2 },
+    { label: "Hourly", value: 60 },
+    { label: "Daily", value: 1440 },
+  ];
+
+  const getExpiresAt = (): string | null => {
+    if (duration === "forever") return null;
+    const days = parseInt(duration);
+    const date = new Date();
+    date.setDate(date.getDate() + days);
+    return date.toISOString();
+  };
 
   const handleSubmit = () => {
     if (!targetRate || isNaN(Number(targetRate)) || Number(targetRate) <= 0) return;
     setSubmitting(true);
-    onCreate({ currency, target_rate: targetRate, direction });
+    onCreate({
+      currency,
+      target_rate: targetRate,
+      direction,
+      expires_at: getExpiresAt(),
+      cooldown_minutes: cooldown,
+    });
   };
 
   // Reset on close
@@ -231,6 +261,8 @@ function CreateAlertModal({
       setCurrency("BTC");
       setTargetRate("");
       setDirection("above");
+      setDuration("30d");
+      setCooldown(60);
       setSubmitting(false);
     }
   }, [visible]);
@@ -455,6 +487,91 @@ function CreateAlertModal({
                     }}
                   >
                     {dir}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {/* Duration */}
+          <Text
+            style={{
+              color: tc.textMuted,
+              fontSize: 11,
+              fontFamily: "DMSans_600SemiBold",
+              textTransform: "uppercase",
+              letterSpacing: 1,
+              marginBottom: 10,
+            }}
+          >
+            Active For
+          </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 20 }}>
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              {DURATION_OPTIONS.map((opt) => {
+                const sel = duration === opt.value;
+                return (
+                  <Pressable
+                    key={opt.value}
+                    onPress={() => setDuration(opt.value)}
+                    style={{
+                      paddingHorizontal: 14,
+                      paddingVertical: 8,
+                      borderRadius: 10,
+                      borderWidth: 1,
+                      borderColor: sel ? colors.primary[400] + "60" : tc.glass.border,
+                      backgroundColor: sel ? colors.primary[400] + "15" : "transparent",
+                    }}
+                  >
+                    <Text style={{
+                      color: sel ? colors.primary[400] : tc.textSecondary,
+                      fontSize: 13,
+                      fontFamily: sel ? "DMSans_600SemiBold" : "DMSans_400Regular",
+                    }}>
+                      {opt.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </ScrollView>
+
+          {/* Notify Frequency */}
+          <Text
+            style={{
+              color: tc.textMuted,
+              fontSize: 11,
+              fontFamily: "DMSans_600SemiBold",
+              textTransform: "uppercase",
+              letterSpacing: 1,
+              marginBottom: 10,
+            }}
+          >
+            Notify Me
+          </Text>
+          <View style={{ flexDirection: "row", gap: 8, marginBottom: 28 }}>
+            {COOLDOWN_OPTIONS.map((opt) => {
+              const sel = cooldown === opt.value;
+              return (
+                <Pressable
+                  key={opt.value}
+                  onPress={() => setCooldown(opt.value)}
+                  style={{
+                    flex: 1,
+                    paddingVertical: 10,
+                    borderRadius: 10,
+                    borderWidth: 1,
+                    borderColor: sel ? colors.primary[400] + "60" : tc.glass.border,
+                    backgroundColor: sel ? colors.primary[400] + "15" : "transparent",
+                    alignItems: "center",
+                  }}
+                >
+                  <Text style={{
+                    color: sel ? colors.primary[400] : tc.textSecondary,
+                    fontSize: 12,
+                    fontFamily: sel ? "DMSans_600SemiBold" : "DMSans_400Regular",
+                  }}>
+                    {opt.label}
                   </Text>
                 </Pressable>
               );

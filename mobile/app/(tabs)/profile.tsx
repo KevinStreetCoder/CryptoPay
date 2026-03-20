@@ -15,6 +15,7 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useState, useEffect } from "react";
 import * as ImagePicker from "expo-image-picker";
+import { Image as ExpoImage } from "expo-image";
 import { useAuth, isBiometricEnabled, setBiometricEnabled } from "../../src/stores/auth";
 import { useBiometricAuth } from "../../src/hooks/useBiometricAuth";
 import { getLockTimeout, setLockTimeout, LOCK_TIMEOUT_OPTIONS, LockTimeout } from "../../src/hooks/useAppLock";
@@ -2028,7 +2029,7 @@ export default function ProfileScreen() {
               accessibilityRole="button"
               accessibilityLabel="English"
             >
-              <Image source={{ uri: "https://flagcdn.com/w80/gb.png" }} style={{ width: 28, height: 20, borderRadius: 3, marginRight: 12 }} />
+              <ExpoImage source="https://flagcdn.com/w80/gb.png" style={{ width: 28, height: 20, borderRadius: 3, marginRight: 12 }} cachePolicy="disk" />
               <View style={{ flex: 1 }}>
                 <Text
                   style={{
@@ -2080,7 +2081,7 @@ export default function ProfileScreen() {
               accessibilityRole="button"
               accessibilityLabel="Kiswahili"
             >
-              <Image source={{ uri: "https://flagcdn.com/w80/ke.png" }} style={{ width: 28, height: 20, borderRadius: 3, marginRight: 12 }} />
+              <ExpoImage source="https://flagcdn.com/w80/ke.png" style={{ width: 28, height: 20, borderRadius: 3, marginRight: 12 }} cachePolicy="disk" />
               <View style={{ flex: 1 }}>
                 <Text
                   style={{
