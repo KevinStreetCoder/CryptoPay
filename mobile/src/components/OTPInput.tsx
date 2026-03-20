@@ -59,14 +59,50 @@ export function OTPInput({
   }, [cooldown]);
 
   const handleChange = (text: string, index: number) => {
-    const digit = text.slice(-1);
-    if (digit && !/^\d$/.test(digit)) return;
+    // Strip non-digits
+    const cleaned = text.replace(/[^0-9]/g, "");
+    if (!cleaned) {
+      // User cleared the field
+      const newCode = [...code];
+      newCode[index] = "";
+      setCode(newCode);
+      return;
+    }
 
+    // Handle paste: if multiple digits, fill from current index
+    if (cleaned.length > 1) {
+      const newCode = [...code];
+      const digits = cleaned.slice(0, length - index);
+      for (let i = 0; i < digits.length; i++) {
+        if (index + i < length) {
+          newCode[index + i] = digits[i];
+        }
+      }
+      setCode(newCode);
+      // Focus the next empty cell or last cell
+      const nextEmpty = newCode.findIndex((d) => !d);
+      if (nextEmpty >= 0 && nextEmpty < length) {
+        inputRefs.current[nextEmpty]?.focus();
+      } else {
+        inputRefs.current[length - 1]?.focus();
+      }
+      const fullCode = newCode.join("");
+      if (fullCode.length === length && !newCode.includes("")) {
+        if (Platform.OS !== "web") {
+          Keyboard.dismiss();
+        }
+        onComplete(fullCode);
+      }
+      return;
+    }
+
+    // Single digit entry
+    const digit = cleaned[0];
     const newCode = [...code];
     newCode[index] = digit;
     setCode(newCode);
 
-    if (digit && index < length - 1) {
+    if (index < length - 1) {
       inputRefs.current[index + 1]?.focus();
     }
 
@@ -166,7 +202,7 @@ export function OTPInput({
               onFocus={() => setFocusedIndex(index)}
               onBlur={() => setFocusedIndex(-1)}
               keyboardType="number-pad"
-              maxLength={1}
+              maxLength={length}
               selectTextOnFocus
               autoFocus={autoFocus && index === 0}
               editable={!loading}

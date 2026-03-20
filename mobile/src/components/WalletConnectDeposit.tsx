@@ -45,7 +45,7 @@ function ensureAppKitLoaded() {
   try {
     // Import and initialize AppKit on first use
     const appkitConfig = require("../config/appkit");
-    __DEPOSIT_NETWORKS = appkitConfig._DEPOSIT_NETWORKS || [];
+    __DEPOSIT_NETWORKS = appkitConfig.DEPOSIT_NETWORKS || [];
     _appKitInitialized = appkitConfig.appKitInitialized || false;
 
     // Initialize if not already done
@@ -162,7 +162,7 @@ function WalletConnectDepositInner({ depositAddress, onDepositInitiated }: Props
 
   const [selectedToken, setSelectedToken] = useState(TOKEN_OPTIONS[0]);
   const [amount, setAmount] = useState("");
-  const [selectedNetwork, setSelectedNetwork] = useState<DepositNetwork>(_DEPOSIT_NETWORKS[0]);
+  const [selectedNetwork, setSelectedNetwork] = useState<DepositNetwork>(__DEPOSIT_NETWORKS[0]);
 
   // Hooks always called — this component only renders when AppKit is ready
   const appKit = _useAppKit();
@@ -386,7 +386,7 @@ function WalletConnectDepositInner({ depositAddress, onDepositInitiated }: Props
           </View>
 
           {/* Network Selector (for ERC-20 only) */}
-          {selectedToken.symbol !== "ETH" && _DEPOSIT_NETWORKS.length > 1 && (
+          {selectedToken.symbol !== "ETH" && __DEPOSIT_NETWORKS.length > 1 && (
             <View style={{ gap: 8 }}>
               <Text
                 style={{
@@ -400,9 +400,9 @@ function WalletConnectDepositInner({ depositAddress, onDepositInitiated }: Props
                 Network
               </Text>
               <View style={{ flexDirection: "row", gap: 8 }}>
-                {_DEPOSIT_NETWORKS.filter((n) =>
+                {__DEPOSIT_NETWORKS.filter((n: any) =>
                   n.tokens.includes(selectedToken.symbol)
-                ).map((network) => {
+                ).map((network: any) => {
                   const active = selectedNetwork.chainId === network.chainId;
                   return (
                     <Pressable

@@ -17,6 +17,7 @@ import { useState, useEffect } from "react";
 import * as ImagePicker from "expo-image-picker";
 import { useAuth, isBiometricEnabled, setBiometricEnabled } from "../../src/stores/auth";
 import { useBiometricAuth } from "../../src/hooks/useBiometricAuth";
+import { getLockTimeout, setLockTimeout, LOCK_TIMEOUT_OPTIONS, LockTimeout } from "../../src/hooks/useAppLock";
 import { useToast } from "../../src/components/Toast";
 import { usePhonePrivacy, maskPhone } from "../../src/utils/privacy";
 import { useLocale } from "../../src/hooks/useLocale";
@@ -127,9 +128,11 @@ function MenuItem({ icon, label, subtitle, onPress, danger, iconBg, iconColor, t
   );
 }
 
-const AVATAR_COLORS = ["#10B981", "#F59E0B", "#3B82F6", "#8B5CF6", "#EC4899", "#EF4444", "#6366F1", "#14B8A6"];
+const AVATAR_COLORS = ["#10B981", "#3B82F6", "#8B5CF6", "#EC4899", "#6366F1", "#14B8A6", "#F59E0B", "#EF4444"];
+const ADMIN_GOLD = "#D4AF37";
 
-function getAvatarColor(identifier: string): string {
+function getAvatarColor(identifier: string, isAdmin?: boolean): string {
+  if (isAdmin) return ADMIN_GOLD;
   let hash = 0;
   for (let i = 0; i < identifier.length; i++) hash = identifier.charCodeAt(i) + ((hash << 5) - hash);
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
@@ -349,6 +352,8 @@ export default function ProfileScreen() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showLanguagePicker, setShowLanguagePicker] = useState(false);
   const [biometricOn, setBiometricOn] = useState(false);
+  const [lockTimeout, setLockTimeoutState] = useState<LockTimeout>(0);
+  const [showLockPicker, setShowLockPicker] = useState(false);
   const toast = useToast();
   const biometric = useBiometricAuth();
   const { locale, setLocale, t } = useLocale();
@@ -426,7 +431,16 @@ export default function ProfileScreen() {
 
   useEffect(() => {
     isBiometricEnabled().then(setBiometricOn);
+    getLockTimeout().then(setLockTimeoutState);
   }, []);
+
+  const handleLockTimeoutChange = async (value: LockTimeout) => {
+    await setLockTimeout(value);
+    setLockTimeoutState(value);
+    setShowLockPicker(false);
+    const option = LOCK_TIMEOUT_OPTIONS.find((o) => o.value === value);
+    toast.success("Updated", `App lock: ${option?.label || "Immediately"}`);
+  };
 
   const handleVerifyIdentity = () => {
     router.push("/settings/kyc" as any);
@@ -532,7 +546,8 @@ export default function ProfileScreen() {
 
   // ── Avatar component (shared between layouts) ──
   const avatarIdentifier = user?.id?.toString() || user?.phone || "user";
-  const avatarBgColor = getAvatarColor(avatarIdentifier);
+  const isAdmin = user?.is_staff || user?.is_superuser;
+  const avatarBgColor = getAvatarColor(avatarIdentifier, isAdmin);
   const initials = getInitials(user?.full_name);
 
   const renderAvatar = (size: number) => (
@@ -1030,6 +1045,59 @@ export default function ProfileScreen() {
             />
           )}
         </View>
+        {/* Lock Timeout — only show if biometric is enabled */}
+        {biometricOn && (
+          <>
+            <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 76 }} />
+            <MenuItem
+              icon="timer-outline"
+              label="App Lock Timeout"
+              subtitle={LOCK_TIMEOUT_OPTIONS.find((o) => o.value === lockTimeout)?.label || "Immediately"}
+              onPress={() => setShowLockPicker(!showLockPicker)}
+              iconBg={colors.info + "20"}
+              iconColor={colors.info}
+              tc={tc}
+              ts={ts}
+            />
+            {showLockPicker && (
+              <View style={{ paddingHorizontal: 18, paddingBottom: 12, gap: 4 }}>
+                {LOCK_TIMEOUT_OPTIONS.map((option) => (
+                  <Pressable
+                    key={option.value}
+                    onPress={() => handleLockTimeoutChange(option.value)}
+                    style={({ pressed }: any) => ({
+                      flexDirection: "row",
+                      alignItems: "center",
+                      paddingVertical: 10,
+                      paddingHorizontal: 14,
+                      borderRadius: 10,
+                      backgroundColor: lockTimeout === option.value
+                        ? colors.primary[500] + "20"
+                        : "transparent",
+                      opacity: pressed ? 0.7 : 1,
+                    })}
+                  >
+                    <Ionicons
+                      name={lockTimeout === option.value ? "radio-button-on" : "radio-button-off"}
+                      size={18}
+                      color={lockTimeout === option.value ? colors.primary[400] : tc.textMuted}
+                      style={{ marginRight: 10 }}
+                    />
+                    <Text
+                      style={{
+                        color: lockTimeout === option.value ? tc.textPrimary : tc.textSecondary,
+                        fontSize: 14,
+                        fontFamily: lockTimeout === option.value ? "DMSans_600SemiBold" : "DMSans_400Regular",
+                      }}
+                    >
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+          </>
+        )}
       </View>
     </>
   );
@@ -1297,7 +1365,7 @@ export default function ProfileScreen() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
-          paddingBottom: Platform.OS === "android" ? 80 : 40,
+          paddingBottom: Platform.OS === "android" ? 100 : 48,
           ...(isDesktop
             ? { paddingHorizontal: 24 }
             : {}),
