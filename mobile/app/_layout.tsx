@@ -48,7 +48,7 @@ const queryClient = new QueryClient({
 });
 
 function RootNavigator() {
-  const { user, loading, bootstrap } = useAuth();
+  const { user, loading, bootstrap, logout } = useAuth();
   const segments = useSegments();
   const router = useRouter();
   const [appReady, setAppReady] = useState(false);
@@ -195,7 +195,16 @@ function RootNavigator() {
     return (
       <View style={{ flex: 1, backgroundColor: tc.dark.bg }}>
         <StatusBar style={isDark ? "light" : "dark"} />
-        <AppLockScreen onUnlock={unlock} userPhone={user?.phone} />
+        <AppLockScreen
+          onUnlock={unlock}
+          userPhone={user?.phone}
+          onForgotPin={() => {
+            // Force logout and redirect to forgot-pin
+            unlock(); // Remove lock screen
+            logout(); // Clear tokens
+            setTimeout(() => router.replace("/auth/forgot-pin" as any), 100);
+          }}
+        />
       </View>
     );
   }

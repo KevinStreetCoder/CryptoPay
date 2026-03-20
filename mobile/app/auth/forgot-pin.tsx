@@ -22,7 +22,7 @@ import { useThemeMode } from "../../src/stores/theme";
 import { BRAND_LOGOS } from "../../src/constants/logos";
 import { api } from "../../src/api/client";
 
-type Step = "phone" | "otp" | "new-pin" | "confirm-pin" | "success";
+type Step = "phone" | "otp" | "totp" | "new-pin" | "confirm-pin" | "success";
 
 function KenyaFlag() {
   return (
@@ -51,6 +51,8 @@ export default function ForgotPINScreen() {
   const [pinError, setPinError] = useState(false);
   const [newPin, setNewPin] = useState("");
   const [useEmail, setUseEmail] = useState(false);
+  const [totpRequired, setTotpRequired] = useState(false);
+  const [pendingOtp, setPendingOtp] = useState("");
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
@@ -101,22 +103,39 @@ export default function ForgotPINScreen() {
     }
   };
 
-  const handleVerifyOTP = async (otp: string) => {
+  const handleVerifyOTP = async (otp: string, totpCode?: string) => {
     setLoading(true);
     try {
-      const res = await api.post("/auth/forgot-pin/verify/", {
-        phone: normalizedPhone(),
-        otp,
-      });
-      setResetToken(res.data.reset_token);
-      toast.success("Verified", "Enter your new PIN");
-      animateTransition("new-pin");
+      const payload: any = { phone: normalizedPhone(), otp };
+      if (totpCode) payload.totp_code = totpCode;
+
+      const res = await api.post("/auth/forgot-pin/verify/", payload);
+
+      if (res.data.reset_token) {
+        setResetToken(res.data.reset_token);
+        toast.success("Verified", "Enter your new PIN");
+        animateTransition("new-pin");
+      }
     } catch (err: any) {
-      const msg = err?.response?.data?.error || "Invalid or expired code";
-      toast.error("Verification Failed", msg);
+      const data = err?.response?.data;
+      // Backend requires TOTP — show TOTP step
+      if (data?.totp_required && !totpCode) {
+        setPendingOtp(otp);
+        setTotpRequired(true);
+        animateTransition("totp");
+        toast.info("2FA Required", data.message || "Enter your authenticator code");
+      } else {
+        const msg = data?.error || "Invalid or expired code";
+        toast.error("Verification Failed", msg);
+      }
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleTOTPVerify = async (totpCode: string) => {
+    // Re-submit the OTP verification with the TOTP code
+    await handleVerifyOTP(pendingOtp, totpCode);
   };
 
   const handleNewPin = (pin: string) => {
@@ -159,9 +178,12 @@ export default function ForgotPINScreen() {
     otp: {
       icon: "shield-checkmark-outline",
       title: "Verify your identity",
-      subtitle: useEmail
-        ? "Enter the 6-digit code sent to your email."
-        : "Enter the 6-digit code sent to your phone.",
+      subtitle: "Enter the 6-digit code sent to your phone or email.",
+    },
+    totp: {
+      icon: "key-outline",
+      title: "2-Factor Authentication",
+      subtitle: "Enter the code from your authenticator app.",
     },
     "new-pin": {
       icon: "lock-closed-outline",
@@ -429,6 +451,20 @@ export default function ForgotPINScreen() {
             </View>
           )}
 
+          {step === "totp" && (
+            <View>
+              <OTPInput
+                length={6}
+                onComplete={handleTOTPVerify}
+                loading={loading}
+                icon="key-outline"
+                iconColor="#8B5CF6"
+                title="Authenticator Code"
+                subtitle="This account has 2-factor authentication enabled. Enter the code from your authenticator app, or a backup code."
+              />
+            </View>
+          )}
+
           {step === "new-pin" && (
             <View style={{ marginTop: 8 }}>
               <PinInput
@@ -505,8 +541,10 @@ export default function ForgotPINScreen() {
                 router.back();
               } else if (step === "otp") {
                 animateTransition("phone");
-              } else if (step === "new-pin") {
+              } else if (step === "totp") {
                 animateTransition("otp");
+              } else if (step === "new-pin") {
+                animateTransition(totpRequired ? "totp" : "otp");
               } else if (step === "confirm-pin") {
                 setNewPin("");
                 setPinError(false);

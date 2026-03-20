@@ -12,9 +12,10 @@ const isWeb = Platform.OS === "web";
 interface AppLockScreenProps {
   onUnlock: () => void;
   userPhone?: string;
+  onForgotPin?: () => void;
 }
 
-export function AppLockScreen({ onUnlock, userPhone }: AppLockScreenProps) {
+export function AppLockScreen({ onUnlock, userPhone, onForgotPin }: AppLockScreenProps) {
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
   const { authenticate, biometricType, isAvailable } = useBiometricAuth();
@@ -268,6 +269,31 @@ export function AppLockScreen({ onUnlock, userPhone }: AppLockScreenProps) {
             >
               Incorrect PIN. Try again.
             </Text>
+          )}
+
+          {/* Forgot PIN link */}
+          {onForgotPin && (
+            <Pressable
+              onPress={onForgotPin}
+              style={({ pressed }: any) => ({
+                paddingVertical: 10,
+                marginTop: 8,
+                opacity: pressed ? 0.6 : 1,
+              })}
+              accessibilityRole="link"
+              accessibilityLabel="Forgot PIN"
+            >
+              <Text
+                style={{
+                  color: tc.textMuted,
+                  fontSize: 13,
+                  fontFamily: "DMSans_500Medium",
+                  textAlign: "center",
+                }}
+              >
+                Forgot PIN?
+              </Text>
+            </Pressable>
           )}
 
           {/* Switch to biometric if available */}
