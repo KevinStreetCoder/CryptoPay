@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from "react";
-import { View, Text, TextInput, Pressable, Platform, useWindowDimensions } from "react-native";
+import { View, Text, TextInput, Pressable, Platform, useWindowDimensions, Keyboard } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, getThemeColors } from "../constants/theme";
 import { useThemeMode } from "../stores/theme";
@@ -72,6 +72,9 @@ export function OTPInput({
 
     const fullCode = newCode.join("");
     if (fullCode.length === length && !newCode.includes("")) {
+      if (Platform.OS !== "web") {
+        Keyboard.dismiss();
+      }
       onComplete(fullCode);
     }
   };

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { View, TextInput, Pressable, Platform, useWindowDimensions } from "react-native";
+import { View, TextInput, Pressable, Platform, useWindowDimensions, Keyboard } from "react-native";
 import * as Haptics from "expo-haptics";
 import { getThemeColors } from "../constants/theme";
 import { useThemeMode } from "../stores/theme";
@@ -53,6 +53,7 @@ export function PinInput({ length = 6, onComplete, error, testID }: PinInputProp
     if (cleaned.length === length) {
       if (Platform.OS !== "web") {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        Keyboard.dismiss();
       }
       onComplete(cleaned);
     }

@@ -12,6 +12,7 @@ import {
   useWindowDimensions,
   Image,
   InteractionManager,
+  Keyboard,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -313,6 +314,7 @@ export default function RegisterScreen() {
   };
 
   const handlePinComplete = async (pinValue: string) => {
+    if (Platform.OS !== "web") Keyboard.dismiss();
     setPin(pinValue);
     setLoading(true);
     try {
