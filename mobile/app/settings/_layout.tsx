@@ -30,6 +30,7 @@ export default function SettingsLayout() {
       <Stack.Screen name="admin-users" />
       <Stack.Screen name="admin-user-detail" />
       <Stack.Screen name="currency" />
+      <Stack.Screen name="price-alerts" />
     </Stack>
   );
 }

@@ -59,6 +59,9 @@ channels==4.2.0
 channels-redis==4.2.1
 daphne==4.1.2
 
+# AWS KMS
+boto3==1.35.0
+
 # Production
 gunicorn==23.0.0
 whitenoise==6.8.2

@@ -7,12 +7,15 @@ The core flow:
 3. Backend verifies PIN, checks idempotency, runs the payment saga
 """
 
+import csv
+import io
 import logging
 from decimal import Decimal
 
 from django.conf import settings as app_settings
 from django.core.cache import cache
 from django.db import IntegrityError
+from django.http import HttpResponse
 from rest_framework import status
 from rest_framework.generics import ListAPIView
 from rest_framework.permissions import IsAuthenticated
@@ -1288,6 +1291,116 @@ class CircuitBreakerStatusView(APIView):
         if xff:
             return xff.split(",")[0].strip()
         return request.META.get("REMOTE_ADDR", "0.0.0.0")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Transaction CSV Export
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class ExportRateThrottle(UserRateThrottle):
+    """Limit CSV exports to 5 per hour per user."""
+    rate = "5/hour"
+
+
+class TransactionExportView(APIView):
+    """Export user transactions as a CSV file.
+
+    GET /api/v1/payments/transactions/export/?date_from=2025-01-01&date_to=2025-12-31&type=paybill
+    Max 1000 rows per export.
+    """
+
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ExportRateThrottle]
+
+    def get(self, request):
+        user = request.user
+        date_from = request.query_params.get("date_from", "")
+        date_to = request.query_params.get("date_to", "")
+        type_filter = request.query_params.get("type", "")
+
+        qs = Transaction.objects.filter(user=user)
+
+        if type_filter:
+            type_map = {
+                "deposit": ["DEPOSIT", "KES_DEPOSIT", "KES_DEPOSIT_C2B"],
+                "paybill": ["PAYBILL_PAYMENT"],
+                "till": ["TILL_PAYMENT"],
+                "send": ["SEND_MPESA"],
+                "buy": ["BUY"],
+                "withdrawal": ["WITHDRAWAL"],
+            }
+            allowed_types = type_map.get(type_filter, [type_filter.upper()])
+            qs = qs.filter(type__in=allowed_types)
+        if date_from:
+            qs = qs.filter(created_at__date__gte=date_from)
+        if date_to:
+            qs = qs.filter(created_at__date__lte=date_to)
+
+        qs = qs.order_by("-created_at")[:1000]
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow([
+            "Date",
+            "Type",
+            "Status",
+            "From Currency",
+            "From Amount",
+            "To Currency",
+            "To Amount",
+            "Rate",
+            "Fee",
+            "M-Pesa Receipt",
+            "Reference",
+        ])
+
+        type_labels = {
+            "PAYBILL_PAYMENT": "Pay Bill",
+            "TILL_PAYMENT": "Buy Goods",
+            "SEND_MPESA": "Send M-Pesa",
+            "DEPOSIT": "Deposit",
+            "KES_DEPOSIT": "KES Deposit",
+            "KES_DEPOSIT_C2B": "KES Deposit (C2B)",
+            "WITHDRAWAL": "Withdrawal",
+            "BUY": "Buy Crypto",
+            "SELL": "Sell Crypto",
+            "FEE": "Fee",
+            "INTERNAL_TRANSFER": "Internal Transfer",
+        }
+
+        for tx in qs:
+            reference = tx.mpesa_paybill or tx.mpesa_till or tx.mpesa_phone or tx.tx_hash or ""
+            writer.writerow([
+                tx.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                type_labels.get(tx.type, tx.type),
+                tx.status.capitalize(),
+                tx.source_currency,
+                str(tx.source_amount or "0"),
+                tx.dest_currency,
+                str(tx.dest_amount or "0"),
+                str(tx.exchange_rate or ""),
+                str(tx.fee_amount),
+                tx.mpesa_receipt,
+                reference,
+            ])
+
+        response = HttpResponse(
+            output.getvalue(),
+            content_type="text/csv",
+        )
+        response["Content-Disposition"] = 'attachment; filename="cryptopay_transactions.csv"'
+
+        # Ensure CORS headers are present for web downloads
+        origin = request.META.get("HTTP_ORIGIN", "")
+        if origin:
+            from django.conf import settings as _cors_settings
+            allowed = getattr(_cors_settings, "CORS_ALLOWED_ORIGINS", [])
+            if origin in allowed or getattr(_cors_settings, "CORS_ALLOW_ALL_ORIGINS", False):
+                response["Access-Control-Allow-Origin"] = origin
+                response["Access-Control-Allow-Credentials"] = "true"
+
+        return response
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

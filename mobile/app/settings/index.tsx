@@ -595,6 +595,16 @@ export default function SettingsScreen() {
           route: "/settings/notifications",
         },
         {
+          key: "price-alerts",
+          icon: "trending-up-outline",
+          iconColor: colors.accent,
+          iconBg: colors.accent + "18",
+          label: t("settings.priceAlerts"),
+          description: t("settings.priceAlertsDesc"),
+          route: "/settings/price-alerts",
+          badge: "NEW",
+        },
+        {
           key: "language",
           icon: "language-outline",
           iconColor: "#60A5FA",

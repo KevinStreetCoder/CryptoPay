@@ -18,6 +18,7 @@ urlpatterns = [
     path("withdraw/fee/", views.WithdrawFeeView.as_view(), name="withdraw-fee"),
     path("history/", views.TransactionHistoryView.as_view(), name="history"),
     path("activity/", views.UnifiedActivityView.as_view(), name="activity"),
+    path("transactions/export/", views.TransactionExportView.as_view(), name="transaction-export"),
     path("<uuid:transaction_id>/receipt/", views.TransactionReceiptView.as_view(), name="transaction-receipt"),
     path("circuit-breaker/", views.CircuitBreakerStatusView.as_view(), name="circuit-breaker"),
     # Saved Paybills
