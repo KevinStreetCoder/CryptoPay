@@ -16,7 +16,7 @@ class RateAlertSerializer(serializers.ModelSerializer):
             "created_at",
         )
         read_only_fields = (
-            "id", "triggered_at", "trigger_count", "last_triggered_at",
+            "id", "is_active", "triggered_at", "trigger_count", "last_triggered_at",
             "last_scheduled_at", "created_at",
         )
 
