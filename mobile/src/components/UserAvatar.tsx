@@ -145,15 +145,16 @@ export function UserAvatar({
           backgroundColor: "rgba(255,255,255,0.12)",
         }}
       />
-      {/* Initials */}
+      {/* Initials — use fontWeight as primary (always works on Android) */}
       <Text
         style={{
           color: "#FFFFFF",
           fontSize,
-          fontFamily: "DMSans_700Bold",
+          fontWeight: "800",
           letterSpacing: initials.length > 1 ? 1.5 : 0.5,
           includeFontPadding: false,
           textAlignVertical: "center",
+          lineHeight: fontSize * 1.1,
         }}
       >
         {initials}
