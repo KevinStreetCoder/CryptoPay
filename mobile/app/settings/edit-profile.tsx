@@ -32,7 +32,7 @@ type Step = "edit" | "pin" | "email-verify" | "success";
 
 function resolveAvatarUrl(url: string | null | undefined): string | null {
   if (!url) return null;
-  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:")) return url;
   const base = config.apiUrl.replace(/\/api\/v1\/?$/, "");
   return `${base}${url.startsWith("/") ? "" : "/"}${url}`;
 }

@@ -34,7 +34,7 @@ const isWeb = Platform.OS === "web";
 /** Resolve avatar URL — handles relative paths from Django */
 function resolveAvatarUrl(url: string | null | undefined): string | null {
   if (!url) return null;
-  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:")) return url;
   // Relative path from Django (e.g., /media/avatars/xxx.jpg)
   const base = config.apiUrl.replace(/\/api\/v1\/?$/, "");
   return `${base}${url.startsWith("/") ? "" : "/"}${url}`;
