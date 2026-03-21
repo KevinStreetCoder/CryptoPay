@@ -237,7 +237,7 @@ class UserSerializer(serializers.ModelSerializer):
         fields = (
             "id", "phone", "email", "full_name", "avatar_url",
             "kyc_tier", "kyc_status", "email_verified", "totp_enabled",
-            "is_staff", "is_superuser", "is_suspended", "suspension_reason", "created_at",
+            "is_staff", "is_suspended", "created_at",
         )
         read_only_fields = fields
 
