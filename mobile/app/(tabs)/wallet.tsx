@@ -694,6 +694,14 @@ export default function WalletScreen() {
       route: "/payment/till" as const,
       color: "#8B5CF6",
     },
+    {
+      id: "withdraw",
+      icon: "arrow-up-circle-outline" as const,
+      label: "Withdraw Crypto",
+      subtitle: "Send crypto to external wallet",
+      route: "/payment/withdraw" as const,
+      color: "#EF4444",
+    },
   ];
 
   const renderSendPicker = () => (
