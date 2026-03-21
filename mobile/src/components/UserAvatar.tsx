@@ -1,15 +1,16 @@
 /**
  * UserAvatar — works on ALL platforms including BlueStacks.
  *
- * For uploaded photos: expo-image with onError fallback.
+ * Uses React Native's built-in Image for uploaded photos (not expo-image).
+ * RN Image uses OkHttp directly — more reliable on Android emulators
+ * where expo-image's Glide backend fails with SSL/CDN images.
+ *
  * Fallback: Ionicons person silhouette on a colored background.
- * Ionicons renders as a font glyph — proven to work on BlueStacks
- * where RN Text and SVG Text fail inside colored containers.
  */
 
 import { useState } from "react";
-import { View, Platform } from "react-native";
-import { Image } from "expo-image";
+import { View, Image, Platform } from "react-native";
+import { Image as ExpoImage } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { config } from "../constants/config";
 
@@ -56,27 +57,38 @@ export function UserAvatar({
   const resolved = resolveUrl(avatarUrl);
   const [imgFailed, setImgFailed] = useState(false);
 
-  // If uploaded photo URL exists AND hasn't failed to load, show it
   if (resolved && !imgFailed) {
+    const imgStyle = {
+      width: size, height: size, borderRadius: r,
+      borderWidth, borderColor: `#${borderHex}99`,
+      backgroundColor: `#${bgHex}`,
+    };
+
+    // Web: use expo-image (better caching + transitions)
+    // Android/iOS: use RN built-in Image (OkHttp — more reliable with CDN/SSL)
+    if (Platform.OS === "web") {
+      return (
+        <ExpoImage
+          source={{ uri: resolved }}
+          style={imgStyle}
+          contentFit="cover"
+          cachePolicy="memory"
+          transition={150}
+          onError={() => setImgFailed(true)}
+        />
+      );
+    }
+
     return (
       <Image
         source={{ uri: resolved }}
-        style={{
-          width: size, height: size, borderRadius: r,
-          borderWidth, borderColor: `#${borderHex}99`,
-          backgroundColor: `#${bgHex}`,
-        }}
-        contentFit="cover"
-        cachePolicy={Platform.OS === "web" ? "memory" : "memory-disk"}
-        transition={150}
+        style={{ ...imgStyle, resizeMode: "cover" } as any}
         onError={() => setImgFailed(true)}
       />
     );
   }
 
-  // Fallback: colored background + Ionicons person silhouette.
-  // Ionicons is a font glyph rendered by the native font engine —
-  // works on BlueStacks where RN Text and SVG Text fail.
+  // Fallback: colored background + Ionicons person silhouette
   const iconSize = Math.round(size * 0.52);
 
   return (
