@@ -1,6 +1,6 @@
 # CryptoPay — Production Readiness Checklist
 
-**Last updated:** 2026-03-11
+**Last updated:** 2026-03-21
 
 Items needed before the app can go live with real users and money.
 
@@ -11,31 +11,53 @@ Items needed before the app can go live with real users and money.
 ### API Keys & Credentials
 | # | Item | Status | How to Get |
 |---|------|--------|------------|
-| 1 | **Africa's Talking SMS API** | ❌ Need API key | Sign up at africastalking.com → sandbox free, production KES 0.8/SMS. Set `AT_API_KEY`, `AT_USERNAME`, `AT_SENDER_ID` in `.env` |
-| 2 | **M-Pesa Daraja Production Keys** | ❌ Need production app | Apply at developer.safaricom.co.ke → business shortcode required. Switch from sandbox. Set `MPESA_*` env vars |
-| 3 | **Smile Identity (KYC)** | ❌ Need API key | Sign up at usesmileid.com → KES 50-100 per ID check. Set `SMILE_API_KEY`, `SMILE_PARTNER_ID` |
-| 4 | **CoinGecko Pro API** | ⚠️ Optional | Free tier: 10K calls/month. Pro ($129/mo) for 500K calls. Set `COINGECKO_API_KEY`. Currently using free tier with CryptoCompare fallback. |
-| 5 | **Wallet Master Seed** | ❌ Must generate | Run: `python -c "import secrets; print(secrets.token_hex(32))"`. Set `WALLET_MASTER_SEED` env var. **CRITICAL: Back up securely, never commit!** |
-| 6 | **Django SECRET_KEY** | ❌ Must generate | Run: `python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"`. Set in `.env` |
-| 7 | **Google OAuth Client IDs** | ❌ Need config | Google Cloud Console → OAuth 2.0 credentials. Set in `mobile/app.json` extra config |
+| 1 | **SMS Provider (eSMS Africa)** | ✅ Configured | eSMS Africa API key + account ID set in production .env |
+| 2 | **SasaPay Payment API** | ✅ Live (sandbox) | Sandbox tested with real STK Push. Merchant 600980. Needs production merchant account after business registration |
+| 3 | **M-Pesa Daraja (alternative)** | ⚠️ Sandbox only | Sandbox keys configured. Production needs business shortcode + VASP license |
+| 4 | **Smile Identity (KYC)** | ❌ Need API key | Sign up at usesmileid.com → KES 50-100 per ID check |
+| 5 | **CoinGecko API** | ✅ Configured | Demo key `CG-zJVrCfUcwus46BCr8TXJff9M` set. Attribution required. |
+| 6 | **Wallet Master Seed** | ✅ Generated | BIP-39 mnemonic generated, HD keys derived for all 5 chains. Stored in VPS .env |
+| 7 | **Django SECRET_KEY** | ✅ Set | Production SECRET_KEY configured in .env |
+| 8 | **Google OAuth Client IDs** | ✅ Configured | Web + Android client IDs set in app.json |
+| 9 | **Resend Email** | ✅ Working | Emails sending (receipts, rate alerts, notifications) |
+| 10 | **Expo/EAS Token** | ✅ Configured | Local WSL APK builds working |
+| 11 | **TronGrid API** | ✅ Configured | Key set, Tron listener running |
+| 12 | **Alchemy (ETH + SOL)** | ✅ Configured | RPC URLs set for both chains |
+| 13 | **BlockCypher (BTC)** | ❌ Signup pending | Email verification not received. Need for BTC monitoring |
+| 14 | **Yellow Card API** | ❌ Need keys | Contact paymentsapi@yellowcard.io for B2B rebalancing |
 
 ### Infrastructure
 | # | Item | Status | Details |
 |---|------|--------|---------|
-| 8 | **VPS / Cloud Server** | ❌ Need to provision | Recommended: Nairobi-based VPS (Lineserve/Truehost) or AWS Africa (Cape Town). Min 4GB RAM, 2 vCPU |
-| 9 | **Domain Name** | ❌ Need to register | `cryptopay.co.ke` or similar. Register at kenic.or.ke or via Namecheap |
-| 10 | **SSL Certificate** | ❌ Auto with deploy | Certbot + Let's Encrypt. Already configured in nginx.conf, just needs domain |
-| 11 | **Production Database** | ❌ Need to provision | PostgreSQL 16. Can use managed (AWS RDS, DigitalOcean) or self-hosted Docker |
-| 12 | **Email Provider** | ⚠️ Configured | Resend SMTP configured in production.py (3K emails/month free). Set `RESEND_API_KEY` |
+| 8 | **VPS / Cloud Server** | ✅ Live | Contabo VPS 173.249.4.109, Docker Compose, nginx + Cloudflare |
+| 9 | **Domain Name** | ✅ Live | cpay.co.ke with Cloudflare CDN + SSL |
+| 10 | **SSL Certificate** | ✅ Live | Cloudflare handles TLS termination |
+| 11 | **Production Database** | ✅ Running | PostgreSQL 16 in Docker, 6 days uptime |
+| 12 | **Email Provider** | ✅ Working | Resend SMTP — receipts, alerts, notifications all sending |
+| 13 | **Monitoring** | ✅ Running | Prometheus + Grafana + exporters (Redis, Postgres, Node) |
 
 ### Legal & Compliance
 | # | Item | Status | Details |
 |---|------|--------|---------|
-| 13 | **VASP Registration** | ❌ Required | Kenya VASP Act 2025 requires registration with CMA. Apply at cma.or.ke |
-| 14 | **Business Registration** | ❌ Required | Register company with Kenya BRS. Need for M-Pesa business shortcode |
-| 15 | **Privacy Policy** | ⚠️ Draft needed | Required for app stores and VASP compliance. Currently placeholder URLs |
-| 16 | **Terms of Service** | ⚠️ Draft needed | Required for app stores. Cover crypto risks, liability, KYC requirements |
-| 17 | **Excise Duty Compliance** | ✅ Implemented | 10% excise on platform fees per VASP Act. Already in backend + frontend |
+| 13 | **VASP Registration** | ⚠️ Comment period | Draft regulations published. Public comment deadline **April 10, 2026** |
+| 14 | **Business Registration** | ⚠️ Pending | Submitted on eCitizen, awaiting approval |
+| 15 | **Privacy Policy** | ❌ Draft needed | Required for app stores and VASP compliance |
+| 16 | **Terms of Service** | ❌ Draft needed | Required for app stores |
+| 17 | **Excise Duty Compliance** | ✅ Implemented | 10% excise on platform fees per VASP Act |
+
+### Security (Penetration Tested 2026-03-21)
+| # | Item | Status | Details |
+|---|------|--------|---------|
+| 18 | **Auth bypass protection** | ✅ Passed | All endpoints return 401 without valid JWT |
+| 19 | **JWT tampering** | ✅ Passed | Forged tokens rejected |
+| 20 | **SQL injection** | ✅ Passed | Django ORM parameterized queries |
+| 21 | **XSS** | ✅ Passed | Input validation returns 400 |
+| 22 | **CORS** | ✅ Passed | Evil origins blocked |
+| 23 | **IDOR** | ✅ Passed | Cross-user data access blocked |
+| 24 | **Rate limiting** | ✅ Working | Login throttled at 24 requests |
+| 25 | **Sensitive data masking** | ✅ Done | Phone numbers, M-Pesa receipts masked in API |
+| 26 | **Swagger disabled** | ✅ Done | OpenAPI/docs return 404 in production |
+| 27 | **TOTP secret hidden** | ✅ Done | Only provisioning_uri returned, not raw secret |
 
 ---
 
