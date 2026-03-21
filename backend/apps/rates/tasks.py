@@ -30,13 +30,22 @@ def refresh_rates():
         logger.error(f"Failed to refresh USD/KES: {e}")
 
     # Broadcast updated rates to all WebSocket clients
-    _broadcast_current_rates()
+    try:
+        _broadcast_current_rates()
+    except Exception as e:
+        logger.warning(f"Broadcast failed (non-fatal): {e}")
 
     # Check rate alerts against new rates
-    _check_rate_alerts()
+    try:
+        _check_rate_alerts()
+    except Exception as e:
+        logger.error(f"Rate alert check failed: {e}")
 
     # Check scheduled routine alerts
-    _check_scheduled_alerts()
+    try:
+        _check_scheduled_alerts()
+    except Exception as e:
+        logger.warning(f"Scheduled alert check failed: {e}")
 
 
 def _broadcast_current_rates():
@@ -182,7 +191,7 @@ def _send_rate_alert_notification(notif):
                 django_settings.DEFAULT_FROM_EMAIL,
                 [user.email],
                 html_message=html_content,
-                fail_silently=True,
+                fail_silently=False,
             )
     except Exception as e:
         logger.warning(f"Failed to send rate alert email to {user}: {e}")
