@@ -45,11 +45,9 @@ class Wallet(models.Model):
                 condition=models.Q(locked_balance__gte=0),
                 name="wallet_locked_balance_non_negative",
             ),
-            models.UniqueConstraint(
-                fields=["deposit_address"],
-                name="wallet_deposit_address_unique",
-                condition=models.Q(deposit_address__gt=""),
-            ),
+            # Note: deposit_address is NOT unique — EVM chains (ETH, USDC/Polygon)
+            # share the same address (BIP-44 coin type 60). Multiple wallets for
+            # the same user can have the same deposit address.
         ]
 
     def __str__(self):
