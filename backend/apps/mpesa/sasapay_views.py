@@ -134,17 +134,23 @@ def _process_successful_payment(data: dict, ref: str, trans_code: str, amount: s
     tx.completed_at = timezone.now()
     tx.save(update_fields=["mpesa_receipt", "status", "completed_at", "updated_at"])
 
-    # For Buy Crypto (DEPOSIT type with STK Push): credit the crypto wallet
-    if tx.type == "DEPOSIT" and tx.saga_data and tx.saga_data.get("quote"):
+    # For Buy Crypto (BUY type with STK Push): credit the crypto wallet
+    if tx.type in ("BUY", "DEPOSIT") and tx.saga_data and tx.saga_data.get("quote"):
         try:
             from decimal import Decimal
+            from apps.wallets.models import Wallet
             from apps.wallets.services import WalletService
             quote = tx.saga_data["quote"]
             crypto_currency = quote.get("currency", tx.dest_currency)
             crypto_amount = Decimal(str(quote.get("crypto_amount", tx.dest_amount or "0")))
             if crypto_amount > 0:
-                WalletService.credit(tx.user, crypto_currency, crypto_amount,
-                                     f"Buy crypto via SasaPay STK Push {trans_code}")
+                wallet = Wallet.objects.get(user=tx.user, currency=crypto_currency)
+                WalletService.credit(
+                    wallet_id=wallet.id,
+                    amount=crypto_amount,
+                    transaction_id=str(tx.id),
+                    description=f"Buy crypto via SasaPay {trans_code}",
+                )
                 logger.info(f"Credited {crypto_amount} {crypto_currency} to {tx.user.phone}")
         except Exception as e:
             logger.error(f"Failed to credit crypto for tx {tx.id}: {e}")
