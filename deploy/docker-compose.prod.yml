@@ -112,7 +112,7 @@ services:
     command: >
       celery -A config worker
         -l warning
-        -Q default,blockchain,notifications
+        -Q celery,default,blockchain,notifications
         --concurrency=4
         --max-tasks-per-child=1000
     volumes:
