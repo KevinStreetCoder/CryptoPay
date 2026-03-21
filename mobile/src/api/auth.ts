@@ -198,4 +198,8 @@ export const authApi = {
   // Transaction receipt
   downloadReceipt: (transactionId: string) =>
     api.get(`/payments/${transactionId}/receipt/`, { responseType: "blob" }),
+
+  // Email PDF receipt to user
+  emailReceipt: (transactionId: string) =>
+    api.get(`/payments/${transactionId}/receipt/`, { params: { send_email: "true" } }),
 };

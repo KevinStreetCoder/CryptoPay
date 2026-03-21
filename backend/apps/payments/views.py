@@ -1214,6 +1214,28 @@ class TransactionReceiptView(APIView):
             receipt_path = generate_receipt_pdf(tx)
 
         if receipt_path and os.path.exists(receipt_path):
+            # If send_email param is set, email the PDF to the user
+            send_email = request.query_params.get("send_email") == "true"
+            if send_email and request.user.email:
+                try:
+                    from django.core.mail import EmailMessage
+
+                    email = EmailMessage(
+                        subject=f"CryptoPay Receipt — {tx.type.replace('_', ' ').title()} ({str(tx.id)[:8].upper()})",
+                        body=f"Hi {request.user.full_name or 'there'},\n\nPlease find your transaction receipt attached.\n\nTransaction: {tx.type.replace('_', ' ').title()}\nDate: {tx.created_at.strftime('%d %B %Y, %H:%M')}\nRef: {str(tx.id)[:8].upper()}\n\nThank you for using CryptoPay.\n\n— CryptoPay Team",
+                        from_email=None,  # uses DEFAULT_FROM_EMAIL
+                        to=[request.user.email],
+                    )
+                    email.attach_file(receipt_path, "application/pdf")
+                    email.send(fail_silently=False)
+                    return Response({"message": f"Receipt sent to {request.user.email}"})
+                except Exception as e:
+                    logger.warning(f"Failed to email receipt: {e}")
+                    return Response(
+                        {"error": "Could not send receipt email. Try again."},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    )
+
             response = FileResponse(
                 open(receipt_path, "rb"),
                 content_type="application/pdf",
