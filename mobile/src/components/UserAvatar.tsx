@@ -6,10 +6,11 @@
  * avatar — SVG text is rendered by the native SVG engine, not RN's Text
  * component, so it bypasses the bug entirely. No network needed.
  *
- * For uploaded photos: expo-image with native caching.
+ * For uploaded photos: expo-image with onError fallback to SVG.
  * For generated avatars: react-native-svg with initial letter.
  */
 
+import { useState } from "react";
 import { View } from "react-native";
 import { Image } from "expo-image";
 import Svg, { Rect, Text as SvgText } from "react-native-svg";
@@ -61,8 +62,10 @@ export function UserAvatar({
   const borderHex = admin ? ADMIN_GOLD : kycTier >= 1 ? "10B981" : bgHex;
   const r = borderRadius ?? Math.round(size * 0.32);
   const resolved = resolveUrl(avatarUrl);
+  const [imgFailed, setImgFailed] = useState(false);
 
-  if (resolved) {
+  // If uploaded photo URL exists AND hasn't failed to load, show it
+  if (resolved && !imgFailed) {
     return (
       <Image
         source={{ uri: resolved }}
@@ -74,6 +77,7 @@ export function UserAvatar({
         contentFit="cover"
         cachePolicy="memory-disk"
         transition={150}
+        onError={() => setImgFailed(true)}
       />
     );
   }
@@ -83,7 +87,6 @@ export function UserAvatar({
   // so it bypasses the BlueStacks invisible-text bug. Fully offline.
   const letter = getInitial(fullName);
   const fontSize = Math.round(size * 0.42);
-  const rx = Math.round(size * 0.15);
 
   return (
     <View style={{
@@ -92,12 +95,12 @@ export function UserAvatar({
       overflow: "hidden",
     }}>
       <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        <Rect width={size} height={size} rx={rx} fill={`#${bgHex}`} />
+        <Rect width={size} height={size} fill={`#${bgHex}`} />
         <SvgText
           x={size / 2}
-          y={size * 0.54}
+          y={size * 0.55}
           textAnchor="middle"
-          alignmentBaseline="central"
+          dominantBaseline="central"
           fill="white"
           fontSize={fontSize}
           fontWeight="700"

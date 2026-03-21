@@ -227,6 +227,7 @@ export default function TransactionDetailScreen() {
 
   const isCryptoDeposit = tx?.type === "CRYPTO_DEPOSIT";
   const isWithdrawal = tx?.type === "WITHDRAWAL";
+  const isSwap = tx?.type === "SWAP";
   const isMpesaPayment = tx?.type === "PAYBILL_PAYMENT" || tx?.type === "TILL_PAYMENT" || tx?.type === "SEND_MPESA";
 
   const renderDetailRow = (label: string, value: string | undefined | null, iconName?: string, options?: { copiable?: boolean; onPress?: () => void }) => {
@@ -632,25 +633,23 @@ export default function TransactionDetailScreen() {
               </View>
             </View>
 
-            {/* KES Amount (prominent) */}
+            {/* Amount (prominent) */}
             <View style={{ alignItems: "center", marginTop: 20, marginBottom: 28 }}>
-              <Text
-                style={{
-                  color: "#FFFFFF",
-                  fontSize: 40,
-                  fontFamily: "DMSans_700Bold",
-                  letterSpacing: -1,
-                }}
-              >
-                KSh{" "}
-                {getTxKesAmount(tx).toLocaleString("en-KE", {
-                  minimumFractionDigits: 0,
-                  maximumFractionDigits: 2,
-                })}
-              </Text>
-              {(() => {
-                const crypto = getTxCrypto(tx);
-                return crypto.currency && crypto.amount ? (
+              {isSwap ? (
+                <>
+                  <Text
+                    style={{
+                      color: "#FFFFFF",
+                      fontSize: 40,
+                      fontFamily: "DMSans_700Bold",
+                      letterSpacing: -1,
+                    }}
+                  >
+                    {parseFloat(tx.source_amount || "0").toFixed(
+                      CURRENCIES[tx.source_currency as CurrencyCode]?.decimals ?? 2
+                    )}{" "}
+                    {tx.source_currency}
+                  </Text>
                   <Text
                     style={{
                       color: tc.textSecondary,
@@ -659,13 +658,48 @@ export default function TransactionDetailScreen() {
                       marginTop: 6,
                     }}
                   >
-                    {parseFloat(crypto.amount).toFixed(
-                      CURRENCIES[crypto.currency as CurrencyCode]?.decimals ?? 4
+                    → {parseFloat(tx.dest_amount || "0").toFixed(
+                      CURRENCIES[tx.dest_currency as CurrencyCode]?.decimals ?? 4
                     )}{" "}
-                    {crypto.currency}
+                    {tx.dest_currency}
                   </Text>
-                ) : null;
-              })()}
+                </>
+              ) : (
+                <>
+                  <Text
+                    style={{
+                      color: "#FFFFFF",
+                      fontSize: 40,
+                      fontFamily: "DMSans_700Bold",
+                      letterSpacing: -1,
+                    }}
+                  >
+                    KSh{" "}
+                    {getTxKesAmount(tx).toLocaleString("en-KE", {
+                      minimumFractionDigits: 0,
+                      maximumFractionDigits: 2,
+                    })}
+                  </Text>
+                  {(() => {
+                    const crypto = getTxCrypto(tx);
+                    return crypto.currency && crypto.amount ? (
+                      <Text
+                        style={{
+                          color: tc.textSecondary,
+                          fontSize: 15,
+                          fontFamily: "DMSans_500Medium",
+                          marginTop: 6,
+                        }}
+                      >
+                        {parseFloat(crypto.amount).toFixed(
+                          CURRENCIES[crypto.currency as CurrencyCode]?.decimals ?? 4
+                        )}{" "}
+                        {crypto.currency}
+                      </Text>
+                    ) : null;
+                  })()}
+                </>
+              )}
             </View>
 
             {/* Status Timeline */}
@@ -749,7 +783,9 @@ export default function TransactionDetailScreen() {
               {tx.exchange_rate
                 ? renderDetailRow(
                     "Exchange Rate",
-                    `1 ${getTxCrypto(tx).currency} = KSh ${parseFloat(tx.exchange_rate).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                    isSwap
+                      ? `1 ${tx.source_currency} = ${parseFloat(tx.exchange_rate).toFixed(6)} ${tx.dest_currency}`
+                      : `1 ${getTxCrypto(tx).currency} = KSh ${parseFloat(tx.exchange_rate).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
                     "trending-up-outline"
                   )
                 : null}
@@ -757,7 +793,9 @@ export default function TransactionDetailScreen() {
               {tx.fee_amount && parseFloat(tx.fee_amount) > 0
                 ? renderDetailRow(
                     "Fee",
-                    `KSh ${parseFloat(tx.fee_amount).toLocaleString("en-KE", { minimumFractionDigits: 2 })}`,
+                    isSwap
+                      ? `${parseFloat(tx.fee_amount).toFixed(CURRENCIES[tx.source_currency as CurrencyCode]?.decimals ?? 4)} ${tx.source_currency}`
+                      : `KSh ${parseFloat(tx.fee_amount).toLocaleString("en-KE", { minimumFractionDigits: 2 })}`,
                     "pricetag-outline"
                   )
                 : null}
