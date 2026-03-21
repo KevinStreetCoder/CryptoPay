@@ -149,6 +149,17 @@ docker compose -f "$COMPOSE_FILE" exec -T web python manage.py migrate --noinput
 log "Collecting static files..."
 docker compose -f "$COMPOSE_FILE" exec -T web python manage.py collectstatic --noinput
 
+# Deploy frontend (Expo web build) if dist/ exists
+if [ -d "$APP_DIR/mobile/dist" ] && [ -f "$APP_DIR/mobile/dist/index.html" ]; then
+    log "Deploying Expo web frontend..."
+    WEB_ROOT="/var/www/cpay"
+    mkdir -p "$WEB_ROOT"
+    rsync -a --delete "$APP_DIR/mobile/dist/" "$WEB_ROOT/"
+    chown -R www-data:www-data "$WEB_ROOT"
+    chmod -R 755 "$WEB_ROOT"
+    log "Frontend deployed to $WEB_ROOT"
+fi
+
 # Test & reload host nginx
 log "Testing nginx configuration..."
 if nginx -t 2>/dev/null; then
@@ -157,6 +168,37 @@ if nginx -t 2>/dev/null; then
 else
     error "Nginx config test failed! Check: nginx -t"
     exit 1
+fi
+
+# Purge Cloudflare cache (if credentials are available)
+CF_ENV_FILE="$APP_DIR/deploy/.env.cloudflare"
+if [ -f "$CF_ENV_FILE" ]; then
+    # shellcheck disable=SC1090
+    source "$CF_ENV_FILE"
+    if [ -n "${CLOUDFLARE_ZONE_ID:-}" ] && [ -n "${CLOUDFLARE_API_TOKEN:-}" ]; then
+        log "Purging Cloudflare cache..."
+        DOMAIN="${CLOUDFLARE_DOMAIN:-cpay.co.ke}"
+        # Purge index.html specifically
+        curl -s -X POST \
+            "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/purge_cache" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data "{\"files\":[\"https://${DOMAIN}/\",\"https://${DOMAIN}/index.html\"]}" \
+            > /dev/null 2>&1
+        # Full purge to clear stale JS bundles
+        curl -s -X POST \
+            "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/purge_cache" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data '{"purge_everything":true}' \
+            > /dev/null 2>&1
+        log "Cloudflare cache purged."
+    else
+        warn "Cloudflare credentials incomplete in $CF_ENV_FILE — skipping cache purge."
+    fi
+else
+    warn "No deploy/.env.cloudflare found — skipping Cloudflare cache purge."
+    warn "Create it from deploy/.env.cloudflare.example for automatic cache busting."
 fi
 
 # ── Verification ────────────────────────────────────────────

@@ -135,7 +135,12 @@ CACHES = {
         "LOCATION": REDIS_URL,
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            "CONNECTION_POOL_KWARGS": {"max_connections": 50},
+            "SOCKET_CONNECT_TIMEOUT": 5,
+            "SOCKET_TIMEOUT": 5,
+            "RETRY_ON_TIMEOUT": True,
         },
+        "KEY_PREFIX": "cpay",
     }
 }
 
@@ -149,6 +154,10 @@ CELERY_TIMEZONE = "Africa/Nairobi"
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 CELERY_WORKER_SEND_TASK_EVENTS = True
 CELERY_TASK_SEND_SENT_EVENT = True
+CELERY_TASK_SOFT_TIME_LIMIT = 300  # 5 min soft limit (raises SoftTimeLimitExceeded)
+CELERY_TASK_TIME_LIMIT = 600  # 10 min hard kill
+CELERY_TASK_REJECT_ON_WORKER_LOST = True  # re-queue tasks if worker crashes
+CELERY_WORKER_HIJACK_ROOT_LOGGER = False
 CELERY_BEAT_SCHEDULE = {
     "refresh-exchange-rates": {
         "task": "apps.rates.tasks.refresh_rates",
@@ -284,6 +293,9 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "anon": "30/minute",
         "user": "120/minute",
+        "payment": "10/hour",
+        "swap": "10/hour",
+        "export": "5/hour",
     },
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }

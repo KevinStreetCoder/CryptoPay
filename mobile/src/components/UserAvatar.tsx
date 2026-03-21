@@ -1,15 +1,18 @@
 /**
  * UserAvatar — works on ALL platforms including BlueStacks.
  *
- * BlueStacks has a bug where Text inside a View with backgroundColor
- * renders invisible. This component uses expo-image with a placeimg
- * URL to generate the avatar server-side, bypassing the bug entirely.
+ * BlueStacks has a bug where RN Text inside a View with backgroundColor
+ * renders invisible. This component uses react-native-svg for the fallback
+ * avatar — SVG text is rendered by the native SVG engine, not RN's Text
+ * component, so it bypasses the bug entirely. No network needed.
  *
  * For uploaded photos: expo-image with native caching.
- * For generated avatars: placehold.co service (returns PNG with text).
+ * For generated avatars: react-native-svg with initial letter.
  */
 
+import { View } from "react-native";
 import { Image } from "expo-image";
+import Svg, { Rect, Text as SvgText } from "react-native-svg";
 import { config } from "../constants/config";
 
 const COLORS = ["10B981", "3B82F6", "8B5CF6", "EC4899", "6366F1", "14B8A6", "F59E0B", "EF4444"];
@@ -75,24 +78,34 @@ export function UserAvatar({
     );
   }
 
-  // Generate avatar as image via placehold.co (free, no auth, returns PNG)
-  // This renders the letter SERVER-SIDE as a PNG image — bypasses all
-  // Android/BlueStacks Text rendering bugs.
+  // Fallback: render initial via react-native-svg.
+  // SVG text uses the native SVG engine, NOT React Native's Text component,
+  // so it bypasses the BlueStacks invisible-text bug. Fully offline.
   const letter = getInitial(fullName);
-  const imgSize = Math.round(size * 2); // 2x for retina
-  const avatarImgUrl = `https://placehold.co/${imgSize}x${imgSize}/${bgHex}/FFFFFF/png?text=${letter}&font=roboto`;
+  const fontSize = Math.round(size * 0.42);
+  const rx = Math.round(size * 0.15);
 
   return (
-    <Image
-      source={{ uri: avatarImgUrl }}
-      style={{
-        width: size, height: size, borderRadius: r,
-        borderWidth, borderColor: `#${borderHex}99`,
-        backgroundColor: `#${bgHex}`,
-      }}
-      contentFit="cover"
-      cachePolicy="memory-disk"
-      transition={200}
-    />
+    <View style={{
+      width: size, height: size, borderRadius: r,
+      borderWidth, borderColor: `#${borderHex}99`,
+      overflow: "hidden",
+    }}>
+      <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <Rect width={size} height={size} rx={rx} fill={`#${bgHex}`} />
+        <SvgText
+          x={size / 2}
+          y={size * 0.54}
+          textAnchor="middle"
+          alignmentBaseline="central"
+          fill="white"
+          fontSize={fontSize}
+          fontWeight="700"
+          fontFamily="sans-serif"
+        >
+          {letter}
+        </SvgText>
+      </Svg>
+    </View>
   );
 }
