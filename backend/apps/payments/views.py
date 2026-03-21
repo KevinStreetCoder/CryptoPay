@@ -549,11 +549,12 @@ class BuyCryptoView(APIView):
                 return Response(TransactionSerializer(existing).data)
             return Response({"error": "Duplicate payment"}, status=status.HTTP_409_CONFLICT)
 
-        # Initiate M-Pesa STK Push
-        from apps.mpesa.client import MpesaClient, MpesaError
+        # Initiate M-Pesa STK Push (via Daraja or SasaPay)
+        from apps.mpesa.provider import get_payment_client
+        from apps.mpesa.client import MpesaError
 
         try:
-            client = MpesaClient()
+            client = get_payment_client()
             kes_amount = int(Decimal(quote["total_kes"]).quantize(Decimal("1")))
             mpesa_phone = data["phone"].replace("+", "")
 
