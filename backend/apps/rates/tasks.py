@@ -77,6 +77,7 @@ def _check_rate_alerts():
 
         usd_kes = cache.get("rate:forex:usd:kes")
         if not usd_kes:
+            logger.warning("Rate alerts skipped: USD/KES rate not in cache (rate refresh may have failed)")
             return
 
         usd_kes = Decimal(str(usd_kes))
