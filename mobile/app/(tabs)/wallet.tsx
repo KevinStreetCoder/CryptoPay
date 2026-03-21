@@ -1638,7 +1638,7 @@ export default function WalletScreen() {
                     alignItems: "center",
                   }}
                 >
-                <View style={{ flexDirection: "row", gap: 16 }}>
+                <View style={{ flexDirection: "row", gap: 12, flexWrap: "wrap" }}>
                   {/* Receive Button */}
                   <Pressable
                     onPress={handleReceiveGeneric}
@@ -1654,8 +1654,9 @@ export default function WalletScreen() {
                         : colors.primary[500],
                       borderRadius: 14,
                       height: 48,
-                      width: 170,
-                      maxWidth: 180,
+                      flex: 1,
+                      minWidth: 130,
+                      maxWidth: 200,
                       gap: 8,
                       opacity: pressed ? 0.85 : generatingAddress ? 0.7 : 1,
                       transform: [{ scale: pressed ? 0.97 : 1 }],
@@ -1703,8 +1704,9 @@ export default function WalletScreen() {
                         : (isDark ? tc.dark.elevated : "#0F172A"),
                       borderRadius: 14,
                       height: 48,
-                      width: 170,
-                      maxWidth: 180,
+                      flex: 1,
+                      minWidth: 130,
+                      maxWidth: 200,
                       gap: 8,
                       borderWidth: 1,
                       borderColor: hoverSend
