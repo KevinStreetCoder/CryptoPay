@@ -96,13 +96,31 @@ def _process_successful_payment(data: dict, ref: str, trans_code: str, amount: s
     """Process a successful B2B or B2C payment."""
     from apps.payments.models import Transaction
 
-    if not ref:
-        return
+    # Find transaction by multiple strategies
+    tx = None
 
-    # Find transaction by idempotency key or reference
-    tx = Transaction.objects.filter(idempotency_key=ref).first()
+    # Strategy 1: by idempotency_key (B2B/B2C payments)
+    if ref:
+        tx = Transaction.objects.filter(idempotency_key=ref).first()
+
+    # Strategy 2: by CheckoutRequestID in saga_data (STK Push)
     if not tx:
-        logger.warning(f"SasaPay callback: no matching transaction for ref={ref}")
+        checkout_id = data.get("CheckoutRequestID", data.get("checkoutRequestId", ""))
+        if checkout_id:
+            tx = Transaction.objects.filter(
+                saga_data__mpesa_checkout_request_id=checkout_id
+            ).first()
+
+    # Strategy 3: by MerchantRequestID in saga_data
+    if not tx:
+        merchant_req_id = data.get("MerchantRequestID", "")
+        if merchant_req_id:
+            tx = Transaction.objects.filter(
+                saga_data__mpesa_merchant_request_id=merchant_req_id
+            ).first()
+
+    if not tx:
+        logger.warning(f"SasaPay callback: no matching transaction. ref={ref}, data keys={list(data.keys())}")
         return
 
     if tx.status == Transaction.Status.COMPLETED:
@@ -115,6 +133,21 @@ def _process_successful_payment(data: dict, ref: str, trans_code: str, amount: s
     tx.status = Transaction.Status.COMPLETED
     tx.completed_at = timezone.now()
     tx.save(update_fields=["mpesa_receipt", "status", "completed_at", "updated_at"])
+
+    # For Buy Crypto (DEPOSIT type with STK Push): credit the crypto wallet
+    if tx.type == "DEPOSIT" and tx.saga_data and tx.saga_data.get("quote"):
+        try:
+            from decimal import Decimal
+            from apps.wallets.services import WalletService
+            quote = tx.saga_data["quote"]
+            crypto_currency = quote.get("currency", tx.dest_currency)
+            crypto_amount = Decimal(str(quote.get("crypto_amount", tx.dest_amount or "0")))
+            if crypto_amount > 0:
+                WalletService.credit(tx.user, crypto_currency, crypto_amount,
+                                     f"Buy crypto via SasaPay STK Push {trans_code}")
+                logger.info(f"Credited {crypto_amount} {crypto_currency} to {tx.user.phone}")
+        except Exception as e:
+            logger.error(f"Failed to credit crypto for tx {tx.id}: {e}")
 
     # Send notifications
     try:
