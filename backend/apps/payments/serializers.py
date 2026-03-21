@@ -224,6 +224,8 @@ class SavedPaybillSerializer(serializers.ModelSerializer):
 
 class TransactionSerializer(serializers.ModelSerializer):
     destination_address = serializers.SerializerMethodField()
+    mpesa_phone = serializers.SerializerMethodField()
+    mpesa_receipt = serializers.SerializerMethodField()
 
     class Meta:
         model = Transaction
@@ -242,3 +244,17 @@ class TransactionSerializer(serializers.ModelSerializer):
 
     def get_destination_address(self, obj):
         return obj.saga_data.get("destination_address", "") if obj.saga_data else ""
+
+    def get_mpesa_phone(self, obj):
+        """Mask phone number: +254701****23"""
+        phone = obj.mpesa_phone
+        if not phone or len(phone) < 6:
+            return phone
+        return phone[:6] + "****" + phone[-2:]
+
+    def get_mpesa_receipt(self, obj):
+        """Mask M-Pesa receipt: show only last 6 chars"""
+        receipt = obj.mpesa_receipt
+        if not receipt or len(receipt) < 6:
+            return receipt
+        return "****" + receipt[-6:]

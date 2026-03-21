@@ -29,13 +29,7 @@ def api_root(request):
     })
 
 
-def trigger_error(request):
-    """Sentry test endpoint — triggers a ZeroDivisionError to verify error tracking."""
-    _ = 1 / 0
-
-
 urlpatterns = [
-    path("sentry-debug/", trigger_error),
     path("", api_root, name="api-root"),
     path("", include("django_prometheus.urls")),
     path("health/", HealthCheckView.as_view(), name="health-check"),

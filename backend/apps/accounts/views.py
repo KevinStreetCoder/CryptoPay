@@ -1371,7 +1371,6 @@ class SetupTOTPView(APIView):
         uri = get_totp_uri(secret, user.phone)
 
         return Response({
-            "secret": secret,
             "provisioning_uri": uri,
             "already_enabled": user.totp_enabled,
         })
@@ -1474,7 +1473,6 @@ class TOTPSetupView(APIView):
         uri = get_totp_uri(secret, user.phone)
 
         return Response({
-            "secret": secret,
             "uri": uri,
             "qr_data": uri,  # The URI itself is the QR code payload
             "already_enabled": user.totp_enabled,

@@ -36,6 +36,11 @@ STORAGES = {
     },
 }
 
+# --- Disable browsable API and Swagger in production ---
+REST_FRAMEWORK["DEFAULT_RENDERER_CLASSES"] = (  # noqa: F405
+    "rest_framework.renderers.JSONRenderer",
+)
+
 # --- Database connection pooling ---
 DATABASES["default"]["CONN_MAX_AGE"] = env.int("DB_CONN_MAX_AGE", default=600)  # noqa: F405
 DATABASES["default"]["CONN_HEALTH_CHECKS"] = True  # noqa: F405
