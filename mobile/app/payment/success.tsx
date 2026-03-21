@@ -275,8 +275,8 @@ export default function PaymentSuccessScreen() {
         toast.success("Downloading", "Receipt opened in new tab");
       } else {
         const { authApi } = require("../../src/api/auth");
-        const response = await authApi.downloadReceipt(txId);
-        toast.success("Generated", "Receipt is being prepared");
+        await authApi.emailReceipt(txId);
+        toast.success("Sent", "Receipt sent to your email");
       }
     } catch {
       toast.error("Error", "Could not download receipt. Try again later.");
