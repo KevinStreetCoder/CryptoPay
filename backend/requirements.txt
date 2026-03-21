@@ -36,6 +36,8 @@ httpx==0.28.1
 tronpy==0.5.0
 web3==7.6.0
 bitcoinlib==0.7.7
+solders==0.21.0
+bit==0.8.0
 mnemonic==0.21
 
 # Rate feeds

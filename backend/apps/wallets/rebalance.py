@@ -151,17 +151,146 @@ class YellowCardAPIProvider(ExchangeProvider):
 
     BASE_URL = getattr(settings, "YELLOW_CARD_BASE_URL", "https://sandbox.api.yellowcard.io/business")
 
+    def _get_headers(self, method: str, path: str, body: str = "") -> dict:
+        """Generate HMAC authentication headers for Yellow Card API."""
+        import hashlib
+        import hmac as hmac_mod
+        import time
+
+        api_key = getattr(settings, "YELLOW_CARD_API_KEY", "")
+        secret_key = getattr(settings, "YELLOW_CARD_SECRET_KEY", "")
+        if not api_key or not secret_key:
+            raise RuntimeError("YELLOW_CARD_API_KEY and YELLOW_CARD_SECRET_KEY must be set.")
+
+        timestamp = str(int(time.time()))
+        message = f"{timestamp}{path}{method}{body}"
+        signature = hmac_mod.new(
+            secret_key.encode(), message.encode(), hashlib.sha256
+        ).hexdigest()
+
+        return {
+            "Authorization": f"YcHmacV1 {api_key}:{signature}",
+            "X-YC-Timestamp": timestamp,
+            "Content-Type": "application/json",
+        }
+
+    def _request(self, method: str, path: str, json_data: dict = None, retries: int = 3) -> dict:
+        """Make authenticated request to Yellow Card API with retry/backoff."""
+        import requests
+        import json
+        import time
+
+        url = f"{self.BASE_URL}{path}"
+        body = json.dumps(json_data, separators=(",", ":")) if json_data else ""
+
+        last_error = None
+        for attempt in range(retries):
+            try:
+                headers = self._get_headers(method.upper(), path, body)
+                resp = requests.request(
+                    method, url, headers=headers,
+                    data=body if json_data else None, timeout=30,
+                )
+                if resp.status_code == 429:
+                    wait = min(2 ** attempt * 5, 60)
+                    logger.warning(f"Yellow Card rate limited, waiting {wait}s (attempt {attempt + 1})")
+                    time.sleep(wait)
+                    continue
+                resp.raise_for_status()
+                return resp.json()
+            except requests.exceptions.ConnectionError as e:
+                last_error = e
+                if attempt < retries - 1:
+                    time.sleep(2 ** attempt)
+                    continue
+            except requests.exceptions.HTTPError as e:
+                if e.response is not None and e.response.status_code >= 500:
+                    last_error = e
+                    if attempt < retries - 1:
+                        time.sleep(2 ** attempt)
+                        continue
+                raise RuntimeError(
+                    f"Yellow Card API error ({method} {path}): "
+                    f"HTTP {e.response.status_code if e.response else '?'} — {e}"
+                ) from e
+
+        raise RuntimeError(f"Yellow Card API failed after {retries} retries: {last_error}")
+
     def get_sell_quote(self, currency: str, amount: Decimal) -> dict:
-        raise NotImplementedError(
-            "Yellow Card API not configured. Set YELLOW_CARD_API_KEY in env. "
-            "Using manual mode for now."
-        )
+        """Get USDT/KES sell rate from Yellow Card."""
+        data = self._request("GET", "/rates?currency=KES")
+        # Find the USDT rate
+        rate_info = None
+        for r in data.get("data", data if isinstance(data, list) else []):
+            if r.get("code") == currency or r.get("currency") == currency:
+                rate_info = r
+                break
+        if not rate_info:
+            raise RuntimeError(f"No Yellow Card rate found for {currency}/KES")
+
+        rate = Decimal(str(rate_info.get("sell", rate_info.get("rate", 0))))
+        kes_amount = amount * rate
+        return {
+            "rate": rate,
+            "kes_amount": kes_amount,
+            "currency": currency,
+            "amount": amount,
+        }
 
     def execute_sell(self, order: RebalanceOrder) -> dict:
-        raise NotImplementedError("Yellow Card API not configured.")
+        """Create an off-ramp payment on Yellow Card."""
+        # Get the M-Pesa channel
+        channels = self._request("GET", "/channels?country=KE")
+        mpesa_channel = None
+        for ch in channels.get("data", channels if isinstance(channels, list) else []):
+            if "mpesa" in ch.get("name", "").lower() or ch.get("code") == "mpesa":
+                mpesa_channel = ch
+                break
+        if not mpesa_channel:
+            raise RuntimeError("No M-Pesa channel found on Yellow Card for Kenya")
+
+        # Get merchant's settlement account
+        settlement_account = getattr(settings, "YELLOW_CARD_SETTLEMENT_PHONE", "")
+        if not settlement_account:
+            raise RuntimeError("YELLOW_CARD_SETTLEMENT_PHONE must be set for KES settlement.")
+
+        payment = self._request("POST", "/payments", {
+            "channelId": mpesa_channel.get("id"),
+            "amount": str(order.sell_amount),
+            "currency": order.sell_currency,
+            "country": "KE",
+            "reason": f"CryptoPay rebalance {str(order.id)[:8]}",
+            "destination": {
+                "accountNumber": settlement_account,
+                "accountType": "mobile_money",
+                "networkCode": "63902",
+            },
+            "customerName": "CryptoPay Ltd",
+        })
+
+        return {
+            "exchange_order_id": payment.get("id", ""),
+            "status": payment.get("status", "pending"),
+            "reference": payment.get("reference", ""),
+        }
 
     def check_settlement(self, order: RebalanceOrder) -> dict:
-        raise NotImplementedError("Yellow Card API not configured.")
+        """Check if a Yellow Card payment has settled."""
+        if not order.exchange_order_id:
+            return {"settled": False}
+
+        payment = self._request("GET", f"/payments/{order.exchange_order_id}")
+        status = payment.get("status", "").lower()
+        settled = status in ("completed", "settled", "done")
+        actual_rate = Decimal(str(payment.get("rate", 0))) if payment.get("rate") else None
+
+        return {
+            "settled": settled,
+            "status": status,
+            "kes_received": Decimal(str(payment.get("amountSettled", 0))) if settled else None,
+            "actual_rate": actual_rate,
+            "reference": payment.get("reference", order.exchange_reference or ""),
+        }
 
 
 # ── Rebalancing Orchestrator ─────────────────────────────────────────────────

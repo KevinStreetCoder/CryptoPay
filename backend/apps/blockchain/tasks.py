@@ -604,6 +604,10 @@ def _broadcast_to_chain(network: str, currency: str, destination_address: str, a
         return _broadcast_tron_trc20(destination_address, amount)
     elif network in ("ethereum", "polygon"):
         return _broadcast_evm(network, currency, destination_address, amount)
+    elif network == "solana":
+        return _broadcast_solana(currency, destination_address, amount)
+    elif network == "bitcoin":
+        return _broadcast_bitcoin(destination_address, amount)
     else:
         raise NotImplementedError(
             f"Withdrawal broadcast not yet implemented for {currency} on {network}. "
@@ -766,6 +770,240 @@ def _broadcast_evm(network: str, currency: str, destination_address: str, amount
     except ImportError:
         raise RuntimeError(
             "web3 is required for EVM withdrawals. Install with: pip install web3"
+        )
+
+
+def _broadcast_solana(currency: str, destination_address: str, amount: Decimal) -> str:
+    """
+    Broadcast a Solana withdrawal (native SOL or SPL token).
+
+    For SOL: native system transfer.
+    For USDT/USDC on Solana: SPL token transfer.
+
+    Requires SOL_HOT_WALLET_PRIVATE_KEY (base58 or JSON array format).
+    """
+    from django.conf import settings as django_settings
+
+    private_key = getattr(django_settings, "SOL_HOT_WALLET_PRIVATE_KEY", "")
+    rpc_url = getattr(django_settings, "SOL_RPC_URL", "https://api.mainnet-beta.solana.com")
+
+    if not private_key:
+        raise RuntimeError(
+            "SOL_HOT_WALLET_PRIVATE_KEY not configured. "
+            "Cannot broadcast Solana withdrawals."
+        )
+
+    try:
+        from solders.keypair import Keypair
+        from solders.pubkey import Pubkey
+        from solders.system_program import TransferParams, transfer
+        from solders.transaction import Transaction as SolTransaction
+        from solders.message import Message
+        from solders.hash import Hash as SolHash
+        import requests as req
+        import json as json_mod
+
+        # Parse private key (support both base58 and JSON byte array)
+        if private_key.startswith("["):
+            key_bytes = bytes(json_mod.loads(private_key))
+            sender = Keypair.from_bytes(key_bytes)
+        else:
+            sender = Keypair.from_base58_string(private_key)
+
+        recipient = Pubkey.from_string(destination_address)
+
+        if currency == "SOL":
+            # Native SOL transfer (9 decimals = lamports)
+            lamports = int(amount * Decimal("1000000000"))
+
+            # Get recent blockhash
+            resp = req.post(rpc_url, json={
+                "jsonrpc": "2.0", "id": 1,
+                "method": "getLatestBlockhash",
+                "params": [{"commitment": "finalized"}],
+            }, timeout=30).json()
+            blockhash_str = resp["result"]["value"]["blockhash"]
+            blockhash = SolHash.from_string(blockhash_str)
+
+            # Build and sign transaction
+            ix = transfer(TransferParams(
+                from_pubkey=sender.pubkey(),
+                to_pubkey=recipient,
+                lamports=lamports,
+            ))
+            msg = Message.new_with_blockhash([ix], sender.pubkey(), blockhash)
+            tx = SolTransaction.new([sender], msg, blockhash)
+
+            # Send transaction
+            tx_bytes = bytes(tx)
+            import base64 as b64
+            tx_b64 = b64.b64encode(tx_bytes).decode("ascii")
+            send_resp = req.post(rpc_url, json={
+                "jsonrpc": "2.0", "id": 1,
+                "method": "sendTransaction",
+                "params": [tx_b64, {"encoding": "base64", "preflightCommitment": "confirmed"}],
+            }, timeout=30).json()
+
+            if "error" in send_resp:
+                raise RuntimeError(f"Solana broadcast failed: {send_resp['error']}")
+
+            tx_hash = send_resp["result"]
+            logger.info(f"Solana SOL withdrawal broadcast: {tx_hash}")
+            return tx_hash
+
+        else:
+            # SPL token transfer (USDT/USDC on Solana)
+            # Uses raw instruction construction via solders (no separate spl-token lib needed)
+            from solders.instruction import Instruction, AccountMeta
+
+            SPL_TOKEN_PROGRAM = Pubkey.from_string("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
+            ASSOCIATED_TOKEN_PROGRAM = Pubkey.from_string("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL")
+
+            # Token mint addresses on Solana mainnet
+            SPL_MINTS = {
+                "USDT": Pubkey.from_string("Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"),
+                "USDC": Pubkey.from_string("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"),
+            }
+
+            mint = SPL_MINTS.get(currency)
+            if not mint:
+                raise RuntimeError(f"No SPL mint address for {currency} on Solana")
+
+            # Both USDT and USDC have 6 decimals on Solana
+            raw_amount = int(amount * Decimal("1000000"))
+
+            # Derive Associated Token Accounts (ATAs) for sender and recipient
+            def find_ata(owner: Pubkey, mint_addr: Pubkey) -> Pubkey:
+                seeds = [bytes(owner), bytes(SPL_TOKEN_PROGRAM), bytes(mint_addr)]
+                ata, _ = Pubkey.find_program_address(seeds, ASSOCIATED_TOKEN_PROGRAM)
+                return ata
+
+            sender_ata = find_ata(sender.pubkey(), mint)
+            recipient_ata = find_ata(recipient, mint)
+
+            # Check if recipient ATA exists; if not, create it
+            ata_check = req.post(rpc_url, json={
+                "jsonrpc": "2.0", "id": 1,
+                "method": "getAccountInfo",
+                "params": [str(recipient_ata), {"encoding": "base64"}],
+            }, timeout=30).json()
+
+            instructions = []
+
+            if not ata_check.get("result", {}).get("value"):
+                # Create Associated Token Account for recipient
+                create_ata_ix = Instruction(
+                    program_id=ASSOCIATED_TOKEN_PROGRAM,
+                    accounts=[
+                        AccountMeta(sender.pubkey(), is_signer=True, is_writable=True),
+                        AccountMeta(recipient_ata, is_signer=False, is_writable=True),
+                        AccountMeta(recipient, is_signer=False, is_writable=False),
+                        AccountMeta(mint, is_signer=False, is_writable=False),
+                        AccountMeta(Pubkey.from_string("11111111111111111111111111111111"), is_signer=False, is_writable=False),
+                        AccountMeta(SPL_TOKEN_PROGRAM, is_signer=False, is_writable=False),
+                    ],
+                    data=b"",
+                )
+                instructions.append(create_ata_ix)
+
+            # SPL Token transfer instruction (instruction index 3 = Transfer)
+            transfer_data = b"\x03" + raw_amount.to_bytes(8, "little")
+            transfer_ix = Instruction(
+                program_id=SPL_TOKEN_PROGRAM,
+                accounts=[
+                    AccountMeta(sender_ata, is_signer=False, is_writable=True),
+                    AccountMeta(recipient_ata, is_signer=False, is_writable=True),
+                    AccountMeta(sender.pubkey(), is_signer=True, is_writable=False),
+                ],
+                data=transfer_data,
+            )
+            instructions.append(transfer_ix)
+
+            # Get recent blockhash
+            resp = req.post(rpc_url, json={
+                "jsonrpc": "2.0", "id": 1,
+                "method": "getLatestBlockhash",
+                "params": [{"commitment": "finalized"}],
+            }, timeout=30).json()
+            blockhash = SolHash.from_string(resp["result"]["value"]["blockhash"])
+
+            # Build and sign transaction
+            msg = Message.new_with_blockhash(instructions, sender.pubkey(), blockhash)
+            tx = SolTransaction.new([sender], msg, blockhash)
+
+            # Send
+            tx_bytes = bytes(tx)
+            tx_b64 = b64.b64encode(tx_bytes).decode("ascii")
+            send_resp = req.post(rpc_url, json={
+                "jsonrpc": "2.0", "id": 1,
+                "method": "sendTransaction",
+                "params": [tx_b64, {"encoding": "base64", "preflightCommitment": "confirmed"}],
+            }, timeout=30).json()
+
+            if "error" in send_resp:
+                raise RuntimeError(f"Solana SPL broadcast failed: {send_resp['error']}")
+
+            tx_hash = send_resp["result"]
+            logger.info(f"Solana SPL {currency} withdrawal broadcast: {tx_hash}")
+            return tx_hash
+
+    except ImportError:
+        raise RuntimeError(
+            "solders is required for Solana withdrawals. Install with: pip install solders"
+        )
+
+
+def _broadcast_bitcoin(destination_address: str, amount: Decimal) -> str:
+    """
+    Broadcast a Bitcoin withdrawal using the bit library.
+
+    Supports P2WPKH (native segwit bech32), P2SH-P2WPKH, and legacy addresses.
+    Uses BlockCypher API for fee estimation and broadcast.
+
+    Requires BTC_HOT_WALLET_PRIVATE_KEY (WIF format).
+    """
+    from django.conf import settings as django_settings
+
+    private_key_wif = getattr(django_settings, "BTC_HOT_WALLET_PRIVATE_KEY", "")
+    btc_network = getattr(django_settings, "BTC_NETWORK", "testnet")
+
+    if not private_key_wif:
+        raise RuntimeError(
+            "BTC_HOT_WALLET_PRIVATE_KEY not configured (WIF format). "
+            "Cannot broadcast Bitcoin withdrawals."
+        )
+
+    try:
+        from bit import Key, PrivateKeyTestnet
+
+        # Use testnet key for non-mainnet
+        if btc_network == "mainnet":
+            key = Key(private_key_wif)
+        else:
+            key = PrivateKeyTestnet(private_key_wif)
+
+        # Convert BTC to satoshis (8 decimals)
+        satoshis = int(amount * Decimal("100000000"))
+
+        # Get current fee per byte from the network
+        balance = key.get_balance("satoshi")
+        if int(balance) < satoshis:
+            raise RuntimeError(
+                f"Insufficient BTC balance: have {balance} sat, need {satoshis} sat"
+            )
+
+        # Create and broadcast transaction
+        tx_hash = key.send(
+            [(destination_address, satoshis, "satoshi")],
+            fee="normal",
+        )
+
+        logger.info(f"Bitcoin withdrawal broadcast: {tx_hash}")
+        return tx_hash
+
+    except ImportError:
+        raise RuntimeError(
+            "bit is required for Bitcoin withdrawals. Install with: pip install bit"
         )
 
 
