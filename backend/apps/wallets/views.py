@@ -1,5 +1,6 @@
 import logging
 
+from django.db import IntegrityError
 from rest_framework import status
 from rest_framework.generics import ListAPIView
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
@@ -79,9 +80,26 @@ class GenerateDepositAddressView(APIView):
                 str(request.user.id), wallet.currency, index
             )
 
-            wallet.deposit_address = address
-            wallet.address_index = index
-            wallet.save(update_fields=["deposit_address", "address_index"])
+            try:
+                wallet.deposit_address = address
+                wallet.address_index = index
+                wallet.save(update_fields=["deposit_address", "address_index"])
+            except IntegrityError:
+                # EVM chains (ETH, USDC/Polygon) share the same address space.
+                # If another wallet already has this address, reuse it.
+                existing = Wallet.objects.filter(
+                    deposit_address=address, user=request.user
+                ).first()
+                if existing:
+                    wallet.deposit_address = address
+                    wallet.address_index = index
+                    # Remove the unique constraint violation by using update()
+                    Wallet.objects.filter(id=wallet.id).update(
+                        deposit_address=address, address_index=index
+                    )
+                    wallet.refresh_from_db()
+                else:
+                    raise
 
         logger.info(
             f"Generated deposit address for user {request.user.id}, "
