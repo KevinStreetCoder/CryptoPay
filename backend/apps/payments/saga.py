@@ -182,9 +182,9 @@ class PaymentSaga:
             self.complete(mpesa_receipt=f"DEV{short_id}")
             return
 
-        from apps.mpesa.client import MpesaClient
+        from apps.mpesa.provider import get_payment_client
 
-        client = MpesaClient()
+        client = get_payment_client()
 
         if self.tx.mpesa_paybill:
             result = client.b2b_payment(
@@ -229,10 +229,10 @@ class PaymentSaga:
         """Reverse Step 3: Request M-Pesa reversal if payment went through."""
         mpesa_receipt = self.tx.mpesa_receipt
         if mpesa_receipt:
-            from apps.mpesa.client import MpesaClient
+            from apps.mpesa.provider import get_payment_client
 
             try:
-                client = MpesaClient()
+                client = get_payment_client()
                 client.reversal(
                     transaction_id=mpesa_receipt,
                     amount=int(self.tx.dest_amount),
