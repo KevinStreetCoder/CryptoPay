@@ -336,11 +336,17 @@ def process_c2b_deposit(trans_id: str, amount_str: str, phone: str, bill_ref: st
 def poll_stk_status(checkout_request_id: str, transaction_id: str, attempt: int = 1):
     """
     Poll STK Push status when callback hasn't arrived within timeout.
-    Retries up to 3 times with 30s intervals.
+    For SasaPay: skip polling (callback handles completion).
+    For Daraja: poll up to 5 times with 30s intervals.
     """
     from django.utils import timezone
 
     from apps.payments.models import Transaction
+
+    # SasaPay uses callbacks, not polling — skip
+    if getattr(settings, "PAYMENT_PROVIDER", "daraja") == "sasapay":
+        logger.info(f"SasaPay mode: skipping STK poll for tx {transaction_id} (callback handles it)")
+        return
 
     from .client import MpesaClient
 
