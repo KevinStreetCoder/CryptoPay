@@ -1,19 +1,16 @@
 /**
  * UserAvatar — works on ALL platforms including BlueStacks.
  *
- * BlueStacks has a bug where RN Text inside a View with backgroundColor
- * renders invisible. This component uses react-native-svg for the fallback
- * avatar — SVG text is rendered by the native SVG engine, not RN's Text
- * component, so it bypasses the bug entirely. No network needed.
- *
- * For uploaded photos: expo-image with onError fallback to SVG.
- * For generated avatars: react-native-svg with initial letter.
+ * For uploaded photos: expo-image with onError fallback.
+ * Fallback: Ionicons person silhouette on a colored background.
+ * Ionicons renders as a font glyph — proven to work on BlueStacks
+ * where RN Text and SVG Text fail inside colored containers.
  */
 
 import { useState } from "react";
-import { View } from "react-native";
+import { View, Platform } from "react-native";
 import { Image } from "expo-image";
-import Svg, { Rect, Text as SvgText } from "react-native-svg";
+import { Ionicons } from "@expo/vector-icons";
 import { config } from "../constants/config";
 
 const COLORS = ["10B981", "3B82F6", "8B5CF6", "EC4899", "6366F1", "14B8A6", "F59E0B", "EF4444"];
@@ -24,11 +21,6 @@ function pickColorHex(id: string, admin?: boolean): string {
   let h = 0;
   for (let i = 0; i < id.length; i++) h = id.charCodeAt(i) + ((h << 5) - h);
   return COLORS[Math.abs(h) % COLORS.length];
-}
-
-function getInitial(name?: string): string {
-  if (name && name.trim()) return name.trim()[0].toUpperCase();
-  return "U";
 }
 
 function resolveUrl(url: string | null | undefined): string | null {
@@ -75,40 +67,28 @@ export function UserAvatar({
           backgroundColor: `#${bgHex}`,
         }}
         contentFit="cover"
-        cachePolicy="memory-disk"
+        cachePolicy={Platform.OS === "web" ? "memory" : "memory-disk"}
         transition={150}
         onError={() => setImgFailed(true)}
       />
     );
   }
 
-  // Fallback: render initial via react-native-svg.
-  // SVG text uses the native SVG engine, NOT React Native's Text component,
-  // so it bypasses the BlueStacks invisible-text bug. Fully offline.
-  const letter = getInitial(fullName);
-  const fontSize = Math.round(size * 0.42);
+  // Fallback: colored background + Ionicons person silhouette.
+  // Ionicons is a font glyph rendered by the native font engine —
+  // works on BlueStacks where RN Text and SVG Text fail.
+  const iconSize = Math.round(size * 0.52);
 
   return (
     <View style={{
       width: size, height: size, borderRadius: r,
       borderWidth, borderColor: `#${borderHex}99`,
+      backgroundColor: `#${bgHex}`,
+      alignItems: "center",
+      justifyContent: "center",
       overflow: "hidden",
     }}>
-      <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        <Rect width={size} height={size} fill={`#${bgHex}`} />
-        <SvgText
-          x={size / 2}
-          y={size * 0.55}
-          textAnchor="middle"
-          dominantBaseline="central"
-          fill="white"
-          fontSize={fontSize}
-          fontWeight="700"
-          fontFamily="sans-serif"
-        >
-          {letter}
-        </SvgText>
-      </Svg>
+      <Ionicons name="person" size={iconSize} color="rgba(255,255,255,0.9)" />
     </View>
   );
 }

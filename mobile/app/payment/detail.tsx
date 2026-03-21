@@ -794,7 +794,7 @@ export default function TransactionDetailScreen() {
                 ? renderDetailRow(
                     "Fee",
                     isSwap
-                      ? `${parseFloat(tx.fee_amount).toFixed(CURRENCIES[tx.source_currency as CurrencyCode]?.decimals ?? 4)} ${tx.source_currency}`
+                      ? `${parseFloat(tx.fee_amount).toFixed(Math.max(CURRENCIES[tx.source_currency as CurrencyCode]?.decimals ?? 4, 4))} ${tx.source_currency}`
                       : `KSh ${parseFloat(tx.fee_amount).toLocaleString("en-KE", { minimumFractionDigits: 2 })}`,
                     "pricetag-outline"
                   )
