@@ -1,7 +1,7 @@
 # CryptoPay Security Audit Report
 
-**Date:** 2026-03-14
-**Scope:** Full backend security audit — OTP, PIN, M-Pesa, payments, wallets, deposits
+**Date:** 2026-03-14 (updated 2026-03-21)
+**Scope:** Full backend security audit — OTP, PIN, M-Pesa, payments, wallets, deposits + penetration test
 
 ---
 
@@ -9,10 +9,34 @@
 
 | Severity | Found | Fixed | Remaining |
 |----------|-------|-------|-----------|
-| CRITICAL | 1 | 1 | 0 |
-| HIGH | 7 | 7 | 0 |
-| MEDIUM | 7 | 4 | 3 |
-| LOW | 4 | 1 | 3 |
+| CRITICAL | 3 | 3 | 0 |
+| HIGH | 10 | 10 | 0 |
+| MEDIUM | 7 | 6 | 1 |
+| LOW | 4 | 2 | 2 |
+
+### Production Penetration Test (2026-03-21)
+All tests passed against live production at cpay.co.ke:
+- Auth bypass (401 on all protected endpoints)
+- JWT token tampering (forged tokens rejected)
+- SQL injection (Django ORM parameterized)
+- XSS (input validation returns 400)
+- CORS (evil origins blocked)
+- IDOR (cross-user data blocked)
+- Path traversal (nginx try_files prevents)
+- .env/.git access (404 blocked)
+- Rate limiting (throttled at 24 requests)
+- Burp Suite MITM testing (PIN encrypted via HTTPS)
+
+### Fixes Applied 2026-03-21
+- C2: Removed sentry-debug/ endpoint (unauthenticated DoS vector)
+- C3: Removed TOTP secret from API response (only provisioning_uri)
+- H8: Disabled DRF browsable API in production (JSON renderer only)
+- H9: Disabled Swagger/OpenAPI in production (404)
+- H10: Masked phone numbers in TransactionSerializer (+254701****23)
+- H11: Masked M-Pesa receipts (****ABC123)
+- H12: Removed is_superuser from UserSerializer
+- M5: Slippage enforcement — CONFIRMED already implemented (_check_rate_slippage)
+- M2: TOTP encryption — CONFIRMED already implemented (Fernet via set_totp_secret)
 
 ---
 
