@@ -14,19 +14,7 @@ from apps.core.views import HealthCheckView
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def api_root(request):
-    return Response({
-        "name": "CryptoPay API",
-        "version": "1.0.0",
-        "endpoints": {
-            "auth": "/api/v1/auth/",
-            "wallets": "/api/v1/wallets/",
-            "payments": "/api/v1/payments/",
-            "rates": "/api/v1/rates/",
-            "health": "/health/",
-            "admin": "/admin/",
-            "docs": "/api/docs/",
-        },
-    })
+    return Response({"name": "CryptoPay API", "version": "1.0.0", "status": "ok"})
 
 
 urlpatterns = [
@@ -43,10 +31,12 @@ urlpatterns = [
     path("api/v1/hooks/", include("apps.mpesa.hooks_urls")),
     path("api/v1/rates/", include("apps.rates.urls")),
     path("api/v1/notifications/", include("apps.notifications.urls")),
-    # OpenAPI / Swagger
-    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
-    path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
-    path("api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
+    # OpenAPI / Swagger — only in development (exposes full API surface)
+    *([
+        path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
+        path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
+        path("api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
+    ] if settings.DEBUG else []),
 ]
 
 # Always serve media files — static() silently does nothing when DEBUG=False,
