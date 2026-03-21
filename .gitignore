@@ -17,6 +17,8 @@ media/
 # Environment
 .env
 *.env.local
+deploy/.env.cloudflare
+deploy/.env.production
 
 # IDE
 .vscode/

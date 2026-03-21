@@ -163,7 +163,8 @@
       "expo-local-authentication",
       "expo-web-browser",
       "expo-notifications",
-      "./queries.js"
+      "./queries.js",
+      "expo-image"
     ]
   }
 }

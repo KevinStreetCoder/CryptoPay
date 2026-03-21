@@ -26,6 +26,7 @@ from rest_framework.views import APIView
 
 class PaymentRateThrottle(UserRateThrottle):
     """Limit payment transactions to 10 per hour per user."""
+    scope = "payment"
     rate = "10/hour"
 
 from django.utils import timezone
@@ -635,6 +636,7 @@ class BuyCryptoView(APIView):
 
 class SwapRateThrottle(UserRateThrottle):
     """Limit swap transactions to 10 per hour per user."""
+    scope = "swap"
     rate = "10/hour"
 
 
@@ -1525,6 +1527,7 @@ class CircuitBreakerStatusView(APIView):
 
 class ExportRateThrottle(UserRateThrottle):
     """Limit CSV exports to 5 per hour per user."""
+    scope = "export"
     rate = "5/hour"
 
 

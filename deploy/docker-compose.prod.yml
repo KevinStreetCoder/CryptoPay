@@ -88,6 +88,11 @@ services:
       redis:
         condition: service_healthy
     restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8000/health/ || exit 1"]
       interval: 30s
@@ -124,6 +129,11 @@ services:
       redis:
         condition: service_healthy
     restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     healthcheck:
       test: ["CMD-SHELL", "celery -A config inspect ping --timeout 10 2>/dev/null || exit 1"]
       interval: 60s
