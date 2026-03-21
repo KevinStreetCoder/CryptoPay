@@ -252,8 +252,10 @@ export default function PaymentSuccessScreen() {
 
   const toast = useToast();
   const amountKES = parseFloat(params.amount_kes || "0");
+  // Detect transaction type from params
+  const isSwap = params.recipient?.includes("→") || false;
   // Detect if this is a deposit/buy flow (crypto received) vs payment flow (crypto spent)
-  const isBuyFlow = !params.recipient || params.recipient?.startsWith("+254") || params.recipient?.startsWith("0");
+  const isBuyFlow = !isSwap && (!params.recipient || params.recipient?.startsWith("+254") || params.recipient?.startsWith("0"));
 
   const handleDownloadReceipt = async () => {
     const txId = params.transaction_id;
@@ -284,7 +286,9 @@ export default function PaymentSuccessScreen() {
   };
 
   const handleShare = async () => {
-    const receiptText = `CryptoPay Receipt\n\nTotal: KSh ${amountKES.toLocaleString()}\n${isBuyFlow ? "Received" : "Used"}: ${params.crypto_amount} ${params.crypto_currency}\n${isBuyFlow ? "Phone" : "Sent To"}: ${params.recipient}\nStatus: ${statusLabel}\n${params.transaction_id ? `Ref: ${params.transaction_id.slice(0, 8)}` : ""}\n\nPowered by CryptoPay`;
+    const receiptText = isSwap
+      ? `CryptoPay Swap Receipt\n\nReceived: ${params.crypto_amount} ${params.crypto_currency}\nConversion: ${params.recipient}\nStatus: ${statusLabel}\n${params.transaction_id ? `Ref: ${params.transaction_id.slice(0, 8)}` : ""}\n\nPowered by CryptoPay`
+      : `CryptoPay Receipt\n\nTotal: KSh ${amountKES.toLocaleString()}\n${isBuyFlow ? "Received" : "Used"}: ${params.crypto_amount} ${params.crypto_currency}\n${isBuyFlow ? "Phone" : "Sent To"}: ${params.recipient}\nStatus: ${statusLabel}\n${params.transaction_id ? `Ref: ${params.transaction_id.slice(0, 8)}` : ""}\n\nPowered by CryptoPay`;
 
     if (isWeb) {
       if (navigator.clipboard) {
@@ -299,7 +303,9 @@ export default function PaymentSuccessScreen() {
   };
 
   const handleShareWhatsApp = () => {
-    const message = `I just paid my bill with crypto using CryptoPay! KSh ${amountKES.toLocaleString()} sent via M-Pesa in seconds. Try it: https://cpay.co.ke`;
+    const message = isSwap
+      ? `I just swapped crypto on CryptoPay! ${params.crypto_amount} ${params.crypto_currency} received instantly. Try it: https://cpay.co.ke`
+      : `I just paid my bill with crypto using CryptoPay! KSh ${amountKES.toLocaleString()} sent via M-Pesa in seconds. Try it: https://cpay.co.ke`;
     const encoded = encodeURIComponent(message);
     Linking.openURL(`https://wa.me/?text=${encoded}`);
   };
@@ -333,7 +339,7 @@ export default function PaymentSuccessScreen() {
             letterSpacing: -0.5,
           }}
         >
-          {isFailed ? t("payment.paymentFailed") : isCompleted ? t("payment.paymentComplete") : t("payment.paymentProcessing")}
+          {isFailed ? t("payment.paymentFailed") : isCompleted ? (isSwap ? t("payment.swapComplete") : t("payment.paymentComplete")) : t("payment.paymentProcessing")}
         </Text>
         <Text
           style={{
@@ -348,7 +354,7 @@ export default function PaymentSuccessScreen() {
           {isFailed
             ? params.error_message || t("payment.paymentFailedDesc")
             : isCompleted
-              ? t("payment.paymentConfirmedDesc")
+              ? (isSwap ? t("payment.swapConfirmedDesc") : t("payment.paymentConfirmedDesc"))
               : t("payment.paymentProcessingDesc")}
         </Text>
 
@@ -385,7 +391,7 @@ export default function PaymentSuccessScreen() {
                   marginBottom: 8,
                 }}
               >
-                {isFailed ? "Amount" : "Total Charged"}
+                {isFailed ? "Amount" : isSwap ? "Amount Swapped" : "Total Charged"}
               </Text>
               <Text
                 style={{
@@ -395,22 +401,22 @@ export default function PaymentSuccessScreen() {
                   letterSpacing: -0.5,
                 }}
               >
-                KSh {amountKES.toLocaleString()}
+                {isSwap ? `${params.crypto_amount} ${params.crypto_currency}` : `KSh ${amountKES.toLocaleString()}`}
               </Text>
             </View>
 
             <View style={{ paddingHorizontal: 24 }}>
               <DetailRow
-                label={isBuyFlow ? "Crypto Received" : "Crypto Used"}
+                label={isSwap ? "Received" : isBuyFlow ? "Crypto Received" : "Crypto Used"}
                 value={`${params.crypto_amount} ${params.crypto_currency}`}
-                icon={isBuyFlow ? "arrow-down-circle-outline" : "wallet-outline"}
+                icon={isSwap ? "swap-horizontal-outline" : isBuyFlow ? "arrow-down-circle-outline" : "wallet-outline"}
                 tc={tc}
               />
               <View style={{ height: 1, backgroundColor: tc.glass.border }} />
               <DetailRow
-                label={isBuyFlow ? "M-Pesa Phone" : "Sent To"}
+                label={isSwap ? "Conversion" : isBuyFlow ? "M-Pesa Phone" : "Sent To"}
                 value={params.recipient || "\u2014"}
-                icon={isBuyFlow ? "phone-portrait-outline" : "person-outline"}
+                icon={isSwap ? "repeat-outline" : isBuyFlow ? "phone-portrait-outline" : "person-outline"}
                 tc={tc}
               />
               <View style={{ height: 1, backgroundColor: tc.glass.border }} />
@@ -539,7 +545,9 @@ export default function PaymentSuccessScreen() {
           >
             {isFailed
               ? "No funds have been deducted from your wallet.\nPlease try again or contact support."
-              : "You'll receive an M-Pesa confirmation SMS and email receipt shortly.\nTransaction details are in your history."}
+              : isSwap
+                ? t("payment.swapInfoText")
+                : "You'll receive an M-Pesa confirmation SMS and email receipt shortly.\nTransaction details are in your history."}
           </Text>
         </Animated.View>
 
@@ -577,8 +585,8 @@ export default function PaymentSuccessScreen() {
                 icon={<Ionicons name="checkmark-done-outline" size={20} color="#FFFFFF" />}
               />
               <Button
-                title="Make Another Payment"
-                onPress={() => router.replace("/(tabs)/pay")}
+                title={isSwap ? "Make Another Swap" : "Make Another Payment"}
+                onPress={() => router.replace(isSwap ? "/(tabs)/swap" as any : "/(tabs)/pay")}
                 variant="secondary"
                 size="lg"
                 icon={<Ionicons name="repeat-outline" size={20} color={isDark ? "#FFFFFF" : "#0F172A"} />}
