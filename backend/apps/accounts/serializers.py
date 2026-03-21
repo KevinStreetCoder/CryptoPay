@@ -242,12 +242,22 @@ class UserSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_avatar_url(self, obj):
-        if obj.avatar:
+        if not obj.avatar:
+            return None
+        try:
+            import base64
+            import mimetypes
+            path = obj.avatar.path
+            mime = mimetypes.guess_type(path)[0] or "image/jpeg"
+            with open(path, "rb") as f:
+                data = base64.b64encode(f.read()).decode("ascii")
+            return f"data:{mime};base64,{data}"
+        except Exception:
+            # Fallback to URL if file read fails
             request = self.context.get("request")
             if request:
                 return request.build_absolute_uri(obj.avatar.url)
             return obj.avatar.url
-        return None
 
 
 class ProfileUpdateSerializer(serializers.Serializer):
