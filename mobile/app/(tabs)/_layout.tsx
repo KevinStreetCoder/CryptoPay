@@ -148,8 +148,8 @@ export default function TabLayout() {
 
   // On Android, insets.bottom is 0 for 3-button nav and small for gesture nav.
   // We only need minimal padding — never add extra space above the system nav buttons.
-  const bottomPadding = isWeb ? 12 : Platform.OS === "android" ? insets.bottom : insets.bottom;
-  const tabBarHeight = (isWeb ? 72 : Platform.OS === "android" ? 56 : 88) + bottomPadding;
+  const bottomPadding = isWeb ? 20 : Platform.OS === "android" ? insets.bottom : insets.bottom;
+  const tabBarHeight = (isWeb ? 76 : Platform.OS === "android" ? 56 : 88) + bottomPadding;
 
   return (
     <Tabs
