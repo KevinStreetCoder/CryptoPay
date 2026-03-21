@@ -31,6 +31,8 @@ urlpatterns = [
     path("api/v1/hooks/", include("apps.mpesa.hooks_urls")),
     path("api/v1/rates/", include("apps.rates.urls")),
     path("api/v1/notifications/", include("apps.notifications.urls")),
+    # SasaPay callbacks (at top level to match registered callback URL)
+    path("api/v1/sasapay/callback/", __import__("apps.mpesa.sasapay_views", fromlist=["sasapay_callback"]).sasapay_callback, name="sasapay-callback-root"),
     # OpenAPI / Swagger — only in development (exposes full API surface)
     *([
         path("api/schema/", SpectacularAPIView.as_view(), name="schema"),

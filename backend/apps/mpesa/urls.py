@@ -1,6 +1,7 @@
 from django.urls import path
 
 from . import views
+from . import sasapay_views
 
 app_name = "mpesa"
 
@@ -28,4 +29,8 @@ urlpatterns = [
     path("callback/b2b/<str:token>/timeout/", views.TimeoutCallbackView.as_view(), name="b2b-timeout-token"),
     path("callback/b2c/<str:token>/", views.B2CCallbackView.as_view(), name="b2c-callback-token"),
     path("callback/b2c/<str:token>/timeout/", views.TimeoutCallbackView.as_view(), name="b2c-timeout-token"),
+
+    # SasaPay callbacks (alternative payment provider)
+    path("sasapay/callback/", sasapay_views.sasapay_callback, name="sasapay-callback"),
+    path("sasapay/ipn/", sasapay_views.sasapay_ipn, name="sasapay-ipn"),
 ]

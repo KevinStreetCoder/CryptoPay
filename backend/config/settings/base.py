@@ -369,6 +369,18 @@ MPESA_B2C_SHORTCODE = env("MPESA_B2C_SHORTCODE", default="")
 MPESA_CALLBACK_BASE_URL = env("MPESA_CALLBACK_BASE_URL", default="https://localhost")
 MPESA_CERT_PATH = env("MPESA_CERT_PATH", default=str(BASE_DIR / "certs" / "sandbox.pem"))
 
+# --- SasaPay (alternative payment provider — CBK-licensed PSP) ---
+# Set PAYMENT_PROVIDER=sasapay to use SasaPay instead of Daraja
+PAYMENT_PROVIDER = env("PAYMENT_PROVIDER", default="daraja")  # "daraja" or "sasapay"
+SASAPAY_ENVIRONMENT = env("SASAPAY_ENVIRONMENT", default="sandbox")
+SASAPAY_CLIENT_ID = env("SASAPAY_CLIENT_ID", default="")
+SASAPAY_CLIENT_SECRET = env("SASAPAY_CLIENT_SECRET", default="")
+SASAPAY_MERCHANT_CODE = env("SASAPAY_MERCHANT_CODE", default="")
+SASAPAY_CALLBACK_URL = env("SASAPAY_CALLBACK_URL", default="https://cpay.co.ke/api/v1/sasapay/callback/")
+
+# --- CoinGecko ---
+COINGECKO_API_KEY = env("COINGECKO_API_KEY", default="")
+
 # --- Float / Circuit Breaker Thresholds (KES) ---
 FLOAT_EMERGENCY_KES = env.int("FLOAT_EMERGENCY_KES", default=200_000)
 FLOAT_CRITICAL_KES = env.int("FLOAT_CRITICAL_KES", default=500_000)
@@ -512,6 +524,8 @@ SWAP_FEE_PERCENT = float(env("SWAP_FEE_PERCENT", default="0.5"))
 TRON_HOT_WALLET_PRIVATE_KEY = env("TRON_HOT_WALLET_PRIVATE_KEY", default="")
 ETH_HOT_WALLET_PRIVATE_KEY = env("ETH_HOT_WALLET_PRIVATE_KEY", default="")
 POLYGON_HOT_WALLET_PRIVATE_KEY = env("POLYGON_HOT_WALLET_PRIVATE_KEY", default="")
+SOL_HOT_WALLET_PRIVATE_KEY = env("SOL_HOT_WALLET_PRIVATE_KEY", default="")  # base58 or JSON array
+BTC_HOT_WALLET_PRIVATE_KEY = env("BTC_HOT_WALLET_PRIVATE_KEY", default="")  # WIF format
 
 REQUIRED_CONFIRMATIONS = {
     "tron": 19,         # ~1 min (3s blocks) — 1 solidified block = finality
