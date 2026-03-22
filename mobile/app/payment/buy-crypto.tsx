@@ -723,7 +723,7 @@ export default function BuyCryptoScreen() {
           <View style={{ flex: 1 }} />
 
           {/* Continue Button */}
-          <View style={{ marginBottom: 32 }}>
+          <View style={{ marginBottom: 32, maxWidth: isDesktop ? 420 : undefined, alignSelf: isDesktop ? "center" : undefined, width: isDesktop ? "100%" : undefined }}>
             <Button
               title="Continue"
               onPress={handleContinue}
@@ -1070,7 +1070,7 @@ export default function BuyCryptoScreen() {
           </View>
 
           {/* Buy Now Button */}
-          <View style={{ marginTop: 24, marginBottom: isDesktop ? 8 : 32 }}>
+          <View style={{ marginTop: 24, marginBottom: isDesktop ? 8 : 32, maxWidth: isDesktop ? 420 : undefined, alignSelf: isDesktop ? "center" : undefined, width: isDesktop ? "100%" : undefined }}>
             <Button
               title="Buy Now"
               onPress={handleConfirmPayment}

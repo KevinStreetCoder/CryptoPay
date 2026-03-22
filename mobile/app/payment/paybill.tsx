@@ -619,7 +619,7 @@ export default function PayBillScreen() {
               )}
 
               {/* Action Button */}
-              <View style={{ marginTop: 28, marginBottom: 32 }}>
+              <View style={{ marginTop: 28, marginBottom: 32, maxWidth: isDesktop ? 420 : undefined, alignSelf: isDesktop ? "center" : undefined, width: isDesktop ? "100%" : undefined }}>
                 {!quote ? (
                   <Button
                     title={t("payment.getQuote")}

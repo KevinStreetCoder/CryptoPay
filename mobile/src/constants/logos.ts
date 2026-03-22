@@ -26,4 +26,5 @@ export const SERVICE_LOGOS: Record<string, any> = {
 export const BRAND_LOGOS = {
   google: "https://img.icons8.com/color/48/google-logo.png",
   kenyaFlag: "https://flagcdn.com/w40/ke.png",
+  coingecko: "https://static.coingecko.com/s/coingecko-branding-guide-8447f228-4ac5-4eb4-8591-e2cb145a943d/coingecko-logo-white-ea42ded10631c0.png",
 };

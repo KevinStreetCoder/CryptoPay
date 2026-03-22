@@ -731,7 +731,7 @@ export default function ConfirmPaymentScreen() {
           </GlassCard>
 
           {/* Pay Now / Expired Button */}
-          <View style={{ marginTop: 24, marginBottom: isDesktop ? 8 : 32 }}>
+          <View style={{ marginTop: 24, marginBottom: isDesktop ? 8 : 32, maxWidth: isDesktop ? 420 : undefined, alignSelf: isDesktop ? "center" : undefined, width: isDesktop ? "100%" : undefined }}>
             {quoteExpired ? (
               <Button
                 title={t("payment.getNewQuote")}

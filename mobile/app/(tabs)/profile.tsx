@@ -1301,6 +1301,8 @@ export default function ProfileScreen() {
             : colors.error + "20",
         marginBottom: 16,
         width: "100%",
+        maxWidth: isDesktop ? 420 : undefined,
+        alignSelf: isDesktop ? "center" as const : undefined,
         ...(isWeb ? { cursor: "pointer", transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)" } as any : {}),
         transform: [{ scale: pressed ? 0.98 : 1 }],
       })}

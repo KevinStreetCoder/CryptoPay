@@ -59,7 +59,7 @@ class STKCallbackView(APIView):
             )
 
         payload = request.data
-        logger.info(f"STK callback received: {payload}")
+        logger.debug(f"STK callback payload: {payload}")
 
         body = payload.get("Body", {}).get("stkCallback", {})
         merchant_request_id = body.get("MerchantRequestID", "")
@@ -183,7 +183,7 @@ class B2BCallbackView(APIView):
             )
 
         payload = request.data
-        logger.info(f"B2B callback received: {payload}")
+        logger.debug(f"B2B callback payload: {payload}")
 
         result = payload.get("Result", {})
         result_code = result.get("ResultCode")
@@ -261,7 +261,7 @@ class B2CCallbackView(APIView):
             )
 
         payload = request.data
-        logger.info(f"B2C callback received: {payload}")
+        logger.debug(f"B2C callback payload: {payload}")
 
         result = payload.get("Result", {})
         result_code = result.get("ResultCode")
@@ -333,7 +333,7 @@ class C2BValidationView(APIView):
     authentication_classes = []
 
     def post(self, request):
-        logger.info(f"C2B validation received: {request.data}")
+        logger.debug(f"C2B validation payload: {request.data}")
 
         bill_ref = request.data.get("BillRefNumber", "").strip()
         amount = request.data.get("TransAmount", 0)
@@ -373,7 +373,7 @@ class C2BValidationView(APIView):
             pass  # Don't reject on check failure — let it through
 
         # Accept
-        logger.info(f"C2B validation accepted: {kes_amount} KES from {phone} -> {currency} for user {user.id}")
+        logger.debug(f"C2B validation accepted: {kes_amount} KES from {phone} -> {currency} for user {user.id}")
         return Response({"ResultCode": 0, "ResultDesc": "Accepted"})
 
 
@@ -389,7 +389,7 @@ class C2BConfirmationView(APIView):
     authentication_classes = []
 
     def post(self, request):
-        logger.info(f"C2B confirmation received: {request.data}")
+        logger.debug(f"C2B confirmation payload: {request.data}")
 
         trans_id = request.data.get("TransID", "")
         amount = request.data.get("TransAmount", 0)

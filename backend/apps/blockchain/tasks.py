@@ -705,6 +705,23 @@ def _broadcast_evm(network: str, currency: str, destination_address: str, amount
 
         account = w3.eth.account.from_key(private_key)
 
+        # EIP-1559 fee estimation (Ethereum mainnet) or legacy gas price (Polygon/testnets)
+        nonce = w3.eth.get_transaction_count(account.address)
+        latest_block = w3.eth.get_block("latest")
+        supports_eip1559 = "baseFeePerGas" in latest_block
+
+        def _build_fee_params() -> dict:
+            if supports_eip1559:
+                base_fee = latest_block["baseFeePerGas"]
+                priority_fee = w3.eth.max_priority_fee
+                max_fee = base_fee * 2 + priority_fee
+                return {
+                    "maxFeePerGas": max_fee,
+                    "maxPriorityFeePerGas": priority_fee,
+                    "type": 2,
+                }
+            return {"gasPrice": w3.eth.gas_price}
+
         if currency in ("USDT", "USDC"):
             # ERC-20 token transfer
             token_contracts = {
@@ -745,9 +762,9 @@ def _broadcast_evm(network: str, currency: str, destination_address: str, amount
                 raw_amount,
             ).build_transaction({
                 "from": account.address,
-                "nonce": w3.eth.get_transaction_count(account.address),
+                "nonce": nonce,
                 "gas": 100_000,
-                "gasPrice": w3.eth.gas_price,
+                **_build_fee_params(),
             })
         else:
             # Native ETH transfer
@@ -756,8 +773,8 @@ def _broadcast_evm(network: str, currency: str, destination_address: str, amount
                 "to": Web3.to_checksum_address(destination_address),
                 "value": raw_amount,
                 "gas": 21_000,
-                "gasPrice": w3.eth.gas_price,
-                "nonce": w3.eth.get_transaction_count(account.address),
+                "nonce": nonce,
+                **_build_fee_params(),
             }
 
         signed_tx = w3.eth.account.sign_transaction(tx, private_key)
@@ -800,6 +817,7 @@ def _broadcast_solana(currency: str, destination_address: str, amount: Decimal) 
         from solders.transaction import Transaction as SolTransaction
         from solders.message import Message
         from solders.hash import Hash as SolHash
+        import base64 as b64
         import requests as req
         import json as json_mod
 
@@ -836,7 +854,6 @@ def _broadcast_solana(currency: str, destination_address: str, amount: Decimal) 
 
             # Send transaction
             tx_bytes = bytes(tx)
-            import base64 as b64
             tx_b64 = b64.b64encode(tx_bytes).decode("ascii")
             send_resp = req.post(rpc_url, json={
                 "jsonrpc": "2.0", "id": 1,

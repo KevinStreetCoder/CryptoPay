@@ -19,9 +19,8 @@ def check_pending_mpesa_payments():
     """
     from datetime import timedelta
 
+    from django.conf import settings as app_settings
     from django.utils import timezone
-
-    from apps.mpesa.client import MpesaClient
 
     cutoff = timezone.now() - timedelta(seconds=60)
     stuck = Transaction.objects.filter(
@@ -34,19 +33,25 @@ def check_pending_mpesa_payments():
         ],
     )
 
-    client = MpesaClient()
+    provider = getattr(app_settings, "PAYMENT_PROVIDER", "daraja")
 
     for tx in stuck:
         conversation_id = tx.saga_data.get("mpesa_conversation_id", "")
         if not conversation_id:
             continue
 
-        # Try querying M-Pesa transaction status
-        try:
-            result = client.transaction_status(conversation_id)
-            logger.info(f"Status query for tx {tx.id}: {result}")
-        except Exception as e:
-            logger.error(f"Status query failed for tx {tx.id}: {e}")
+        # Try querying transaction status (Daraja only — SasaPay uses callbacks)
+        if provider != "sasapay":
+            try:
+                from apps.mpesa.client import MpesaClient
+                client = MpesaClient()
+                result = client.transaction_status(conversation_id)
+                logger.info(f"Status query for tx {tx.id}: {result}")
+            except Exception as e:
+                logger.error(f"Status query failed for tx {tx.id}: {e}")
+        else:
+            # SasaPay relies on callbacks — log that we're waiting
+            logger.debug(f"SasaPay tx {tx.id} pending callback (no status query API)")
 
         # After 10 minutes with no resolution, compensate and mark FAILED
         ten_min_cutoff = timezone.now() - timedelta(minutes=10)
