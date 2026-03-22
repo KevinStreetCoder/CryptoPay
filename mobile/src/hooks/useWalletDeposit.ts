@@ -8,19 +8,20 @@
 import { useState, useCallback } from "react";
 import { ERC20_CONTRACTS } from "../config/appkit";
 
-// Minimal ERC-20 transfer ABI
-const ERC20_TRANSFER_ABI = [
-  {
-    constant: false,
-    inputs: [
-      { name: "_to", type: "address" },
-      { name: "_value", type: "uint256" },
-    ],
-    name: "transfer",
-    outputs: [{ name: "", type: "bool" }],
-    type: "function",
-  },
-];
+/**
+ * Validate Ethereum address format (0x + 40 hex chars).
+ * Does NOT verify checksum — wallets handle that.
+ */
+function isValidEVMAddress(address: string): boolean {
+  return /^0x[0-9a-fA-F]{40}$/.test(address);
+}
+
+/** Minimum deposit amounts to prevent dust transactions */
+const MIN_DEPOSIT: Record<string, number> = {
+  USDT: 1,
+  USDC: 1,
+  ETH: 0.001,
+};
 
 // Encode ERC-20 transfer calldata (no ethers.js dependency)
 function encodeERC20Transfer(to: string, amount: bigint): string {
@@ -60,6 +61,16 @@ export function useWalletDeposit() {
       setError(null);
 
       try {
+        if (!isValidEVMAddress(toAddress)) {
+          throw new Error("Invalid deposit address format");
+        }
+
+        const numAmount = parseFloat(amount);
+        const minAmount = MIN_DEPOSIT[token] || 1;
+        if (isNaN(numAmount) || numAmount < minAmount) {
+          throw new Error(`Minimum deposit is ${minAmount} ${token}`);
+        }
+
         const contracts = ERC20_CONTRACTS[token];
         const contractAddress = contracts[chainId as keyof typeof contracts];
         if (!contractAddress) {
@@ -115,6 +126,16 @@ export function useWalletDeposit() {
       setError(null);
 
       try {
+        if (!isValidEVMAddress(toAddress)) {
+          throw new Error("Invalid deposit address format");
+        }
+
+        const numAmount = parseFloat(amount);
+        const minAmount = MIN_DEPOSIT.ETH || 0.001;
+        if (isNaN(numAmount) || numAmount < minAmount) {
+          throw new Error(`Minimum deposit is ${minAmount} ETH`);
+        }
+
         // Convert ETH to Wei (18 decimals)
         const weiAmount = BigInt(
           Math.floor(parseFloat(amount) * 10 ** 18)
