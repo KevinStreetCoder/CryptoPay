@@ -166,6 +166,10 @@ class PaymentSaga:
                         )
                     except Exception:
                         pass
+                    raise SagaError(
+                        f"Compensation failed after {max_retries} retries for tx {self.tx.id}. "
+                        f"User {self.tx.user.phone} lost {amount} {self.tx.source_currency}."
+                    )
 
     def step_initiate_mpesa(self):
         """Step 3: Call M-Pesa API — B2B for paybill/till, B2C for send-to-phone."""

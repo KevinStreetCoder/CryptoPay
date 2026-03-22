@@ -11,8 +11,8 @@
 |----------|-------|-------|-----------|
 | CRITICAL | 3 | 3 | 0 |
 | HIGH | 10 | 10 | 0 |
-| MEDIUM | 7 | 6 | 1 |
-| LOW | 4 | 2 | 2 |
+| MEDIUM | 7 | 7 | 0 |
+| LOW | 4 | 3 | 1 |
 
 ### Production Penetration Test (2026-03-21)
 All tests passed against live production at cpay.co.ke:
@@ -96,25 +96,25 @@ All tests passed against live production at cpay.co.ke:
 - **Issue:** OTP codes stored as plaintext in Redis. If attacker gains Redis access, can read pending OTPs.
 - **Mitigation:** Redis is not exposed externally. OTPs have 5-minute TTL. Brute-force protection now limits attempts. Hashing would complicate the verification flow for marginal benefit.
 
-### M2: TOTP Secret Stored Plaintext in Database — TRACKED
-- **File:** `backend/apps/accounts/models.py:57`
+### M2: TOTP Secret Stored Plaintext in Database — FIXED ✅
+- **File:** `backend/apps/accounts/models.py`
 - **Issue:** `totp_secret` stored as plaintext CharField. DB breach exposes all TOTP secrets.
-- **Recommendation:** Encrypt with `django-encrypted-model-fields` or custom Fernet encryption with key from env var. Tracked for next sprint.
+- **Fix:** Implemented Fernet encryption via `set_totp_secret()` and `totp_secret_decrypted` property. Migration 0013 increased field to 255 chars. Legacy plaintext values auto-decrypt on read. Backup codes bcrypt-hashed.
 
-### M3: Google OAuth Users Have No PIN — TRACKED
-- **File:** `backend/apps/accounts/views.py:603-604`
+### M3: Google OAuth Users Have No PIN — FIXED ✅
+- **File:** `backend/apps/accounts/views.py`
 - **Issue:** Google OAuth creates users with `phone=""` and no PIN. These users can't transact (PIN required) but no "set initial PIN" flow exists.
-- **Recommendation:** Add "set initial PIN" endpoint for users without `pin_hash`. Tracked for next sprint.
+- **Fix:** Added `SetInitialPINView` at `/auth/set-initial-pin/` for authenticated users. `GoogleCompleteProfileView` handles phone+PIN for new OAuth users. `GoogleLoginView` returns `pin_required` flag.
 
 ### M4: Receipt CORS Echoes Any Origin — FIXED ✅
 - **File:** `backend/apps/payments/views.py:711-715`
 - **Issue:** Manual CORS headers echoed back ANY origin, bypassing Django CORS middleware's allowed origins list.
 - **Fix:** Now validates origin against `settings.CORS_ALLOWED_ORIGINS` before echoing.
 
-### M5: DEPOSIT_SLIPPAGE_TOLERANCE Not Enforced — TRACKED
-- **File:** `backend/config/settings/base.py:375`
+### M5: DEPOSIT_SLIPPAGE_TOLERANCE Not Enforced — FIXED ✅
+- **File:** `backend/apps/payments/views.py`
 - **Issue:** Setting defined (2.0%) but never checked during payment execution. Stale quotes at favorable rates honored without slippage verification.
-- **Recommendation:** Enforce at quote consumption time by comparing locked rate vs current live rate.
+- **Fix:** `_check_rate_slippage()` function compares quote rate vs live rate using `DEPOSIT_SLIPPAGE_TOLERANCE`. Applied in PayBillView, PayTillView, and SendMpesaView.
 
 ### M6: C2B Validation Bypassed When ResponseType="Completed" — FIXED ✅
 - **File:** `backend/apps/mpesa/tasks.py`
@@ -140,10 +140,10 @@ All tests passed against live production at cpay.co.ke:
 - **Issue:** `datetime.now()` without timezone. If server runs in UTC, STK password timestamp is wrong.
 - **Fix:** Changed to `datetime.now(tz=ZoneInfo("Africa/Nairobi"))` explicitly.
 
-### L3: Raw M-Pesa Payload Logged at INFO — ACCEPTED
-- **File:** `backend/apps/mpesa/views.py` (multiple locations)
+### L3: Raw M-Pesa Payload Logged at INFO — FIXED ✅
+- **File:** `backend/apps/mpesa/views.py`, `backend/apps/mpesa/sasapay_views.py`
 - **Issue:** Full callback payloads (including phone numbers) logged at INFO level. PII in logs.
-- **Mitigation:** Acceptable for early stage. Will move to DEBUG-only logging before GDPR/DPA compliance review.
+- **Fix:** All 8 payload logging statements moved from INFO to DEBUG across both Daraja and SasaPay callback handlers.
 
 ### L4: Phone Dashes Not Stripped in C2B Parsing — FIXED ✅
 - **File:** `backend/apps/mpesa/views.py:440`
@@ -154,9 +154,20 @@ All tests passed against live production at cpay.co.ke:
 
 ## Remaining Action Items (Prioritized)
 
-1. **M2:** Encrypt TOTP secrets at rest
-2. **M3:** Add "set initial PIN" flow for Google OAuth users
-3. **M5:** Enforce slippage tolerance at quote consumption
-4. **L3:** Move M-Pesa payload logging to DEBUG level
-5. **Future:** Redis-based OAuth token caching for multi-worker deployments
-6. **Future:** Add automated M-Pesa reversal for orphaned C2B deposits
+1. **L1:** DEBUG mode disables security challenges — accepted (prod always DEBUG=False)
+2. **Future:** Redis-based OAuth token caching for multi-worker deployments
+3. **Future:** Add automated M-Pesa reversal for orphaned C2B deposits
+4. **Future:** AWS CloudHSM for production key management (>$10M AUM)
+
+## Fixes Applied 2026-03-22
+
+### SasaPay B2B Payment Flow — 5 bugs fixed
+- **P0:** Provider adapter B2C parameter mismatch (`receiver_number` → `phone`) — would crash on any B2C payment
+- **P0:** SasaPay C2B deposit credit used wrong WalletService.credit() signature — deposits silently failed
+- **P1:** Saga compensate_convert() silently swallowed fund loss after 3 retries — now raises SagaError
+- **P1:** Provider adapter reversal returned fake success for SasaPay — now raises NotImplementedError
+- **P1:** Payment status polling hardcoded to Daraja MpesaClient — now checks provider, skips query for SasaPay
+
+### Multi-chain Withdrawal — 2 bugs fixed
+- **P0:** Solana SPL withdrawal crashed with NameError (base64 import scoped inside wrong branch)
+- **P2:** EVM withdrawal used legacy gasPrice — now uses EIP-1559 (maxFeePerGas) on Ethereum mainnet

@@ -95,7 +95,7 @@ class PaymentProviderAdapter:
                     remarks: str = "", transaction_id: str = "") -> dict:
         if self.is_sasapay:
             result = self._client.send_to_mobile(
-                receiver_number=phone,
+                phone=phone,
                 amount=float(amount),
                 reason=remarks,
                 reference=transaction_id,
@@ -140,9 +140,12 @@ class PaymentProviderAdapter:
 
     def reversal(self, transaction_id: str, amount: int, remarks: str = "") -> dict:
         if self.is_sasapay:
-            # SasaPay doesn't have a reversal API — log and skip
+            # SasaPay doesn't have a reversal API — raise so callers know it failed
             logger.warning(f"SasaPay reversal not supported. tx={transaction_id}")
-            return {"ResponseCode": "0", "detail": "Reversal not supported for SasaPay"}
+            raise NotImplementedError(
+                f"SasaPay does not support reversals. Transaction {transaction_id} "
+                f"requires manual intervention."
+            )
         else:
             return self._client.reversal(
                 transaction_id=transaction_id,

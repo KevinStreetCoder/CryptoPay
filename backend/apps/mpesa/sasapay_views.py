@@ -27,7 +27,7 @@ def sasapay_callback(request):
     """
     try:
         data = json.loads(request.body)
-        logger.info(f"SasaPay callback: {json.dumps(data, indent=2)[:500]}")
+        logger.debug(f"SasaPay callback payload: {json.dumps(data, indent=2)[:500]}")
 
         result_code = str(data.get("ResultCode", data.get("resultCode", "")))
         checkout_id = data.get("CheckoutRequestID", data.get("checkoutRequestId", ""))
@@ -66,7 +66,7 @@ def sasapay_ipn(request):
     """
     try:
         data = json.loads(request.body)
-        logger.info(f"SasaPay IPN: {json.dumps(data, indent=2)[:500]}")
+        logger.debug(f"SasaPay IPN payload: {json.dumps(data, indent=2)[:500]}")
 
         # IPN fields: MerchantCode, TransID, ThirdPartyTransID, FullName,
         # TransactionType (C2B/B2C/B2B), MSISDN, TransAmount, TransTime,
@@ -235,7 +235,13 @@ def _process_c2b_deposit(data: dict):
 
     # Credit KES wallet
     try:
-        WalletService.credit(user, "KES", kes_amount, f"SasaPay deposit {trans_id}")
+        from apps.wallets.models import Wallet
+        import uuid as _uuid
+
+        wallet, _ = Wallet.objects.get_or_create(user=user, currency="KES")
+        # Deterministic credit ID to prevent double-credit on retry
+        credit_tx_id = _uuid.uuid5(_uuid.NAMESPACE_URL, f"sasapay_c2b:{trans_id}")
+        WalletService.credit(wallet.id, kes_amount, credit_tx_id, f"SasaPay deposit {trans_id}")
 
         # Create transaction record
         Transaction.objects.create(

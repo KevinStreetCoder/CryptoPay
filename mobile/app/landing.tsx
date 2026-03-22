@@ -344,11 +344,13 @@ function Navbar({ tc, isMobile, onSignIn, onGetStarted, onScrollTo }: {
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const { width } = useWindowDimensions();
+  const router = useRouter();
   const pad = width >= 1400 ? 80 : width >= 1024 ? 48 : width >= 768 ? 32 : 20;
   const navLinks = [
     { label: "How It Works", section: "howItWorks", icon: "bulb-outline" as keyof typeof Ionicons.glyphMap },
     { label: "Features", section: "features", icon: "grid-outline" as keyof typeof Ionicons.glyphMap },
     { label: "Pricing", section: "pricing", icon: "pricetag-outline" as keyof typeof Ionicons.glyphMap },
+    { label: "Privacy", section: "_privacy", icon: "shield-checkmark-outline" as keyof typeof Ionicons.glyphMap },
   ];
   return (
     <>
@@ -371,7 +373,7 @@ function Navbar({ tc, isMobile, onSignIn, onGetStarted, onScrollTo }: {
         {!isMobile && (
           <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
             {navLinks.map((l) => (
-              <Pressable key={l.label} onPress={() => onScrollTo(l.section)} style={({ hovered }: any) => ({
+              <Pressable key={l.label} onPress={() => l.section === "_privacy" ? (isWeb ? window.location.href = "/privacy" : router.push("/privacy" as any)) : onScrollTo(l.section)} style={({ hovered }: any) => ({
                 paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8,
                 flexDirection: "row", alignItems: "center", gap: 6,
                 backgroundColor: hovered ? "rgba(16,185,129,0.06)" : "transparent",
@@ -420,7 +422,7 @@ function Navbar({ tc, isMobile, onSignIn, onGetStarted, onScrollTo }: {
           ...(isWeb ? { backgroundColor: "rgba(6,14,31,0.97)", backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)", borderBottom: "1px solid rgba(255,255,255,0.06)" } as any : { backgroundColor: "#060E1F" }),
         }}>
           {navLinks.map((l) => (
-            <Pressable key={l.label} onPress={() => { onScrollTo(l.section); setMenuOpen(false); }}
+            <Pressable key={l.label} onPress={() => { if (l.section === "_privacy") { if (isWeb) window.location.href = "/privacy"; else router.push("/privacy" as any); } else { onScrollTo(l.section); } setMenuOpen(false); }}
               style={{ paddingVertical: 12, paddingHorizontal: 16, borderRadius: 10, backgroundColor: "rgba(255,255,255,0.03)" }}>
               <Text style={{ color: tc.textPrimary, fontSize: 16, fontFamily: "DMSans_500Medium" }}>{l.label}</Text>
             </Pressable>
@@ -1799,8 +1801,9 @@ export default function LandingPage() {
             <View style={{ gap: 10 }}>
               <Text style={{ color: tc.textSecondary, fontSize: 11, fontFamily: "DMSans_700Bold", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 4 }}>Legal</Text>
               {[{ label: "Privacy Policy", href: "/privacy" }, { label: "Terms of Service", href: "/terms" }].map((l) => (
-                <Pressable key={l.label} onPress={() => { if (isWeb) window.location.href = l.href; else router.push(l.href as any); }}>
-                  <Text style={{ color: tc.textMuted, fontSize: 13, fontFamily: "DMSans_400Regular" }}>{l.label}</Text>
+                <Pressable key={l.label} onPress={() => { if (isWeb) window.location.href = l.href; else router.push(l.href as any); }}
+                  style={({ hovered }: any) => ({ ...(isWeb ? { cursor: "pointer" } as any : {}) })}>
+                  <Text style={{ color: tc.textMuted, fontSize: 13, fontFamily: "DMSans_400Regular", ...(isWeb ? { textDecorationLine: "underline" as const, textDecorationColor: "rgba(255,255,255,0.2)" } : {}) }}>{l.label}</Text>
                 </Pressable>
               ))}
             </View>

@@ -43,6 +43,7 @@ import {
   ChartDataPoint,
 } from "../../src/components/CryptoChart";
 import { CryptoLogo } from "../../src/components/CryptoLogo";
+import { CoinGeckoAttribution } from "../../src/components/CoinGeckoAttribution";
 import { useDeposits } from "../../src/components/DepositTracker";
 import { useLocale } from "../../src/hooks/useLocale";
 import { UserAvatar } from "../../src/components/UserAvatar";
@@ -1008,6 +1009,9 @@ function CryptoPriceChartsSection({
           loading={expandedQuery.isLoading || expandedQuery.isFetching}
         />
       )}
+
+      {/* CoinGecko attribution (required by API terms) */}
+      <CoinGeckoAttribution />
     </View>
   );
 }
@@ -1164,6 +1168,9 @@ function MobileCryptoCharts({
           />
         </View>
       )}
+
+      {/* CoinGecko attribution (required by API terms) */}
+      <CoinGeckoAttribution />
     </View>
   );
 }
