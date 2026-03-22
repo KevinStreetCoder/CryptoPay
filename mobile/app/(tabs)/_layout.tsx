@@ -192,11 +192,7 @@ export default function TabLayout() {
             },
         tabBarActiveTintColor: colors.primary[400],
         tabBarInactiveTintColor: isDark ? "#556B82" : "#94A3B8",
-        tabBarShowLabel: true,
-        tabBarLabelStyle: {
-          fontFamily: "DMSans_500Medium",
-          fontSize: 11,
-        },
+        tabBarShowLabel: false,
         tabBarItemStyle: {
           flex: 1,
           paddingVertical: 0,
