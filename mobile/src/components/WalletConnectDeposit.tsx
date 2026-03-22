@@ -208,6 +208,27 @@ function WalletConnectDepositInner({ depositAddress, onDepositInitiated }: Props
       return;
     }
 
+    // Validate deposit address format
+    if (!/^0x[0-9a-fA-F]{40}$/.test(depositAddress)) {
+      toast.error("Address Error", "Invalid deposit address. Please try again.");
+      return;
+    }
+
+    // Auto-switch chain if wallet is on wrong network
+    const targetChainId = selectedToken.symbol === "ETH" ? 1 : selectedNetwork.chainId;
+    const walletChainId = account.chainId;
+    if (walletChainId && walletChainId !== targetChainId) {
+      try {
+        await provider.request({
+          method: "wallet_switchEthereumChain",
+          params: [{ chainId: `0x${targetChainId.toString(16)}` }],
+        });
+      } catch (switchErr: any) {
+        toast.error("Wrong Network", `Please switch to ${selectedNetwork.name} in your wallet`);
+        return;
+      }
+    }
+
     try {
       let result;
       if (selectedToken.symbol === "ETH") {
@@ -225,16 +246,20 @@ function WalletConnectDepositInner({ depositAddress, onDepositInitiated }: Props
 
       toast.success(
         "Deposit Initiated",
-        `${amount} ${selectedToken.symbol} sent. TX: ${result.txHash.slice(0, 10)}...`
+        `${amount} ${selectedToken.symbol} sent. Your balance will update after network confirmation.`
       );
       onDepositInitiated?.(result.txHash, selectedToken.symbol, amount);
       setAmount("");
     } catch (err: any) {
       if (err?.message?.includes("User rejected") || err?.message?.includes("cancelled")) {
         toast.error("Cancelled", "Transaction was cancelled in your wallet");
+      } else if (err?.message?.includes("Minimum deposit")) {
+        toast.error("Amount Too Low", err.message);
+      } else if (err?.message?.includes("Invalid deposit")) {
+        toast.error("Address Error", err.message);
       }
     }
-  }, [provider, address, depositAddress, amount, selectedToken, selectedNetwork]);
+  }, [provider, address, depositAddress, amount, selectedToken, selectedNetwork, account.chainId]);
 
   const shortAddress = address
     ? `${address.slice(0, 6)}...${address.slice(-4)}`
