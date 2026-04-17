@@ -1140,7 +1140,7 @@ export default function LandingPage() {
   // SECTION 4: STATS — scale-up oversized numbers + Nairobi image
   // ═══════════════════════════════════════════════════════════════════════
   const statsSection = (
-    <View ref={usersCounter.viewRef as any} style={{
+    <View style={{
       paddingVertical: isMobile ? 40 : 64, position: "relative", overflow: "hidden",
       ...(isWeb ? { background: "linear-gradient(135deg, rgba(16,185,129,0.06) 0%, #060E1F 40%, rgba(99,102,241,0.04) 100%)", borderTop: "1px solid rgba(16,185,129,0.08)", borderBottom: "1px solid rgba(16,185,129,0.08)" } as any : { backgroundColor: "#060E1F" }),
     }}>
