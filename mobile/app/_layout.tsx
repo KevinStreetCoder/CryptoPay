@@ -7,7 +7,13 @@ import { useFonts, DMSans_400Regular, DMSans_500Medium, DMSans_600SemiBold, DMSa
 import { Ionicons } from "@expo/vector-icons";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { useAuth, isBiometricEnabled } from "../src/stores/auth";
+import {
+  useAuth,
+  isBiometricEnabled,
+  isGoogleUnlockPending,
+  getGoogleUnlockPendingSync,
+  subscribeGoogleUnlock,
+} from "../src/stores/auth";
 import { ErrorBoundary } from "../src/components/ErrorBoundary";
 import { NetworkStatus } from "../src/components/NetworkStatus";
 import { LoadingScreen } from "../src/components/LoadingScreen";
@@ -117,25 +123,33 @@ function RootNavigator() {
     })();
   }, [user]);
 
-  // Google-unlock sentinel — set when a returning Google user has tokens
-  // but hasn't proven local PIN/biometric yet. Read in the auth gate to
-  // force /auth/google-unlock before any authenticated screen renders.
-  const [googleUnlockPending, setGoogleUnlockPending] = useState(false);
+  // Google-unlock sentinel — read synchronously from a module-level
+  // mirror populated atomically by setGoogleUnlockPendingFlag() /
+  // clearGoogleUnlockFlag() so the auth gate never sees a stale value
+  // during Google sign-in or PIN-verify transitions.
+  const [googleUnlockPending, setGoogleUnlockPending] = useState(
+    getGoogleUnlockPendingSync(),
+  );
+  // Hydrate the mirror from SecureStore on mount (and whenever user
+  // changes) — handles cold starts where the mirror hasn't been
+  // initialised yet (e.g. user re-opens the tab after closing it).
   useEffect(() => {
     if (!user) {
       setGoogleUnlockPending(false);
       return;
     }
     let cancelled = false;
-    (async () => {
-      const { isGoogleUnlockPending } = await import("../src/stores/auth");
-      const pending = await isGoogleUnlockPending();
+    isGoogleUnlockPending().then((pending) => {
       if (!cancelled) setGoogleUnlockPending(pending);
-    })();
+    });
+    const unsub = subscribeGoogleUnlock(() => {
+      setGoogleUnlockPending(getGoogleUnlockPendingSync());
+    });
     return () => {
       cancelled = true;
+      unsub();
     };
-  }, [user, segments]);
+  }, [user]);
 
   // Auth gate
   useEffect(() => {
@@ -188,9 +202,20 @@ function RootNavigator() {
         router.replace("/auth/login");
       }
     } else if (user && (inAuthGroup || isLanding)) {
-      router.replace("/(tabs)");
+      // Exempt the Google-unlock gate and the initial-PIN setup from the
+      // default "authenticated user bounces back to tabs" rule. Without
+      // this, a returning Google user is instantly redirected to (tabs)
+      // the moment tokens are stored — before the async
+      // `googleUnlockPending` state has caught up — and the unlock
+      // screen is bypassed.
+      const isUnlockScreen = segments[0] === "auth" && (
+        segments[1] === "google-unlock" || segments[1] === "set-initial-pin"
+      );
+      if (!isUnlockScreen) {
+        router.replace("/(tabs)");
+      }
     }
-  }, [user, segments, appReady, router]);
+  }, [user, segments, appReady, router, googleUnlockPending]);
 
   const handleOnboardingComplete = useCallback(() => {
     setShowOnboarding(false);
