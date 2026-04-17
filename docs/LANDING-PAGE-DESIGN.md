@@ -201,6 +201,77 @@ Modern, tight, works well for fintech. **Do not change.**
 
 ---
 
+## Upgrade from static unDraw art → real rendered visualisations
+
+**Decision:** Move the 2–3 most prominent illustrations from decorative
+unDraw SVGs to **actually-rendered visualisations driven by real data or
+real product chrome**. unDraw reads as an indie-project default; a real
+chart or a Lottie of our own product flow reads as a fintech.
+
+**Rule of motion (2026-04-17 update):** all illustrations are now **static
+by default** with **animation on hover only**. No more continuous idle
+loops — they were the biggest single "AI-template" tell on the page.
+Implementation: `.cpay-illustration` class (landing.tsx:637 area) was
+changed from `animation: cpay-illus-idle 5s ease-in-out infinite` to a
+pure `:hover` transform + glow transition.
+
+### Three prioritised upgrades
+
+#### 1. Hero secondary graphic — Lottie of crypto → M-Pesa flow
+Current: text-only left column next to the glass mockup card.
+Upgrade: add a small Lottie (≤150 KB) showing a coin icon dropping into
+a phone, then a paybill receipt appearing. Plays on scroll-into-view
+**once**, not on loop. Source: https://lottiefiles.com/free-animations/payment
+(curate 2–3 candidates, pick one with emerald/amber palette).
+Tool: `lottie-react` on web (`npm i lottie-react`). Guard with
+`Platform.OS === "web"` so native uses the existing static asset.
+
+#### 2. Stats section — real sparkline of USDT/KES over 7 days
+Current: 4 number tiles (90 s / live rate / < 30 s / 1.5 %).
+Upgrade: underlay a thin 7-day USDT/KES sparkline fetched from the
+existing `/api/v1/rates/market_chart?currency=USDT&days=7` endpoint
+(already implemented in `apps/rates/services.py::get_market_chart`). One
+line, 1 px stroke, primary-500 colour, no axes, no grid. Real data =
+real credibility.
+Tool: no dependency needed — render as an SVG `<polyline>`; <80 lines
+of code.
+
+#### 3. "How it works" section — mini phone UI mockup, not cartoon
+Current: `credit_card_payment_vzc8.svg` unDraw illustration.
+Upgrade: render a small phone-shaped card with three vertical steps
+styled to match the real app: "Enter paybill → Lock rate for 90 s →
+Confirm with PIN". Uses existing theme tokens. Zero new assets. Feels
+like the product, not a stock illustration.
+
+### What stays as unDraw (for now)
+
+Sections where a generic illustration is fine because they're framing
+copy rather than value prop: FAQ/questions section, Design community
+footer-ish section, empty states. Keep those on unDraw to preserve
+budget/focus for the three upgrades above.
+
+### When to use Lottie vs static SVG vs code-rendered UI
+
+| Use case | Asset type | Example |
+|---|---|---|
+| A product flow in motion ("watch how it works") | **Lottie** | Hero secondary, feature-benefit row |
+| Live data ("look how accurate we are") | **Code-rendered SVG** | Stats section sparkline, rate ticker mini-chart |
+| Product chrome ("this is what it looks like") | **Code-rendered UI** | Phone mockup in hero (already done), "how it works" steps |
+| Generic decoration (section breathing) | **unDraw** static | Empty states, FAQ section |
+
+### Implementation hints when you pick this up
+
+- Put Lotties in `mobile/assets/lottie/` named by purpose
+  (`payment-flow-hero.lottie`). Keep total bundle impact under 400 KB
+  for all Lotties combined.
+- Wrap each Lottie in a `<Suspense>` / lazy-import so it doesn't pad
+  the landing's initial JS bundle (`entry-*.js` currently ~4 MB;
+  non-critical Lotties should be in a chunk like
+  `_expo/static/js/web/lottie-*.js`).
+- Sparkline: use the `rates/market_chart` endpoint, cache client-side
+  for 5 min, render as `<svg viewBox="0 0 100 30">` with normalised
+  `polyline points="..."`. No chart library needed.
+
 ## Remaining backlog (prioritised)
 
 ### Priority 1 — Before beta launch
