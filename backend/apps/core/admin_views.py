@@ -328,6 +328,63 @@ def admin_stats_dashboard(request):
         created_at__gte=now - timedelta(hours=24)
     ).count()
 
+    # ── System health — live checks ─────────────────────────────────────
+    # Measured inline. Keeps the dashboard honest: if the DB/Redis/SMS/
+    # rate-provider is slow right now the number turns red.
+    import time as _time
+    from django.db import connection as _db_conn
+    from django.core.cache import cache as _cache
+    system_health = {
+        "timestamp": now.isoformat(),
+        "checks": [],
+    }
+
+    def _measure(name, fn):
+        t0 = _time.monotonic()
+        try:
+            fn()
+            ok, err = True, None
+        except Exception as e:  # noqa: BLE001
+            ok, err = False, str(e)[:160]
+        latency_ms = int((_time.monotonic() - t0) * 1000)
+        system_health["checks"].append({
+            "name": name,
+            "ok": ok,
+            "latency_ms": latency_ms,
+            "error": err,
+        })
+
+    # Database round-trip
+    def _db_check():
+        with _db_conn.cursor() as c:
+            c.execute("SELECT 1")
+            c.fetchone()
+    _measure("postgres", _db_check)
+
+    # Redis round-trip
+    _measure("redis", lambda: (_cache.set("admin_stats_health_probe", "1", 5), _cache.get("admin_stats_health_probe")))
+
+    # Rate cache freshness — we require at least one cached crypto rate
+    def _rate_check():
+        if not _cache.get("rate:crypto:USDT:usd"):
+            raise RuntimeError("rate cache empty")
+    _measure("rate_cache", _rate_check)
+
+    # Forex cache freshness
+    def _forex_check():
+        if not _cache.get("rate:forex:usd:kes"):
+            raise RuntimeError("forex cache empty")
+    _measure("forex_cache", _forex_check)
+
+    system_health["all_ok"] = all(c["ok"] for c in system_health["checks"])
+
+    # Recent activity (last 5 min) = proxy for "is the app being used right now"
+    from django.contrib.auth import get_user_model as _gum
+    _User = _gum()
+    online_cutoff = now - timedelta(minutes=5)
+    online_users_now = _User.objects.filter(last_activity_at__gt=online_cutoff).count()
+    active_24h_users = _User.objects.filter(last_activity_at__gt=now - timedelta(hours=24)).count()
+
     # ── Build Context ───────────────────────────────────────────────────
     context = {
         # Scalar stats
@@ -371,6 +428,10 @@ def admin_stats_dashboard(request):
         "type_breakdown_json": json.dumps(type_breakdown, cls=DecimalEncoder),
         # System stats
         "celery_tasks_24h": celery_tasks_24h,
+        "system_health": system_health,
+        "system_health_json": json.dumps(system_health, cls=DecimalEncoder),
+        "online_users_now": online_users_now,
+        "active_24h_users": active_24h_users,
         # Metadata
         "last_refresh": now.strftime("%Y-%m-%d %H:%M:%S %Z"),
     }
