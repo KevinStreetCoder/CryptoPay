@@ -237,31 +237,29 @@ export default function AdminUsersScreen() {
           </Text>
         </View>
 
-        {/* Presence strip — live counts of users active now vs today. */}
+        {/* Presence strip — live counts of users active now vs today.
+            Wraps on narrow viewports (<420px) so it never overflows. The
+            "N-minute window" caption drops below the metrics on mobile to
+            keep the tile row intact. */}
         {presence ? (
           <View
             style={{
               flexDirection: "row",
-              gap: 16,
+              flexWrap: "wrap",
+              columnGap: 16,
+              rowGap: 6,
               alignItems: "center",
               backgroundColor: tc.dark.card,
               borderRadius: 12,
               borderWidth: 1,
               borderColor: tc.glass.border,
               paddingVertical: 12,
-              paddingHorizontal: 16,
+              paddingHorizontal: 14,
               marginBottom: 16,
             }}
           >
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <View
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: 4,
-                  backgroundColor: colors.success,
-                }}
-              />
+              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.success }} />
               <Text style={{ color: tc.textPrimary, fontSize: 14, fontFamily: "DMSans_700Bold" }}>
                 {presence.online_now}
               </Text>
@@ -269,7 +267,6 @@ export default function AdminUsersScreen() {
                 online now
               </Text>
             </View>
-            <View style={{ width: 1, height: 18, backgroundColor: tc.glass.border }} />
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
               <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "#F59E0B" }} />
               <Text style={{ color: tc.textPrimary, fontSize: 14, fontFamily: "DMSans_700Bold" }}>
@@ -279,8 +276,14 @@ export default function AdminUsersScreen() {
                 active today
               </Text>
             </View>
-            <View style={{ flex: 1 }} />
-            <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_400Regular" }}>
+            <Text
+              style={{
+                color: tc.textMuted,
+                fontSize: 11,
+                fontFamily: "DMSans_400Regular",
+                marginLeft: isDesktop ? ("auto" as any) : 0,
+              }}
+            >
               {presence.online_window_minutes}-minute window
             </Text>
           </View>
