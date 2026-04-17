@@ -15,6 +15,8 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { getThemeColors, shadows } from "../src/constants/theme";
 import { CRYPTO_LOGOS } from "../src/constants/logos";
+import { KesRateSparkline } from "../src/components/landing/KesRateSparkline";
+import { HowItWorksMockup } from "../src/components/landing/HowItWorksMockup";
 
 const isWeb = Platform.OS === "web";
 
@@ -1162,6 +1164,15 @@ export default function LandingPage() {
     }}>
       {/* Nairobi skyline background */}
       {isWeb && !isMobile && <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "60%", opacity: 0.04, ...(isWeb ? { backgroundImage: `url(${CDN_IMAGES.nairobiSkyline})`, backgroundSize: "cover", backgroundPosition: "bottom center", filter: "blur(1px)" } as any : {}) } as any} />}
+      {/* Real 7-day BTC price sparkline underlay (web only). Data-driven
+          substitute for decorative unDraw-style illustrations — "look how
+          accurate our rates are" rather than a cartoon. Hover reveals a
+          scrubbing cursor with the exact value. */}
+      {isWeb && !isMobile ? (
+        <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 140, opacity: 0.55, pointerEvents: "box-none" } as any}>
+          <KesRateSparkline currency="BTC" height={140} />
+        </View>
+      ) : null}
       <Section>
         <RevealOnScroll variant="scale-up">
           <View style={{ alignItems: "center", marginBottom: isMobile ? 24 : 36 }}>
@@ -1211,7 +1222,10 @@ export default function LandingPage() {
       <Section>
         <RevealOnScroll variant="fade-up">
           <View style={{ flexDirection: isDesktop ? "row" : "column", alignItems: "center", justifyContent: "center", gap: isDesktop ? 40 : 16, marginBottom: isMobile ? 36 : 56 }}>
-            <SvgIllustration uri={ILLUSTRATIONS.fastLoading} size={isMobile ? 70 : 140} style={{ opacity: 0.75 }} />
+            {/* Product-chrome mockup instead of a stock unDraw illustration
+                — three real in-app states (paybill entry → rate lock →
+                confirmation). Reads as the actual product. */}
+            <HowItWorksMockup width={isMobile ? 240 : 290} />
             <View style={{ alignItems: isDesktop ? "flex-start" : "center", flex: isDesktop ? 1 : undefined }}>
               <Text style={{ color: tc.primary[400], fontSize: 12, fontFamily: "DMSans_700Bold", textTransform: "uppercase", letterSpacing: 3, marginBottom: 12 }}>How It Works</Text>
               <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 28 : 42, fontFamily: "DMSans_700Bold", textAlign: isDesktop ? "left" : "center", letterSpacing: -1, lineHeight: isMobile ? 36 : 52 }}>Simple as sending a text message</Text>

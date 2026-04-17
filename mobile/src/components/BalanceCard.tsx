@@ -81,7 +81,14 @@ export function BalanceCard({ wallets }: BalanceCardProps) {
       </View>
 
       <Text
-        style={styles.balance}
+        style={[
+          styles.balance,
+          // Shrink the balance figure on narrow phones (iPhone SE / 320px) so
+          // KES totals like "KSh 1,234,567.89" don't clip or wrap mid-figure.
+          isSmall && { fontSize: 26, letterSpacing: -0.5, marginBottom: 16 },
+        ]}
+        adjustsFontSizeToFit
+        numberOfLines={1}
         maxFontSizeMultiplier={1.2}
         accessibilityElementsHidden={hidden}
       >

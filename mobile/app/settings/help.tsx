@@ -405,12 +405,10 @@ export default function HelpScreen() {
     Linking.openURL("mailto:support@cpay.co.ke");
   };
 
-  // Support WhatsApp is disabled until a real monitored number is set.
-  // Swap SUPPORT_WHATSAPP_NUMBER to a real E.164 number (e.g. "254712345678")
-  // to re-enable the button. Previously wired to +254700000000 — that's a
-  // placeholder which routes nowhere and would embarrass us in front of
-  // a beta tester.
-  const SUPPORT_WHATSAPP_NUMBER = ""; // empty => hide the card
+  // Support WhatsApp — routes to Kevin's line until we provision a
+  // dedicated support number. Swap this constant when that happens.
+  // Previous value "+254700000000" was a placeholder that 404'd.
+  const SUPPORT_WHATSAPP_NUMBER = "254701961618";
   const handleWhatsApp = () => {
     if (!SUPPORT_WHATSAPP_NUMBER) return;
     Linking.openURL(`https://wa.me/${SUPPORT_WHATSAPP_NUMBER}`);
