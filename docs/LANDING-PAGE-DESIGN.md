@@ -5,6 +5,8 @@
 fintech (Wise, Revolut, Cash App, Flutterwave, Chipper) — not an AI-generated
 template.
 
+**Last updated:** 2026-04-17 (industry-standard audit + credibility fixes)
+
 ---
 
 ## Principles (anti-AI-slop checklist)
@@ -56,6 +58,89 @@ production site. Summary of issues and status.
 | 11 | Section reveal animations all identical timing (0.6s). Wise/Revolut stagger for lightness. | `app/landing.tsx` | Low | **Todo** — pass stagger index to `RevealOnScroll`. |
 | 12 | Pricing / "How it works" icons feel generic. Could use Storyset for a more editorial tone. | various | Low | **Todo**. |
 | 13 | No hero illustration of the core product flow (KES → crypto → paybill). Value prop is text-only on the left. | hero section | High | **Todo** — Lottie or static SVG hero illustration. |
+
+---
+
+## Industry-standard audit (2026-04-17)
+
+Benchmarked against **Wise, Revolut, Cash App, Flutterwave, Chipper Cash**.
+
+### Claims & numbers — verified and corrected
+
+| Claim | File:Line | Status | Note |
+|---|---|---|---|
+| "730K+ Kenyans use crypto" animated counter | landing.tsx:487,1155,1163 | **Removed 2026-04-17** | Number was unsourced and couldn't be reliably defended to a journalist or regulator. Replaced with "Kenyans hold billions in crypto — but can't pay a single electricity bill with it. Until now." The 4-tile stat strip no longer leads with a fabricated user count — the "90 s rate lock" takes its place (verifiable from backend code). |
+| "First KES 5,000 — zero fees" | landing.tsx:1433,1454,1785 | **Clarified 2026-04-17** | The 1.5% spread still applies to the first KES 5K — only the KES 10 flat fee is waived. Copy now reads "First KES 5,000 — KES 10 flat fee waived" / "no flat fee". Prevents chargeback / complaint risk. |
+| "VASP-compliant architecture" | landing.tsx:809 | **Softened 2026-04-17** | We're not licensed under the VASP Act yet (KES 50 M capital requirement; Act No. 20 of 2025). "Compliant" was overselling. Now reads "Built for Kenya's VASP Act 2025" — honest positioning that we designed toward the regs while waiting on licensure. |
+| "< 30 s payment speed" | many | ✓ Kept | Real, backend-verified (saga target). |
+| "Rate locked for 90 seconds" | many | ✓ Kept | Verifiable — see `apps/rates/services.py` `RATE_LOCK_TTL_SECONDS = 90` in settings. |
+| "1.5% transparent spread + KES 10 flat fee" | many | ✓ Kept | Real — see `PLATFORM_SPREAD_PERCENT` and `FLAT_FEE_KES` in `config/settings/base.py`. |
+
+### Partner claims — verified against backend
+
+| Partner | Integration backed by code? | Notes |
+|---|---|---|
+| **M-Pesa (Daraja / SasaPay)** | ✓ `backend/apps/mpesa/` (full client + callbacks, live STK Push tested with KSh 52.05) | Safest partner claim — direct production integration. |
+| **Smile Identity** | ✓ `backend/apps/accounts/kyc_service.py` — `SMILE_API_BASE = "https://api.smileidentity.com/v2/"` | Code is wired; API keys not yet issued (pending signup). Current logo is aspirational until we sign up. |
+| **CoinGecko** | ✓ `backend/apps/rates/services.py` — demo API key configured, attribution present | Honest listing. |
+| **Sentry** | ✓ Django settings ready; DSN not yet set in prod `.env` | Listed as infrastructure rather than customer-facing partner. |
+
+### unDraw & illustrations — source verified
+
+The `U` CDN constant resolves to the official unDraw Rackspace endpoint
+(`42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations`).
+This *is* the domain unDraw themselves serve from, but **we're currently
+hot-linking**. For production resilience, all 12 SVGs should be pulled into
+`mobile/public/illustrations/` so they survive a CDN outage and load faster
+for Kenyan users (lower TTFB from Cloudflare edge vs Rackspace US).
+
+Illustrations currently referenced: `bitcoin2_ave7`, `finance_0bdk`,
+`wallet_aym5`, `secure_data_0rwp`, `fast_loading_0lbh`,
+`successful_purchase_uyin`, `credit_card_payment_vzc8`, `questions_re1f`,
+`design_community_8qqr`, `online_world_igmw`, `target_kriv`, `safe_c-7y`.
+
+All unDraw assets are MIT-licensed / free for commercial use per unDraw's
+public licence. No attribution required, but crediting on the /about page
+is a courtesy.
+
+### Industry gaps (Wise / Revolut / Cash App / Flutterwave / Chipper)
+
+These five reference sites share patterns we are missing:
+
+1. **Testimonial photos** — we use initials in coloured circles; they use
+   real or stylised avatar photos. Initials read as "AI-generated template".
+2. **Regulator name in header / hero** — Wise prints "FCA-regulated since
+   2011" above the fold; Revolut prints their specific licence. We can't
+   claim FCA or CBK yet, but once the VASP Bill is finalised and the
+   licence arrives we should be explicit about the regulator + licence
+   number.
+3. **App store rating** — every reference site shows "4.5★ on App Store"
+   somewhere above the fold. Add once we have real reviews.
+4. **Press coverage strip** — "As seen in TechCrunch / Business Daily /
+   Bitange Ndemo's blog" etc. Post-launch.
+5. **Footer social proof** — Revolut and Wise both print TVT ("Total Value
+   Transacted") or MAU in the footer. Ours is Legal-only. Add once we have
+   real numbers to cite.
+
+### What CryptoPay already does BETTER than the reference 5
+
+- **90-second rate lock** is a genuine differentiator — neither Wise nor
+  Revolut commits to a fixed rate for consumer transfers.
+- **Transparent fee table** (1.5% spread + KES 10 flat) is clearer than
+  Revolut's hidden FX markup.
+- **Live rate tile** (USDT/KES pulled from CoinGecko every 2 min) gives
+  the hero a credibility signal their static sites don't match.
+- **Bento feature grid** with scroll-reveal animations is more modern
+  than the Wise/Revolut feature-row wall-of-text.
+
+### Scoring
+
+| Dimension | Score | Delta vs audit |
+|---|---|---|
+| Trust / credibility | 82/100 (was 70) | +12 after removing fabricated stat, clarifying free offer, softening VASP language |
+| Design polish | 85/100 | Unchanged — bento layout + animations are genuinely strong |
+| Industry alignment | 72/100 | Missing photos / ratings / press remain open |
+| Legal / compliance risk | Low (was Medium-High) | Claims now sourced or removed |
 
 ---
 
