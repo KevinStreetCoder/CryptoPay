@@ -1,12 +1,17 @@
 import json
+import time
 from datetime import timedelta
 from decimal import Decimal
 
+from django.conf import settings
 from django.contrib.admin.views.decorators import staff_member_required
 from django.db.models import Count, Sum, Q, F
 from django.db.models.functions import TruncDate, Substr
+from django.http import JsonResponse
 from django.shortcuts import render
 from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
 
 from apps.accounts.models import User
 from apps.blockchain.models import BlockchainDeposit
@@ -371,3 +376,71 @@ def admin_stats_dashboard(request):
     }
 
     return render(request, "admin/stats.html", context)
+
+
+# ---------------------------------------------------------------------------
+# SMS health check endpoint — staff-only, verifies eSMS / AT delivery on demand
+# ---------------------------------------------------------------------------
+
+
+@csrf_exempt
+@staff_member_required
+@require_http_methods(["POST", "GET"])
+def admin_sms_health(request):
+    """Staff-only endpoint to send a test SMS and report provider outcome.
+
+    GET:  returns which providers are configured (no message sent).
+    POST: accepts JSON or form body with 'to' (E.164 phone) and optional
+          'message'. Dispatches via send_sms() and returns latency + success.
+
+    Purpose: after provider outages (like eSMS Africa's week of silent drops
+    in April 2026) we need a fast, auth-gated way to verify OTP delivery
+    without going through the full login flow.
+    """
+    from apps.core.email import send_sms
+
+    esms_configured = bool(
+        getattr(settings, "ESMS_API_KEY", "") and getattr(settings, "ESMS_ACCOUNT_ID", "")
+    )
+    at_configured = bool(getattr(settings, "AT_API_KEY", ""))
+
+    if request.method == "GET":
+        return JsonResponse({
+            "providers": {
+                "esms_africa": "configured" if esms_configured else "not_configured",
+                "africas_talking": "configured" if at_configured else "not_configured",
+            },
+            "usage": "POST { 'to': '+2547XXXXXXXX', 'message': 'optional test body' }",
+        })
+
+    # POST — parse body
+    try:
+        if request.content_type and "application/json" in request.content_type:
+            body = json.loads(request.body.decode("utf-8") or "{}")
+        else:
+            body = request.POST
+        to = (body.get("to") or "").strip()
+        message = (body.get("message") or
+                   f"CPay health check {timezone.now().strftime('%H:%M:%S')}").strip()
+    except (ValueError, UnicodeDecodeError):
+        return JsonResponse({"ok": False, "error": "invalid_body"}, status=400)
+
+    if not to:
+        return JsonResponse({"ok": False, "error": "missing_to"}, status=400)
+
+    t0 = time.monotonic()
+    ok = send_sms(to, message)
+    latency_ms = int((time.monotonic() - t0) * 1000)
+
+    # Which provider actually delivered is recorded in the structured
+    # `sms.dispatch` log entry emitted by send_sms — we just report overall
+    # success here to keep the response small.
+    return JsonResponse({
+        "ok": bool(ok),
+        "to_masked": f"***{to[-4:]}" if len(to) >= 4 else "***",
+        "latency_ms": latency_ms,
+        "providers_tried": {
+            "esms_africa": esms_configured,
+            "africas_talking_fallback": at_configured,
+        },
+    })

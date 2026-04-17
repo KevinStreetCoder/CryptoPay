@@ -1,12 +1,21 @@
 """Email and SMS service module — direct sending (no Celery dependency)."""
 
 import logging
+import time
 
 from django.conf import settings
 from django.core.mail import send_mail, mail_admins
 from django.template.loader import render_to_string
 
 logger = logging.getLogger(__name__)
+
+
+def _mask_phone(phone):
+    """Return a masked phone for log lines: +25471234**** -> ***1234."""
+    if not phone:
+        return "***"
+    digits = str(phone)
+    return f"***{digits[-4:]}" if len(digits) >= 4 else "***"
 
 
 # ---------------------------------------------------------------------------
@@ -31,11 +40,13 @@ def send_sms(phone, message):
         return False
 
     sms_sent = False
+    to_masked = _mask_phone(phone)
 
     # Primary: eSMS Africa
     esms_key = getattr(settings, "ESMS_API_KEY", "")
     esms_account = getattr(settings, "ESMS_ACCOUNT_ID", "")
     if esms_key and esms_account:
+        t0 = time.monotonic()
         try:
             import requests as http_requests
             payload = {
@@ -55,26 +66,74 @@ def send_sms(phone, message):
                 },
                 timeout=10,
             )
-            if resp.status_code == 200:
-                sms_sent = True
-                logger.info(f"SMS sent via eSMS to {phone[:7]}***")
-            else:
-                logger.error(f"eSMS failed: {resp.status_code} {resp.text}")
+            latency_ms = int((time.monotonic() - t0) * 1000)
+            ok = resp.status_code == 200
+            sms_sent = ok
+            # Structured log — shows up in Sentry breadcrumbs and any JSON log aggregator
+            (logger.info if ok else logger.error)(
+                "sms.dispatch",
+                extra={
+                    "provider": "esms_africa",
+                    "to_masked": to_masked,
+                    "status_code": resp.status_code,
+                    "latency_ms": latency_ms,
+                    "fallback_triggered": False,
+                    "ok": ok,
+                    "response_snippet": (resp.text or "")[:200],
+                },
+            )
         except Exception as e:
-            logger.error(f"eSMS send failed: {e}")
+            latency_ms = int((time.monotonic() - t0) * 1000)
+            logger.exception(
+                "sms.dispatch",
+                extra={
+                    "provider": "esms_africa",
+                    "to_masked": to_masked,
+                    "status_code": None,
+                    "latency_ms": latency_ms,
+                    "fallback_triggered": False,
+                    "ok": False,
+                    "error": str(e),
+                },
+            )
 
     # Fallback: Africa's Talking
     if not sms_sent and getattr(settings, "AT_API_KEY", ""):
+        t0 = time.monotonic()
         try:
             import africastalking
             africastalking.initialize(settings.AT_USERNAME, settings.AT_API_KEY)
             sms = africastalking.SMS
             sender = getattr(settings, "AT_SENDER_ID", "") or None
-            sms.send(message, [phone], sender_id=sender)
+            at_resp = sms.send(message, [phone], sender_id=sender)
+            latency_ms = int((time.monotonic() - t0) * 1000)
             sms_sent = True
-            logger.info(f"SMS sent via AT to {phone[:7]}***")
+            logger.info(
+                "sms.dispatch",
+                extra={
+                    "provider": "africas_talking",
+                    "to_masked": to_masked,
+                    "status_code": 200,
+                    "latency_ms": latency_ms,
+                    "fallback_triggered": True,
+                    "ok": True,
+                    "response_snippet": str(at_resp)[:200],
+                },
+            )
         except Exception as e:
-            logger.error(f"AT SMS send failed: {e}")
+            latency_ms = int((time.monotonic() - t0) * 1000)
+            logger.exception(
+                "sms.dispatch",
+                extra={
+                    "provider": "africas_talking",
+                    "to_masked": to_masked,
+                    "status_code": None,
+                    "latency_ms": latency_ms,
+                    "fallback_triggered": True,
+                    "ok": False,
+                    "error": str(e),
+                },
+            )
 
     if not sms_sent:
         logger.info(f"[DEV] SMS to {phone}: {message}")
