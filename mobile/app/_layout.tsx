@@ -117,12 +117,45 @@ function RootNavigator() {
     })();
   }, [user]);
 
+  // Google-unlock sentinel — set when a returning Google user has tokens
+  // but hasn't proven local PIN/biometric yet. Read in the auth gate to
+  // force /auth/google-unlock before any authenticated screen renders.
+  const [googleUnlockPending, setGoogleUnlockPending] = useState(false);
+  useEffect(() => {
+    if (!user) {
+      setGoogleUnlockPending(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { isGoogleUnlockPending } = await import("../src/stores/auth");
+      const pending = await isGoogleUnlockPending();
+      if (!cancelled) setGoogleUnlockPending(pending);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, segments]);
+
   // Auth gate
   useEffect(() => {
     if (!appReady) return;
 
     const inAuthGroup = segments[0] === "auth";
     const inOnboarding = segments[0] === "onboarding";
+
+    // Force Google-authenticated users through PIN/biometric before they
+    // can reach authenticated routes. `auth/google-unlock` itself and
+    // `auth/set-initial-pin` are allowed; everything else is blocked.
+    if (user && googleUnlockPending) {
+      const isUnlockScreen = segments[0] === "auth" && (
+        segments[1] === "google-unlock" || segments[1] === "set-initial-pin"
+      );
+      if (!isUnlockScreen) {
+        router.replace("/auth/google-unlock" as any);
+        return;
+      }
+    }
 
     // Skip onboarding route — redirect to proper place
     if (inOnboarding) {

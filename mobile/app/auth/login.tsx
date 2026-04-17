@@ -221,9 +221,14 @@ export default function LoginScreen() {
       if (data.phone_required) {
         router.replace("/auth/google-complete-profile" as any);
       } else if (data.pin_required) {
+        // First-time Google user — set their PIN then enter the app.
         router.replace("/auth/set-initial-pin" as any);
       } else {
-        router.replace("/(tabs)");
+        // Returning Google user. Even though Google verified them server-
+        // side, we REQUIRE a local second factor (PIN or biometric)
+        // before dropping them into authenticated screens. A stolen
+        // Google session must not open the wallet.
+        router.replace("/auth/google-unlock" as any);
       }
     } catch (err: unknown) {
       const appError = normalizeError(err);

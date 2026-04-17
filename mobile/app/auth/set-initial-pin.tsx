@@ -75,6 +75,14 @@ export default function SetInitialPinScreen() {
     setPinError(false);
     try {
       await authApi.setInitialPin(confirmPin);
+      // A brand-new Google user has now set their PIN, so the unlock
+      // gate no longer applies for this session.
+      try {
+        const { clearGoogleUnlockFlag } = await import("../../src/stores/auth");
+        await clearGoogleUnlockFlag();
+      } catch {
+        /* non-fatal */
+      }
       toast.success("PIN Set", "Your security PIN has been set successfully.");
       router.replace("/(tabs)");
     } catch (err: unknown) {

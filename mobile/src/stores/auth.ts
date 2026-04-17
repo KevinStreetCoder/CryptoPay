@@ -17,6 +17,9 @@ function notify() {
 export function forceLogout() {
   storage.deleteItemAsync("access_token");
   storage.deleteItemAsync("refresh_token");
+  // Also clear the Google-unlock sentinel so a fresh sign-in isn't
+  // perpetually stuck behind the gate.
+  storage.deleteItemAsync("google_unlock_pending");
   _user = null;
   resetBalanceVisibility();
   notify();
@@ -27,6 +30,20 @@ export function forceLogout() {
 setOnSessionExpired(forceLogout);
 
 /** Check if user has enabled biometric login */
+/**
+ * True when the user authenticated via Google and has not yet proven
+ * local device ownership (PIN or biometric). Route guards read this to
+ * force `/auth/google-unlock` before any authenticated screen renders.
+ */
+export async function isGoogleUnlockPending(): Promise<boolean> {
+  const v = await storage.getItemAsync("google_unlock_pending");
+  return v === "1";
+}
+
+export async function clearGoogleUnlockFlag(): Promise<void> {
+  await storage.deleteItemAsync("google_unlock_pending");
+}
+
 export async function isBiometricEnabled(): Promise<boolean> {
   const val = await storage.getItemAsync("biometric_enabled");
   return val === "true";
@@ -134,6 +151,15 @@ export function useAuth() {
     } else {
       await storage.setItemAsync("access_token", data.tokens.access);
       await storage.setItemAsync("refresh_token", data.tokens.refresh);
+      // Set the "needs local unlock" flag BEFORE exposing the user. The
+      // route guard in _layout.tsx sees this and forces /auth/google-
+      // unlock. Cleared on successful PIN/biometric (see clearGoogleUnlockFlag).
+      // pin_required=true means it's a first-time user who will be routed
+      // to /auth/set-initial-pin; that screen also clears this flag on
+      // completion.
+      if (!data.pin_required) {
+        await storage.setItemAsync("google_unlock_pending", "1");
+      }
       resetSessionExpired();
       _user = data.user;
       notify();
