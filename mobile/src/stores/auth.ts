@@ -34,14 +34,54 @@ setOnSessionExpired(forceLogout);
  * True when the user authenticated via Google and has not yet proven
  * local device ownership (PIN or biometric). Route guards read this to
  * force `/auth/google-unlock` before any authenticated screen renders.
+ *
+ * Kept as a module-level synchronous mirror of the SecureStore flag so
+ * the route guard in _layout.tsx can react WITHOUT waiting for an async
+ * read — avoiding the race where /(tabs) briefly renders between
+ * SecureStore writes and React state updates.
  */
+let _googleUnlockSync: boolean | null = null;
+const _unlockSubs = new Set<() => void>();
+
+function _notifyUnlock() {
+  _unlockSubs.forEach((fn) => fn());
+}
+
+export function subscribeGoogleUnlock(cb: () => void): () => void {
+  _unlockSubs.add(cb);
+  return () => _unlockSubs.delete(cb);
+}
+
+export function getGoogleUnlockPendingSync(): boolean {
+  return _googleUnlockSync === true;
+}
+
 export async function isGoogleUnlockPending(): Promise<boolean> {
   const v = await storage.getItemAsync("google_unlock_pending");
-  return v === "1";
+  const pending = v === "1";
+  // Populate the sync mirror the first time we read from SecureStore so
+  // subsequent calls to getGoogleUnlockPendingSync() return the real state.
+  if (_googleUnlockSync !== pending) {
+    _googleUnlockSync = pending;
+    _notifyUnlock();
+  }
+  return pending;
+}
+
+export async function setGoogleUnlockPendingFlag(): Promise<void> {
+  await storage.setItemAsync("google_unlock_pending", "1");
+  if (_googleUnlockSync !== true) {
+    _googleUnlockSync = true;
+    _notifyUnlock();
+  }
 }
 
 export async function clearGoogleUnlockFlag(): Promise<void> {
   await storage.deleteItemAsync("google_unlock_pending");
+  if (_googleUnlockSync !== false) {
+    _googleUnlockSync = false;
+    _notifyUnlock();
+  }
 }
 
 export async function isBiometricEnabled(): Promise<boolean> {
@@ -153,12 +193,12 @@ export function useAuth() {
       await storage.setItemAsync("refresh_token", data.tokens.refresh);
       // Set the "needs local unlock" flag BEFORE exposing the user. The
       // route guard in _layout.tsx sees this and forces /auth/google-
-      // unlock. Cleared on successful PIN/biometric (see clearGoogleUnlockFlag).
-      // pin_required=true means it's a first-time user who will be routed
-      // to /auth/set-initial-pin; that screen also clears this flag on
-      // completion.
+      // unlock. Cleared on successful PIN/biometric. Uses the atomic
+      // helper so the sync mirror flips instantly — eliminates the race
+      // where the auth gate runs before the async SecureStore read
+      // resolves and briefly lets the user through to (tabs).
       if (!data.pin_required) {
-        await storage.setItemAsync("google_unlock_pending", "1");
+        await setGoogleUnlockPendingFlag();
       }
       resetSessionExpired();
       _user = data.user;
