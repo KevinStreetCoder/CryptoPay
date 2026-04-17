@@ -21,6 +21,7 @@ import { PinInput } from "../../src/components/PinInput";
 import { OTPInput } from "../../src/components/OTPInput";
 import { useToast } from "../../src/components/Toast";
 import { useAuth } from "../../src/stores/auth";
+import { authApi } from "../../src/api/auth";
 import { resetSessionExpired } from "../../src/api/client";
 import { useScreenSecurity } from "../../src/hooks/useScreenSecurity";
 import { normalizeError } from "../../src/utils/apiErrors";
@@ -190,6 +191,11 @@ export default function LoginScreen() {
   const [otpRequired, setOtpRequired] = useState(false);
   const [securityChallenge, setSecurityChallenge] = useState(false);
   const [pendingPin, setPendingPin] = useState("");
+  // Push-2FA state: when the server returns a push_challenge, we poll its
+  // status every 3s in parallel with the OTP input. The moment the other
+  // device taps Approve, this auto-completes the login without the user
+  // touching anything.
+  const [pushChallengeId, setPushChallengeId] = useState<string | null>(null);
   const { width } = useWindowDimensions();
   const { ready: googleReady, response: googleResponse, promptAsync } = useGoogleAuth();
 
@@ -273,6 +279,10 @@ export default function LoginScreen() {
         setPendingPin(pin);
         setOtpRequired(true);
         setSecurityChallenge(!!errorData.security_challenge);
+        // If backend dispatched a push challenge, store its ID so the
+        // polling effect below activates and can auto-complete login.
+        const challengeId = errorData.push_challenge?.challenge_id ?? null;
+        setPushChallengeId(challengeId);
         animateTransition("otp");
         const devOtp = errorData.dev_otp ? ` [DEV OTP: ${errorData.dev_otp}]` : "";
         toast.warning(
@@ -288,6 +298,59 @@ export default function LoginScreen() {
       setLoading(false);
     }
   };
+
+  // Poll the push-challenge status while the OTP screen is shown.
+  // Stops when: challenge is consumed, OTP flow ends, or 5 min elapse.
+  // If the user has no second device, pushChallengeId is null and this
+  // effect is a no-op — the SMS OTP flow works exactly as before.
+  useEffect(() => {
+    if (!pushChallengeId || !otpRequired) return;
+    let cancelled = false;
+    let attempts = 0;
+    const maxAttempts = 100; // 100 * 3s = 5 min, matches backend TTL
+
+    const tick = async () => {
+      if (cancelled) return;
+      attempts += 1;
+      try {
+        const { data } = await authApi.getChallengeStatus(pushChallengeId);
+        if (cancelled) return;
+        if (data.status === "approved") {
+          // The other device approved — finish login with challenge_id as proof.
+          setLoading(true);
+          try {
+            await login(phone, pendingPin, undefined, pushChallengeId);
+            router.replace("/(tabs)");
+          } catch (err) {
+            const appError = normalizeError(err);
+            toast.error(appError.title, appError.message);
+          } finally {
+            setLoading(false);
+          }
+          return;
+        }
+        if (data.status === "denied") {
+          toast.error("Sign-in denied", "You denied this sign-in on your other device.");
+          setPushChallengeId(null);
+          return;
+        }
+        if (data.status === "expired") {
+          setPushChallengeId(null);
+          return;
+        }
+      } catch {
+        // 404 = expired, any other error → stop polling silently, SMS still works
+        setPushChallengeId(null);
+        return;
+      }
+      if (!cancelled && attempts < maxAttempts) {
+        setTimeout(tick, 3000);
+      }
+    };
+
+    const t = setTimeout(tick, 3000);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [pushChallengeId, otpRequired, phone, pendingPin]);
 
   const handleOtpComplete = async (otp: string) => {
     if (Platform.OS !== "web") Keyboard.dismiss();
@@ -816,6 +879,36 @@ export default function LoginScreen() {
           ) : (
             /* OTP Challenge Step */
             <View>
+              {/* Push-approval banner — only shown when the server dispatched
+                  a push challenge to another trusted device. If the user has
+                  no other device, pushChallengeId is null and this hides
+                  entirely — they just see the normal OTP input below. */}
+              {pushChallengeId ? (
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    backgroundColor: "rgba(59, 130, 246, 0.08)",
+                    borderColor: "rgba(59, 130, 246, 0.25)",
+                    borderWidth: 1,
+                    borderRadius: 12,
+                    padding: 12,
+                    marginBottom: 16,
+                    gap: 10,
+                  }}
+                >
+                  <Ionicons name="notifications-outline" size={20} color="#3B82F6" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: "#3B82F6", fontSize: 13, fontFamily: "DMSans_600SemiBold" }}>
+                      Check your other device
+                    </Text>
+                    <Text style={{ color: "#3B82F6", opacity: 0.85, fontSize: 12, fontFamily: "DMSans_400Regular", marginTop: 2 }}>
+                      Tap "Approve" on the notification — or just enter the code below.
+                    </Text>
+                  </View>
+                </View>
+              ) : null}
+
               <OTPInput
                 length={6}
                 onComplete={handleOtpComplete}
@@ -832,6 +925,7 @@ export default function LoginScreen() {
               <Pressable
                 onPress={() => {
                   setOtpRequired(false);
+                  setPushChallengeId(null);
                   animateTransition("pin");
                 }}
                 style={({ pressed, hovered }: any) => ({

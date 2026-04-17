@@ -569,8 +569,8 @@ export default function LandingPage() {
       @keyframes cpay-scroll-left { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
       @keyframes cpay-shine { 0% { left:-100%;opacity:0; } 50% { opacity:0.6; } 100% { left:200%;opacity:0; } }
       @keyframes cpay-particle { 0%,100% { transform: translateY(0) translateX(0); opacity:0.3; } 25% { transform: translateY(-20px) translateX(10px); opacity:0.6; } 50% { transform: translateY(-10px) translateX(-15px); opacity:0.4; } 75% { transform: translateY(-30px) translateX(5px); opacity:0.5; } }
-      @keyframes cpay-glow-border { 0%,100% { border-color: rgba(16,185,129,0.15); box-shadow: 0 20px 60px rgba(0,0,0,0.4); } 50% { border-color: rgba(16,185,129,0.3); box-shadow: 0 20px 60px rgba(0,0,0,0.4), 0 0 30px rgba(16,185,129,0.08); } }
-      @keyframes cpay-tilt-float { 0%,100% { transform: perspective(1200px) rotateX(2deg) rotateY(-1deg) translateY(0); } 50% { transform: perspective(1200px) rotateX(-1deg) rotateY(1deg) translateY(-8px); } }
+      @keyframes cpay-glow-border { 0%,100% { border-color: rgba(16,185,129,0.12); box-shadow: 0 16px 48px rgba(0,0,0,0.4); } 50% { border-color: rgba(16,185,129,0.22); box-shadow: 0 16px 48px rgba(0,0,0,0.4), 0 0 24px rgba(16,185,129,0.05); } }
+      @keyframes cpay-tilt-float { 0%,100% { transform: perspective(1200px) rotateX(1.5deg) rotateY(-0.8deg) translateY(0); } 50% { transform: perspective(1200px) rotateX(-0.8deg) rotateY(0.8deg) translateY(-6px); } }
       @keyframes cpay-img-reveal { 0% { clip-path: inset(100% 0 0 0); opacity:0; } 100% { clip-path: inset(0 0 0 0); opacity:1; } }
       @keyframes cpay-count-pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.04); } }
 
@@ -581,7 +581,7 @@ export default function LandingPage() {
       .cpay-carousel-track-reverse { display:flex; animation: cpay-scroll-left 30s linear infinite reverse; width: max-content; }
       .cpay-carousel-track-reverse:hover { animation-play-state: paused; }
 
-      .cpay-hero-mockup { animation: cpay-tilt-float 6s ease-in-out infinite, cpay-glow-border 4s ease-in-out infinite; transition: transform 0.4s ease, box-shadow 0.4s ease; }
+      .cpay-hero-mockup { animation: cpay-tilt-float 5s ease-in-out infinite, cpay-glow-border 3.5s ease-in-out infinite; transition: transform 0.4s ease, box-shadow 0.4s ease; }
       .cpay-hero-mockup:hover { transform: perspective(1200px) rotateX(0deg) rotateY(0deg) translateY(-12px) scale(1.02) !important; box-shadow: 0 30px 80px rgba(0,0,0,0.5), 0 0 40px rgba(16,185,129,0.12) !important; }
 
       .cpay-img-accent { animation: cpay-img-reveal 1s cubic-bezier(0.4,0,0.2,1) both; border-radius: 16px; }
@@ -786,6 +786,43 @@ export default function LandingPage() {
                 <Text style={{ color: tc.textSecondary, fontSize: 15, fontFamily: "DMSans_600SemiBold" }}>See How It Works</Text>
               </Pressable>
             </View>
+
+            {/* Trust strip — small hero-adjacent social proof. Three quick
+                signals (Kenya-built, VASP-aligned, partner-backed) give
+                returning visitors the fintech credibility cue right above
+                the fold, without taking space from the primary CTAs. */}
+            <View
+              style={{
+                flexDirection: "row",
+                flexWrap: "wrap",
+                alignItems: "center",
+                gap: 14,
+                marginTop: 18,
+                justifyContent: isDesktop ? "flex-start" : "center",
+              }}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <Ionicons name="shield-checkmark" size={14} color={tc.primary[400]} />
+                <Text style={{ color: tc.textSecondary, fontSize: 12, fontFamily: "DMSans_500Medium" }}>
+                  VASP-compliant architecture
+                </Text>
+              </View>
+              <View style={{ width: 3, height: 3, borderRadius: 2, backgroundColor: tc.textMuted, opacity: 0.5 }} />
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <Ionicons name="flag-outline" size={14} color={tc.primary[400]} />
+                <Text style={{ color: tc.textSecondary, fontSize: 12, fontFamily: "DMSans_500Medium" }}>
+                  Built in Kenya
+                </Text>
+              </View>
+              <View style={{ width: 3, height: 3, borderRadius: 2, backgroundColor: tc.textMuted, opacity: 0.5 }} />
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <Ionicons name="lock-closed-outline" size={14} color={tc.primary[400]} />
+                <Text style={{ color: tc.textSecondary, fontSize: 12, fontFamily: "DMSans_500Medium" }}>
+                  Bank-grade encryption
+                </Text>
+              </View>
+            </View>
+
             {/* Sign in + store badges */}
             <Pressable onPress={navigateToLogin} style={({ hovered }: any) => ({ marginTop: 14, flexDirection: "row", alignItems: "center", gap: 6, alignSelf: isDesktop ? "flex-start" as any : "center" as any, backgroundColor: hovered ? "rgba(255,255,255,0.03)" : "transparent", paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, ...(isWeb ? { cursor: "pointer", transition: "all 0.2s ease" } as any : {}) })}>
               <Text style={{ color: tc.textMuted, fontSize: 14, fontFamily: "DMSans_400Regular" }}>
@@ -812,7 +849,7 @@ export default function LandingPage() {
             ref={(ref: any) => { if (isWeb && ref instanceof HTMLElement) ref.className = "cpay-hero-mockup"; }}
             style={{
               width: heroMockupWidth, backgroundColor: "rgba(12,26,46,0.88)",
-              borderRadius: 24, borderWidth: 1.5, borderColor: "rgba(16,185,129,0.15)",
+              borderRadius: 16, borderWidth: 1.5, borderColor: "rgba(16,185,129,0.15)",
               padding: isMobile ? 18 : 24, overflow: "hidden",
               ...(isWeb ? { backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", boxShadow: "0 20px 60px rgba(0,0,0,0.45), 0 0 0 1px rgba(16,185,129,0.08)", willChange: "transform" } as any : {}),
             } as any}
