@@ -7,7 +7,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from apps.core.admin_views import admin_stats_dashboard
+from apps.core.admin_views import admin_stats_dashboard, admin_sms_health
 from apps.core.views import HealthCheckView
 
 
@@ -22,6 +22,7 @@ urlpatterns = [
     path("", include("django_prometheus.urls")),
     path("health/", HealthCheckView.as_view(), name="health-check"),
     path("admin/stats/", admin_stats_dashboard, name="admin-stats"),
+    path("admin/health/sms/", admin_sms_health, name="admin-sms-health"),
     path("admin/", admin.site.urls),
     path("api/v1/auth/", include("apps.accounts.urls")),
     path("api/v1/wallets/", include("apps.wallets.urls")),

@@ -335,7 +335,9 @@ else:
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+    # 30-day refresh TTL. Rotation + blacklist are on, so a stolen token is
+    # invalidated on the legit client's next refresh. Matches Binance/Revolut.
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=30),
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
     "ALGORITHM": _JWT_ALGORITHM,

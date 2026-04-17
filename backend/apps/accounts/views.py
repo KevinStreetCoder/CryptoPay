@@ -348,15 +348,30 @@ class LoginView(APIView):
         security_challenge = False
         challenge_reasons = []
 
-        # Check for new/unknown device (skip if OTP already verified)
+        # Check for new/unknown device (skip if OTP already verified).
+        # A device is only considered "known" if it exists AND is trusted — trust
+        # is set on first successful login via update_or_create below.
+        known_device = False
         if device_id and not otp_already_verified:
-            known_device = Device.objects.filter(user=user, device_id=device_id).exists()
+            known_device = Device.objects.filter(
+                user=user, device_id=device_id, is_trusted=True
+            ).exists()
             if not known_device:
                 security_challenge = True
                 challenge_reasons.append("new_device")
 
-        # Check for IP change (skip if OTP already verified)
-        if client_ip and user.last_login_ip and client_ip != user.last_login_ip and not otp_already_verified:
+        # Check for IP change, but ONLY when the device is NOT already trusted.
+        # Mobile IPs rotate constantly (WiFi <-> cellular, carrier NAT), so
+        # challenging a trusted phone on every network change is pure false-
+        # positive noise. Attackers using a stolen refresh token from a new
+        # phone will still hit the new_device branch above.
+        if (
+            not known_device
+            and client_ip
+            and user.last_login_ip
+            and client_ip != user.last_login_ip
+            and not otp_already_verified
+        ):
             security_challenge = True
             challenge_reasons.append("ip_changed")
 
@@ -379,11 +394,19 @@ class LoginView(APIView):
                     details={"reasons": challenge_reasons, "ip": client_ip, "device_id": device_id},
                     ip_address=client_ip,
                 )
+                # Build accurate user-facing message based on actual reason(s)
+                if "new_device" in challenge_reasons:
+                    msg = "New device detected. Enter the OTP sent to your phone."
+                elif "ip_changed" in challenge_reasons:
+                    msg = "Sign-in from a new location. Enter the OTP sent to your phone."
+                else:
+                    msg = "Security verification required. Enter the OTP sent to your phone."
                 response_data = {
                     "error": "Security verification required",
                     "otp_required": True,
                     "security_challenge": True,
-                    "message": "New device or location detected. Enter the OTP sent to your phone.",
+                    "challenge_reasons": challenge_reasons,
+                    "message": msg,
                 }
                 return Response(response_data, status=status.HTTP_403_FORBIDDEN)
             # Verify the OTP for security challenge with brute-force protection

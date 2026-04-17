@@ -4,7 +4,7 @@ from datetime import timedelta
 from unittest.mock import patch
 
 from django.core.cache import cache
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from .models import Device, User
@@ -196,3 +196,76 @@ class DeviceRegistrationTest(TestCase):
         Device.objects.create(user=self.user, device_id="device-1")
         Device.objects.create(user=self.user, device_id="device-2")
         self.assertEqual(self.user.devices.count(), 2)
+
+
+class LoginSecurityChallengeTest(TestCase):
+    """Covers the 'trusted device + IP change' behavior added to stop false-
+    positive OTP prompts when a user's mobile IP rotates (WiFi <-> cellular).
+
+    Also verifies the refresh-token lifetime bump to 30 days.
+    """
+
+    def setUp(self):
+        from rest_framework.test import APIClient
+
+        self.client = APIClient()
+        self.phone = "+254712345678"
+        self.pin = "123456"
+        self.device_id = "trusted-device-xyz"
+        self.user = User.objects.create_user(phone=self.phone, pin=self.pin)
+        # Seed last_login_ip so IP-change branch is reachable
+        self.user.last_login_ip = "1.1.1.1"
+        self.user.save(update_fields=["last_login_ip"])
+        cache.clear()
+
+    def _login(self, ip, device_id=None):
+        return self.client.post(
+            "/api/v1/auth/login/",
+            {
+                "phone": self.phone,
+                "pin": self.pin,
+                "device_id": device_id if device_id is not None else self.device_id,
+            },
+            format="json",
+            REMOTE_ADDR=ip,
+            HTTP_X_FORWARDED_FOR=ip,
+        )
+
+    @override_settings(DEBUG=False)
+    def test_trusted_device_ip_change_no_challenge(self):
+        """Pre-trusted device + different IP -> no OTP required."""
+        Device.objects.create(
+            user=self.user,
+            device_id=self.device_id,
+            is_trusted=True,
+            ip_address="1.1.1.1",
+        )
+
+        resp = self._login(ip="9.9.9.9")
+
+        # No security challenge triggered — tokens issued
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertIn("tokens", resp.json())
+
+    @override_settings(DEBUG=False)
+    def test_untrusted_device_ip_change_triggers_challenge(self):
+        """Unknown device + different IP -> OTP required (new_device reason)."""
+        with patch("apps.accounts.views.LoginView._send_otp_challenge"):
+            resp = self._login(ip="9.9.9.9", device_id="brand-new-device")
+
+        self.assertEqual(resp.status_code, 403)
+        body = resp.json()
+        self.assertTrue(body.get("otp_required"))
+        self.assertIn("new_device", body.get("challenge_reasons", []))
+
+    def test_refresh_token_lifetime_bumped_from_one_day(self):
+        """Guard against regression: refresh TTL must be at least 7 days.
+
+        Base settings = 30d (production), dev overrides to 7d. Either is fine
+        — the 1-day value that caused the 'logged out after a day' UX bug is
+        what we're preventing.
+        """
+        from django.conf import settings as dj_settings
+
+        lifetime = dj_settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"]
+        self.assertGreaterEqual(lifetime, timedelta(days=7))
