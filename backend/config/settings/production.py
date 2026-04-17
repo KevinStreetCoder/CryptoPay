@@ -128,3 +128,72 @@ ADMIN_OTP_EMAIL = env("ADMIN_OTP_EMAIL", default="kevinisaackareithi@gmail.com")
 
 # Google OAuth
 GOOGLE_CLIENT_ID = env("GOOGLE_CLIENT_ID", default="")
+
+
+# ---------------------------------------------------------------------------
+# Production safety checks — fail loud if a sandbox default leaked.
+# ---------------------------------------------------------------------------
+# The base settings keep "sandbox" as the default for payment providers so
+# local dev boots without touching real APIs. In production, the operator
+# must explicitly set each *_ENVIRONMENT env var. We log an ERROR (not a
+# crash) for each missing override so the box boots and operators can see
+# the problem rather than a hard-fail cascade during a bad deploy.
+
+import logging as _prod_logging
+
+_prod_logger = _prod_logging.getLogger("apps.core.production_checks")
+
+
+def _assert_production_env():
+    issues = []
+
+    # Payment rail — if either provider's environment is still sandbox, stop
+    # the app from processing real payments. The audit flagged this as the
+    # top beta blocker: a missing env var would silently route every M-Pesa
+    # payment to sandbox.
+    if MPESA_ENVIRONMENT != "production":  # noqa: F405
+        issues.append(
+            f"MPESA_ENVIRONMENT={MPESA_ENVIRONMENT!r} in production — set to 'production' in .env.production"
+        )
+    if SASAPAY_ENVIRONMENT != "production":  # noqa: F405
+        issues.append(
+            f"SASAPAY_ENVIRONMENT={SASAPAY_ENVIRONMENT!r} in production — set to 'production' in .env.production"
+        )
+
+    # Africa's Talking sandbox username would try to send real SMS through
+    # the AT sandbox endpoint and silently fail. Either a real username or
+    # the sandbox must be intentional.
+    if AT_USERNAME == "sandbox":  # noqa: F405
+        issues.append("AT_USERNAME='sandbox' in production — set to your real AT username")
+
+    # Yellow Card base URL — only relevant once the API is live, but if an
+    # operator sets the key without the prod URL we'd leak transfers to the
+    # sandbox environment.
+    yc_url = globals().get("YELLOW_CARD_BASE_URL", "")
+    if "sandbox" in yc_url and globals().get("YELLOW_CARD_API_KEY"):  # noqa: F405
+        issues.append(
+            f"YELLOW_CARD_BASE_URL={yc_url!r} is sandbox but a key is set — override with production URL"
+        )
+
+    # Mpesa production cert — if the cert path still points at the sandbox
+    # pem bundled with the repo, B2B/B2C RSA crypto will talk to the wrong
+    # Safaricom edge.
+    if "sandbox" in str(MPESA_CERT_PATH):  # noqa: F405
+        issues.append(
+            f"MPESA_CERT_PATH={MPESA_CERT_PATH!r} — set to the production pem path"
+        )
+
+    for issue in issues:
+        _prod_logger.error("production.env_check_failed", extra={"issue": issue})
+
+    if issues and env.bool("REQUIRE_PROD_ENV_STRICT", default=False):  # noqa: F405
+        # Opt-in fail-fast: set REQUIRE_PROD_ENV_STRICT=True in .env for
+        # deploys where we'd rather crashloop than serve sandbox payments.
+        raise ImproperlyConfigured(
+            "Refusing to boot in production with sandbox env: " + "; ".join(issues)
+        )
+
+
+from django.core.exceptions import ImproperlyConfigured  # noqa: E402
+
+_assert_production_env()

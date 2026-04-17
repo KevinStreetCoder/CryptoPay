@@ -92,9 +92,11 @@ function RootNavigator() {
           }, 8000)),
         ]);
       } catch (e: any) {
-        // Timeout or error — proceed anyway (user will land on login screen)
+        // Timeout or error — proceed anyway (user will land on login screen).
+        // We intentionally don't log to console here: on flaky mobile networks
+        // this path fires frequently and would spam the JS console; the status
+        // message already surfaces the issue in the loading screen itself.
         setInitStatus(e?.message === "Init timeout" ? "Ready" : `Error: ${e?.message?.slice(0, 50)}`);
-        console.warn("App init failed or timed out:", e);
       }
       setAppReady(true);
     };
