@@ -385,22 +385,51 @@ class LoginView(APIView):
             security_challenge = False
 
         if security_challenge:
+            # Accept an approved push-challenge as proof instead of OTP
+            challenge_id = request.data.get("challenge_id")
+            if challenge_id:
+                from .push_challenge import consume_if_approved
+
+                if consume_if_approved(challenge_id, user):
+                    # User approved on their trusted device — skip OTP path
+                    otp_already_verified = True
+                    security_challenge = False
+
+        if security_challenge:
             if not otp:
-                # Send OTP and require verification
+                # Send OTP (SMS + email) AND create a push challenge if the
+                # user has another trusted device that can approve. Both go
+                # out so the user can tap-to-approve from their other phone
+                # OR fall back to the SMS code — whichever arrives first.
                 self._send_otp_challenge(phone, user)
+
+                from .push_challenge import create_challenge as create_push_challenge
+
+                push_challenge = create_push_challenge(
+                    user=user,
+                    requesting_ip=client_ip or "",
+                    requesting_device_id=device_id or "",
+                    requesting_device_name=(device_name or platform or "a device"),
+                )
+
                 AuditLog.objects.create(
                     user=user,
                     action="SECURITY_CHALLENGE",
-                    details={"reasons": challenge_reasons, "ip": client_ip, "device_id": device_id},
+                    details={
+                        "reasons": challenge_reasons,
+                        "ip": client_ip,
+                        "device_id": device_id,
+                        "push_challenge_sent": bool(push_challenge),
+                    },
                     ip_address=client_ip,
                 )
                 # Build accurate user-facing message based on actual reason(s)
                 if "new_device" in challenge_reasons:
-                    msg = "New device detected. Enter the OTP sent to your phone."
+                    msg = "New device detected. Approve on your other device or enter the OTP sent to your phone."
                 elif "ip_changed" in challenge_reasons:
-                    msg = "Sign-in from a new location. Enter the OTP sent to your phone."
+                    msg = "Sign-in from a new location. Approve on your other device or enter the OTP sent to your phone."
                 else:
-                    msg = "Security verification required. Enter the OTP sent to your phone."
+                    msg = "Security verification required. Approve on your other device or enter the OTP sent to your phone."
                 response_data = {
                     "error": "Security verification required",
                     "otp_required": True,
@@ -408,6 +437,12 @@ class LoginView(APIView):
                     "challenge_reasons": challenge_reasons,
                     "message": msg,
                 }
+                # Advertise push channel only when we actually created one
+                if push_challenge:
+                    response_data["push_challenge"] = {
+                        "challenge_id": push_challenge.id,
+                        "expires_in_seconds": 300,
+                    }
                 return Response(response_data, status=status.HTTP_403_FORBIDDEN)
             # Verify the OTP for security challenge with brute-force protection
             sec_attempt_key = f"otp_verify_attempts:sec:{phone}"
@@ -2668,3 +2703,82 @@ class AdminReviewKYCView(APIView):
                 "rejection_reason": doc.rejection_reason,
             },
         })
+
+
+# ---------------------------------------------------------------------------
+# Push-notification login challenge (2FA alternative to SMS OTP)
+# ---------------------------------------------------------------------------
+
+
+class PushChallengeStatusView(APIView):
+    """Polled by the login screen (unauthenticated) to learn whether the user
+    has tapped Approve/Deny on their other device.
+
+    Returns 200 with { status: pending|approved|denied|expired } while the
+    Redis record exists; 404 once it's gone (treat as expired).
+
+    This endpoint is intentionally unauthenticated because at this point the
+    client has no access token yet — the login flow hasn't completed. The
+    challenge_id itself is the authorization (16-byte url-safe secret,
+    single-use, 5-min TTL).
+    """
+
+    permission_classes = [AllowAny]
+
+    def get(self, request, challenge_id):
+        from .push_challenge import get_challenge
+
+        c = get_challenge(challenge_id)
+        if not c:
+            return Response({"status": "expired"}, status=status.HTTP_404_NOT_FOUND)
+        return Response({
+            "status": c.status,
+            "requesting_device_name": c.requesting_device_name,
+            "requesting_ip": c.requesting_ip,
+        })
+
+
+class PushChallengeApproveView(APIView):
+    """Trusted device taps Approve. Requires authentication — only the user
+    whose account is being targeted can approve.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, challenge_id):
+        from .push_challenge import approve_challenge
+
+        c = approve_challenge(challenge_id, request.user)
+        if not c:
+            return Response(
+                {"error": "Challenge not found or not yours"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        AuditLog.objects.create(
+            user=request.user,
+            action="LOGIN_CHALLENGE_APPROVED",
+            details={"challenge_id": challenge_id, "requesting_ip": c.requesting_ip},
+            ip_address=request.META.get("REMOTE_ADDR", ""),
+        )
+        return Response({"status": c.status})
+
+
+class PushChallengeDenyView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, challenge_id):
+        from .push_challenge import deny_challenge
+
+        c = deny_challenge(challenge_id, request.user)
+        if not c:
+            return Response(
+                {"error": "Challenge not found or not yours"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        AuditLog.objects.create(
+            user=request.user,
+            action="LOGIN_CHALLENGE_DENIED",
+            details={"challenge_id": challenge_id, "requesting_ip": c.requesting_ip},
+            ip_address=request.META.get("REMOTE_ADDR", ""),
+        )
+        return Response({"status": c.status})

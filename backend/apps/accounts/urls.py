@@ -35,6 +35,10 @@ urlpatterns = [
     path("recovery/", views.RecoveryEmailView.as_view(), name="recovery-settings"),
     # Security settings overview
     path("security/", views.SecuritySettingsView.as_view(), name="security-settings"),
+    # Push login challenge (2FA via tap-to-approve on trusted device)
+    path("challenge/<str:challenge_id>/status/", views.PushChallengeStatusView.as_view(), name="challenge-status"),
+    path("challenge/<str:challenge_id>/approve/", views.PushChallengeApproveView.as_view(), name="challenge-approve"),
+    path("challenge/<str:challenge_id>/deny/", views.PushChallengeDenyView.as_view(), name="challenge-deny"),
     # Forgot PIN recovery flow (3-step: initiate -> verify OTP -> reset)
     path("forgot-pin/", views.ForgotPINView.as_view(), name="forgot-pin"),
     path("forgot-pin/verify/", views.VerifyPINResetOTPView.as_view(), name="forgot-pin-verify"),

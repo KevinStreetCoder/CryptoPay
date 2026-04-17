@@ -31,8 +31,9 @@ export const colors = {
   info: "#3B82F6",
   white: "#FFFFFF",
   textPrimary: "#F0F4F8",
-  textSecondary: "#8899AA",
-  textMuted: "#556B82",
+  // Bumped from #8899AA (~3.5:1 on dark bg) to meet WCAG AA 4.5:1 on #060E1F.
+  textSecondary: "#A8BBCC",
+  textMuted: "#6B8299",
 
   // Glass morphism
   glass: {
