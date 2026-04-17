@@ -61,6 +61,9 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "apps.core.middleware.AuditMiddleware",
+    # Writes User.last_activity_at at most once per minute so admin can see
+    # "online now" and last-active without firing O(requests) DB writes.
+    "apps.core.middleware.ActivityHeartbeatMiddleware",
     "apps.mpesa.middleware.MpesaIPWhitelistMiddleware",
     "django_prometheus.middleware.PrometheusAfterMiddleware",
 ]

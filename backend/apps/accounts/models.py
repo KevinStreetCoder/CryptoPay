@@ -62,6 +62,15 @@ class User(AbstractBaseUser, PermissionsMixin):
     # Login tracking for device/IP change detection
     last_login_ip = models.GenericIPAddressField(null=True, blank=True)
     last_login_country = models.CharField(max_length=2, blank=True, default="")
+    # Rolling activity timestamp. Updated by ActivityHeartbeatMiddleware on
+    # every authenticated request (at most once per USER_ACTIVITY_DEBOUNCE
+    # seconds to avoid write amplification). Admin "online now" UI reads
+    # this with a 5-minute window.
+    last_activity_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    # Last authenticated request's IP — may differ from last_login_ip if
+    # the user roamed between networks mid-session. Used by admin to show
+    # current region.
+    last_activity_ip = models.GenericIPAddressField(null=True, blank=True)
 
     # TOTP (authenticator app) — encrypted secret key
     totp_secret = models.CharField(max_length=255, blank=True, default="")

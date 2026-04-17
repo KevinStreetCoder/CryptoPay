@@ -2317,8 +2317,18 @@ class AdminUserListView(APIView):
         start = (page - 1) * page_size
         users = qs[start : start + page_size]
 
-        user_list = [
-            {
+        # Online window. Anything newer = "active now" dot. 5 minutes is
+        # the common convention; matches Slack/Discord presence UX.
+        from datetime import timedelta
+        online_cutoff = timezone.now() - timedelta(minutes=5)
+        # "Active today" is a softer "recently seen" signal (24h).
+        today_cutoff = timezone.now() - timedelta(hours=24)
+
+        user_list = []
+        for u in users:
+            is_online = bool(u.last_activity_at and u.last_activity_at > online_cutoff)
+            active_today = bool(u.last_activity_at and u.last_activity_at > today_cutoff)
+            user_list.append({
                 "id": str(u.id),
                 "phone": u.phone,
                 "full_name": u.full_name,
@@ -2328,9 +2338,18 @@ class AdminUserListView(APIView):
                 "is_active": u.is_active,
                 "is_suspended": u.is_suspended,
                 "created_at": u.created_at.isoformat(),
-            }
-            for u in users
-        ]
+                # Presence + activity
+                "is_online": is_online,
+                "active_today": active_today,
+                "last_activity_at": u.last_activity_at.isoformat() if u.last_activity_at else None,
+                "last_activity_ip": u.last_activity_ip,
+                "last_login_ip": u.last_login_ip,
+                "last_login_country": u.last_login_country or None,
+            })
+
+        # Aggregate: total online right now (useful header stat).
+        online_count = User.objects.filter(last_activity_at__gt=online_cutoff).count()
+        active_today_count = User.objects.filter(last_activity_at__gt=today_cutoff).count()
 
         return Response(
             {
@@ -2339,6 +2358,11 @@ class AdminUserListView(APIView):
                 "total": total,
                 "page": page,
                 "page_size": page_size,
+                "presence": {
+                    "online_now": online_count,
+                    "active_today": active_today_count,
+                    "online_window_minutes": 5,
+                },
             }
         )
 
@@ -2546,6 +2570,55 @@ class AdminUserDetailView(APIView):
             for log in audit_logs
         ]
 
+        # Activity timeline — user's OWN actions (login, payments, kyc
+        # uploads, etc). Distinct from the audit_data above which is
+        # admin-on-user actions. Top 20 most recent.
+        activity_logs = AuditLog.objects.filter(
+            user=target_user,
+        ).order_by("-created_at")[:20]
+        activity_data = [
+            {
+                "action": log.action,
+                "ip": log.ip_address,
+                "user_agent": (log.user_agent or "")[:120],
+                "created_at": log.created_at.isoformat(),
+            }
+            for log in activity_logs
+        ]
+
+        # Login history — a subset of the activity log filtered to auth
+        # events. Useful for "logged in from 3 countries this week" UX.
+        login_events = AuditLog.objects.filter(
+            user=target_user,
+            action__in=["LOGIN", "REGISTER", "SECURITY_CHALLENGE", "LOGIN_CHALLENGE_APPROVED"],
+        ).order_by("-created_at")[:10]
+        login_history = [
+            {
+                "action": log.action,
+                "ip": log.ip_address,
+                "details": log.details,
+                "created_at": log.created_at.isoformat(),
+            }
+            for log in login_events
+        ]
+
+        # Presence
+        from datetime import timedelta
+        online_cutoff = timezone.now() - timedelta(minutes=5)
+        is_online = bool(target_user.last_activity_at and target_user.last_activity_at > online_cutoff)
+        # Current device = most recently-seen device (if any in last 5m).
+        current_device = None
+        if is_online:
+            recent_device = target_user.devices.filter(last_seen__gt=online_cutoff).order_by("-last_seen").first()
+            if recent_device:
+                current_device = {
+                    "device_name": recent_device.device_name,
+                    "platform": recent_device.platform,
+                    "ip_address": recent_device.ip_address,
+                    "is_trusted": recent_device.is_trusted,
+                    "last_seen": recent_device.last_seen.isoformat(),
+                }
+
         # KYC documents
         kyc_docs = target_user.kyc_documents.all().order_by("-created_at")
         kyc_data = [
@@ -2576,13 +2649,20 @@ class AdminUserDetailView(APIView):
                 "suspended_by": target_user.suspended_by.phone if target_user.suspended_by else None,
                 "totp_enabled": target_user.totp_enabled,
                 "last_login_ip": target_user.last_login_ip,
+                "last_login_country": target_user.last_login_country or None,
+                "last_activity_at": target_user.last_activity_at.isoformat() if target_user.last_activity_at else None,
+                "last_activity_ip": target_user.last_activity_ip,
+                "is_online": is_online,
                 "created_at": target_user.created_at.isoformat(),
                 "updated_at": target_user.updated_at.isoformat(),
             },
             "wallets": wallet_data,
             "recent_transactions": transactions,
             "devices": device_data,
+            "current_device": current_device,
             "audit_log": audit_data,
+            "activity_log": activity_data,
+            "login_history": login_history,
             "kyc_documents": kyc_data,
         })
 

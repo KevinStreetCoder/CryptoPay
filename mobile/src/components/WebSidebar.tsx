@@ -475,118 +475,213 @@ export function WebSidebar() {
         </View>
       </View>
 
-      {/* Bottom section: User card + Logout */}
-      <View style={{ paddingHorizontal: collapsed ? 8 : 12 }}>
-        {/* User card */}
-        {collapsed ? (
-          /* Collapsed: just the avatar */
-          <View style={{ alignItems: "center", marginBottom: 10 }}>
-            <UserAvatar
-              avatarUrl={user?.avatar_url}
-              fullName={user?.full_name}
-              phone={user?.phone}
-              userId={user?.id}
-              isStaff={user?.is_staff}
-              isSuperuser={user?.is_superuser}
-              kycTier={user?.kyc_tier}
-              size={42}
-              borderRadius={12}
-            />
-          </View>
-        ) : (
-          /* Expanded: user card — avatar + name only, no phone */
-          <Pressable
-            onPress={() => router.push("/(tabs)/profile" as any)}
-            style={({ hovered }: any) => ({
-              backgroundColor: hovered
-                ? (isDark ? "rgba(255, 255, 255, 0.06)" : "rgba(0, 0, 0, 0.06)")
-                : (isDark ? "rgba(255, 255, 255, 0.04)" : "rgba(0, 0, 0, 0.04)"),
-              borderRadius: 14,
-              padding: 14,
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 12,
-              marginBottom: 10,
-              borderWidth: 1,
-              borderColor: isDark ? "rgba(255, 255, 255, 0.06)" : "rgba(0, 0, 0, 0.06)",
-              ...(Platform.OS === "web" ? { cursor: "pointer", transition: "background-color 0.15s ease" } as any : {}),
-            })}
-          >
-            <UserAvatar
-              avatarUrl={user?.avatar_url}
-              fullName={user?.full_name}
-              phone={user?.phone}
-              userId={user?.id}
-              isStaff={user?.is_staff}
-              isSuperuser={user?.is_superuser}
-              kycTier={user?.kyc_tier}
-              size={38}
-              borderRadius={10}
-            />
-            <Text
-              style={{
-                flex: 1,
-                color: tc.textPrimary,
-                fontSize: 13,
-                fontFamily: "DMSans_600SemiBold",
-              }}
-              numberOfLines={1}
-            >
-              {user?.full_name || "User"}
-            </Text>
-          </Pressable>
-        )}
+      {/* Bottom section: User card + Logout.
+          Redesigned 2026-04-17 — enterprise-grade minimal footer that
+          (a) shows KYC verification at a glance via the same emerald tick
+          used on the dashboard header, (b) turns the tier into a quiet pill
+          (KYC 1/2/3/ADMIN) instead of just a coloured avatar border, and
+          (c) demotes the Logout row to a small ghost button so the user
+          row is the visual primary. Logout only colours red on hover. */}
+      {(() => {
+        const tier = user?.kyc_tier ?? 0;
+        const isAdmin = !!(user?.is_staff || user?.is_superuser);
+        const isVerified = tier >= 1; // same threshold the dashboard uses
+        const tierLabel = isAdmin
+          ? "ADMIN"
+          : tier === 0
+            ? "UNVERIFIED"
+            : `TIER ${tier}`;
+        const tierTone = isAdmin
+          ? "#F59E0B" // gold — matches admin border on avatars
+          : isVerified
+            ? colors.primary[400]
+            : "#64748B"; // muted slate for unverified
 
-        {/* Logout */}
-        <Pressable
-          onPress={handleLogout}
-          style={({ pressed, hovered }: any) => ({
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: collapsed ? "center" : "flex-start",
-            gap: collapsed ? 0 : 10,
-            paddingHorizontal: collapsed ? 0 : 14,
-            paddingVertical: 10,
-            borderRadius: 12,
-            backgroundColor: hovered
-              ? "rgba(239, 68, 68, 0.08)"
-              : "transparent",
-            opacity: pressed ? 0.8 : 1,
-            ...(Platform.OS === "web"
-              ? ({
-                  cursor: "pointer",
-                  transition: "background-color 0.15s ease",
-                } as any)
-              : {}),
-          })}
-          accessibilityRole="button"
-          accessibilityLabel="Logout"
-        >
-          <View
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 10,
-              backgroundColor: collapsed ? "rgba(239, 68, 68, 0.08)" : "transparent",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Ionicons name="log-out-outline" size={18} color={colors.error} />
-          </View>
-          {!collapsed && (
-            <Text
-              style={{
-                color: colors.error,
-                fontSize: 13,
-                fontFamily: "DMSans_500Medium",
-              }}
+        return (
+          <View style={{ paddingHorizontal: collapsed ? 8 : 12 }}>
+            {/* User card */}
+            {collapsed ? (
+              /* Collapsed: avatar + small verified/admin dot in the corner */
+              <Pressable
+                onPress={() => router.push("/(tabs)/profile" as any)}
+                style={({ hovered }: any) => ({
+                  alignItems: "center",
+                  marginBottom: 8,
+                  opacity: hovered ? 0.85 : 1,
+                  ...(Platform.OS === "web"
+                    ? ({ cursor: "pointer", transition: "opacity 0.15s ease" } as any)
+                    : {}),
+                })}
+                accessibilityRole="button"
+                accessibilityLabel={`Profile — ${tierLabel}`}
+              >
+                <View style={{ position: "relative" }}>
+                  <UserAvatar
+                    avatarUrl={user?.avatar_url}
+                    fullName={user?.full_name}
+                    phone={user?.phone}
+                    userId={user?.id}
+                    isStaff={user?.is_staff}
+                    isSuperuser={user?.is_superuser}
+                    kycTier={user?.kyc_tier}
+                    size={42}
+                    borderRadius={12}
+                  />
+                  {(isVerified || isAdmin) && (
+                    <View
+                      style={{
+                        position: "absolute",
+                        right: -2,
+                        bottom: -2,
+                        width: 16,
+                        height: 16,
+                        borderRadius: 8,
+                        backgroundColor: tierTone,
+                        borderWidth: 2,
+                        borderColor: tc.dark.bg,
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <Ionicons name="checkmark" size={10} color="#FFFFFF" />
+                    </View>
+                  )}
+                </View>
+              </Pressable>
+            ) : (
+              /* Expanded: avatar + name with verified tick + tier pill below. */
+              <Pressable
+                onPress={() => router.push("/(tabs)/profile" as any)}
+                style={({ hovered }: any) => ({
+                  backgroundColor: hovered
+                    ? (isDark ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.04)")
+                    : "transparent",
+                  borderRadius: 14,
+                  paddingVertical: 12,
+                  paddingHorizontal: 12,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 12,
+                  marginBottom: 6,
+                  borderWidth: 1,
+                  borderColor: isDark ? "rgba(255, 255, 255, 0.06)" : "rgba(0, 0, 0, 0.06)",
+                  ...(Platform.OS === "web"
+                    ? ({ cursor: "pointer", transition: "background-color 0.15s ease" } as any)
+                    : {}),
+                })}
+                accessibilityRole="button"
+                accessibilityLabel={`Open profile — ${tierLabel}`}
+              >
+                <UserAvatar
+                  avatarUrl={user?.avatar_url}
+                  fullName={user?.full_name}
+                  phone={user?.phone}
+                  userId={user?.id}
+                  isStaff={user?.is_staff}
+                  isSuperuser={user?.is_superuser}
+                  kycTier={user?.kyc_tier}
+                  size={36}
+                  borderRadius={10}
+                />
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  {/* Row 1: name + verified tick (mirrors dashboard header). */}
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <Text
+                      style={{
+                        flexShrink: 1,
+                        color: tc.textPrimary,
+                        fontSize: 13,
+                        fontFamily: "DMSans_600SemiBold",
+                        letterSpacing: -0.1,
+                      }}
+                      numberOfLines={1}
+                    >
+                      {user?.full_name || "User"}
+                    </Text>
+                    {(isVerified || isAdmin) && (
+                      <View
+                        style={{
+                          width: 14,
+                          height: 14,
+                          borderRadius: 7,
+                          backgroundColor: tierTone,
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flexShrink: 0,
+                        }}
+                        accessibilityLabel={isAdmin ? "Admin" : "Verified"}
+                      >
+                        <Ionicons name="checkmark" size={9} color="#FFFFFF" />
+                      </View>
+                    )}
+                  </View>
+                  {/* Row 2: tier pill. Always present so layout is stable. */}
+                  <Text
+                    style={{
+                      color: tierTone,
+                      fontSize: 10,
+                      fontFamily: "DMSans_700Bold",
+                      letterSpacing: 0.9,
+                      marginTop: 2,
+                    }}
+                  >
+                    {tierLabel}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={14} color={tc.textMuted} />
+              </Pressable>
+            )}
+
+            {/* Logout — ghost button style, quiet at rest, red on hover. */}
+            <Pressable
+              onPress={handleLogout}
+              style={({ pressed, hovered }: any) => ({
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: collapsed ? "center" : "flex-start",
+                gap: collapsed ? 0 : 10,
+                paddingHorizontal: collapsed ? 0 : 12,
+                paddingVertical: 9,
+                borderRadius: 10,
+                backgroundColor: hovered ? "rgba(239, 68, 68, 0.08)" : "transparent",
+                opacity: pressed ? 0.75 : 1,
+                ...(Platform.OS === "web"
+                  ? ({
+                      cursor: "pointer",
+                      transition: "background-color 0.15s ease",
+                    } as any)
+                  : {}),
+              })}
+              accessibilityRole="button"
+              accessibilityLabel="Sign out"
             >
-              Logout
-            </Text>
-          )}
-        </Pressable>
-      </View>
+              <View
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 8,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Ionicons name="log-out-outline" size={16} color={tc.textMuted} />
+              </View>
+              {!collapsed && (
+                <Text
+                  style={{
+                    color: tc.textSecondary,
+                    fontSize: 12,
+                    fontFamily: "DMSans_500Medium",
+                    letterSpacing: 0.1,
+                  }}
+                >
+                  Sign out
+                </Text>
+              )}
+            </Pressable>
+          </View>
+        );
+      })()}
     </View>
   );
 }

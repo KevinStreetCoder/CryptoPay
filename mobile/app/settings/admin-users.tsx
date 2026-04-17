@@ -39,6 +39,32 @@ interface AdminUser {
   is_active: boolean;
   is_suspended: boolean;
   created_at: string;
+  // Presence fields populated by backend heartbeat (≤ 5 min = online).
+  is_online?: boolean;
+  active_today?: boolean;
+  last_activity_at?: string | null;
+  last_activity_ip?: string | null;
+  last_login_ip?: string | null;
+  last_login_country?: string | null;
+}
+
+interface PresenceSummary {
+  online_now: number;
+  active_today: number;
+  online_window_minutes: number;
+}
+
+/** Human-friendly relative time for last-active timestamps. */
+function timeAgo(iso?: string | null): string {
+  if (!iso) return "never";
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "—";
+  const diff = (Date.now() - then) / 1000;
+  if (diff < 60) return "just now";
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  if (diff < 86400 * 30) return `${Math.floor(diff / 86400)}d ago`;
+  return new Date(iso).toLocaleDateString();
 }
 
 const TIER_COLORS = ["#94A3B8", "#F59E0B", "#3B82F6", "#10B981"];
@@ -56,6 +82,7 @@ export default function AdminUsersScreen() {
 
   const [distribution, setDistribution] = useState<KycDistribution[]>([]);
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [presence, setPresence] = useState<PresenceSummary | null>(null);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
@@ -86,6 +113,7 @@ export default function AdminUsersScreen() {
       setDistribution(data.distribution || []);
       setUsers(data.users || []);
       setTotal(data.total || 0);
+      setPresence(data.presence || null);
     } catch (err) {
       const appError = normalizeError(err);
       toast.error(appError.title, appError.message);
@@ -208,6 +236,55 @@ export default function AdminUsersScreen() {
             Verify users, manage KYC tiers, suspend accounts, and view activity
           </Text>
         </View>
+
+        {/* Presence strip — live counts of users active now vs today. */}
+        {presence ? (
+          <View
+            style={{
+              flexDirection: "row",
+              gap: 16,
+              alignItems: "center",
+              backgroundColor: tc.dark.card,
+              borderRadius: 12,
+              borderWidth: 1,
+              borderColor: tc.glass.border,
+              paddingVertical: 12,
+              paddingHorizontal: 16,
+              marginBottom: 16,
+            }}
+          >
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <View
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: 4,
+                  backgroundColor: colors.success,
+                }}
+              />
+              <Text style={{ color: tc.textPrimary, fontSize: 14, fontFamily: "DMSans_700Bold" }}>
+                {presence.online_now}
+              </Text>
+              <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_500Medium", letterSpacing: 0.5 }}>
+                online now
+              </Text>
+            </View>
+            <View style={{ width: 1, height: 18, backgroundColor: tc.glass.border }} />
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "#F59E0B" }} />
+              <Text style={{ color: tc.textPrimary, fontSize: 14, fontFamily: "DMSans_700Bold" }}>
+                {presence.active_today}
+              </Text>
+              <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_500Medium", letterSpacing: 0.5 }}>
+                active today
+              </Text>
+            </View>
+            <View style={{ flex: 1 }} />
+            <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_400Regular" }}>
+              {presence.online_window_minutes}-minute window
+            </Text>
+          </View>
+        ) : null}
 
         {/* KYC Distribution Cards */}
         <View
@@ -469,9 +546,26 @@ export default function AdminUsersScreen() {
                         borderBottomColor: tc.glass.border,
                       }}
                     >
-                      {/* Row 1: Name + Status */}
+                      {/* Row 1: Name + Presence dot + Status */}
                       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
                         <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flex: 1 }}>
+                          {/* Online presence dot — green if active in last
+                              5 min, amber if active today, grey otherwise.
+                              Matches the Slack/Discord convention. */}
+                          <View
+                            style={{
+                              width: 8,
+                              height: 8,
+                              borderRadius: 4,
+                              backgroundColor: u.is_online
+                                ? colors.success
+                                : u.active_today
+                                  ? "#F59E0B"
+                                  : tc.textMuted,
+                              opacity: u.is_online ? 1 : 0.6,
+                            }}
+                            accessibilityLabel={u.is_online ? "Online" : u.active_today ? "Active today" : "Offline"}
+                          />
                           <Text numberOfLines={1} style={{ color: tc.textPrimary, fontSize: 15, fontFamily: "DMSans_600SemiBold", flexShrink: 1 }}>
                             {u.full_name || "No name"}
                           </Text>
@@ -484,6 +578,18 @@ export default function AdminUsersScreen() {
                         <View style={{ backgroundColor: statusColor + "15", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 3 }}>
                           <Text style={{ color: statusColor, fontSize: 11, fontFamily: "DMSans_600SemiBold" }}>{statusLabel}</Text>
                         </View>
+                      </View>
+
+                      {/* Row 1b: presence meta — "Online · KE" / "Active 2h ago" */}
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                        <Text style={{ color: u.is_online ? colors.success : tc.textMuted, fontSize: 11, fontFamily: "DMSans_500Medium", letterSpacing: 0.2 }}>
+                          {u.is_online ? "ONLINE NOW" : `Active ${timeAgo(u.last_activity_at)}`}
+                        </Text>
+                        {u.last_login_country ? (
+                          <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_400Regular" }}>
+                            · {u.last_login_country}
+                          </Text>
+                        ) : null}
                       </View>
 
                       {/* Row 2: Phone + Tier */}
