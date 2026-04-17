@@ -1437,6 +1437,77 @@ def _execute_eth_sweep(order: SweepOrder, private_key: bytes) -> str:
 # 6c. Bitcoin sweep via BlockCypher
 # ---------------------------------------------------------------------------
 
+def _broadcast_raw_tx_with_fallback(raw_tx_hex: str) -> str:
+    """Broadcast a raw signed Bitcoin tx, trying multiple providers in order.
+
+    Returns the tx hash. Each provider gets ~10 s. A provider is skipped on
+    5xx, timeout, or connection error. A 4xx is treated as terminal (most
+    likely our signed tx is bad) and re-raised immediately so we don't
+    paper over signing bugs by masking them with retries.
+
+    Providers (in order):
+      1. Blockstream Esplora  — free, no key, used by btc_listener already.
+      2. Mempool.space        — free, no key, widely monitored.
+      3. BlockCypher /txs/push — requires key for meaningful rate limit.
+
+    If all three fail, raises RuntimeError with the last error seen.
+    """
+    from django.conf import settings
+
+    net = getattr(settings, "BTC_NETWORK", "main")
+    testnet = net in ("test", "test3", "testnet")
+
+    providers = [
+        ("blockstream", f"https://blockstream.info/{'testnet/' if testnet else ''}api/tx", "text"),
+        ("mempool.space", f"https://mempool.space/{'testnet/' if testnet else ''}api/tx", "text"),
+    ]
+
+    bc_token = getattr(settings, "BLOCKCYPHER_API_TOKEN", "")
+    bc_net = "test3" if testnet else "main"
+    bc_url = f"https://api.blockcypher.com/v1/btc/{bc_net}/txs/push"
+    providers.append(("blockcypher", bc_url, "json"))
+
+    last_err: str = "no providers configured"
+    for name, url, kind in providers:
+        try:
+            if kind == "text":
+                resp = requests.post(url, data=raw_tx_hex, timeout=10,
+                                     headers={"Content-Type": "text/plain"})
+            else:
+                params = {"token": bc_token} if bc_token else {}
+                resp = requests.post(url, json={"tx": raw_tx_hex}, params=params, timeout=10)
+
+            if resp.status_code == 200:
+                # Blockstream + mempool.space return plain-text txid; BlockCypher returns JSON.
+                if kind == "text":
+                    txid = resp.text.strip()
+                else:
+                    txid = resp.json().get("tx", {}).get("hash", "")
+                if txid and len(txid) == 64:
+                    logger.info("btc.broadcast.ok", extra={"provider": name, "txid": txid})
+                    return txid
+                last_err = f"{name}: success but no txid in response"
+                continue
+
+            if 400 <= resp.status_code < 500:
+                # Hard error — our tx is bad. Don't retry; raise so the
+                # caller sees the actual rejection from the network.
+                raise RuntimeError(
+                    f"btc broadcast rejected by {name}: {resp.status_code} {resp.text[:200]}"
+                )
+
+            last_err = f"{name}: {resp.status_code} {resp.text[:200]}"
+            logger.warning("btc.broadcast.provider_failed", extra={
+                "provider": name, "status": resp.status_code, "body": resp.text[:200],
+            })
+        except requests.RequestException as e:
+            last_err = f"{name}: {e}"
+            logger.warning("btc.broadcast.provider_failed", extra={"provider": name, "error": str(e)})
+            continue
+
+    raise RuntimeError(f"btc broadcast failed on all providers: {last_err}")
+
+
 def _execute_btc_sweep(order: SweepOrder, private_key: bytes) -> str:
     """
     Execute a BTC sweep using BlockCypher's two-step transaction API.
@@ -1444,12 +1515,27 @@ def _execute_btc_sweep(order: SweepOrder, private_key: bytes) -> str:
     Flow:
     1. POST /txs/new — BlockCypher selects UTXOs and creates tx skeleton
     2. Sign each tosign hash with secp256k1 (DER-encoded)
-    3. POST /txs/send with signatures and public keys
-    4. Return tx hash
+    3. POST /txs/send — BlockCypher reconstructs and broadcasts. If that fails
+       with a transient error we retry via _broadcast_raw_tx_with_fallback()
+       using the returned raw tx hex.
+    4. Return tx hash.
 
     BlockCypher handles UTXO selection, fee calculation, and change.
     We send all funds to the hot wallet (no change output needed).
+
+    Guarded at the caller level by `BTC_WITHDRAWALS_ENABLED`.
     """
+    from django.conf import settings
+
+    if not getattr(settings, "BTC_WITHDRAWALS_ENABLED", False):
+        # Safety net. Sweep orchestrator should have filtered these out,
+        # but if a direct call lands here we refuse rather than burn funds
+        # via a possibly-mis-addressed transaction.
+        raise RuntimeError(
+            "BTC withdrawals are disabled by BTC_WITHDRAWALS_ENABLED=False. "
+            "Enable in .env.production only after verifying P2WPKH addresses on mainnet."
+        )
+
     from cryptography.hazmat.backends import default_backend
     from cryptography.hazmat.primitives.asymmetric.ec import ECDSA, SECP256K1, derive_private_key
     from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature

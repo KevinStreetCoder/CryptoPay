@@ -461,7 +461,15 @@ POLYGON_RPC_URL = env("POLYGON_RPC_URL", default="")  # Alchemy/Infura URL, e.g.
 POLYGON_LOG_SCAN_RANGE = env.int("POLYGON_LOG_SCAN_RANGE", default=50)  # Blocks per scan (Polygon is fast)
 
 # --- Bitcoin ---
-BTC_NETWORK = env("BTC_NETWORK", default="test3")  # main or test3 (testnet)
+# Production default is mainnet. Set BTC_NETWORK=test3 in .env for local/dev
+# testing. A boot-time check in apps.blockchain.apps warns if BTC_NETWORK is
+# testnet while DEBUG=False.
+BTC_NETWORK = env("BTC_NETWORK", default="main")  # "main" or "test3" (testnet)
+# Freeze-switch for BTC withdrawals. Off by default until native SegWit
+# (bech32 P2WPKH) address generation is verified end-to-end against a real
+# mainnet signer. Deposits remain fully functional regardless — only the
+# outbound sweep/withdraw path is gated.
+BTC_WITHDRAWALS_ENABLED = env.bool("BTC_WITHDRAWALS_ENABLED", default=False)
 BLOCKCYPHER_API_TOKEN = env("BLOCKCYPHER_API_TOKEN", default="")  # Free: 200 req/hr, with token: 2000 req/hr
 
 # --- Solana ---

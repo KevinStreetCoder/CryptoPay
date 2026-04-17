@@ -130,8 +130,15 @@ class AddressGenerationTest(TestCase):
         self.assertGreater(len(addr), 30)
 
     def test_btc_generates_bitcoin_address(self):
+        # Migrated to native SegWit (BIP-173 / P2WPKH) in 2026-04-17 session.
+        # Addresses start with bc1q (mainnet) or tb1q (testnet) depending on
+        # BTC_NETWORK. Both prefixes are valid here since the setting can
+        # differ per environment.
         addr = generate_deposit_address("user1", "BTC", 0)
-        self.assertTrue(addr.startswith("1") or addr.startswith("3"))
+        self.assertTrue(
+            addr.startswith("bc1q") or addr.startswith("tb1q"),
+            f"expected bech32 P2WPKH address, got: {addr}",
+        )
 
     def test_eth_generates_hex_address(self):
         addr = generate_deposit_address("user1", "ETH", 0)

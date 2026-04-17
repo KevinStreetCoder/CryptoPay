@@ -1512,7 +1512,7 @@ export default function LandingPage() {
           <ScrollView horizontal={isMobile} showsHorizontalScrollIndicator={false}>
             <View style={{
               minWidth: isMobile ? 640 : ("100%" as any),
-              backgroundColor: "rgba(12,26,46,0.6)", borderRadius: 24,
+              backgroundColor: "rgba(12,26,46,0.6)", borderRadius: 16,
               borderWidth: 1, borderColor: "rgba(255,255,255,0.06)", overflow: "hidden",
               ...(isWeb ? { backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" } as any : {}),
             }}>
@@ -1744,7 +1744,7 @@ export default function LandingPage() {
         <RevealOnScroll variant="scale-up">
           <View style={{
             alignItems: "center", zIndex: 1,
-            backgroundColor: "rgba(12,26,46,0.5)", borderRadius: 32,
+            backgroundColor: "rgba(12,26,46,0.5)", borderRadius: 16,
             borderWidth: 1, borderColor: "rgba(16,185,129,0.1)",
             padding: isMobile ? 36 : 64, maxWidth: 900, alignSelf: "center" as any, width: "100%",
             ...(isWeb ? { backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", boxShadow: "0 20px 80px rgba(0,0,0,0.3)" } as any : {}),
