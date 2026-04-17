@@ -332,6 +332,41 @@
         </div>
     </div>
 
+    <!-- ═══ SYSTEM STATUS STRIP ═════════════════════════════════
+         Inline round-trip checks for the services the app depends on.
+         Latency in ms. Overall dot flips red if any check failed. -->
+    <div class="system-status" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;
+                background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);
+                padding:14px 18px;margin-bottom:24px;box-shadow:var(--shadow)">
+      <div style="display:flex;align-items:center;gap:10px;min-width:180px">
+        <span style="width:10px;height:10px;border-radius:5px;background:{% if system_health.all_ok %}#10B981{% else %}#EF4444{% endif %};box-shadow:0 0 8px {% if system_health.all_ok %}rgba(16,185,129,0.5){% else %}rgba(239,68,68,0.5){% endif %}"></span>
+        <strong style="color:var(--text);font-size:13px;letter-spacing:0.2px">
+          {% if system_health.all_ok %}All systems operational{% else %}Degraded{% endif %}
+        </strong>
+      </div>
+      {% for c in system_health.checks %}
+      <div style="display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:8px;
+                  background:{% if c.ok %}rgba(16,185,129,0.08){% else %}rgba(239,68,68,0.08){% endif %};
+                  border:1px solid {% if c.ok %}rgba(16,185,129,0.25){% else %}rgba(239,68,68,0.25){% endif %}">
+        <span style="width:6px;height:6px;border-radius:3px;background:{% if c.ok %}#10B981{% else %}#EF4444{% endif %}"></span>
+        <span style="color:var(--text);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.6px">{{ c.name }}</span>
+        <span style="color:var(--text-muted);font-size:11px;font-variant-numeric:tabular-nums">{{ c.latency_ms }}ms</span>
+      </div>
+      {% endfor %}
+      <div style="margin-left:auto;display:flex;gap:18px;align-items:center">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="width:6px;height:6px;border-radius:3px;background:#10B981"></span>
+          <span style="color:var(--text);font-weight:700;font-size:13px">{{ online_users_now }}</span>
+          <span style="color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:0.5px">online</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="width:6px;height:6px;border-radius:3px;background:#F59E0B"></span>
+          <span style="color:var(--text);font-weight:700;font-size:13px">{{ active_24h_users }}</span>
+          <span style="color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:0.5px">24h active</span>
+        </div>
+      </div>
+    </div>
+
     <!-- ═══ KPI CARDS ═══════════════════════════════════════════ -->
     <div class="kpi-grid">
         <div class="kpi green">
