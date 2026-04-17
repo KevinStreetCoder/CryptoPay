@@ -93,6 +93,23 @@ api.interceptors.response.use(
       return Promise.reject(new SessionExpiredError());
     }
 
+    // Transient upstream failures (502/503/504) — usually a brief deploy
+    // window or a connection reset between nginx and daphne. Retry twice
+    // with 700ms / 1600ms backoff before surfacing the error. Auth
+    // endpoints skipped above, so logins still fail fast.
+    const status = error.response?.status;
+    const isTransient = status === 502 || status === 503 || status === 504
+      || error.code === "ECONNABORTED" || error.code === "ERR_NETWORK";
+    if (isTransient && originalRequest && !originalRequest._transientRetries) {
+      originalRequest._transientRetries = 0;
+    }
+    if (isTransient && originalRequest && originalRequest._transientRetries < 2) {
+      originalRequest._transientRetries += 1;
+      const delay = originalRequest._transientRetries === 1 ? 700 : 1600;
+      await new Promise((r) => setTimeout(r, delay));
+      return api(originalRequest);
+    }
+
     if (error.response?.status === 401 && !originalRequest._retry) {
       // If the 401 carries a business-logic error (e.g. "Invalid PIN"),
       // pass it through instead of treating it as token expiry.
