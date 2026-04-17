@@ -56,6 +56,10 @@ interface UserDetail {
   suspended_by: string | null;
   totp_enabled: boolean;
   last_login_ip: string | null;
+  last_login_country?: string | null;
+  last_activity_at?: string | null;
+  last_activity_ip?: string | null;
+  is_online?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -121,6 +125,12 @@ export default function AdminUserDetailScreen() {
   const [devices, setDevices] = useState<DeviceInfo[]>([]);
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
   const [kycDocs, setKycDocs] = useState<KycDoc[]>([]);
+  // Presence + activity — surfaced via the new admin-detail endpoint
+  // additions. `currentDevice` is populated only when the user is online
+  // RIGHT NOW (≤ 5 min) so admins see what they're using live.
+  const [currentDevice, setCurrentDevice] = useState<DeviceInfo | null>(null);
+  const [activityLog, setActivityLog] = useState<Array<{ action: string; ip: string | null; user_agent: string; created_at: string }>>([]);
+  const [loginHistory, setLoginHistory] = useState<Array<{ action: string; ip: string | null; details: any; created_at: string }>>([]);
 
   // Suspend modal
   const [suspendModal, setSuspendModal] = useState<"suspend" | "unsuspend" | null>(null);
@@ -151,6 +161,9 @@ export default function AdminUserDetailScreen() {
       setDevices(data.devices || []);
       setAuditLog(data.audit_log || []);
       setKycDocs(data.kyc_documents || []);
+      setCurrentDevice(data.current_device || null);
+      setActivityLog(data.activity_log || []);
+      setLoginHistory(data.login_history || []);
     } catch (err) {
       const appError = normalizeError(err);
       toast.error(appError.title, appError.message);
@@ -477,6 +490,98 @@ export default function AdminUserDetailScreen() {
 
         {activeTab === "overview" && (
           <>
+            {/* Presence + activity — enterprise admin signal. Shows
+                whether user is online right now, on which device, where
+                from, and their recent activity / login history. */}
+            {sectionTitle("Presence & activity", "pulse-outline", colors.success)}
+            <View style={cardStyle}>
+              {/* Live status row */}
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10, padding: 18, borderBottomWidth: 1, borderBottomColor: tc.glass.border }}>
+                <View
+                  style={{
+                    width: 10,
+                    height: 10,
+                    borderRadius: 5,
+                    backgroundColor: (userData?.last_activity_at && (Date.now() - new Date(userData.last_activity_at).getTime() < 5 * 60 * 1000))
+                      ? colors.success
+                      : tc.textMuted,
+                  }}
+                />
+                <Text style={{ color: tc.textPrimary, fontSize: 14, fontFamily: "DMSans_600SemiBold" }}>
+                  {userData?.last_activity_at && (Date.now() - new Date(userData.last_activity_at).getTime() < 5 * 60 * 1000)
+                    ? "Online now"
+                    : userData?.last_activity_at
+                      ? `Last active ${new Date(userData.last_activity_at).toLocaleString()}`
+                      : "Never active"}
+                </Text>
+                {userData?.last_login_country ? (
+                  <View style={{ marginLeft: "auto" as any, flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <Ionicons name="location-outline" size={12} color={tc.textMuted} />
+                    <Text style={{ color: tc.textSecondary, fontSize: 12, fontFamily: "DMSans_500Medium" }}>
+                      {userData.last_login_country}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+
+              {/* Current device (only while online) */}
+              {currentDevice ? (
+                <View style={{ padding: 18, borderBottomWidth: 1, borderBottomColor: tc.glass.border, flexDirection: "row", gap: 14, alignItems: "center" }}>
+                  <Ionicons
+                    name={currentDevice.platform?.toLowerCase().includes("ios") ? "phone-portrait" : "phone-portrait-outline"}
+                    size={22}
+                    color={colors.primary[400]}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: tc.textPrimary, fontSize: 13, fontFamily: "DMSans_600SemiBold" }}>
+                      {currentDevice.device_name || currentDevice.platform || "Unknown device"}
+                    </Text>
+                    <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_400Regular", marginTop: 2 }}>
+                      {currentDevice.ip_address || "IP unknown"} · seen {new Date(currentDevice.last_seen).toLocaleTimeString()}
+                    </Text>
+                  </View>
+                  {currentDevice.is_trusted ? (
+                    <View style={{ paddingVertical: 3, paddingHorizontal: 8, borderRadius: 999, backgroundColor: colors.primary[500] + "18" }}>
+                      <Text style={{ color: colors.primary[400], fontSize: 10, fontFamily: "DMSans_600SemiBold", letterSpacing: 0.6 }}>TRUSTED</Text>
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
+
+              {/* Login history — last 5 */}
+              <View style={{ padding: 18 }}>
+                <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_700Bold", letterSpacing: 0.8, marginBottom: 10 }}>
+                  RECENT LOGINS
+                </Text>
+                {loginHistory.length === 0 ? (
+                  <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_400Regular" }}>No login events recorded.</Text>
+                ) : (
+                  loginHistory.slice(0, 5).map((ev, i) => (
+                    <View
+                      key={`${ev.created_at}-${i}`}
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        paddingVertical: 6,
+                        borderBottomWidth: i < Math.min(loginHistory.length, 5) - 1 ? 1 : 0,
+                        borderBottomColor: tc.glass.border,
+                      }}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: tc.textPrimary, fontSize: 12, fontFamily: "DMSans_500Medium" }}>
+                          {ev.action.replace(/_/g, " ")}
+                        </Text>
+                        <Text style={{ color: tc.textMuted, fontSize: 10, fontFamily: "DMSans_400Regular", marginTop: 2 }}>
+                          {ev.ip || "—"} · {new Date(ev.created_at).toLocaleString()}
+                        </Text>
+                      </View>
+                    </View>
+                  ))
+                )}
+              </View>
+            </View>
+
             {/* Wallets */}
             {sectionTitle("Wallets", "wallet-outline", colors.primary[400])}
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
