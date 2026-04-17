@@ -72,10 +72,14 @@ export default function GoogleCallback() {
     (async () => {
       try {
         const data: any = await googleLogin(idToken);
-        if (data?.requires_profile_completion) {
+        if (data?.phone_required || data?.requires_profile_completion) {
           router.replace("/auth/google-complete-profile" as any);
+        } else if (data?.pin_required) {
+          router.replace("/auth/set-initial-pin" as any);
         } else {
-          router.replace("/(tabs)" as any);
+          // Returning Google user — force PIN/biometric gate before the
+          // wallet opens. Matches the handleGoogleLogin path in login.tsx.
+          router.replace("/auth/google-unlock" as any);
         }
       } catch (err) {
         const message =
