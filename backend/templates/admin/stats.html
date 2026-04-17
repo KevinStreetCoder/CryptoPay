@@ -367,6 +367,43 @@
       </div>
     </div>
 
+    <!-- ═══ ENTERPRISE COHORT STRIP ═════════════════════════════
+         Higher-order metrics the KPI cards don't capture: stickiness
+         (DAU/MAU), treasury concentration (AUM by tier), churn-risk
+         cohort, high-velocity traders, 24h failure rate. -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:24px">
+      <!-- Stickiness -->
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow)">
+        <div style="color:var(--text-muted);font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:6px">Stickiness</div>
+        <div style="color:var(--text);font-size:22px;font-weight:700;font-variant-numeric:tabular-nums">{{ stickiness_percent }}%</div>
+        <div style="color:var(--text-muted);font-size:11px;margin-top:4px">DAU {{ dau }} · MAU {{ mau }}</div>
+      </div>
+      <!-- Churn risk -->
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow)">
+        <div style="color:var(--text-muted);font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:6px">Churn risk</div>
+        <div style="color:#F59E0B;font-size:22px;font-weight:700;font-variant-numeric:tabular-nums">{{ churn_risk_count }}</div>
+        <div style="color:var(--text-muted);font-size:11px;margin-top:4px">tx&nbsp;&lt;30d, inactive&nbsp;&gt;7d</div>
+      </div>
+      <!-- 24h failure rate -->
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow)">
+        <div style="color:var(--text-muted);font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:6px">24h failure rate</div>
+        <div style="color:{% if failure_rate_24h >= 5 %}#EF4444{% elif failure_rate_24h >= 2 %}#F59E0B{% else %}#10B981{% endif %};font-size:22px;font-weight:700;font-variant-numeric:tabular-nums">{{ failure_rate_24h }}%</div>
+        <div style="color:var(--text-muted);font-size:11px;margin-top:4px">{{ tx_24h_failed }} of {{ tx_24h_total }} txs</div>
+      </div>
+      <!-- High-velocity traders -->
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow)">
+        <div style="color:var(--text-muted);font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:6px">High-velocity users</div>
+        <div style="color:var(--text);font-size:22px;font-weight:700;font-variant-numeric:tabular-nums">{{ high_velocity_count }}</div>
+        <div style="color:var(--text-muted);font-size:11px;margin-top:4px">&gt;{{ high_velocity_threshold }} tx / 24h · compliance watchlist</div>
+      </div>
+    </div>
+
+    <!-- AUM by KYC tier — inline data-only row, no chart library needed. -->
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;margin-bottom:24px;box-shadow:var(--shadow)">
+      <div style="color:var(--text-muted);font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:10px">Assets under management — by KYC tier</div>
+      <div id="aum-by-tier-row" style="display:flex;flex-wrap:wrap;gap:22px"></div>
+    </div>
+
     <!-- ═══ KPI CARDS ═══════════════════════════════════════════ -->
     <div class="kpi-grid">
         <div class="kpi green">
@@ -583,6 +620,30 @@ const totalRevenue       = {{ total_revenue }};
 const depositByChain     = {{ deposit_by_chain_json|safe }};
 const depositByCurrency  = {{ deposit_by_currency_json|safe }};
 const typeBreakdown      = {{ type_breakdown_json|safe }};
+const aumByTier          = {{ aum_by_tier_json|safe }};
+const highVelocityUsers  = {{ high_velocity_json|safe }};
+
+// Render AUM-by-tier row — simple data pills, no chart library needed.
+(function renderAumByTier() {
+  const row = document.getElementById('aum-by-tier-row');
+  if (!row) return;
+  if (!aumByTier.length) {
+    row.innerHTML = '<span style="color:var(--text-muted);font-size:12px">No wallet data.</span>';
+    return;
+  }
+  const tones = ['#94A3B8', '#F59E0B', '#3B82F6', '#10B981'];
+  const fmt = v => 'KES ' + Number(v).toLocaleString('en-KE', { maximumFractionDigits: 0 });
+  row.innerHTML = aumByTier.map((t, i) => `
+    <div style="min-width:150px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+        <span style="width:8px;height:8px;border-radius:4px;background:${tones[t.tier] || tones[0]}"></span>
+        <span style="color:var(--text-muted);font-size:10px;font-weight:600;letter-spacing:0.6px;text-transform:uppercase">${t.label}</span>
+      </div>
+      <div style="color:var(--text);font-size:16px;font-weight:700;font-variant-numeric:tabular-nums">${fmt(t.total_balance)}</div>
+      <div style="color:var(--text-muted);font-size:11px">${t.wallet_count} wallets</div>
+    </div>
+  `).join('');
+})();
 
 // ── Colors ────────────────────────────────────────────────────────────
 const C = { primary: '#10B981', accent: '#F59E0B', danger: '#EF4444', info: '#3B82F6', purple: '#8B5CF6', teal: '#14B8A6', pink: '#EC4899', orange: '#F97316', cyan: '#06B6D4' };

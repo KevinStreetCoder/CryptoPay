@@ -6,7 +6,7 @@ from decimal import Decimal
 from django.conf import settings
 from django.contrib.admin.views.decorators import staff_member_required
 from django.db.models import Count, Sum, Q, F
-from django.db.models.functions import TruncDate, Substr
+from django.db.models.functions import TruncDate, Substr, Coalesce
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.utils import timezone
@@ -385,6 +385,67 @@ def admin_stats_dashboard(request):
     online_users_now = _User.objects.filter(last_activity_at__gt=online_cutoff).count()
     active_24h_users = _User.objects.filter(last_activity_at__gt=now - timedelta(hours=24)).count()
 
+    # ── Enterprise cohort metrics ─────────────────────────────────────────
+    # DAU / MAU split — stickiness = DAU/MAU. Industry benchmark is 20%+.
+    dau = _User.objects.filter(last_activity_at__gt=now - timedelta(days=1)).count()
+    mau = _User.objects.filter(last_activity_at__gt=now - timedelta(days=30)).count()
+    stickiness_percent = round(dau / mau * 100, 1) if mau else 0
+
+    # AUM (Assets Under Management) — total balance across all wallets,
+    # grouped by KYC tier. Identifies treasury concentration (are most
+    # assets held by a small tier-3 cohort?).
+    aum_by_tier = list(
+        Wallet.objects.filter(user__isnull=False)
+        .values("user__kyc_tier")
+        .annotate(
+            wallet_count=Count("id"),
+            total_balance=Coalesce(Sum("balance"), Decimal("0")),
+        )
+        .order_by("user__kyc_tier")
+    )
+    # Normalise for JSON encoding.
+    aum_by_tier = [
+        {
+            "tier": r["user__kyc_tier"],
+            "label": kyc_tier_labels.get(r["user__kyc_tier"], f"Tier {r['user__kyc_tier']}"),
+            "wallet_count": r["wallet_count"],
+            "total_balance": r["total_balance"] or Decimal("0"),
+        }
+        for r in aum_by_tier
+    ]
+
+    # Churn-risk cohort — users who had a transaction in the past 30 days
+    # but haven't opened the app in the last 7 days. Prime targets for a
+    # re-engagement push campaign.
+    recent_tx_user_ids = (
+        Transaction.objects.filter(created_at__gt=now - timedelta(days=30))
+        .values_list("user_id", flat=True)
+        .distinct()
+    )
+    churn_risk_count = _User.objects.filter(
+        id__in=recent_tx_user_ids,
+    ).exclude(
+        last_activity_at__gt=now - timedelta(days=7),
+    ).count()
+
+    # High-velocity traders — users with more than N transactions in the
+    # last 24 hours. Watch-list for compliance / fraud review.
+    HIGH_VELOCITY_THRESHOLD = 10
+    high_velocity_qs = (
+        Transaction.objects.filter(created_at__gt=now - timedelta(days=1))
+        .values("user_id")
+        .annotate(tx_count=Count("id"))
+        .filter(tx_count__gt=HIGH_VELOCITY_THRESHOLD)
+        .order_by("-tx_count")[:10]
+    )
+    high_velocity = list(high_velocity_qs)
+
+    # 24h transaction failure rate — if this spikes, something's on fire.
+    last_day_tx = Transaction.objects.filter(created_at__gt=now - timedelta(days=1))
+    tx_24h_total = last_day_tx.count()
+    tx_24h_failed = last_day_tx.filter(status="failed").count()
+    failure_rate_24h = round(tx_24h_failed / tx_24h_total * 100, 2) if tx_24h_total else 0
+
     # ── Build Context ───────────────────────────────────────────────────
     context = {
         # Scalar stats
@@ -432,6 +493,18 @@ def admin_stats_dashboard(request):
         "system_health_json": json.dumps(system_health, cls=DecimalEncoder),
         "online_users_now": online_users_now,
         "active_24h_users": active_24h_users,
+        # Enterprise cohort metrics
+        "dau": dau,
+        "mau": mau,
+        "stickiness_percent": stickiness_percent,
+        "aum_by_tier_json": json.dumps(aum_by_tier, cls=DecimalEncoder),
+        "churn_risk_count": churn_risk_count,
+        "high_velocity_json": json.dumps(high_velocity, cls=DecimalEncoder),
+        "high_velocity_count": len(high_velocity),
+        "high_velocity_threshold": HIGH_VELOCITY_THRESHOLD,
+        "failure_rate_24h": failure_rate_24h,
+        "tx_24h_total": tx_24h_total,
+        "tx_24h_failed": tx_24h_failed,
         # Metadata
         "last_refresh": now.strftime("%Y-%m-%d %H:%M:%S %Z"),
     }
