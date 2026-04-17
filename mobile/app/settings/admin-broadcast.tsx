@@ -15,6 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { getThemeColors, getThemeShadows, colors } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
 import { api } from "../../src/api/client";
+import { NotificationDetailModal } from "../../src/components/NotificationDetailModal";
 
 const isWeb = Platform.OS === "web";
 
@@ -103,6 +104,10 @@ export default function AdminBroadcastScreen() {
   const [loadingStats, setLoadingStats] = useState(true);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  // Which broadcast is open in the admin detail+edit modal (null = closed).
+  // Distinct from expandedId because the modal shows *server-fetched*
+  // per-broadcast stats and the inline edit form.
+  const [adminEditId, setAdminEditId] = useState<string | null>(null);
 
   const toggleChannel = (key: string) => {
     setSelectedChannels((prev) =>
@@ -699,7 +704,7 @@ export default function AdminBroadcastScreen() {
                       </View>
 
                       {/* Meta */}
-                      <View style={{ flexDirection: "row", gap: 16 }}>
+                      <View style={{ flexDirection: "row", gap: 16, marginBottom: 12 }}>
                         <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_400Regular" }}>
                           Target: {item.target}
                         </Text>
@@ -707,6 +712,33 @@ export default function AdminBroadcastScreen() {
                           By: {item.created_by_name}
                         </Text>
                       </View>
+
+                      {/* Open-in-modal action. Admin can see detailed open/
+                          read counts distinct from "in list" read status,
+                          plus edit the broadcast in a single surface. */}
+                      <Pressable
+                        onPress={(e: any) => {
+                          e?.stopPropagation?.();
+                          setAdminEditId(item.id);
+                        }}
+                        style={({ pressed }) => ({
+                          flexDirection: "row",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: 6,
+                          paddingVertical: 10,
+                          paddingHorizontal: 14,
+                          borderRadius: 10,
+                          borderWidth: 1,
+                          borderColor: "rgba(16,185,129,0.35)",
+                          opacity: pressed ? 0.75 : 1,
+                        })}
+                      >
+                        <Ionicons name="create-outline" size={14} color={colors.primary[400]} />
+                        <Text style={{ color: colors.primary[300], fontSize: 12, fontFamily: "DMSans_600SemiBold" }}>
+                          View full stats & edit
+                        </Text>
+                      </Pressable>
                     </View>
                   )}
                 </Pressable>
@@ -715,6 +747,19 @@ export default function AdminBroadcastScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* Admin detail + edit modal. Opened from any history card's
+          "View full stats & edit" action. Fires onEdited to refetch the
+          history list so edited titles/bodies refresh immediately. */}
+      <NotificationDetailModal
+        notificationId={adminEditId}
+        adminMode
+        onClose={() => setAdminEditId(null)}
+        onEdited={() => {
+          fetchStats();
+          fetchHistory();
+        }}
+      />
     </SafeAreaView>
   );
 }
