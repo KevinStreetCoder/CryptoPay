@@ -3,14 +3,30 @@
 **Last updated:** 2026-04-17
 
 > See also: [BETA-LAUNCH-TRACKER.md](./BETA-LAUNCH-TRACKER.md) — hard blockers before opening beta (CoinGecko cold-start, forex fallback, BTC mainnet default, Smile Identity signup, ToS/Privacy review, bank letter). **Read this first.**
+> See also: [API-TRACKING.md](./API-TRACKING.md) — every external API the app depends on, current status, fallback chain, who owns it.
+> See also: [FAILURE-LOG.md](./FAILURE-LOG.md) — production incident log + open at-risk items. Every failure gets a postmortem entry.
 > See also: [LANDING-PAGE-DESIGN.md](./LANDING-PAGE-DESIGN.md) — landing page audit, anti-AI-slop checklist, design resources (unDraw, Storyset, Lottie), prioritised backlog.
-> See also: [SESSION-2026-04-17.md](./SESSION-2026-04-17.md) — this session's work: session durability, push 2FA, Google OAuth fix, simplified loading, landing polish.
+> See also: [SESSION-2026-04-17.md](./SESSION-2026-04-17.md) — this session's work: session durability, push 2FA, Google OAuth fix, simplified loading, landing polish, admin presence tracking.
 > See also: [ROADMAP.md](./ROADMAP.md) for strategic vision, fundraising, and expansion plans.
 > See also: [SYSTEM-DESIGN.md](./SYSTEM-DESIGN.md) for technical architecture and liquidity engine design.
 > See also: [KES-DEPOSIT-RESEARCH.md](./KES-DEPOSIT-RESEARCH.md) for M-Pesa C2B/STK Push research, sandbox testing, and go-live checklist.
 > See also: [SECURITY-AUDIT.md](./SECURITY-AUDIT.md) for full security audit report with findings and fixes.
 
 ---
+
+## Deploy method (current)
+
+Source of truth is GitHub `main` on `KevinStreetCoder/CryptoPay`.
+
+1. Local: make changes, commit, `git push origin main`.
+2. VPS: `ssh root@173.249.4.109 "cd /home/deploy/cpay && git pull --ff-only origin main"`.
+3. For backend changes: `cd deploy && docker compose -f docker-compose.prod.yml build web celery celery-beat && docker compose -f docker-compose.prod.yml up -d --force-recreate web celery celery-beat`.
+4. For web-only changes: build locally with `cd mobile && npx expo export --platform web --output-dir dist`, tar the output, `scp` to VPS, extract into `/var/www/cpay/`, `systemctl reload nginx`. (Do **not** `scp -r` raw — Expo font filenames contain spaces; see `feedback_deploy_method.md`.)
+5. For APK: WSL Ubuntu local EAS build into `/tmp/cryptopay.apk` → `scp` to `/var/www/cpay/download/cryptopay.apk`.
+
+**Caveat:** `--force-recreate` has a ~60s downtime window. See
+[FAILURE-LOG.md item D-01](./FAILURE-LOG.md) for the zero-downtime
+migration plan (2 web replicas with nginx upstream health checks).
 
 ## What changed 2026-04-17 (session summary)
 
