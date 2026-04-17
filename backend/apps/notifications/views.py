@@ -283,3 +283,177 @@ class UnreadCountView(APIView):
             read=False,
         ).count()
         return Response({"unread_count": count})
+
+
+class UserNotificationDetailView(APIView):
+    """GET /api/v1/notifications/<id>/ — Full details for the modal.
+
+    Also records an "opened" event on first fetch (or increments open_count
+    on subsequent opens). This is what powers the admin "X users opened
+    vs. Y read" stat separation.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, notification_id):
+        try:
+            notif = UserNotification.objects.select_related(
+                "notification", "notification__created_by"
+            ).get(id=notification_id, user=request.user)
+        except UserNotification.DoesNotExist:
+            return Response({"error": "Not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        # Mark read + opened atomically. `read` is implicit on detail view,
+        # `opened_at` tracks deliberate engagement (tapped card).
+        updates = []
+        now = timezone.now()
+        if not notif.read:
+            notif.read = True
+            notif.read_at = now
+            updates += ["read", "read_at"]
+        if notif.opened_at is None:
+            notif.opened_at = now
+            updates.append("opened_at")
+        notif.open_count = (notif.open_count or 0) + 1
+        updates.append("open_count")
+        notif.save(update_fields=updates)
+
+        src = notif.notification
+        return Response({
+            "id": str(notif.id),
+            "title": src.title,
+            "body": src.body,
+            "category": src.category,
+            "priority": src.priority,
+            "read": notif.read,
+            "read_at": notif.read_at,
+            "opened_at": notif.opened_at,
+            "open_count": notif.open_count,
+            "delivered_via": notif.delivered_via,
+            "created_at": notif.created_at,
+            "sent_at": src.created_at,
+            "sender_name": (src.created_by.full_name or src.created_by.phone)
+            if src.created_by else "CryptoPay Team",
+            "is_edited": src.edit_count > 0,
+            "last_edited_at": src.updated_at if src.edit_count > 0 else None,
+        })
+
+
+# ---------------------------------------------------------------------------
+# Admin: Per-notification stats + Edit
+# ---------------------------------------------------------------------------
+
+
+class AdminNotificationStatsDetailView(APIView):
+    """GET /api/v1/notifications/admin/<id>/stats/ — Per-broadcast stats.
+
+    Returns read / opened / open_count across the recipient pool so admins
+    can distinguish "scrolled past in the list" (read=True via list render)
+    from "actually tapped into the content" (opened_at != null).
+    """
+
+    permission_classes = [IsAdminUser]
+
+    def get(self, request, notification_id):
+        try:
+            broadcast = AdminNotification.objects.select_related("created_by").get(
+                id=notification_id
+            )
+        except AdminNotification.DoesNotExist:
+            return Response({"error": "Not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        deliveries = UserNotification.objects.filter(notification=broadcast)
+        total = deliveries.count()
+        read = deliveries.filter(read=True).count()
+        opened = deliveries.exclude(opened_at__isnull=True).count()
+        total_opens = deliveries.aggregate(s=Sum("open_count"))["s"] or 0
+
+        # Channel mix
+        channel_counts = (
+            deliveries.values("delivered_via")
+            .annotate(count=Count("id"))
+            .order_by("-count")
+        )
+
+        return Response({
+            "id": str(broadcast.id),
+            "title": broadcast.title,
+            "body": broadcast.body,
+            "category": broadcast.category,
+            "priority": broadcast.priority,
+            "created_at": broadcast.created_at,
+            "updated_at": broadcast.updated_at,
+            "edit_count": broadcast.edit_count,
+            "created_by": (broadcast.created_by.full_name or broadcast.created_by.phone)
+            if broadcast.created_by else None,
+            "totals": {
+                "recipients": total,
+                "read": read,
+                "opened": opened,
+                "total_opens": total_opens,
+                "read_rate_percent": round(read / total * 100, 1) if total else 0,
+                "open_rate_percent": round(opened / total * 100, 1) if total else 0,
+            },
+            "channels": [
+                {"channel": r["delivered_via"], "count": r["count"]}
+                for r in channel_counts
+            ],
+        })
+
+
+class AdminNotificationEditView(APIView):
+    """PATCH /api/v1/notifications/admin/<id>/ — Edit title/body/category/priority.
+
+    Edits propagate automatically to every UserNotification record via the
+    ForeignKey join — no need to touch the per-user rows. We bump
+    `edit_count` + `last_edited_by` so admins see an audit trail. Email /
+    SMS deliveries already sent are NOT re-sent (unsafe to spam users with
+    revisions); the edit surfaces in the in-app notification detail view.
+    """
+
+    permission_classes = [IsAdminUser]
+
+    ALLOWED = {"title", "body", "category", "priority"}
+
+    def patch(self, request, notification_id):
+        try:
+            broadcast = AdminNotification.objects.get(id=notification_id)
+        except AdminNotification.DoesNotExist:
+            return Response({"error": "Not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        changed = []
+        for key in self.ALLOWED:
+            if key in request.data:
+                new_val = request.data[key]
+                # Validate category / priority choices
+                if key == "category" and new_val not in dict(AdminNotification.Category.choices):
+                    return Response({"error": f"Invalid category: {new_val}"}, status=400)
+                if key == "priority" and new_val not in dict(AdminNotification.Priority.choices):
+                    return Response({"error": f"Invalid priority: {new_val}"}, status=400)
+                if getattr(broadcast, key) != new_val:
+                    setattr(broadcast, key, new_val)
+                    changed.append(key)
+
+        if not changed:
+            return Response({"status": "no_changes", "id": str(broadcast.id)})
+
+        broadcast.edit_count = (broadcast.edit_count or 0) + 1
+        broadcast.last_edited_by = request.user
+        broadcast.save(update_fields=[*changed, "edit_count", "last_edited_by", "updated_at"])
+
+        logger.info(
+            "notification.edited",
+            extra={
+                "notification_id": str(broadcast.id),
+                "edited_by": str(request.user.id),
+                "changed_fields": changed,
+            },
+        )
+
+        return Response({
+            "status": "ok",
+            "id": str(broadcast.id),
+            "edit_count": broadcast.edit_count,
+            "changed_fields": changed,
+            "updated_at": broadcast.updated_at,
+        })

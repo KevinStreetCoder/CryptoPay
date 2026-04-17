@@ -17,6 +17,7 @@ import { paymentsApi, Transaction, getTxKesAmount, getTxRecipient } from "../../
 import { notificationsApi, ServerNotification } from "../../src/api/notifications";
 import * as NotifStore from "../../src/stores/notifications";
 import { useToast } from "../../src/components/Toast";
+import { NotificationDetailModal } from "../../src/components/NotificationDetailModal";
 import { normalizeError } from "../../src/utils/apiErrors";
 import { colors, getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
@@ -216,6 +217,11 @@ export default function NotificationsInboxScreen() {
   const [loading, setLoading] = useState(true);
   const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
   const [, forceUpdate] = useState(0);
+  // The detail modal shows the full notification content (long bodies,
+  // sender, timestamps, delivery channel, read status). `openId` holds
+  // the UserNotification id of the row that was tapped — null when the
+  // modal is closed.
+  const [openId, setOpenId] = useState<string | null>(null);
 
   const loadNotifications = useCallback(async () => {
     try {
@@ -491,7 +497,16 @@ export default function NotificationsInboxScreen() {
                   index={index}
                   onPress={() => {
                     markRead(notification.id, !!notification.isServer);
-                    if (!notification.isServer) {
+                    if (notification.isServer) {
+                      // Server-backed admin broadcasts → show the full
+                      // detail modal. This handles both short and long
+                      // bodies; the user can scroll long content, see
+                      // who sent it and when, and the open is tracked
+                      // for admin stats.
+                      setOpenId(notification.id);
+                    } else {
+                      // Transaction-style client notifications still
+                      // deep-link into the payment detail page.
                       router.push({ pathname: "/payment/detail", params: { id: notification.id } });
                     }
                   }}
@@ -506,6 +521,12 @@ export default function NotificationsInboxScreen() {
           ))
         )}
       </ScrollView>
+
+      {/* Full-content detail modal for server-backed notifications. */}
+      <NotificationDetailModal
+        notificationId={openId}
+        onClose={() => setOpenId(null)}
+      />
     </SafeAreaView>
   );
 }
