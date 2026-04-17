@@ -119,30 +119,44 @@ export function NotificationDetailModal({
     setLoading(true);
     setError(null);
     setEditing(false);
+    setAdminStats(null);
 
     (async () => {
       try {
-        const { data } = await notificationsApi.detail(notificationId);
-        if (cancelled) return;
-        setDetail(data);
-        setEditTitle(data.title);
-        setEditBody(data.body);
-
-        // Admins also fetch the aggregate stats. We derive the admin
-        // notification id from... well, our API doesn't expose it on the
-        // user-facing detail endpoint, so the stats call is best-effort
-        // and silently ignored for non-admins.
         if (adminMode) {
-          try {
-            // The user-notification id IS the row they tapped; the
-            // broadcast id lives on the server-side join. We call the
-            // admin list and match by title+created_at as a pragmatic
-            // bridge. For the full wiring see the integration snippet.
-            // Skipped here when we don't have a broadcast id; the parent
-            // should pass it via a dedicated prop in a follow-up.
-          } catch {
-            /* non-fatal */
-          }
+          // Admin path: `notificationId` is the AdminNotification id.
+          // Fetch the aggregate stats and synthesise a "detail" shape
+          // from it so the same modal UI works for both roles without
+          // a separate view.
+          const { data } = await notificationsApi.adminStatsDetail(notificationId);
+          if (cancelled) return;
+          setAdminStats(data);
+          setDetail({
+            id: data.id,
+            title: data.title,
+            body: data.body,
+            category: data.category,
+            priority: data.priority,
+            read: true,
+            read_at: null,
+            opened_at: null,
+            open_count: data.totals.total_opens,
+            delivered_via: data.channels[0]?.channel || "in_app",
+            created_at: data.created_at,
+            sent_at: data.created_at,
+            sender_name: data.created_by || "CryptoPay Team",
+            is_edited: data.edit_count > 0,
+            last_edited_at: data.edit_count > 0 ? data.updated_at : null,
+          });
+          setEditTitle(data.title);
+          setEditBody(data.body);
+        } else {
+          // User path: `notificationId` is the UserNotification id.
+          const { data } = await notificationsApi.detail(notificationId);
+          if (cancelled) return;
+          setDetail(data);
+          setEditTitle(data.title);
+          setEditBody(data.body);
         }
       } catch (e: any) {
         if (!cancelled) {
