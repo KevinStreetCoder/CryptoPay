@@ -26,6 +26,31 @@ Format per entry:
 | F-03 | EAS local-build startup | `request to https://api.expo.dev/graphql failed` intermittently at cold start | tooling | Low | Re-run the build; transient network flake, works second time |
 | F-04 | Zero-downtime deploy | `docker compose up -d --force-recreate web` has a ~60s window where nginx returns 502 to live users | infra | **High during live usage** | 502 retry shipped 2026-04-17 (`2e8f510`); proper fix is 2 web replicas with health-check routing |
 | F-05 | BlockCypher free tier | 200 req/hour ceiling if our key never arrives | provider | Medium | Esplora + mempool.space broadcast fallback already live (`bc44105`) |
+| F-06 | Sandbox-default env vars in base settings | If `.env.production` forgets `MPESA_ENVIRONMENT`, `SASAPAY_ENVIRONMENT`, `AT_USERNAME`, or `MPESA_CERT_PATH`, the app silently uses sandbox in production | us | **Critical** | `production.py::_assert_production_env()` now logs ERROR for each sandbox leak; set `REQUIRE_PROD_ENV_STRICT=True` in .env to crashloop instead of silently misconfiguring |
+| F-07 | Yellow Card rebalance | `get_sell_quote`/`execute_sell`/`check_settlement` raise `NotImplementedError` | us | Medium | `REBALANCE_EXECUTION_MODE=manual` (the default) — admin rebalances through the dashboard rather than the API; documented as such |
+| F-08 | SasaPay reversal | `apps/mpesa/provider.py` reversal path raises `NotImplementedError` | us | Low | Admin reverses through the SasaPay merchant portal; needs manual SOP doc |
+
+## Non-issues confirmed by audit 2026-04-17
+
+The two code audits flagged a handful of "BETA BLOCKERS" that turned
+out to be false positives after manual inspection:
+
+- **`onPress={() => {}}` on admin modals** (admin-users.tsx:892,
+  admin-user-detail.tsx:996, admin-rebalance.tsx:1440) — these are the
+  **intentional tap-propagation blockers** on the modal body
+  `<Pressable>`. Without them a tap inside the modal would bubble up
+  to the backdrop's `onPress` and close the modal. Every modal in the
+  codebase follows this pattern.
+- **`apps/blockchain/kms.py:99-120` `NotImplementedError`** — this is
+  the abstract `KMSManager` base class. Concrete subclasses
+  (`LocalKMSManager`, `AWSKMSManager`) implement the methods; the base
+  exists only for typing.
+- **`apps/payments/saga.py` DEBUG/sandbox auto-complete** — only fires
+  when both `DEBUG=True` AND `MPESA_ENVIRONMENT=sandbox`. Production
+  has `DEBUG=False` hard-coded in `production.py`. The F-06 env check
+  now guards against the sandbox half of this condition.
+
+Documented so future audits don't re-raise them.
 
 ---
 
