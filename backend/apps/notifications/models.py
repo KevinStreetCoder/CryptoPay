@@ -55,6 +55,18 @@ class AdminNotification(models.Model):
     )
     recipient_count = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
+    # Admin edits flow through `updated_at` / `last_edited_by`. The new
+    # title/body propagate to every UserNotification row automatically via
+    # the ForeignKey join, so edits are O(1) regardless of recipient count.
+    updated_at = models.DateTimeField(auto_now=True)
+    last_edited_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="edited_notifications",
+    )
+    edit_count = models.PositiveIntegerField(default=0)
 
     class Meta:
         ordering = ["-created_at"]
@@ -87,6 +99,12 @@ class UserNotification(models.Model):
     )
     read = models.BooleanField(default=False)
     read_at = models.DateTimeField(null=True, blank=True)
+    # `opened_at` = user tapped/clicked the notification card and saw the
+    # detail modal. Distinct from `read_at`, which fires automatically on
+    # list render. Gives admins a real engagement signal (list-swipe vs.
+    # actual content read). Nullable because legacy rows have no value.
+    opened_at = models.DateTimeField(null=True, blank=True)
+    open_count = models.PositiveIntegerField(default=0)
     delivered_via = models.CharField(
         max_length=10,
         choices=DeliveryChannel.choices,
