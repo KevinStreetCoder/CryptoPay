@@ -94,8 +94,10 @@ export function useAuth() {
     }
   }, []);
 
-  const login = useCallback(async (phone: string, pin: string, otp?: string) => {
-    const { data } = await authApi.login({ phone, pin, otp });
+  const login = useCallback(async (phone: string, pin: string, otp?: string, challenge_id?: string) => {
+    // challenge_id is set when the user approved the sign-in via push on
+    // another trusted device — backend consumes it as proof and skips OTP.
+    const { data } = await authApi.login({ phone, pin, otp, challenge_id });
     await storage.setItemAsync("access_token", data.tokens.access);
     await storage.setItemAsync("refresh_token", data.tokens.refresh);
     resetSessionExpired(); // Allow API requests again after re-login

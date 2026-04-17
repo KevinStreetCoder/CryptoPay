@@ -113,7 +113,8 @@ def create_challenge(
                 "challenge_id": challenge.id,
                 # Deep link so tapping the notification routes straight to the
                 # approval screen. Mobile app must register this route.
-                "deep_link": f"cryptopay://approve-login/{challenge.id}",
+                # Expo Router matches the file path: app/auth/approve-login/[id].tsx
+                "deep_link": f"cryptopay://auth/approve-login/{challenge.id}",
                 "requesting_ip": challenge.requesting_ip,
                 "requesting_device_name": challenge.requesting_device_name,
                 "expires_in_seconds": CHALLENGE_TTL_SECONDS,

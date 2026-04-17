@@ -93,10 +93,22 @@ export const authApi = {
     return api.post<LoginResponse>("/auth/register/", { ...data, ...device });
   },
 
-  login: async (data: { phone: string; pin: string; otp?: string; totp_code?: string }) => {
+  login: async (data: { phone: string; pin: string; otp?: string; totp_code?: string; challenge_id?: string }) => {
     const device = await getDeviceInfo();
     return api.post<LoginResponse>("/auth/login/", { ...data, ...device });
   },
+
+  // Push-notification login challenge (tap-to-approve 2FA)
+  getChallengeStatus: (challengeId: string) =>
+    api.get<{ status: "pending" | "approved" | "denied" | "expired"; requesting_device_name: string; requesting_ip: string }>(
+      `/auth/challenge/${challengeId}/status/`,
+    ),
+
+  approveChallenge: (challengeId: string) =>
+    api.post<{ status: string }>(`/auth/challenge/${challengeId}/approve/`, {}),
+
+  denyChallenge: (challengeId: string) =>
+    api.post<{ status: string }>(`/auth/challenge/${challengeId}/deny/`, {}),
 
   googleLogin: async (idToken: string) => {
     const device = await getDeviceInfo();
