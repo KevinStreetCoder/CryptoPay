@@ -632,14 +632,30 @@ export default function LandingPage() {
       .cpay-bento-card:hover .cpay-icon-bounce,
       .cpay-step-card:hover .cpay-icon-bounce { transform: scale(1.15) rotate(-5deg); }
 
-      /* Illustration animated idle + dramatic hover */
-      @keyframes cpay-illus-idle { 0%,100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-6px) rotate(1deg); } }
-      .cpay-illustration { animation: cpay-illus-idle 5s ease-in-out infinite; transition: transform 0.4s cubic-bezier(0.34,1.56,0.64,1), filter 0.4s ease; cursor: pointer; }
-      .cpay-illustration:hover { animation-play-state: paused; transform: scale(1.15) translateY(-10px) rotate(-3deg); filter: drop-shadow(0 12px 32px rgba(16,185,129,0.25)) brightness(1.1); }
+      /* Illustrations: no idle animation (distracting, AI-templatey).
+         Motion triggered by hover only — subtle lift + glow + gentle tilt. */
+      .cpay-illustration {
+        transform: translateY(0) rotate(0deg) scale(1);
+        transition: transform 0.45s cubic-bezier(0.34,1.56,0.64,1), filter 0.45s ease;
+        cursor: pointer;
+        filter: drop-shadow(0 4px 12px rgba(0,0,0,0.15));
+      }
+      .cpay-illustration:hover {
+        transform: scale(1.08) translateY(-6px) rotate(-1.5deg);
+        filter: drop-shadow(0 14px 32px rgba(16,185,129,0.28)) brightness(1.08);
+      }
 
-      /* Animated gradient border for featured cards */
-      @keyframes cpay-border-glow { 0%,100% { border-color: rgba(16,185,129,0.12); } 50% { border-color: rgba(16,185,129,0.3); } }
-      .cpay-glow-border-anim { animation: cpay-border-glow 3s ease-in-out infinite; }
+      /* Animated gradient border for featured cards — hover-only.
+         Previously ran an infinite border-color loop; now only tints
+         on hover so the page reads as static and professional at rest. */
+      .cpay-glow-border-anim {
+        border-color: rgba(16,185,129,0.12);
+        transition: border-color 0.3s ease, box-shadow 0.3s ease;
+      }
+      .cpay-glow-border-anim:hover {
+        border-color: rgba(16,185,129,0.3);
+        box-shadow: 0 0 0 1px rgba(16,185,129,0.15), 0 10px 30px rgba(16,185,129,0.08);
+      }
 
       /* Pill badge pulse */
       @keyframes cpay-badge-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.3); } 50% { box-shadow: 0 0 0 6px rgba(16,185,129,0); } }
@@ -1151,11 +1167,11 @@ export default function LandingPage() {
           <View style={{ alignItems: "center", marginBottom: isMobile ? 24 : 36 }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 }}>
               <Image source={{ uri: KENYA_FLAG }} style={{ width: 24, height: 17, borderRadius: 2 }} />
-              <Text style={{ color: tc.primary[400], fontSize: 12, fontFamily: "DMSans_700Bold", textTransform: "uppercase", letterSpacing: 2 }}>Kenya Crypto Adoption</Text>
+              <Text style={{ color: tc.primary[400], fontSize: 12, fontFamily: "DMSans_700Bold", textTransform: "uppercase", letterSpacing: 2 }}>The CPay difference</Text>
             </View>
-            <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 18 : 22, fontFamily: "DMSans_600SemiBold", textAlign: "center", lineHeight: isMobile ? 26 : 32, maxWidth: 600 }}>
-              Kenyans hold billions in crypto — but can't pay a single electricity bill with it.{" "}
-              <Text style={{ color: tc.primary[400], fontFamily: "DMSans_700Bold" }}>Until now.</Text>
+            <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 18 : 22, fontFamily: "DMSans_600SemiBold", textAlign: "center", lineHeight: isMobile ? 26 : 32, maxWidth: 640 }}>
+              Locked rates. Live pricing. Transparent fees.{" "}
+              <Text style={{ color: tc.primary[400], fontFamily: "DMSans_700Bold" }}>What you see is what you pay.</Text>
             </Text>
           </View>
         </RevealOnScroll>
