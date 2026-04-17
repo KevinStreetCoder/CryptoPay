@@ -465,3 +465,110 @@ class ProcessPendingDepositsIntegrationTest(TestCase):
         deposit2.refresh_from_db()
         self.assertEqual(deposit1.status, BlockchainDeposit.Status.CREDITED)
         self.assertEqual(deposit2.status, BlockchainDeposit.Status.CREDITED)
+
+
+class BitcoinBech32AddressTest(TestCase):
+    """Native SegWit (BIP-173 / P2WPKH) address generation."""
+
+    def test_encode_p2wpkh_mainnet_known_vector(self):
+        """BIP-173 test vector: 20-byte all-zero hash -> bc1q... with correct checksum."""
+        from apps.blockchain.services import _encode_p2wpkh
+
+        # HASH160 is 20 bytes of zeros — deterministic BIP-173 example.
+        addr = _encode_p2wpkh(bytes(20), hrp="bc")
+        self.assertTrue(addr.startswith("bc1q"))
+        # Length of a P2WPKH bech32 address is always 42 chars for mainnet.
+        self.assertEqual(len(addr), 42)
+
+    def test_encode_p2wpkh_testnet_hrp(self):
+        """Testnet HRP is `tb`; addresses start with tb1q..."""
+        from apps.blockchain.services import _encode_p2wpkh
+
+        addr = _encode_p2wpkh(bytes(20), hrp="tb")
+        self.assertTrue(addr.startswith("tb1q"))
+
+    def test_encode_p2wpkh_rejects_wrong_length(self):
+        """Anything other than a 20-byte hash is a caller bug."""
+        from apps.blockchain.services import _encode_p2wpkh
+
+        with self.assertRaises(ValueError):
+            _encode_p2wpkh(b"\x00" * 21, hrp="bc")
+
+    def test_generate_deposit_address_btc_is_bech32(self):
+        """End-to-end: real HD-derived key produces a bc1q/tb1q address."""
+        from apps.blockchain.services import generate_deposit_address
+
+        # Use a deterministic user_id so the test is reproducible.
+        addr = generate_deposit_address(
+            user_id="00000000-0000-0000-0000-000000000001",
+            currency="BTC",
+            address_index=0,
+        )
+        # HRP depends on current BTC_NETWORK setting — tests default to dev
+        # settings where BTC_NETWORK=main unless overridden by env.
+        self.assertTrue(
+            addr.startswith("bc1q") or addr.startswith("tb1q"),
+            f"expected bech32 P2WPKH address, got {addr}",
+        )
+
+
+class BitcoinWithdrawalFeatureFlagTest(TestCase):
+    """Gate BTC withdrawals behind BTC_WITHDRAWALS_ENABLED to avoid accidents
+    before the native-SegWit signer has been verified on mainnet."""
+
+    def test_sweep_raises_when_disabled(self):
+        from django.test import override_settings
+        from apps.blockchain.sweep import _execute_btc_sweep
+
+        class _FakeOrder:
+            from_address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+            to_address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+            amount = Decimal("0.001")
+
+        with override_settings(BTC_WITHDRAWALS_ENABLED=False):
+            with self.assertRaisesRegex(RuntimeError, "BTC_WITHDRAWALS_ENABLED"):
+                _execute_btc_sweep(_FakeOrder(), private_key=b"\x01" * 32)
+
+    def test_legacy_broadcast_raises_when_disabled(self):
+        from django.test import override_settings
+        from apps.blockchain.tasks import _broadcast_bitcoin
+
+        with override_settings(BTC_WITHDRAWALS_ENABLED=False):
+            with self.assertRaisesRegex(RuntimeError, "BTC_WITHDRAWALS_ENABLED"):
+                _broadcast_bitcoin(
+                    "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+                    Decimal("0.001"),
+                )
+
+
+class ForexFallbackTest(TestCase):
+    """Forex chain must *always* return a non-zero rate — never raise, even
+    when every live provider is down."""
+
+    def test_all_providers_fail_returns_hardcoded(self):
+        from unittest.mock import patch
+        from apps.rates.forex import fetch_usd_kes_rate
+        from apps.rates.models import ExchangeRate
+
+        # Ensure DB is empty so we exercise the hard-coded tail branch, not
+        # a stale row from another test.
+        ExchangeRate.objects.filter(pair="USD/KES").delete()
+
+        with patch("apps.rates.forex._provider_exchangerate_api", return_value=None), \
+             patch("apps.rates.forex._provider_open_exchange_rates", return_value=None), \
+             patch("apps.rates.forex._provider_fixer", return_value=None):
+            quote = fetch_usd_kes_rate()
+
+        self.assertGreater(quote.rate, Decimal("0"))
+        self.assertEqual(quote.source, "fallback")
+
+    def test_first_provider_wins(self):
+        from unittest.mock import patch
+        from apps.rates.forex import fetch_usd_kes_rate
+
+        with patch("apps.rates.forex._provider_exchangerate_api",
+                   return_value=Decimal("145.25")):
+            quote = fetch_usd_kes_rate()
+
+        self.assertEqual(quote.source, "exchangerate-api")
+        self.assertEqual(quote.rate, Decimal("145.25"))

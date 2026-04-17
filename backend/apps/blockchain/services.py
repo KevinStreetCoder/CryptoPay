@@ -7,7 +7,7 @@ Generates real, cryptographically valid deposit addresses from a master seed.
 Supported chains:
   - Tron (TRC-20): SLIP-44 coin type 195, base58check with 0x41 prefix
   - Ethereum/Polygon (ERC-20): SLIP-44 coin type 60, Keccak-256 checksum
-  - Bitcoin (P2WPKH-P2SH): SLIP-44 coin type 0, bech32/base58check
+  - Bitcoin (native SegWit P2WPKH, BIP-173): SLIP-44 coin type 0, bech32 (bc1q.../tb1q...)
   - Solana (SPL): SLIP-44 coin type 501, Ed25519 base58
 """
 
@@ -71,6 +71,82 @@ def _hash160(data: bytes) -> bytes:
     sha = hashlib.sha256(data).digest()
     ripemd = hashlib.new("ripemd160", sha).digest()
     return ripemd
+
+
+# ---- Bech32 (BIP-173) for native SegWit (P2WPKH) addresses ----------------
+# Implementation lifted from BIP-173 reference Python (public domain).
+# Native SegWit has lower transaction fees than P2PKH/P2SH and is universally
+# supported by modern wallets. Addresses look like `bc1q...` on mainnet or
+# `tb1q...` on testnet.
+
+_BECH32_POLYMOD_GEN = [0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3]
+
+
+def _bech32_polymod(values):
+    chk = 1
+    for v in values:
+        b = chk >> 25
+        chk = ((chk & 0x1ffffff) << 5) ^ v
+        for i in range(5):
+            chk ^= _BECH32_POLYMOD_GEN[i] if ((b >> i) & 1) else 0
+    return chk
+
+
+def _bech32_hrp_expand(hrp: str):
+    return [ord(x) >> 5 for x in hrp] + [0] + [ord(x) & 31 for x in hrp]
+
+
+def _bech32_create_checksum(hrp: str, data):
+    values = _bech32_hrp_expand(hrp) + list(data)
+    polymod = _bech32_polymod(values + [0, 0, 0, 0, 0, 0]) ^ 1
+    return [(polymod >> 5 * (5 - i)) & 31 for i in range(6)]
+
+
+def _bech32_encode(hrp: str, data) -> str:
+    combined = list(data) + _bech32_create_checksum(hrp, data)
+    return hrp + "1" + "".join([BECH32_CHARSET[d] for d in combined])
+
+
+def _convertbits(data, frombits: int, tobits: int, pad: bool = True):
+    """Convert a byte stream to a 5-bit stream for bech32 payloads."""
+    acc = 0
+    bits = 0
+    ret = []
+    maxv = (1 << tobits) - 1
+    max_acc = (1 << (frombits + tobits - 1)) - 1
+    for value in data:
+        if value < 0 or (value >> frombits):
+            raise ValueError("invalid byte for bech32 conversion")
+        acc = ((acc << frombits) | value) & max_acc
+        bits += frombits
+        while bits >= tobits:
+            bits -= tobits
+            ret.append((acc >> bits) & maxv)
+    if pad:
+        if bits:
+            ret.append((acc << (tobits - bits)) & maxv)
+    elif bits >= frombits or ((acc << (tobits - bits)) & maxv):
+        raise ValueError("invalid padding for bech32 conversion")
+    return ret
+
+
+def _encode_p2wpkh(pubkey_hash: bytes, hrp: str = "bc") -> str:
+    """Encode a native SegWit v0 P2WPKH address.
+
+    Args:
+        pubkey_hash: 20-byte HASH160(compressed_pubkey).
+        hrp: "bc" for mainnet, "tb" for testnet.
+    """
+    if len(pubkey_hash) != 20:
+        raise ValueError("P2WPKH requires a 20-byte HASH160")
+    # Witness version 0 prepended, followed by 5-bit program.
+    return _bech32_encode(hrp, [0] + _convertbits(pubkey_hash, 8, 5))
+
+
+def _btc_hrp() -> str:
+    """Return the bech32 HRP for the currently-configured Bitcoin network."""
+    net = getattr(settings, "BTC_NETWORK", "main")
+    return "tb" if net in ("test", "test3", "testnet") else "bc"
 
 
 def _keccak256(data: bytes) -> bytes:
@@ -356,11 +432,13 @@ def generate_deposit_address(user_id: str, currency: str, address_index: int) ->
         return "0x" + checksummed
 
     elif chain == "bitcoin":
-        # Bitcoin P2PKH: Hash160 of compressed pubkey, version byte 0x00
+        # Native SegWit P2WPKH (BIP-173 / bech32) — addresses start with
+        # `bc1q` on mainnet or `tb1q` on testnet. Lower transaction fees than
+        # legacy P2PKH and universally supported by modern wallets. HRP is
+        # chosen from BTC_NETWORK so dev/testnet builds emit tb1q... addresses
+        # automatically.
         pubkey_hash = _hash160(public_key)
-        addr_bytes = b"\x00" + pubkey_hash
-        checksum = hashlib.sha256(hashlib.sha256(addr_bytes).digest()).digest()[:4]
-        return _base58_encode(addr_bytes + checksum)
+        return _encode_p2wpkh(pubkey_hash, hrp=_btc_hrp())
 
     elif chain == "solana":
         # Solana: Ed25519 public key as base58

@@ -29,6 +29,7 @@ class RateAlert(models.Model):
 
     class Currency(models.TextChoices):
         USDT = "USDT", "USDT"
+        USDC = "USDC", "USDC"
         BTC = "BTC", "BTC"
         ETH = "ETH", "ETH"
         SOL = "SOL", "SOL"

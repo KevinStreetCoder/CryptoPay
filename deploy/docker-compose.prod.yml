@@ -64,13 +64,20 @@ services:
       context: ../backend
       dockerfile: Dockerfile
     container_name: cryptopay_web
+    # On boot: run migrations, collect static, warm the rate cache (non-strict
+    # so a slow provider can't block startup), then launch daphne. Warming
+    # the cache at boot avoids the first-user 10 s stall while CoinGecko and
+    # the forex chain are fetched synchronously.
     command: >
-      daphne
-        -b 0.0.0.0
-        -p 8000
-        --proxy-headers
-        --access-log -
-        config.asgi:application
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py collectstatic --noinput &&
+             python manage.py warm_rate_cache || true &&
+             exec daphne
+                -b 0.0.0.0
+                -p 8000
+                --proxy-headers
+                --access-log -
+                config.asgi:application"
     volumes:
       - cryptopay_static:/app/staticfiles
       - cryptopay_media:/app/media

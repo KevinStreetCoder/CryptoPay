@@ -156,38 +156,28 @@ class RateService:
 
     @staticmethod
     def get_usd_kes_rate() -> Decimal:
-        """Get USD/KES forex rate."""
+        """Get USD/KES forex rate with tiered provider fallback.
+
+        Delegates to apps.rates.forex.fetch_usd_kes_rate(), which tries
+        exchangerate-api -> openexchangerates -> fixer -> most-recent DB row
+        -> hard-coded worst-case. Guarantees a non-zero Decimal.
+
+        Cache TTL is shortened when the fallback path is used so that live
+        providers are tried again sooner on recovery.
+        """
         cache_key = "rate:forex:usd:kes"
         cached = cache.get(cache_key)
         if cached:
             return Decimal(str(cached))
 
-        try:
-            # Use a free forex API as fallback
-            response = requests.get(
-                "https://api.exchangerate-api.com/v4/latest/USD",
-                timeout=10,
-            )
-            response.raise_for_status()
-            data = response.json()
-            rate = Decimal(str(data["rates"]["KES"]))
+        from .forex import fetch_usd_kes_rate
 
-            cache.set(cache_key, str(rate), timeout=300)  # Cache 5 min
-
-            ExchangeRate.objects.create(
-                pair="USD/KES",
-                rate=rate,
-                source="exchangerate-api",
-            )
-
-            return rate
-
-        except Exception as e:
-            logger.error(f"Failed to fetch USD/KES rate: {e}")
-            latest = ExchangeRate.objects.filter(pair="USD/KES").first()
-            if latest:
-                return latest.rate
-            raise
+        quote = fetch_usd_kes_rate()
+        # Shorter TTL on degraded sources so we re-try live providers sooner.
+        ttl = 300 if quote.source not in ("fallback", "db") else 60
+        cache.set(cache_key, str(quote.rate), timeout=ttl)
+        cache.set("rate:forex:source", quote.source, timeout=ttl)
+        return quote.rate
 
     @staticmethod
     def get_crypto_kes_rate(currency: str) -> dict:

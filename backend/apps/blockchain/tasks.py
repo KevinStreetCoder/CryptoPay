@@ -978,8 +978,17 @@ def _broadcast_bitcoin(destination_address: str, amount: Decimal) -> str:
     Uses BlockCypher API for fee estimation and broadcast.
 
     Requires BTC_HOT_WALLET_PRIVATE_KEY (WIF format).
+
+    Guarded by BTC_WITHDRAWALS_ENABLED. Set in production only after the
+    native SegWit migration has been verified end-to-end against mainnet.
     """
     from django.conf import settings as django_settings
+
+    if not getattr(django_settings, "BTC_WITHDRAWALS_ENABLED", False):
+        raise RuntimeError(
+            "BTC withdrawals are disabled by BTC_WITHDRAWALS_ENABLED=False. "
+            "Enable only after verifying native SegWit addresses on mainnet."
+        )
 
     private_key_wif = getattr(django_settings, "BTC_HOT_WALLET_PRIVATE_KEY", "")
     btc_network = getattr(django_settings, "BTC_NETWORK", "testnet")
