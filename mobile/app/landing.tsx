@@ -484,7 +484,9 @@ export default function LandingPage() {
       .then(r => r.json()).then(d => { const rate = d?.tether?.kes; if (rate) setLiveRate(`KES ${rate.toFixed(2)}`); }).catch(() => {});
   }, []);
 
-  const usersCounter = useAnimatedCounter(730, 1800);
+  // Removed the animated "730K users" counter — we don't publish fabricated
+  // user-count stats. If you want to surface adoption, use the live USDT/KES
+  // rate below or quote a cited source (e.g. Triple-A 2023 Kenya report).
   const speedCounter = useAnimatedCounter(30, 1200);
 
   // ── SEO ─────────────────────────────────────────────────────────────────
@@ -804,7 +806,7 @@ export default function LandingPage() {
               <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                 <Ionicons name="shield-checkmark" size={14} color={tc.primary[400]} />
                 <Text style={{ color: tc.textSecondary, fontSize: 12, fontFamily: "DMSans_500Medium" }}>
-                  VASP-compliant architecture
+                  Built for Kenya's VASP Act 2025
                 </Text>
               </View>
               <View style={{ width: 3, height: 3, borderRadius: 2, backgroundColor: tc.textMuted, opacity: 0.5 }} />
@@ -1152,7 +1154,7 @@ export default function LandingPage() {
               <Text style={{ color: tc.primary[400], fontSize: 12, fontFamily: "DMSans_700Bold", textTransform: "uppercase", letterSpacing: 2 }}>Kenya Crypto Adoption</Text>
             </View>
             <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 18 : 22, fontFamily: "DMSans_600SemiBold", textAlign: "center", lineHeight: isMobile ? 26 : 32, maxWidth: 600 }}>
-              730K+ Kenyans use crypto. None of them can pay their electricity bill with it.{" "}
+              Kenyans hold billions in crypto — but can't pay a single electricity bill with it.{" "}
               <Text style={{ color: tc.primary[400], fontFamily: "DMSans_700Bold" }}>Until now.</Text>
             </Text>
           </View>
@@ -1160,10 +1162,12 @@ export default function LandingPage() {
         <RevealOnScroll delay={200} variant="scale-up">
           <View style={{ flexDirection: isMobile ? "column" : "row", justifyContent: "space-around", gap: isMobile ? 28 : 16 }}>
             {[
-              { value: `${usersCounter.count.toLocaleString()}K+`, label: "Crypto users in Kenya", color: tc.primary[400] },
-              { value: liveRate, label: "USDT/KES rate (live)", color: "#F59E0B" },
-              { value: `< ${speedCounter.count}s`, label: "Average payment speed", color: "#3B82F6" },
-              { value: "1.5%", label: "Transparent fee", color: "#8B5CF6" },
+              // Removed unverifiable user-count stat. If you add a real
+              // metric, source it on the page (hover tooltip or footnote).
+              { value: "90s", label: "Rate lock on every quote", color: tc.primary[400] },
+              { value: liveRate, label: "USDT/KES rate (live via CoinGecko)", color: "#F59E0B" },
+              { value: `< ${speedCounter.count}s`, label: "Typical payment completion", color: "#3B82F6" },
+              { value: "1.5%", label: "Transparent conversion spread", color: "#8B5CF6" },
             ].map((stat) => (
               <View key={stat.label} style={{ alignItems: "center" }}>
                 {isWeb ? (
@@ -1426,7 +1430,7 @@ export default function LandingPage() {
                     { icon: "checkmark-circle" as const, text: "Rate locked for 90 seconds — no slippage" },
                     { icon: "eye" as const, text: "See exact amount before confirming" },
                     { icon: "shield-checkmark" as const, text: "No hidden charges, ever" },
-                    { icon: "gift" as const, text: "First KES 5,000 — zero fees" },
+                    { icon: "gift" as const, text: "First KES 5,000 — KES 10 flat fee waived" },
                   ].map((b) => (
                     <View key={b.text} style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
                       <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: "rgba(16,185,129,0.1)", alignItems: "center", justifyContent: "center" }}>
@@ -1447,7 +1451,7 @@ export default function LandingPage() {
               ...(isWeb ? { boxShadow: "0 4px 20px rgba(16,185,129,0.08)" } as any : {}),
             }}>
               <Ionicons name="gift" size={18} color={tc.primary[400]} />
-              <Text style={{ color: tc.primary[300], fontSize: 15, fontFamily: "DMSans_600SemiBold" }}>First KES 5,000 — zero fees</Text>
+              <Text style={{ color: tc.primary[300], fontSize: 15, fontFamily: "DMSans_600SemiBold" }}>First KES 5,000 — KES 10 flat fee waived</Text>
             </View>
           </View>
         </RevealOnScroll>
@@ -1778,7 +1782,7 @@ export default function LandingPage() {
               {[
                 { icon: "timer-outline" as const, text: "2 min setup", color: tc.primary[400] },
                 { icon: "flash" as const, text: "30 sec payments", color: "#F59E0B" },
-                { icon: "gift" as const, text: "Free for first KES 5K", color: "#8B5CF6" },
+                { icon: "gift" as const, text: "First KES 5K — no flat fee", color: "#8B5CF6" },
               ].map((v) => (
                 <View key={v.text} style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, backgroundColor: "rgba(255,255,255,0.03)", borderRadius: 14, paddingVertical: 14, paddingHorizontal: 16, borderWidth: 1, borderColor: "rgba(255,255,255,0.05)" }}>
                   <Ionicons name={v.icon} size={18} color={v.color} />
