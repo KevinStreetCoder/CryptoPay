@@ -1,11 +1,28 @@
 # CryptoPay — Development Progress
 
-**Last updated:** 2026-03-20
+**Last updated:** 2026-04-17
 
+> See also: [BETA-LAUNCH-TRACKER.md](./BETA-LAUNCH-TRACKER.md) — hard blockers before opening beta (CoinGecko cold-start, forex fallback, BTC mainnet default, Smile Identity signup, ToS/Privacy review, bank letter). **Read this first.**
+> See also: [LANDING-PAGE-DESIGN.md](./LANDING-PAGE-DESIGN.md) — landing page audit, anti-AI-slop checklist, design resources (unDraw, Storyset, Lottie), prioritised backlog.
+> See also: [SESSION-2026-04-17.md](./SESSION-2026-04-17.md) — this session's work: session durability, push 2FA, Google OAuth fix, simplified loading, landing polish.
 > See also: [ROADMAP.md](./ROADMAP.md) for strategic vision, fundraising, and expansion plans.
 > See also: [SYSTEM-DESIGN.md](./SYSTEM-DESIGN.md) for technical architecture and liquidity engine design.
 > See also: [KES-DEPOSIT-RESEARCH.md](./KES-DEPOSIT-RESEARCH.md) for M-Pesa C2B/STK Push research, sandbox testing, and go-live checklist.
 > See also: [SECURITY-AUDIT.md](./SECURITY-AUDIT.md) for full security audit report with findings and fixes.
+
+---
+
+## What changed 2026-04-17 (session summary)
+
+- Session durability: refresh TTL 1 d → 30 d; trusted devices no longer challenged on mobile IP rotation.
+- eSMS verification + structured `sms.dispatch` logs + `/admin/health/sms/` endpoint.
+- Push-notification 2FA foundation shipped (Redis challenges, 3 endpoints, mobile approve-login screen, login-side polling). Single-device users unchanged; SMS fallback always on.
+- Simplified `LoadingScreen` (1 animation vs 6); WCAG AA text contrast.
+- Landing page polish: trust strip under hero, unified 16 px mockup radius, gentler glow.
+- Google OAuth web redirect `/auth/google/callback` route added — fixes "Unmatched Route" after Google sends the user back.
+- WSL toolchain reinstalled (Java 17 + Node 20 + Android SDK 34/35 + NDK 27); local APK builds restored.
+
+Full detail in [SESSION-2026-04-17.md](./SESSION-2026-04-17.md).
 
 ---
 
