@@ -226,18 +226,64 @@ function RevealOnScroll({
 }
 
 // ── Floating Coin ─────────────────────────────────────────────────────────
+// Physics-respecting float: sine-eased sine wave with a per-coin phase
+// offset (via `delay` as both a mount stagger AND the CSS animation-delay
+// so coins aren't in lockstep). 8px amplitude, 3.4-3.8s period — slow
+// enough to read as "breathing," not jittery. Each coin keeps a slightly
+// different duration so their phases drift relative to each other over
+// time (otherwise 4 coins moving together reads as mechanical).
+//
+// On web we use a CSS keyframe (GPU-composited transform, no layout
+// thrash) instead of RN Animated which on web polls JS.
+// On native we fall back to RN Animated.loop with Easing.inOut(sin).
 function FloatingCoin({ uri, size, left, top, delay, color }: {
   uri: string; size: number; left: string; top: string; delay: number; color: string;
 }) {
-  // Static coin — fade in on mount, no idle float. Coin presence around
-  // the hero already signals "crypto"; we don't need them bobbing.
   const op = useRef(new Animated.Value(0)).current;
+  const ty = useRef(new Animated.Value(0)).current;
+  // Stagger the period by ~12% per coin so they drift out of phase.
+  const periodMs = 3400 + delay * 0.6;
+  const amp = 8;
+
   useEffect(() => {
-    Animated.timing(op, { toValue: 0.7, duration: 800, delay, useNativeDriver: !isWeb }).start();
-    return () => {};
+    Animated.timing(op, { toValue: 0.75, duration: 900, delay, useNativeDriver: !isWeb }).start();
+    if (isWeb) return () => {};
+    // Native: sine-eased bob, symmetric up + down.
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(ty, {
+          toValue: -amp,
+          duration: periodMs / 2,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(ty, {
+          toValue: amp,
+          duration: periodMs / 2,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    const t = setTimeout(() => loop.start(), delay);
+    return () => { clearTimeout(t); loop.stop(); };
   }, []);
+
   return (
-    <Animated.View style={{ position: "absolute", left: left as any, top: top as any, opacity: op, zIndex: 2 }}>
+    <Animated.View
+      style={{
+        position: "absolute",
+        left: left as any,
+        top: top as any,
+        opacity: op,
+        zIndex: 2,
+        ...(isWeb
+          ? {
+              animation: `cpay-coin-float ${periodMs}ms cubic-bezier(0.4, 0, 0.2, 1) ${delay}ms infinite`,
+              willChange: "transform",
+            } as any
+          : { transform: [{ translateY: ty }] }),
+      }}>
       <View style={{
         width: size, height: size, borderRadius: size / 2, alignItems: "center", justifyContent: "center",
         backgroundColor: "rgba(255,255,255,0.03)", borderWidth: 1, borderColor: "rgba(255,255,255,0.06)",
@@ -577,6 +623,16 @@ export default function LandingPage() {
       @keyframes cpay-scroll-left { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
       @keyframes cpay-shine { 0% { left:-100%;opacity:0; } 50% { opacity:0.6; } 100% { left:200%;opacity:0; } }
       @keyframes cpay-img-reveal { 0% { clip-path: inset(100% 0 0 0); opacity:0; } 100% { clip-path: inset(0 0 0 0); opacity:1; } }
+
+      /* Hero coin float: sine-ish bob. Sym about 0 so the coin returns
+         to its anchor cleanly. Using translate3d forces GPU composite
+         (no repaint cost). Amplitude 8px — subtle, reads as "floating
+         in zero-g," not as "mascot bouncing." */
+      @keyframes cpay-coin-float {
+        0%   { transform: translate3d(0, 0, 0); }
+        50%  { transform: translate3d(0, -8px, 0); }
+        100% { transform: translate3d(0, 0, 0); }
+      }
 
       /* Hero headline accent — static linear gradient, no animation. */
       .cpay-gradient-headline { background: linear-gradient(135deg, #34D399 0%, #10B981 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
