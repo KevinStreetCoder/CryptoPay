@@ -1024,58 +1024,54 @@ export default function ProfileScreen() {
             />
           )}
         </View>
-        {/* Lock Timeout — only show if biometric is enabled */}
-        {biometricOn && (
-          <>
-            <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 76 }} />
-            <MenuItem
-              icon="timer-outline"
-              label="App Lock Timeout"
-              subtitle={LOCK_TIMEOUT_OPTIONS.find((o) => o.value === lockTimeout)?.label || "Immediately"}
-              onPress={() => setShowLockPicker(!showLockPicker)}
-              iconBg={colors.info + "20"}
-              iconColor={colors.info}
-              tc={tc}
-              ts={ts}
-            />
-            {showLockPicker && (
-              <View style={{ paddingHorizontal: 18, paddingBottom: 12, gap: 4 }}>
-                {LOCK_TIMEOUT_OPTIONS.map((option) => (
-                  <Pressable
-                    key={option.value}
-                    onPress={() => handleLockTimeoutChange(option.value)}
-                    style={({ pressed }: any) => ({
-                      flexDirection: "row",
-                      alignItems: "center",
-                      paddingVertical: 10,
-                      paddingHorizontal: 14,
-                      borderRadius: 10,
-                      backgroundColor: lockTimeout === option.value
-                        ? colors.primary[500] + "20"
-                        : "transparent",
-                      opacity: pressed ? 0.7 : 1,
-                    })}
-                  >
-                    <Ionicons
-                      name={lockTimeout === option.value ? "radio-button-on" : "radio-button-off"}
-                      size={18}
-                      color={lockTimeout === option.value ? colors.primary[400] : tc.textMuted}
-                      style={{ marginRight: 10 }}
-                    />
-                    <Text
-                      style={{
-                        color: lockTimeout === option.value ? tc.textPrimary : tc.textSecondary,
-                        fontSize: 14,
-                        fontFamily: lockTimeout === option.value ? "DMSans_600SemiBold" : "DMSans_400Regular",
-                      }}
-                    >
-                      {option.label}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-            )}
-          </>
+        {/* Lock Timeout — available even without biometric (PIN fallback) */}
+        <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 76 }} />
+        <MenuItem
+          icon="timer-outline"
+          label="App Lock Timeout"
+          subtitle={LOCK_TIMEOUT_OPTIONS.find((o) => o.value === lockTimeout)?.label || "Immediately"}
+          onPress={() => setShowLockPicker(!showLockPicker)}
+          iconBg={colors.info + "20"}
+          iconColor={colors.info}
+          tc={tc}
+          ts={ts}
+        />
+        {showLockPicker && (
+          <View style={{ paddingHorizontal: 18, paddingBottom: 12, gap: 4 }}>
+            {LOCK_TIMEOUT_OPTIONS.map((option) => (
+              <Pressable
+                key={option.value}
+                onPress={() => handleLockTimeoutChange(option.value)}
+                style={({ pressed }: any) => ({
+                  flexDirection: "row",
+                  alignItems: "center",
+                  paddingVertical: 10,
+                  paddingHorizontal: 14,
+                  borderRadius: 10,
+                  backgroundColor: lockTimeout === option.value
+                    ? colors.primary[500] + "20"
+                    : "transparent",
+                  opacity: pressed ? 0.7 : 1,
+                })}
+              >
+                <Ionicons
+                  name={lockTimeout === option.value ? "radio-button-on" : "radio-button-off"}
+                  size={18}
+                  color={lockTimeout === option.value ? colors.primary[400] : tc.textMuted}
+                  style={{ marginRight: 10 }}
+                />
+                <Text
+                  style={{
+                    color: lockTimeout === option.value ? tc.textPrimary : tc.textSecondary,
+                    fontSize: 14,
+                    fontFamily: lockTimeout === option.value ? "DMSans_600SemiBold" : "DMSans_400Regular",
+                  }}
+                >
+                  {option.label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
         )}
       </View>
     </>
