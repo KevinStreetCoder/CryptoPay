@@ -326,22 +326,28 @@ export function ChainConverge({ width = 620, height = 380 }: { width?: number; h
   const t = useLoop(3500);
   if (!isWeb) return <NativeFallback width={width} height={height} label="Chain converge" />;
 
-  const hubX = width * 0.55;
-  const hubY = height / 2;
-  const mpesaX = width - 80;
+  // Fixed viewBox matches the designer's baseline (620×380) so proportions
+  // never change. width/height props only control the rendered size — the
+  // SVG scales internally via preserveAspectRatio. This keeps the
+  // handoff design intact on mobile (220 tall) and desktop (380 tall).
+  const VB_W = 620;
+  const VB_H = 380;
+  const hubX = VB_W * 0.55;
+  const hubY = VB_H / 2;
+  const mpesaX = VB_W - 80;
   const mpesaY = hubY;
   const sources = [
-    { label: "USDT", y: 70, color: CPAY.emerald, net: "TRON" },
-    { label: "BTC", y: 150, color: "#F59E0B", net: "BITCOIN" },
-    { label: "ETH", y: 230, color: "#6366F1", net: "ERC-20" },
-    { label: "SOL", y: 310, color: "#A855F7", net: "SOLANA" },
+    { label: "USDT", y: 70,  color: CPAY.emerald, net: "TRON" },
+    { label: "BTC",  y: 150, color: "#F59E0B",    net: "BITCOIN" },
+    { label: "ETH",  y: 230, color: "#6366F1",    net: "ERC-20" },
+    { label: "SOL",  y: 310, color: "#A855F7",    net: "SOLANA" },
   ];
   const srcX = 80;
   const q = (u: number, p0: number, p1: number, p2: number) => (1 - u) * (1 - u) * p0 + 2 * (1 - u) * u * p1 + u * u * p2;
 
   return (
     <View style={{ width, height }}>
-      <svg viewBox={`0 0 ${width} ${height}`} width={width} height={height} style={{ display: "block", background: CPAY.paper }}>
+      <svg viewBox={`0 0 ${VB_W} ${VB_H}`} width={width} height={height} preserveAspectRatio="xMidYMid meet" style={{ display: "block", background: CPAY.paper }}>
         <defs>
           <radialGradient id="cc-hub-glow" cx="0.5" cy="0.5" r="0.5">
             <stop offset="0%" stopColor={CPAY.emerald} stopOpacity="0.22" />
@@ -378,7 +384,7 @@ export function ChainConverge({ width = 620, height = 380 }: { width?: number; h
         <rect x={mpesaX - 32} y={mpesaY - 22} width="64" height="44" rx="10" fill={CPAY.ink} />
         <text x={mpesaX} y={mpesaY - 4} textAnchor="middle" fontSize="9" fontWeight="500" fill={CPAY.muted} fontFamily="'DM Sans', system-ui" letterSpacing="1">KES</text>
         <text x={mpesaX} y={mpesaY + 12} textAnchor="middle" fontSize="11" fontWeight="600" fill="#fff" fontFamily="'DM Sans', system-ui">Paybill</text>
-        <text x={width / 2} y={height - 16} textAnchor="middle" fontSize="10" fontWeight="500" fill={CPAY.muted} fontFamily="'DM Sans', system-ui" letterSpacing="1.5">
+        <text x={VB_W / 2} y={VB_H - 16} textAnchor="middle" fontSize="10" fontWeight="500" fill={CPAY.muted} fontFamily="'DM Sans', system-ui" letterSpacing="1.5">
           FOUR CHAINS · ONE PAYOUT · &lt; 30 SECONDS
         </text>
       </svg>
