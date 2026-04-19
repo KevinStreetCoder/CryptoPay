@@ -183,7 +183,8 @@ function RootNavigator() {
     const isPitch = segments[0] === "pitch";
     const isPrivacy = segments[0] === "privacy";
     const isTerms = segments[0] === "terms";
-    const isPublicPage = isLanding || isPitch || isPrivacy || isTerms;
+    const isReferralLanding = segments[0] === "r"; // /r/{code} public referral landing
+    const isPublicPage = isLanding || isPitch || isPrivacy || isTerms || isReferralLanding;
 
     const webHost = Platform.OS === "web" && typeof window !== "undefined" ? window.location?.hostname : "";
     const isAppSubdomain = webHost === "app.cpay.co.ke";
