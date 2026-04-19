@@ -1,3 +1,4 @@
+// Router includes /r/[code] public referral landing + /settings/referrals
 import { useEffect, useState, useCallback } from "react";
 import { View, Platform } from "react-native";
 import { Stack, useRouter, useSegments } from "expo-router";
