@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "CryptoPay",
+    "name": "Cpay",
     "slug": "cryptopay",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -25,8 +25,8 @@
           "uniswap",
           "zerion"
         ],
-        "NSCameraUsageDescription": "CryptoPay needs camera access for KYC identity verification.",
-        "NSFaceIDUsageDescription": "CryptoPay uses Face ID for secure authentication."
+        "NSCameraUsageDescription": "Cpay needs camera access for KYC identity verification.",
+        "NSFaceIDUsageDescription": "Cpay uses Face ID for secure authentication."
       },
       "privacyManifests": {
         "NSPrivacyAccessedAPITypes": [
@@ -141,7 +141,7 @@
     "web": {
       "favicon": "./assets/favicon.png",
       "bundler": "metro",
-      "name": "CryptoPay"
+      "name": "Cpay"
     },
     "extra": {
       "API_URL": "https://cpay.co.ke/api/v1",
