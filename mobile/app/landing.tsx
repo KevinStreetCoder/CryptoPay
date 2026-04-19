@@ -59,30 +59,10 @@ const CDN_IMAGES = {
   dataViz: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&q=80",
 };
 
-// ── Professional SVG Illustrations (unDraw CDN) ─────────────────────────────
-const U = "https://42f2671d685f51e10fc6-b9fcecea3e50b3b59bdc28dead054ebc.ssl.cf5.rackcdn.com/illustrations";
-const ILLUSTRATIONS = {
-  bitcoin: `${U}/bitcoin2_ave7.svg`,
-  finance: `${U}/finance_0bdk.svg`,
-  wallet: `${U}/wallet_aym5.svg`,
-  secureData: `${U}/secure_data_0rwp.svg`,
-  fastLoading: `${U}/fast_loading_0lbh.svg`,
-  success: `${U}/successful_purchase_uyin.svg`,
-  creditCard: `${U}/credit_card_payment_yb88.svg`,
-  questions: `${U}/questions_75e0.svg`,
-  community: `${U}/design_community_rcft.svg`,
-  onlineWorld: `${U}/online_world_mc1t.svg`,
-  target: `${U}/target_kriv.svg`,
-  safe: `${U}/safe_bnk7.svg`,
-};
-
-// SVG image component (uses <img> on web for proper SVG rendering)
-function SvgIllustration({ uri, size = 140, style, className }: { uri: string; size?: number; style?: any; className?: string }) {
-  if (isWeb) {
-    return <img src={uri} alt="" className={className || "cpay-illustration"} style={{ width: size, height: size, objectFit: "contain" as any, opacity: 0.85, ...style }} />;
-  }
-  return <Image source={{ uri }} style={{ width: size, height: size, opacity: 0.85, ...style }} resizeMode="contain" />;
-}
+// Legacy unDraw CDN constants removed. All decorative illustrations are
+// now in-brand components (WalletIcon, SecurityLock, SpeedRing, FaqMark,
+// TargetMark, KenyaCorridor, FeeBreakdown) imported from
+// src/components/brand/Illustrations.tsx per the Cpay design handoff.
 
 // ── Partner Logos ───────────────────────────────────────────────────────────
 const PARTNER_LOGOS = {
