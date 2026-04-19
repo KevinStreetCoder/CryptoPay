@@ -16,6 +16,7 @@ import { colors, getThemeColors, getThemeShadows } from "../../src/constants/the
 import { useThemeMode } from "../../src/stores/theme";
 import { authApi } from "../../src/api/auth";
 import { useToast } from "../../src/components/Toast";
+import { Spinner } from "../../src/components/brand/Spinner";
 
 const isWeb = Platform.OS === "web";
 
@@ -239,7 +240,7 @@ function DeviceCard({
           accessibilityLabel={`Remove ${device.device_name || "device"}`}
         >
           {removing ? (
-            <ActivityIndicator size="small" color="#EF4444" />
+            <Spinner size={16} color="#EF4444" />
           ) : (
             <Ionicons name="trash-outline" size={16} color="#EF4444" />
           )}
@@ -458,7 +459,7 @@ export default function DevicesScreen() {
         {/* Loading state */}
         {loading && (
           <View style={{ alignItems: "center", paddingVertical: 60 }}>
-            <ActivityIndicator size="large" color={colors.primary[400]} />
+            <Spinner size={32} color={colors.primary[400]} />
             <Text
               style={{
                 color: tc.textMuted,

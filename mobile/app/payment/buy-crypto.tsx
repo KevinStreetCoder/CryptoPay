@@ -32,6 +32,7 @@ import { useThemeMode } from "../../src/stores/theme";
 import { PaymentStepper } from "../../src/components/PaymentStepper";
 import { GlassCard } from "../../src/components/GlassCard";
 import { useLocale } from "../../src/hooks/useLocale";
+import { Spinner } from "../../src/components/brand/Spinner";
 
 type CryptoOption = "USDT" | "USDC" | "BTC" | "ETH" | "SOL";
 
@@ -517,11 +518,7 @@ export default function BuyCryptoScreen() {
               testID="amount-input"
             />
             {quoteLoading && (
-              <ActivityIndicator
-                size="small"
-                color={tc.primary[400]}
-                style={{ marginLeft: 8 }}
-              />
+              <Spinner size={16} color={tc.primary[400]} style={{ marginLeft: 8 }} />
             )}
           </View>
 

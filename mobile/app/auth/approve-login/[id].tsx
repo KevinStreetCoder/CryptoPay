@@ -23,6 +23,7 @@ import { useAuth } from "../../../src/stores/auth";
 import { useToast } from "../../../src/components/Toast";
 import { getThemeColors } from "../../../src/constants/theme";
 import { useThemeMode } from "../../../src/stores/theme";
+import { Spinner } from "../../../src/components/brand/Spinner";
 
 type ChallengeStatus = "pending" | "approved" | "denied" | "expired";
 
@@ -112,7 +113,7 @@ export default function ApproveLogin() {
   if (fetching) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg, justifyContent: "center", alignItems: "center" }}>
-        <ActivityIndicator color={tc.primary[500]} />
+        <Spinner size={20} color={tc.primary[500]} />
       </SafeAreaView>
     );
   }
@@ -236,7 +237,7 @@ export default function ApproveLogin() {
               testID="approve-btn"
             >
               {acting === "approve" ? (
-                <ActivityIndicator color="#FFFFFF" />
+                <Spinner size={20} color="#FFFFFF" />
               ) : (
                 <Text style={{ color: "#FFFFFF", fontSize: 16, fontFamily: "DMSans_600SemiBold" }}>
                   Yes, it's me — approve
@@ -261,7 +262,7 @@ export default function ApproveLogin() {
               testID="deny-btn"
             >
               {acting === "deny" ? (
-                <ActivityIndicator color={textSecondary} />
+                <Spinner size={20} color={textSecondary} />
               ) : (
                 <Text style={{ color: textSecondary, fontSize: 16, fontFamily: "DMSans_500Medium" }}>
                   No — this wasn't me

@@ -21,6 +21,8 @@ import { NotificationDetailModal } from "../../src/components/NotificationDetail
 import { normalizeError } from "../../src/utils/apiErrors";
 import { colors, getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
+import { Spinner } from "../../src/components/brand/Spinner";
+import { EmptyNoNotifications } from "../../src/components/brand/PolishAssets";
 
 /* --- Types --- */
 type NotificationType = "transaction" | "deposit" | "security" | "system" | "update" | "promotion" | "maintenance";
@@ -459,7 +461,7 @@ export default function NotificationsInboxScreen() {
       >
         {loading ? (
           <View style={{ alignItems: "center", paddingTop: 60 }}>
-            <ActivityIndicator size="large" color={colors.primary[400]} />
+            <Spinner size={32} color={colors.primary[400]} />
             <Text
               style={{
                 color: tc.textMuted,
@@ -995,48 +997,10 @@ function EmptyState({
         transform: [{ scale: scaleAnim }],
       }}
     >
-      <View
-        style={{
-          width: 96,
-          height: 96,
-          borderRadius: 28,
-          backgroundColor: tc.dark.card,
-          alignItems: "center",
-          justifyContent: "center",
-          marginBottom: 24,
-          borderWidth: 1,
-          borderColor: tc.glass.border,
-          position: "relative",
-        }}
-      >
-        <View
-          style={{
-            position: "absolute",
-            width: 120,
-            height: 120,
-            borderRadius: 36,
-            borderWidth: 1,
-            borderColor: "rgba(52, 211, 153, 0.06)",
-          }}
-        />
-        <Ionicons name="notifications-off-outline" size={38} color={tc.textMuted} />
-        <View
-          style={{
-            position: "absolute",
-            bottom: -4,
-            right: -4,
-            width: 28,
-            height: 28,
-            borderRadius: 14,
-            backgroundColor: colors.primary[500],
-            alignItems: "center",
-            justifyContent: "center",
-            borderWidth: 3,
-            borderColor: tc.dark.bg,
-          }}
-        >
-          <Ionicons name="checkmark" size={14} color="#FFFFFF" />
-        </View>
+      {/* Brand EmptyNoNotifications illustration — bell outline with
+          emerald "zzz". Replaces the prior ring + bell Ionicon composite. */}
+      <View style={{ marginBottom: 24, opacity: 0.9 }}>
+        <EmptyNoNotifications size={140} />
       </View>
 
       <Text

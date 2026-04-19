@@ -26,6 +26,7 @@ import { getThemeColors } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
 import { useLocale } from "../../src/hooks/useLocale";
 import { BRAND_LOGOS } from "../../src/constants/logos";
+import { Spinner } from "../../src/components/brand/Spinner";
 
 type Step = "phone" | "otp" | "pin" | "confirm_pin" | "success";
 
@@ -529,7 +530,7 @@ export default function GoogleCompleteProfileScreen() {
                 testID="send-otp-button"
               >
                 {loading ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
+                  <Spinner size={16} color="#FFFFFF" />
                 ) : (
                   <Text
                     style={{
@@ -638,7 +639,7 @@ export default function GoogleCompleteProfileScreen() {
                     gap: 8,
                   }}
                 >
-                  <ActivityIndicator size="small" color={tc.primary[400]} />
+                  <Spinner size={16} color={tc.primary[400]} />
                   <Text
                     style={{
                       color: tc.primary[400],

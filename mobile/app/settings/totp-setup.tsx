@@ -19,6 +19,7 @@ import { useThemeMode } from "../../src/stores/theme";
 import { normalizeError } from "../../src/utils/apiErrors";
 import * as Clipboard from "expo-clipboard";
 import QRCode from "react-native-qrcode-svg";
+import { Spinner } from "../../src/components/brand/Spinner";
 
 const isWeb = Platform.OS === "web";
 
@@ -166,7 +167,7 @@ export default function TOTPSetupScreen() {
               }}
             >
               {loading ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <Spinner size={16} color="#fff" />
               ) : (
                 <Text style={{ color: "#fff", fontSize: 17, fontFamily: "DMSans_600SemiBold" }}>
                   Begin Setup
@@ -232,7 +233,7 @@ export default function TOTPSetupScreen() {
                 </View>
               ) : (
                 <View style={{ alignItems: "center", padding: 40 }}>
-                  <ActivityIndicator size="large" color="#8B5CF6" />
+                  <Spinner size={32} color="#8B5CF6" />
                 </View>
               )}
 
@@ -447,7 +448,7 @@ export default function TOTPSetupScreen() {
               }}
             >
               {loading ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <Spinner size={16} color="#fff" />
               ) : (
                 <Text style={{ color: "#fff", fontSize: 17, fontFamily: "DMSans_600SemiBold" }}>
                   Verify & Enable

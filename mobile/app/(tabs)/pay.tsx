@@ -11,6 +11,7 @@ import { SERVICE_LOGOS } from "../../src/constants/logos";
 import { useLocale } from "../../src/hooks/useLocale";
 import { paymentsApi, SavedPaybill } from "../../src/api/payments";
 import { useToast } from "../../src/components/Toast";
+import { Spinner } from "../../src/components/brand/Spinner";
 
 const isWeb = Platform.OS === "web";
 
@@ -571,7 +572,7 @@ export default function PayScreen() {
           />
           {savedLoading ? (
             <View style={{ paddingVertical: 20, alignItems: "center" }}>
-              <ActivityIndicator size="small" color={colors.primary[400]} />
+              <Spinner size={16} color={colors.primary[400]} />
             </View>
           ) : !savedPaybills || savedPaybills.length === 0 ? (
             <View

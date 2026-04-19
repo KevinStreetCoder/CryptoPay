@@ -13,10 +13,27 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { getThemeColors, shadows } from "../src/constants/theme";
+import { getThemeColors, shadows, colors } from "../src/constants/theme";
 import { CRYPTO_LOGOS } from "../src/constants/logos";
 import { KesRateSparkline } from "../src/components/landing/KesRateSparkline";
 import { HowItWorksMockup } from "../src/components/landing/HowItWorksMockup";
+import { Wordmark } from "../src/components/brand/Wordmark";
+import {
+  HeroFlow,
+  RateSparkline,
+  RateLockRing,
+  ChainConverge,
+  PaymentTicker,
+} from "../src/components/brand/LandingAnimations";
+import {
+  WalletIcon,
+  SecurityLock,
+  SpeedRing,
+  FaqMark,
+  TargetMark,
+  KenyaCorridor,
+  FeeBreakdown,
+} from "../src/components/brand/Illustrations";
 
 const isWeb = Platform.OS === "web";
 
@@ -100,7 +117,11 @@ const STORE_ICONS = {
 };
 
 // App logo from store listing
-const APP_LOGO = require("../assets/icon.png");
+// Transparent-bg Coin-C mark — sits cleanly on the dark app chrome.
+// app-store / home-screen icons use the paper-bg version at assets/icon.png;
+// for in-app UI we want the mark to float over whatever background is
+// behind it, so we use brand-mark.png (emerald on transparent).
+const APP_LOGO = require("../assets/brand-mark.png");
 
 const KENYAN_SERVICES = [
   { name: "KPLC", logo: LANDING_SERVICE_LOGOS.kplc, color: "#00529B", desc: "Electricity" },
@@ -416,8 +437,7 @@ function Navbar({ tc, isMobile, onSignIn, onGetStarted, onScrollTo }: {
             ...(isWeb ? { cursor: "pointer", transition: "all 0.2s ease", transform: hovered ? "scale(1.03)" : "none" } as any : {}),
           }) as any}
         >
-          <Image source={APP_LOGO} style={{ width: 36, height: 36, borderRadius: 10, ...(isWeb ? { boxShadow: "0 2px 12px rgba(16,185,129,0.3)" } as any : {}) }} resizeMode="cover" />
-          <Text style={{ color: tc.textPrimary, fontSize: 19, fontFamily: "DMSans_700Bold", letterSpacing: -0.3 }}>CryptoPay</Text>
+          <Wordmark size={32} dark />
         </Pressable>
         {!isMobile && (
           <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
@@ -695,6 +715,15 @@ export default function LandingPage() {
       .cpay-bento-card:hover .cpay-icon-bounce,
       .cpay-step-card:hover .cpay-icon-bounce { transform: scale(1.15) rotate(-5deg); }
 
+      /* Brand illustration hover — a subtle bring-to-eye lift on the
+         paper card wrapping brand icons (WalletIcon, SecurityLock,
+         SpeedRing, etc.) + a tiny scale on the SVG inside. Keeps the
+         "one motion per fold" rule at rest — only fires on hover. */
+      .cpay-brand-illus { transition: transform 0.35s cubic-bezier(0.4,0,0.2,1), box-shadow 0.35s ease; }
+      .cpay-brand-illus:hover { transform: translateY(-4px); box-shadow: 0 14px 36px rgba(16,185,129,0.12); }
+      .cpay-brand-illus svg { transition: transform 0.45s cubic-bezier(0.34,1.56,0.64,1); }
+      .cpay-brand-illus:hover svg { transform: scale(1.04); }
+
       /* Illustrations: no idle animation (distracting, AI-templatey).
          Motion triggered by hover only — subtle lift + glow + gentle tilt. */
       .cpay-illustration {
@@ -936,7 +965,9 @@ export default function LandingPage() {
             <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 18 }}>
               <Image source={APP_LOGO} style={{ width: 40, height: 40, borderRadius: 12, ...(isWeb ? { boxShadow: "0 4px 14px rgba(16,185,129,0.3)" } as any : {}) }} resizeMode="cover" />
               <View style={{ flex: 1 }}>
-                <Text style={{ color: tc.textPrimary, fontSize: 16, fontFamily: "DMSans_700Bold" }}>CryptoPay</Text>
+                <Text style={{ color: tc.textPrimary, fontSize: 16, fontFamily: "DMSans_700Bold", letterSpacing: -0.2 }}>
+                  <Text style={{ color: colors.primary[500] }}>C</Text>pay
+                </Text>
                 <Text style={{ color: tc.textMuted, fontSize: 10, fontFamily: "DMSans_400Regular" }}>Pay bills with crypto</Text>
               </View>
               <Image source={{ uri: CDN_IMAGES.cryptoCoins }} style={{ width: 44, height: 44, borderRadius: 12, opacity: 0.8 }} resizeMode="cover" />
@@ -988,41 +1019,110 @@ export default function LandingPage() {
         </RevealOnScroll>
       </View>
 
-      {/* Trusted by — animated partner cards with hover */}
+      {/* Trusted tech — full-bleed strip beneath the hero. Previously read
+          as a tiny centered clump with dead space either side on wide
+          screens. Now: a label column on the left, cards stretched
+          evenly across the remaining row on desktop. Wraps to a simple
+          centered list on mobile. */}
       <RevealOnScroll delay={500} variant="fade-up">
-        <View style={{ alignItems: "center", marginTop: isMobile ? 36 : 52, paddingHorizontal: 20, zIndex: 10 }}>
-          <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_600SemiBold", textTransform: "uppercase", letterSpacing: 2, marginBottom: 16 }}>
-            Trusted Technology
-          </Text>
-          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", flexWrap: "wrap", gap: isMobile ? 10 : 16 }}>
-            {[
-              { logo: PARTNER_LOGOS.mpesa, label: "M-Pesa", desc: "Payments", color: "#00A650" },
-              { logo: PARTNER_LOGOS.smileIdentity, label: "Smile Identity", desc: "KYC", color: "#10B981" },
-              { logo: PARTNER_LOGOS.coingecko, label: "CoinGecko", desc: "Rates", color: "#F59E0B" },
-              { logo: PARTNER_LOGOS.sentry, label: "Sentry", desc: "Monitoring", color: "#6366F1" },
-            ].map((p) => (
-              <Pressable
-                key={p.label}
-                ref={(ref: any) => { if (isWeb && ref instanceof HTMLElement) ref.className = "cpay-service-card"; }}
-                style={({ hovered }: any) => ({
-                  flexDirection: "row", alignItems: "center", gap: 12,
-                  backgroundColor: isWeb && hovered ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.02)",
-                  borderRadius: 14, borderWidth: 1,
-                  borderColor: isWeb && hovered ? p.color + "30" : "rgba(255,255,255,0.06)",
-                  paddingVertical: isMobile ? 10 : 14, paddingHorizontal: isMobile ? 14 : 20,
-                  ...(isWeb ? {
-                    cursor: "default", transition: "all 0.3s ease",
-                    boxShadow: hovered ? `0 8px 24px ${p.color}15` : "none",
-                  } as any : {}),
-                }) as any}
+        <View
+          style={{
+            marginTop: isMobile ? 36 : 56,
+            paddingHorizontal: isMobile ? 20 : 32,
+            maxWidth: 1200,
+            alignSelf: "center",
+            width: "100%",
+            zIndex: 10,
+          }}
+        >
+          <View
+            style={{
+              flexDirection: isDesktop ? "row" : "column",
+              alignItems: isDesktop ? "center" : "center",
+              gap: isMobile ? 18 : 28,
+            }}
+          >
+            {/* Label column — left on desktop, centered top on mobile. */}
+            <View
+              style={{
+                flexShrink: 0,
+                alignItems: isDesktop ? "flex-start" : "center",
+                minWidth: isDesktop ? 140 : undefined,
+              }}
+            >
+              <Text
+                style={{
+                  color: tc.textMuted,
+                  fontSize: 11,
+                  fontFamily: "DMSans_600SemiBold",
+                  textTransform: "uppercase",
+                  letterSpacing: 2,
+                }}
               >
-                <Image source={p.logo} style={{ width: isMobile ? 28 : 36, height: isMobile ? 28 : 36, borderRadius: 8 }} resizeMode="contain" />
-                <View>
-                  <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 13 : 15, fontFamily: "DMSans_700Bold" }}>{p.label}</Text>
-                  <Text style={{ color: tc.textMuted, fontSize: isMobile ? 11 : 12, fontFamily: "DMSans_400Regular" }}>{p.desc}</Text>
-                </View>
-              </Pressable>
-            ))}
+                Built on
+              </Text>
+              <Text
+                style={{
+                  color: tc.textSecondary,
+                  fontSize: 13,
+                  fontFamily: "DMSans_500Medium",
+                  marginTop: 2,
+                  opacity: 0.7,
+                }}
+              >
+                trusted rails
+              </Text>
+            </View>
+
+            {/* Cards — stretch to fill the row on desktop. */}
+            <View
+              style={{
+                flex: isDesktop ? 1 : undefined,
+                flexDirection: "row",
+                flexWrap: "wrap",
+                justifyContent: isDesktop ? "space-between" : "center",
+                alignItems: "center",
+                gap: isMobile ? 10 : 14,
+                width: isDesktop ? undefined : "100%",
+              }}
+            >
+              {[
+                { logo: PARTNER_LOGOS.mpesa, label: "M-Pesa", desc: "Payments", color: "#00A650" },
+                { logo: PARTNER_LOGOS.smileIdentity, label: "Smile Identity", desc: "KYC", color: "#10B981" },
+                { logo: PARTNER_LOGOS.coingecko, label: "CoinGecko", desc: "Rates", color: "#F59E0B" },
+                { logo: PARTNER_LOGOS.sentry, label: "Sentry", desc: "Monitoring", color: "#6366F1" },
+              ].map((p) => (
+                <Pressable
+                  key={p.label}
+                  ref={(ref: any) => { if (isWeb && ref instanceof HTMLElement) ref.className = "cpay-service-card"; }}
+                  style={({ hovered }: any) => ({
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 12,
+                    flex: isDesktop ? 1 : undefined,
+                    backgroundColor: isWeb && hovered ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.02)",
+                    borderRadius: 14,
+                    borderWidth: 1,
+                    borderColor: isWeb && hovered ? p.color + "30" : "rgba(255,255,255,0.06)",
+                    paddingVertical: isMobile ? 10 : 14,
+                    paddingHorizontal: isMobile ? 14 : 20,
+                    ...(isWeb
+                      ? {
+                          cursor: "default",
+                          transition: "all 0.3s ease",
+                          boxShadow: hovered ? `0 8px 24px ${p.color}15` : "none",
+                        }
+                      : {}),
+                  }) as any}
+                >
+                  <Image source={p.logo} style={{ width: isMobile ? 28 : 36, height: isMobile ? 28 : 36, borderRadius: 8 }} resizeMode="contain" />
+                  <View style={{ flexShrink: 1 }}>
+                    <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 13 : 15, fontFamily: "DMSans_700Bold" }}>{p.label}</Text>
+                    <Text style={{ color: tc.textMuted, fontSize: isMobile ? 11 : 12, fontFamily: "DMSans_400Regular" }}>{p.desc}</Text>
+                  </View>
+                </Pressable>
+              ))}
+            </View>
           </View>
         </View>
       </RevealOnScroll>
@@ -1051,12 +1151,111 @@ export default function LandingPage() {
   const row1 = KENYAN_SERVICES.slice(0, 6); const row2 = KENYAN_SERVICES.slice(6);
   const doubledRow1 = [...row1, ...row1]; const doubledRow2 = [...row2, ...row2];
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // PAYMENT TICKER — sits above the closing CTA. Scrolling row of
+  // anonymised settled transactions — honest social proof without
+  // testimonial copy. Paper card on dark chrome.
+  // ═══════════════════════════════════════════════════════════════════════
+  const paymentTickerSection = (
+    <View
+      style={{
+        paddingVertical: isMobile ? 40 : 56,
+        paddingHorizontal: isMobile ? 16 : 32,
+        backgroundColor: "#060E1F",
+        alignItems: "center",
+      }}
+    >
+      <View
+        style={{
+          backgroundColor: "#FFFFFF",
+          borderRadius: 20,
+          overflow: "hidden",
+          maxWidth: 900,
+          width: "100%",
+          ...(isWeb
+            ? {
+                boxShadow:
+                  "0 18px 48px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.04)",
+              }
+            : {}),
+        }}
+      >
+        <PaymentTicker width={isMobile ? 340 : 720} height={140} />
+      </View>
+    </View>
+  );
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // CHAIN CONVERGE BAND — sits between hero and services.
+  // USDT / BTC / ETH / SOL streams converging into the Cpay hub → KES payout.
+  // Wraps the animated component in a paper card so the dark app chrome
+  // doesn't wash out the design's light palette. Constrained to 1200px
+  // so it breathes on ultra-wide screens.
+  // ═══════════════════════════════════════════════════════════════════════
+  const chainConvergeSection = (
+    <View
+      style={{
+        paddingVertical: isMobile ? 56 : 80,
+        paddingHorizontal: isMobile ? 16 : 32,
+        backgroundColor: "#060E1F",
+        alignItems: "center",
+      }}
+    >
+      <View style={{ maxWidth: 1200, width: "100%", alignItems: "center" }}>
+        <Text
+          style={{
+            color: tc.textMuted,
+            fontSize: 11,
+            fontFamily: "DMSans_700Bold",
+            textTransform: "uppercase",
+            letterSpacing: 3,
+            marginBottom: 10,
+          }}
+        >
+          Four chains · one payout
+        </Text>
+        <Text
+          style={{
+            color: tc.textPrimary,
+            fontSize: isMobile ? 24 : 32,
+            fontFamily: "DMSans_700Bold",
+            textAlign: "center",
+            letterSpacing: -0.8,
+            marginBottom: isMobile ? 28 : 40,
+            maxWidth: 680,
+          }}
+        >
+          USDT, BTC, ETH, or SOL — all land as KES on M-Pesa.
+        </Text>
+        <View
+          style={{
+            backgroundColor: "#F8FAFC",
+            borderRadius: 20,
+            overflow: "hidden",
+            padding: isMobile ? 8 : 16,
+            maxWidth: isMobile ? "100%" : 720,
+            width: "100%",
+            alignItems: "center",
+            ...(isWeb
+              ? {
+                  boxShadow:
+                    "0 18px 48px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.04)",
+                }
+              : {}),
+          }}
+        >
+          <ChainConverge width={isMobile ? 320 : 620} height={isMobile ? 220 : 380} />
+        </View>
+      </View>
+    </View>
+  );
+
   const servicesSection = (
     <View style={{ paddingVertical: isMobile ? 48 : 64, ...(isWeb ? { background: "linear-gradient(180deg, #0A1628 0%, #081420 100%)", borderTop: "1px solid rgba(16,185,129,0.06)" } as any : { backgroundColor: "#0A1628" }) }}>
       <Section>
         <RevealOnScroll variant="slide-right">
           <View style={{ flexDirection: isDesktop ? "row" : "column", alignItems: "center", justifyContent: "center", marginBottom: isMobile ? 28 : 44, gap: isDesktop ? 32 : 16, overflow: "hidden" }}>
-            {isDesktop && <SvgIllustration uri={ILLUSTRATIONS.finance} size={100} style={{ opacity: 0.7, flexShrink: 0 }} />}
+            {isDesktop && <View style={{ opacity: 0.9, flexShrink: 0 }}><SecurityLock size={100} /></View>}
             <View style={{ alignItems: isDesktop ? "flex-start" : "center", flex: 1 }}>
               <Text style={{ color: tc.primary[400], fontSize: 13, fontFamily: "DMSans_700Bold", textTransform: "uppercase", letterSpacing: 3, marginBottom: 12 }}>Supported Services</Text>
               <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 28 : 40, fontFamily: "DMSans_700Bold", textAlign: isDesktop ? "left" : "center", letterSpacing: -1 }}>Every bill, every provider</Text>
@@ -1064,7 +1263,7 @@ export default function LandingPage() {
                 From KPLC electricity tokens to school fees, DSTV subscriptions to Safaricom airtime — if it has a Paybill or Till number, you can pay it with crypto.
               </Text>
             </View>
-            {isDesktop && <SvgIllustration uri={ILLUSTRATIONS.onlineWorld} size={100} style={{ opacity: 0.7, flexShrink: 0 }} />}
+            {isDesktop && <View style={{ opacity: 0.9, flexShrink: 0 }}><KenyaCorridor size={100} /></View>}
           </View>
         </RevealOnScroll>
 
@@ -1170,7 +1369,7 @@ export default function LandingPage() {
                   <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: "rgba(239,68,68,0.12)", alignItems: "center", justifyContent: "center" }}><Ionicons name="close-circle" size={20} color="#EF4444" /></View>
                   <Text style={{ color: "#EF4444", fontSize: 17, fontFamily: "DMSans_700Bold" }}>The old way</Text>
                 </View>
-                <SvgIllustration uri={ILLUSTRATIONS.bitcoin} size={isMobile ? 50 : 80} style={{ opacity: 0.6 }} />
+                <View style={{ opacity: 0.7 }}><TargetMark size={isMobile ? 50 : 80} /></View>
               </View>
               {["Find a P2P trader on an exchange", "Negotiate rate, hope for the best", "Send crypto and wait for KES", "Go to M-Pesa and manually pay bill", "Pray the trader was honest"].map((s, i) => (
                 <View key={i} style={{ flexDirection: "row", gap: 12, marginBottom: 10 }}>
@@ -1193,7 +1392,7 @@ export default function LandingPage() {
                   <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: "rgba(16,185,129,0.12)", alignItems: "center", justifyContent: "center", ...(isWeb ? { boxShadow: "0 4px 12px rgba(16,185,129,0.15)" } as any : {}) }}><Ionicons name="flash" size={20} color={tc.primary[400]} /></View>
                   <Text style={{ color: tc.primary[400], fontSize: 17, fontFamily: "DMSans_700Bold" }}>With CryptoPay</Text>
                 </View>
-                <SvgIllustration uri={ILLUSTRATIONS.creditCard} size={isMobile ? 50 : 80} style={{ opacity: 0.7 }} />
+                <View style={{ opacity: 0.85 }}><SpeedRing size={isMobile ? 50 : 80} /></View>
               </View>
               {[{ step: "Enter Paybill or Till number", icon: "receipt" as const }, { step: "Rate locks for 90 seconds — no surprises", icon: "lock-closed" as const }, { step: "Confirm with PIN. M-Pesa delivers instantly.", icon: "checkmark-circle" as const }].map((item, i) => (
                 <View key={i} style={{ flexDirection: "row", gap: 12, marginBottom: 14 }}>
@@ -1280,24 +1479,31 @@ export default function LandingPage() {
     }}>
       <Section>
         <RevealOnScroll variant="fade-up">
-          <View style={{ flexDirection: isDesktop ? "row" : "column", alignItems: "center", justifyContent: "center", gap: isDesktop ? 40 : 16, marginBottom: isMobile ? 36 : 56 }}>
-            {/* Product-chrome mockup instead of a stock unDraw illustration
-                — three real in-app states (paybill entry → rate lock →
-                confirmation). Reads as the actual product. */}
+          <View style={{ alignItems: "center", marginBottom: isMobile ? 36 : 56 }}>
+          <View style={{ flexDirection: isDesktop ? "row" : "column", alignItems: "center", justifyContent: "center", gap: isDesktop ? 48 : 16, maxWidth: 960, width: "100%" }}>
+            {/* Kept: product-chrome mockup (paybill entry → rate lock →
+                paid) — reads as the real app. Design brief asked to
+                preserve both hero + how-it-works mockups in place rather
+                than substituting HeroFlow here. HeroFlow / other animated
+                assets already live elsewhere (ChainConverge between hero
+                + services, RateLockRing in step 02, PaymentTicker above
+                CTA) so they don't crowd each other. */}
             <HowItWorksMockup width={isMobile ? 240 : 290} />
             <View style={{ alignItems: isDesktop ? "flex-start" : "center", flex: isDesktop ? 1 : undefined }}>
               <Text style={{ color: tc.primary[400], fontSize: 12, fontFamily: "DMSans_700Bold", textTransform: "uppercase", letterSpacing: 3, marginBottom: 12 }}>How It Works</Text>
               <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 28 : 42, fontFamily: "DMSans_700Bold", textAlign: isDesktop ? "left" : "center", letterSpacing: -1, lineHeight: isMobile ? 36 : 52 }}>Simple as sending a text message</Text>
-              <Text style={{ color: tc.textSecondary, fontSize: isMobile ? 15 : 17, fontFamily: "DMSans_400Regular", textAlign: isDesktop ? "left" : "center", marginTop: 12, maxWidth: 480 }}>Deposit, pick a bill, confirm. Your M-Pesa payment arrives before you put your phone down.</Text>
+              <Text style={{ color: tc.textSecondary, fontSize: isMobile ? 15 : 17, fontFamily: "DMSans_400Regular", textAlign: isDesktop ? "left" : "center", marginTop: 12 }}>Deposit, pick a bill, confirm. Your M-Pesa payment arrives before you put your phone down.</Text>
             </View>
           </View>
+          </View>
         </RevealOnScroll>
-        <View style={{ flexDirection: isMobile ? "column" : "row", gap: isMobile ? 20 : 28, position: "relative" }}>
+        <View style={{ alignItems: "center" }}>
+        <View style={{ flexDirection: isMobile ? "column" : "row", gap: isMobile ? 20 : 28, position: "relative", maxWidth: 1200, width: "100%" }}>
           {isDesktop && isWeb && <View style={{ position: "absolute", top: 56, left: "18%", right: "18%", height: 2, zIndex: 0, ...(isWeb ? { background: "linear-gradient(90deg, rgba(16,185,129,0.1) 0%, rgba(16,185,129,0.25) 50%, rgba(16,185,129,0.1) 100%)" } as any : {}) }} />}
           {[
-            { num: "01", icon: "wallet" as const, title: "Deposit crypto", desc: "Send USDT, BTC, ETH, or SOL to your personal CryptoPay wallet address.", img: CDN_IMAGES.cryptoCoins, illustration: ILLUSTRATIONS.wallet },
-            { num: "02", icon: "receipt" as const, title: "Pick a payment", desc: "Enter a Paybill number, Till number, or phone number. Rate locks for 90 seconds.", img: CDN_IMAGES.mobilePayment, illustration: ILLUSTRATIONS.target },
-            { num: "03", icon: "checkmark-circle" as const, title: "Done", desc: "Confirm with your PIN. M-Pesa delivers in under 30 seconds.", img: CDN_IMAGES.speedTrails, illustration: ILLUSTRATIONS.success },
+            { num: "01", icon: "wallet" as const, title: "Deposit crypto", desc: "Send USDT, BTC, ETH, or SOL to your personal CryptoPay wallet address.", img: CDN_IMAGES.cryptoCoins, brand: "wallet" as const },
+            { num: "02", icon: "lock-closed" as const, title: "Pick a payment", desc: "Enter a Paybill number, Till number, or phone number. Rate locks for 90 seconds.", img: CDN_IMAGES.mobilePayment, brand: "ratelock" as const },
+            { num: "03", icon: "checkmark-circle" as const, title: "Done", desc: "Confirm with your PIN. M-Pesa settles in 10–30 seconds typical.", img: CDN_IMAGES.speedTrails, brand: "speed" as const },
           ].map((step, i) => (
             <RevealOnScroll key={step.num} delay={i * 200} variant="fade-up" style={{ flex: 1, zIndex: 1 }}>
               <View
@@ -1318,15 +1524,45 @@ export default function LandingPage() {
                 </View>
                 <Text style={{ color: tc.textPrimary, fontSize: 18, fontFamily: "DMSans_700Bold", textAlign: "center", marginBottom: 8 }}>{step.title}</Text>
                 <Text style={{ color: tc.textSecondary, fontSize: 14, fontFamily: "DMSans_400Regular", textAlign: "center", lineHeight: 22, maxWidth: 300 }}>{step.desc}</Text>
-                {/* Professional illustration */}
+                {/* Brand illustration — one animated per step. Step 02
+                    gets the full RateLockRing (the product's key promise).
+                    Step 01 + 03 get brand icons to keep "one motion per
+                    fold." The illustration wrapper lets the SVG breathe
+                    — overflow visible + enough height so the ring's glow
+                    + pill ("1 USDT = 131.47") don't clip on the white
+                    card edges. */}
                 {!isMobile && (
-                  <View style={{ marginTop: 16 }}>
-                    <SvgIllustration uri={step.illustration} size={isDesktop ? 100 : 80} style={{ opacity: 0.7 }} />
+                  <View
+                    ref={(ref: any) => { if (isWeb && ref instanceof HTMLElement) ref.className = "cpay-brand-illus"; }}
+                    style={{
+                      marginTop: 18,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      backgroundColor: "#F8FAFC",
+                      borderRadius: 16,
+                      paddingVertical: 18,
+                      paddingHorizontal: 12,
+                      width: "100%",
+                      minHeight: step.brand === "ratelock" ? 280 : 200,
+                      overflow: "hidden",
+                    } as any}
+                  >
+                    {step.brand === "ratelock" ? (
+                      // RateLockRing internal content (glow r=150, ring
+                      // r=110, pill at cy+70) needs ~280px to render
+                      // without clipping on web.
+                      <RateLockRing width={240} height={240} />
+                    ) : step.brand === "speed" ? (
+                      <SpeedRing size={isDesktop ? 160 : 140} />
+                    ) : (
+                      <WalletIcon size={isDesktop ? 160 : 140} />
+                    )}
                   </View>
                 )}
               </View>
             </RevealOnScroll>
           ))}
+        </View>
         </View>
       </Section>
     </View>
@@ -1343,12 +1579,12 @@ export default function LandingPage() {
       <Section>
         <RevealOnScroll variant="scale-up">
           <View style={{ flexDirection: isDesktop ? "row" : "column", alignItems: "center", justifyContent: "center", gap: isDesktop ? 32 : 16, marginBottom: isMobile ? 32 : 52 }}>
-            <SvgIllustration uri={ILLUSTRATIONS.wallet} size={isMobile ? 70 : 140} style={{ opacity: 0.8 }} />
+            <View style={{ opacity: 0.9 }}><WalletIcon size={isMobile ? 70 : 140} /></View>
             <View style={{ alignItems: isDesktop ? "flex-start" : "center" }}>
               <Text style={{ color: tc.primary[400], fontSize: 12, fontFamily: "DMSans_700Bold", textTransform: "uppercase", letterSpacing: 3, marginBottom: 12 }}>Features</Text>
               <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 28 : 42, fontFamily: "DMSans_700Bold", textAlign: isDesktop ? "left" : "center", letterSpacing: -1, lineHeight: isMobile ? 36 : 52 }}>Everything you need{"\n"}to pay bills with crypto</Text>
             </View>
-            <SvgIllustration uri={ILLUSTRATIONS.secureData} size={isMobile ? 70 : 140} style={{ opacity: 0.8 }} />
+            <View style={{ opacity: 0.9 }}><SecurityLock size={isMobile ? 70 : 140} /></View>
           </View>
         </RevealOnScroll>
         <View style={{
@@ -1463,7 +1699,7 @@ export default function LandingPage() {
       <Section>
         <RevealOnScroll variant="fade-up">
           <View style={{ flexDirection: isDesktop ? "row" : "column", alignItems: "center", justifyContent: "center", gap: isDesktop ? 40 : 20, marginBottom: isMobile ? 36 : 56 }}>
-            <SvgIllustration uri={ILLUSTRATIONS.finance} size={isMobile ? 70 : 130} style={{ opacity: 0.75 }} />
+            <View style={{ opacity: 0.9 }}><FeeBreakdown width={isMobile ? 220 : 280} height={isMobile ? 160 : 200} /></View>
             <View style={{ alignItems: isDesktop ? "flex-start" : "center", flex: isDesktop ? 1 : undefined }}>
               <Text style={{ color: "#F59E0B", fontSize: 13, fontFamily: "DMSans_700Bold", textTransform: "uppercase", letterSpacing: 3, marginBottom: 12 }}>Pricing</Text>
               <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 30 : 44, fontFamily: "DMSans_700Bold", textAlign: isDesktop ? "left" : "center", letterSpacing: -1, lineHeight: isMobile ? 38 : 54 }}>
@@ -1595,7 +1831,7 @@ export default function LandingPage() {
                 We put the numbers next to each other. You decide what makes sense for your money.
               </Text>
             </View>
-            <SvgIllustration uri={ILLUSTRATIONS.target} size={isMobile ? 80 : 140} style={{ opacity: 0.75 }} />
+            <View style={{ opacity: 0.9 }}><TargetMark size={isMobile ? 80 : 140} /></View>
           </View>
         </RevealOnScroll>
 
@@ -1675,7 +1911,7 @@ export default function LandingPage() {
       <Section>
         <RevealOnScroll variant="slide-left">
           <View style={{ flexDirection: isDesktop ? "row" : "column", alignItems: "center", justifyContent: "space-between", marginBottom: isMobile ? 36 : 56, gap: 20 }}>
-            <SvgIllustration uri={ILLUSTRATIONS.community} size={isMobile ? 70 : 130} style={{ opacity: 0.75 }} />
+            <View style={{ opacity: 0.9 }}><KenyaCorridor size={isMobile ? 70 : 130} /></View>
             <View style={{ alignItems: isDesktop ? "flex-start" : "center", flex: 1 }}>
               <Text style={{ color: tc.primary[400], fontSize: 13, fontFamily: "DMSans_700Bold", textTransform: "uppercase", letterSpacing: 3, marginBottom: 12 }}>What people use it for</Text>
               <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 28 : 42, fontFamily: "DMSans_700Bold", textAlign: isDesktop ? "left" : "center", letterSpacing: -1, lineHeight: isMobile ? 36 : 52 }}>
@@ -1790,11 +2026,11 @@ export default function LandingPage() {
                 First-timers ask these the most. If yours isn't here, email support@cpay.co.ke and we'll reply the same day.
               </Text>
               <View style={{ marginTop: 24 }}>
-                <SvgIllustration uri={ILLUSTRATIONS.questions} size={isMobile ? 100 : 200} style={{ opacity: 0.75 }} />
+                <View style={{ opacity: 0.9 }}><FaqMark size={isMobile ? 100 : 200} /></View>
               </View>
               {isDesktop && (
                 <View style={{ marginTop: 24 }}>
-                  <SvgIllustration uri={ILLUSTRATIONS.safe} size={140} style={{ opacity: 0.6 }} />
+                  <View style={{ opacity: 0.85 }}><SecurityLock size={140} /></View>
                 </View>
               )}
             </View>
@@ -1837,7 +2073,7 @@ export default function LandingPage() {
           }}>
             {/* Illustrations row */}
             <View style={{ flexDirection: "row", justifyContent: "center", gap: isMobile ? 16 : 40, marginBottom: isMobile ? 24 : 32 }}>
-              <SvgIllustration uri={ILLUSTRATIONS.onlineWorld} size={isMobile ? 60 : 100} style={{ opacity: 0.7 }} />
+              <View style={{ opacity: 0.9 }}><KenyaCorridor size={isMobile ? 60 : 100} /></View>
               <View style={{
                 width: isMobile ? 64 : 80, height: isMobile ? 64 : 80, borderRadius: isMobile ? 20 : 24,
                 backgroundColor: tc.primary[500], alignItems: "center", justifyContent: "center",
@@ -1845,7 +2081,7 @@ export default function LandingPage() {
               }}>
                 <Ionicons name="flash" size={isMobile ? 28 : 36} color="#fff" />
               </View>
-              <SvgIllustration uri={ILLUSTRATIONS.success} size={isMobile ? 60 : 100} style={{ opacity: 0.7 }} />
+              <View style={{ opacity: 0.9 }}><SpeedRing size={isMobile ? 60 : 100} /></View>
             </View>
 
             <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 30 : 46, fontFamily: "DMSans_700Bold", textAlign: "center", letterSpacing: -1.5, lineHeight: isMobile ? 38 : 56, marginBottom: 16 }}>
@@ -1914,9 +2150,8 @@ export default function LandingPage() {
       <Section>
         <View style={{ flexDirection: isMobile ? "column" : "row", justifyContent: "space-between", alignItems: isMobile ? "center" : "flex-start", gap: isMobile ? 32 : 48 }}>
           <View style={{ alignItems: isMobile ? "center" : "flex-start", maxWidth: 280 }}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 }}>
-              <Image source={APP_LOGO} style={{ width: 32, height: 32, borderRadius: 8 }} resizeMode="cover" />
-              <Text style={{ color: tc.textPrimary, fontSize: 18, fontFamily: "DMSans_700Bold", letterSpacing: -0.3 }}>CryptoPay</Text>
+            <View style={{ marginBottom: 12 }}>
+              <Wordmark size={28} dark />
             </View>
             <Text style={{ color: tc.textMuted, fontSize: 13, fontFamily: "DMSans_400Regular", lineHeight: 20, textAlign: isMobile ? "center" : "left" }}>Convert crypto to M-Pesa payments instantly. Secure, fast, transparent.</Text>
           </View>
@@ -1959,6 +2194,7 @@ export default function LandingPage() {
       <Navbar tc={tc} isMobile={isMobile} onSignIn={navigateToLogin} onGetStarted={navigateToRegister} onScrollTo={scrollToSection} />
       <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}>
         {heroSection}
+        {chainConvergeSection}
         {servicesSection}
         {problemSection}
         {statsSection}
@@ -1969,6 +2205,7 @@ export default function LandingPage() {
         {comparisonSection}
         {testimonialsSection}
         {faqSection}
+        {paymentTickerSection}
         {ctaSection}
         {footer}
       </ScrollView>
@@ -1990,3 +2227,7 @@ export default function LandingPage() {
     </View>
   );
 }
+// rebuild-force 1776539185
+
+// rebuild 1776593525
+// wsl-rebuild

@@ -1,3 +1,4 @@
+import { Spinner } from "./brand/Spinner";
 /**
  * WalletConnect deposit component — allows users to deposit crypto
  * directly from MetaMask, Trust Wallet, etc. into their CryptoPay wallet.
@@ -554,7 +555,7 @@ function WalletConnectDepositInner({ depositAddress, onDepositInitiated }: Props
             })}
           >
             {isDepositing ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
+              <Spinner size={16} color="#FFFFFF" />
             ) : (
               <Ionicons name="arrow-down-circle-outline" size={20} color="#FFFFFF" />
             )}

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Cpay brand mark · Variant A · "Coin-C"
+     From the design handoff (cpay/project/logos.jsx LogoCoinC).
+     Geometric C with a coin-slot bar. Holds at 16px for favicon use. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <!-- Outer C: partial circle stroke, rotated so the opening sits on the right. -->
+  <circle cx="100" cy="100" r="72" fill="none" stroke="#10B981" stroke-width="22"
+          stroke-linecap="round" stroke-dasharray="380 500"
+          transform="rotate(-135 100 100)"/>
+  <!-- Coin slot bar — signifies "pay / insert". -->
+  <rect x="100" y="92" width="46" height="16" rx="3" fill="#10B981"/>
+</svg>

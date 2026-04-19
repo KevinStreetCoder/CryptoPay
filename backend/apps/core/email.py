@@ -23,10 +23,34 @@ def _mask_phone(phone):
 # ---------------------------------------------------------------------------
 
 
+_SMS_SIGNATURE = "— Cpay · cpay.co.ke"
+
+
+def _apply_signature(message: str) -> str:
+    """Append the brand signature to outbound SMS unless it's already there.
+
+    The design brief mandates every outbound SMS end with "— Cpay · cpay.co.ke"
+    so recipients can trust the sender + hit the domain without a search.
+    Idempotent: calling again on an already-signed message is a no-op.
+    We also respect the 160-char SMS limit — if appending would push the
+    message over, we skip the signature rather than truncate the message.
+    """
+    if not message:
+        return message
+    if _SMS_SIGNATURE in message:
+        return message
+    with_sig = f"{message}\n{_SMS_SIGNATURE}"
+    if len(with_sig) > 160:
+        return message  # caller's message is tight; keep it intact
+    return with_sig
+
+
 def send_sms(phone, message):
     """Send an SMS via eSMS Africa (primary) or Africa's Talking (fallback).
 
-    This is the single entry point for all outbound SMS.
+    This is the single entry point for all outbound SMS. Appends the
+    "— Cpay · cpay.co.ke" brand signature to every message (within the
+    160-char SMS ceiling).
 
     Args:
         phone: str, E.164 phone number (e.g. +254712345678).
@@ -39,6 +63,7 @@ def send_sms(phone, message):
         logger.warning("send_sms called with empty phone number")
         return False
 
+    message = _apply_signature(message)
     sms_sent = False
     to_masked = _mask_phone(phone)
 

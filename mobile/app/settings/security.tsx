@@ -20,6 +20,7 @@ import { getThemeColors } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
 import { normalizeError } from "../../src/utils/apiErrors";
 import { useLocale } from "../../src/hooks/useLocale";
+import { Spinner } from "../../src/components/brand/Spinner";
 
 const isWeb = Platform.OS === "web";
 
@@ -124,7 +125,7 @@ export default function SecuritySettingsScreen() {
   if (loading) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg, justifyContent: "center", alignItems: "center" }}>
-        <ActivityIndicator size="large" color={tc.primary[500]} />
+        <Spinner size={32} color={tc.primary[500]} />
       </SafeAreaView>
     );
   }
@@ -273,7 +274,7 @@ export default function SecuritySettingsScreen() {
                         })}
                       >
                         {actionLoading === "email_verify" ? (
-                          <ActivityIndicator size="small" color="#fff" />
+                          <Spinner size={16} color="#fff" />
                         ) : (
                           <Text style={{ color: "#fff", fontSize: 15, fontFamily: "DMSans_600SemiBold" }}>
                             {t("securityPage.sendVerification")}
@@ -319,7 +320,7 @@ export default function SecuritySettingsScreen() {
                         })}
                       >
                         {actionLoading === "confirm_email" ? (
-                          <ActivityIndicator size="small" color="#fff" />
+                          <Spinner size={16} color="#fff" />
                         ) : (
                           <Text style={{ color: "#fff", fontSize: 15, fontFamily: "DMSans_600SemiBold" }}>
                             {t("securityPage.verifyCode")}
@@ -468,7 +469,7 @@ export default function SecuritySettingsScreen() {
                       })}
                     >
                       {actionLoading === "recovery" ? (
-                        <ActivityIndicator size="small" color="#fff" />
+                        <Spinner size={16} color="#fff" />
                       ) : (
                         <>
                           <Ionicons name="checkmark-circle-outline" size={18} color="#FFFFFF" />

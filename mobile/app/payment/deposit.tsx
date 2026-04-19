@@ -24,6 +24,7 @@ import { colors, getThemeColors, getThemeShadows } from "../../src/constants/the
 import { useThemeMode } from "../../src/stores/theme";
 import { GlassCard } from "../../src/components/GlassCard";
 import { useLocale } from "../../src/hooks/useLocale";
+import { Spinner } from "../../src/components/brand/Spinner";
 // Lazy import — WalletConnect modules crash if loaded before AppKit context is ready
 // Expo Router eagerly imports all route files at startup, so static import crashes
 const LazyWalletConnectDeposit = React.lazy(() =>
@@ -500,7 +501,7 @@ export default function DepositScreen() {
               <View
                 style={{ alignItems: "center", justifyContent: "center", paddingVertical: 40 }}
               >
-                <ActivityIndicator size="large" color={colors.primary[400]} />
+                <Spinner size={32} color={colors.primary[400]} />
               </View>
             ) : c2bInstructions ? (
               <>

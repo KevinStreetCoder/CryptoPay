@@ -21,6 +21,7 @@ import { colors, shadows, CURRENCIES, CurrencyCode, getThemeColors, getThemeShad
 import { useThemeMode } from "../../src/stores/theme";
 import { usePhonePrivacy } from "../../src/utils/privacy";
 import { useLocale } from "../../src/hooks/useLocale";
+import { Spinner } from "../../src/components/brand/Spinner";
 
 const isWeb = Platform.OS === "web";
 
@@ -489,7 +490,7 @@ export default function TransactionDetailScreen() {
       >
         {isLoading ? (
           <View style={{ paddingTop: 80, alignItems: "center" }}>
-            <ActivityIndicator size="large" color={colors.primary[400]} />
+            <Spinner size={32} color={colors.primary[400]} />
             <Text
               style={{
                 color: tc.textMuted,

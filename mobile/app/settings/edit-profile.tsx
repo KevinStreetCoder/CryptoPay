@@ -25,6 +25,7 @@ import { normalizeError } from "../../src/utils/apiErrors";
 import { useLocale } from "../../src/hooks/useLocale";
 import { Image as ExpoImage } from "expo-image";
 import { UserAvatar } from "../../src/components/UserAvatar";
+import { Spinner } from "../../src/components/brand/Spinner";
 
 const isWeb = Platform.OS === "web";
 
@@ -795,11 +796,7 @@ function PinStep({
 
         {/* Loading */}
         {loading && (
-          <ActivityIndicator
-            size="small"
-            color={colors.primary[500]}
-            style={{ marginBottom: 24 }}
-          />
+          <Spinner size={16} color={colors.primary[500]} style={{ marginBottom: 24 }} />
         )}
 
         {/* Cancel Button */}
@@ -1174,11 +1171,7 @@ function EmailVerifyStep({
 
         {/* Loading */}
         {loading ? (
-          <ActivityIndicator
-            size="small"
-            color={colors.primary[500]}
-            style={{ marginBottom: 20 }}
-          />
+          <Spinner size={16} color={colors.primary[500]} style={{ marginBottom: 20 }} />
         ) : null}
 
         {/* Resend */}
