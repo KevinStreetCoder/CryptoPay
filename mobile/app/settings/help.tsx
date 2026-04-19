@@ -790,7 +790,7 @@ export default function HelpScreen() {
               fontFamily: "DMSans_500Medium",
             }}
           >
-            CryptoPay v1.0.0
+            Cpay v1.0.0
           </Text>
         </View>
       </ScrollView>

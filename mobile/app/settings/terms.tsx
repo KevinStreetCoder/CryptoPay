@@ -172,17 +172,17 @@ function TermsContent({
         </Text>
       </View>
 
-      <LegalSection title="1. About CryptoPay" icon="business-outline" tc={tc} ts={ts} isDesktop={isDesktop}>
+      <LegalSection title="1. About Cpay" icon="business-outline" tc={tc} ts={ts} isDesktop={isDesktop}>
         <Paragraph tc={tc}>
-          CryptoPay is a digital payment platform operated by CryptoPay Technologies Ltd, a company registered in the Republic of Kenya. We enable users to hold cryptocurrency wallets and make payments to Kenyan businesses via M-Pesa integration.
+          Cpay is a digital payment platform operated by Cpay Technologies Ltd, a company registered in the Republic of Kenya. We enable users to hold cryptocurrency wallets and make payments to Kenyan businesses via M-Pesa integration.
         </Paragraph>
         <Paragraph tc={tc}>
-          By creating an account, accessing our mobile application, or using any CryptoPay services, you agree to be bound by these Terms of Service ("Terms"). If you do not agree to these Terms, do not use the Service.
+          By creating an account, accessing our mobile application, or using any Cpay services, you agree to be bound by these Terms of Service ("Terms"). If you do not agree to these Terms, do not use the Service.
         </Paragraph>
       </LegalSection>
 
       <LegalSection title="2. Eligibility" icon="person-outline" tc={tc} ts={ts} isDesktop={isDesktop}>
-        <Paragraph tc={tc}>To use CryptoPay, you must:</Paragraph>
+        <Paragraph tc={tc}>To use Cpay, you must:</Paragraph>
         <BulletPoint tc={tc}>Be at least 18 years of age</BulletPoint>
         <BulletPoint tc={tc}>Be a resident of Kenya or an eligible jurisdiction</BulletPoint>
         <BulletPoint tc={tc}>Have a valid Kenyan mobile number registered with an M-Pesa account</BulletPoint>
@@ -198,19 +198,19 @@ function TermsContent({
           You agree to provide valid government-issued identification (National ID, Passport, or Alien Card) and may be asked for additional verification documents. Failure to complete KYC may result in restricted access or account suspension.
         </Paragraph>
         <Paragraph tc={tc}>
-          You are responsible for maintaining the confidentiality of your account credentials, including your PIN, TOTP authenticator codes, and recovery phrases. CryptoPay will never ask for your PIN or recovery codes.
+          You are responsible for maintaining the confidentiality of your account credentials, including your PIN, TOTP authenticator codes, and recovery phrases. Cpay will never ask for your PIN or recovery codes.
         </Paragraph>
       </LegalSection>
 
       <LegalSection title="4. Supported Services" icon="card-outline" tc={tc} ts={ts} isDesktop={isDesktop}>
-        <Paragraph tc={tc} bold>CryptoPay enables the following services:</Paragraph>
-        <BulletPoint tc={tc}>Cryptocurrency deposits (USDT, USDC, BTC, ETH, SOL) to your CryptoPay wallet via on-chain transfers</BulletPoint>
+        <Paragraph tc={tc} bold>Cpay enables the following services:</Paragraph>
+        <BulletPoint tc={tc}>Cryptocurrency deposits (USDT, USDC, BTC, ETH, SOL) to your Cpay wallet via on-chain transfers</BulletPoint>
         <BulletPoint tc={tc}>Bill payments to Kenyan Paybill numbers using your crypto balance, converted to KES at market rates</BulletPoint>
         <BulletPoint tc={tc}>Till payments to Lipa Na M-Pesa merchant numbers</BulletPoint>
         <BulletPoint tc={tc}>Person-to-person M-Pesa transfers funded by your crypto balance</BulletPoint>
         <BulletPoint tc={tc}>Buying cryptocurrency using M-Pesa (Lipa Na M-Pesa STK Push)</BulletPoint>
         <Paragraph tc={tc}>
-          All KES payouts are processed through Safaricom M-Pesa. CryptoPay acts as an intermediary facilitating the conversion of cryptocurrency to Kenya Shillings at prevailing market rates.
+          All KES payouts are processed through Safaricom M-Pesa. Cpay acts as an intermediary facilitating the conversion of cryptocurrency to Kenya Shillings at prevailing market rates.
         </Paragraph>
       </LegalSection>
 
@@ -219,7 +219,7 @@ function TermsContent({
           Exchange rates are sourced from multiple market data providers and are quoted in real-time. When you initiate a transaction, you receive a locked rate quote that is valid for a limited time (typically 60 seconds).
         </Paragraph>
         <Paragraph tc={tc}>
-          CryptoPay charges a transparent service fee on each transaction, which is displayed before you confirm. The fee varies by transaction type and amount. Additional M-Pesa transaction charges from Safaricom may apply and are passed through at cost.
+          Cpay charges a transparent service fee on each transaction, which is displayed before you confirm. The fee varies by transaction type and amount. Additional M-Pesa transaction charges from Safaricom may apply and are passed through at cost.
         </Paragraph>
         <Paragraph tc={tc}>
           Once a transaction is confirmed and submitted, it is irreversible. The locked exchange rate and fee are final.
@@ -233,12 +233,12 @@ function TermsContent({
         <BulletPoint tc={tc}>Daily transaction limit: Subject to your KYC verification level</BulletPoint>
         <BulletPoint tc={tc}>Monthly aggregate limit: Subject to your KYC verification level and AML monitoring</BulletPoint>
         <Paragraph tc={tc}>
-          Higher limits may be available upon completing enhanced due diligence (EDD). CryptoPay reserves the right to lower limits or pause services based on risk assessments or regulatory requirements.
+          Higher limits may be available upon completing enhanced due diligence (EDD). Cpay reserves the right to lower limits or pause services based on risk assessments or regulatory requirements.
         </Paragraph>
       </LegalSection>
 
       <LegalSection title="7. Prohibited Activities" icon="ban-outline" tc={tc} ts={ts} isDesktop={isDesktop}>
-        <Paragraph tc={tc}>You may not use CryptoPay for:</Paragraph>
+        <Paragraph tc={tc}>You may not use Cpay for:</Paragraph>
         <BulletPoint tc={tc}>Money laundering, terrorism financing, or any activity prohibited by Kenyan or international law</BulletPoint>
         <BulletPoint tc={tc}>Transactions involving sanctioned individuals, entities, or jurisdictions</BulletPoint>
         <BulletPoint tc={tc}>Fraud, market manipulation, or deceptive practices</BulletPoint>
@@ -246,34 +246,34 @@ function TermsContent({
         <BulletPoint tc={tc}>Automated or bot-driven trading or payment activity without authorization</BulletPoint>
         <BulletPoint tc={tc}>Purchasing illegal goods, services, or contraband</BulletPoint>
         <Paragraph tc={tc}>
-          CryptoPay employs transaction monitoring systems and will report suspicious activity to the Financial Reporting Centre (FRC) of Kenya as required by law.
+          Cpay employs transaction monitoring systems and will report suspicious activity to the Financial Reporting Centre (FRC) of Kenya as required by law.
         </Paragraph>
       </LegalSection>
 
       <LegalSection title="8. Wallet Custody & Security" icon="wallet-outline" tc={tc} ts={ts} isDesktop={isDesktop}>
         <Paragraph tc={tc}>
-          CryptoPay operates a custodial wallet service. Your cryptocurrency is held in segregated wallets derived from a secure hierarchical deterministic (HD) wallet system. Private keys are managed by CryptoPay and are never exposed to users.
+          Cpay operates a custodial wallet service. Your cryptocurrency is held in segregated wallets derived from a secure hierarchical deterministic (HD) wallet system. Private keys are managed by Cpay and are never exposed to users.
         </Paragraph>
         <Paragraph tc={tc}>
           We implement industry-standard security measures including encrypted storage, multi-signature authorization for large movements, hot/cold wallet segregation, and regular security audits. However, no system is completely secure, and you acknowledge the inherent risks of holding digital assets.
         </Paragraph>
         <Paragraph tc={tc}>
-          CryptoPay is not a bank and your balances are not insured by the Kenya Deposit Insurance Corporation (KDIC) or any government deposit protection scheme.
+          Cpay is not a bank and your balances are not insured by the Kenya Deposit Insurance Corporation (KDIC) or any government deposit protection scheme.
         </Paragraph>
       </LegalSection>
 
       <LegalSection title="9. Intellectual Property" icon="sparkles-outline" tc={tc} ts={ts} isDesktop={isDesktop}>
         <Paragraph tc={tc}>
-          All content, branding, software, and technology comprising CryptoPay are the intellectual property of CryptoPay Technologies Ltd. You are granted a limited, non-exclusive, non-transferable license to use the application for its intended purpose.
+          All content, branding, software, and technology comprising Cpay are the intellectual property of Cpay Technologies Ltd. You are granted a limited, non-exclusive, non-transferable license to use the application for its intended purpose.
         </Paragraph>
         <Paragraph tc={tc}>
-          You may not copy, modify, reverse-engineer, distribute, or create derivative works based on the CryptoPay application or its underlying technology.
+          You may not copy, modify, reverse-engineer, distribute, or create derivative works based on the Cpay application or its underlying technology.
         </Paragraph>
       </LegalSection>
 
       <LegalSection title="10. Limitation of Liability" icon="alert-circle-outline" tc={tc} ts={ts} isDesktop={isDesktop}>
         <Paragraph tc={tc}>
-          To the maximum extent permitted by Kenyan law, CryptoPay shall not be liable for: indirect, incidental, or consequential damages; loss of profits or cryptocurrency due to market volatility; service interruptions caused by network congestion, blockchain issues, or M-Pesa system downtime; unauthorized access due to user negligence in protecting credentials.
+          To the maximum extent permitted by Kenyan law, Cpay shall not be liable for: indirect, incidental, or consequential damages; loss of profits or cryptocurrency due to market volatility; service interruptions caused by network congestion, blockchain issues, or M-Pesa system downtime; unauthorized access due to user negligence in protecting credentials.
         </Paragraph>
         <Paragraph tc={tc}>
           Our total liability for any claim shall not exceed the total fees paid by you in the six (6) months preceding the claim. This limitation does not apply to liability for fraud, gross negligence, or death/personal injury caused by our negligence.
@@ -294,7 +294,7 @@ function TermsContent({
 
       <LegalSection title="12. Account Termination" icon="close-circle-outline" tc={tc} ts={ts} isDesktop={isDesktop}>
         <Paragraph tc={tc}>
-          You may close your account at any time by contacting support, provided you have no pending transactions and a zero crypto balance. CryptoPay may suspend or terminate your account for: violation of these Terms; failure to complete required KYC/AML checks; suspicious or fraudulent activity; regulatory requirements or court orders.
+          You may close your account at any time by contacting support, provided you have no pending transactions and a zero crypto balance. Cpay may suspend or terminate your account for: violation of these Terms; failure to complete required KYC/AML checks; suspicious or fraudulent activity; regulatory requirements or court orders.
         </Paragraph>
         <Paragraph tc={tc}>
           Upon termination, any remaining cryptocurrency balance will be available for withdrawal for 90 days, after which unclaimed assets will be handled in accordance with applicable Kenyan unclaimed property laws.
@@ -303,7 +303,7 @@ function TermsContent({
 
       <LegalSection title="13. Amendments" icon="create-outline" tc={tc} ts={ts} isDesktop={isDesktop}>
         <Paragraph tc={tc}>
-          CryptoPay reserves the right to amend these Terms at any time. Material changes will be communicated via email and/or in-app notification at least 14 days before taking effect. Continued use of the Service after the effective date constitutes acceptance of the updated Terms.
+          Cpay reserves the right to amend these Terms at any time. Material changes will be communicated via email and/or in-app notification at least 14 days before taking effect. Continued use of the Service after the effective date constitutes acceptance of the updated Terms.
         </Paragraph>
       </LegalSection>
 
@@ -314,7 +314,7 @@ function TermsContent({
       </LegalSection>
 
       <LegalSection title="15. Contact" icon="mail-outline" tc={tc} ts={ts} isDesktop={isDesktop}>
-        <Paragraph tc={tc} bold>CryptoPay Technologies Ltd</Paragraph>
+        <Paragraph tc={tc} bold>Cpay Technologies Ltd</Paragraph>
         <Paragraph tc={tc}>Email: legal@cpay.co.ke</Paragraph>
         <Paragraph tc={tc}>Support: support@cpay.co.ke</Paragraph>
         <Paragraph tc={tc}>Nairobi, Kenya</Paragraph>
@@ -363,15 +363,15 @@ function PrivacyContent({
 
       <LegalSection title="1. Introduction" icon="information-circle-outline" tc={tc} ts={ts} isDesktop={isDesktop}>
         <Paragraph tc={tc}>
-          CryptoPay Technologies Ltd ("CryptoPay", "we", "us") is committed to protecting your personal data in accordance with the Kenya Data Protection Act, 2019 (DPA), the Constitution of Kenya (Article 31, right to privacy), and applicable international data protection standards including the EU General Data Protection Regulation (GDPR) where applicable.
+          Cpay Technologies Ltd ("Cpay", "we", "us") is committed to protecting your personal data in accordance with the Kenya Data Protection Act, 2019 (DPA), the Constitution of Kenya (Article 31, right to privacy), and applicable international data protection standards including the EU General Data Protection Regulation (GDPR) where applicable.
         </Paragraph>
         <Paragraph tc={tc}>
-          This Privacy Policy explains how we collect, use, store, share, and protect your personal data when you use the CryptoPay application and services. The Office of the Data Protection Commissioner (ODPC) of Kenya is the supervisory authority for data protection matters.
+          This Privacy Policy explains how we collect, use, store, share, and protect your personal data when you use the Cpay application and services. The Office of the Data Protection Commissioner (ODPC) of Kenya is the supervisory authority for data protection matters.
         </Paragraph>
       </LegalSection>
 
       <LegalSection title="2. Data Controller" icon="business-outline" tc={tc} ts={ts} isDesktop={isDesktop}>
-        <Paragraph tc={tc} bold>CryptoPay Technologies Ltd</Paragraph>
+        <Paragraph tc={tc} bold>Cpay Technologies Ltd</Paragraph>
         <Paragraph tc={tc}>Data Protection Officer: dpo@cpay.co.ke</Paragraph>
         <Paragraph tc={tc}>Registered Address: Nairobi, Kenya</Paragraph>
         <Paragraph tc={tc}>
@@ -483,7 +483,7 @@ function PrivacyContent({
 
       <LegalSection title="11. Children's Privacy" icon="people-outline" tc={tc} ts={ts} isDesktop={isDesktop}>
         <Paragraph tc={tc}>
-          CryptoPay services are not directed at individuals under 18 years of age. We do not knowingly collect personal data from minors. If we discover that a minor has created an account, we will promptly delete their data and close the account, in accordance with Section 33 of the DPA.
+          Cpay services are not directed at individuals under 18 years of age. We do not knowingly collect personal data from minors. If we discover that a minor has created an account, we will promptly delete their data and close the account, in accordance with Section 33 of the DPA.
         </Paragraph>
       </LegalSection>
 
@@ -503,7 +503,7 @@ function PrivacyContent({
       </LegalSection>
 
       <LegalSection title="14. Contact" icon="mail-outline" tc={tc} ts={ts} isDesktop={isDesktop}>
-        <Paragraph tc={tc} bold>CryptoPay Technologies Ltd</Paragraph>
+        <Paragraph tc={tc} bold>Cpay Technologies Ltd</Paragraph>
         <Paragraph tc={tc}>Data Protection Officer: dpo@cpay.co.ke</Paragraph>
         <Paragraph tc={tc}>General: privacy@cpay.co.ke</Paragraph>
         <Paragraph tc={tc}>ODPC Complaints: complaints@odpc.go.ke</Paragraph>
@@ -600,7 +600,7 @@ export default function TermsAndPrivacyScreen() {
               lineHeight: 22,
             }}
           >
-            Legal documents governing your use of CryptoPay
+            Legal documents governing your use of Cpay
           </Text>
         </View>
 
@@ -693,7 +693,7 @@ export default function TermsAndPrivacyScreen() {
               lineHeight: 18,
             }}
           >
-            CryptoPay Technologies Ltd | Nairobi, Kenya{"\n"}
+            Cpay Technologies Ltd | Nairobi, Kenya{"\n"}
             Regulated under the laws of the Republic of Kenya
           </Text>
         </View>

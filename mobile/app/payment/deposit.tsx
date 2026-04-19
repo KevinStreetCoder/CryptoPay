@@ -435,7 +435,7 @@ export default function DepositScreen() {
                 {
                   icon: "wallet" as const,
                   title: "Crypto credited",
-                  desc: `${currency} deposited to your CryptoPay wallet instantly`,
+                  desc: `${currency} deposited to your Cpay wallet instantly`,
                 },
               ].map((step, i) => (
                 <View
@@ -699,7 +699,7 @@ export default function DepositScreen() {
                   >
                     Crypto will be credited at the live market rate when your M-Pesa
                     payment is confirmed. The phone number you pay from must match your
-                    CryptoPay account.
+                    Cpay account.
                   </Text>
                 </View>
               </>

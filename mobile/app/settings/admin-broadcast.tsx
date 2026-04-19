@@ -268,7 +268,7 @@ export default function AdminBroadcastScreen() {
               Broadcast Notification
             </Text>
             <Text style={{ color: tc.textMuted, fontSize: 14, fontFamily: "DMSans_400Regular" }}>
-              Send announcements to all CryptoPay users
+              Send announcements to all Cpay users
             </Text>
           </View>
         </View>
