@@ -38,6 +38,7 @@ import { BlockchainDeposit } from "../../src/api/wallets";
 import { useLocale } from "../../src/hooks/useLocale";
 import { Spinner } from "../../src/components/brand/Spinner";
 import { TxStatusIcon, type TxStatusKind, EmptyNoTransactions } from "../../src/components/brand/PolishAssets";
+import { QrFrame } from "../../src/components/brand/QrFrame";
 const SUPPORTED_CRYPTOS: CurrencyCode[] = ["USDC", "USDT", "BTC", "SOL", "ETH"];
 
 function useRates() {
@@ -528,23 +529,16 @@ export default function WalletScreen() {
           {/* Currency Tabs */}
           {renderCurrencyTabs(true)}
 
-          {/* QR Code - larger on desktop */}
-          <View
-            style={{
-              alignSelf: "center",
-              backgroundColor: "#FFFFFF",
-              borderRadius: 20,
-              padding: 20,
-              marginBottom: 24,
-              ...ts.md,
-            }}
-          >
-            <QRCode
-              value={depositModal.address || "empty"}
-              size={200}
-              backgroundColor="#FFFFFF"
-              color="#060E1F"
-            />
+          {/* QR Code in brand QrFrame (emerald corners + Cpay stamp) */}
+          <View style={{ alignSelf: "center", marginBottom: 24 }}>
+            <QrFrame size={200}>
+              <QRCode
+                value={depositModal.address || "empty"}
+                size={200}
+                backgroundColor="#FFFFFF"
+                color="#060E1F"
+              />
+            </QrFrame>
           </View>
 
           {/* Deposit Address Display */}
@@ -939,22 +933,16 @@ export default function WalletScreen() {
           {/* Currency Tabs */}
           {renderCurrencyTabs(false)}
 
-          {/* QR Code */}
-          <View
-            style={{
-              alignSelf: "center",
-              backgroundColor: "#FFFFFF",
-              borderRadius: 16,
-              padding: 16,
-              marginBottom: 20,
-            }}
-          >
-            <QRCode
-              value={depositModal?.address || ""}
-              size={200}
-              backgroundColor="#FFFFFF"
-              color="#060E1F"
-            />
+          {/* QR Code in brand QrFrame */}
+          <View style={{ alignSelf: "center", marginBottom: 20 }}>
+            <QrFrame size={200}>
+              <QRCode
+                value={depositModal?.address || ""}
+                size={200}
+                backgroundColor="#FFFFFF"
+                color="#060E1F"
+              />
+            </QrFrame>
           </View>
 
           {/* Deposit Address Display */}
