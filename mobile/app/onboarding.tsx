@@ -17,6 +17,7 @@ import { colors, getThemeColors } from "../src/constants/theme";
 import { useThemeMode } from "../src/stores/theme";
 import { GlassCard } from "../src/components/GlassCard";
 import { useLocale } from "../src/hooks/useLocale";
+import { OnboardingIcon1, OnboardingIcon2, OnboardingIcon3 } from "../src/components/brand/PolishAssets";
 
 const isWeb = Platform.OS === "web";
 
@@ -38,13 +39,14 @@ interface Slide {
   iconBg: string;
   title: string;
   description: string;
+  brandIcon?: "OB1" | "OB2" | "OB3";
 }
 
 // Slide visual config (icons/colors) — text comes from i18n
 const SLIDE_CONFIG = [
-  { id: "1", icon: "wallet" as const, iconColor: "#10B981", iconBg: "rgba(16, 185, 129, 0.15)", titleKey: "tour.slide1Title", descKey: "tour.slide1Desc" },
-  { id: "2", icon: "arrow-down-circle" as const, iconColor: "#F59E0B", iconBg: "rgba(245, 158, 11, 0.15)", titleKey: "tour.slide2Title", descKey: "tour.slide2Desc" },
-  { id: "3", icon: "send" as const, iconColor: "#3B82F6", iconBg: "rgba(59, 130, 246, 0.15)", titleKey: "tour.slide3Title", descKey: "tour.slide3Desc" },
+  { id: "1", icon: "wallet" as const, brandIcon: "OB1" as const, iconColor: "#10B981", iconBg: "rgba(16, 185, 129, 0.15)", titleKey: "tour.slide1Title", descKey: "tour.slide1Desc" },
+  { id: "2", icon: "arrow-down-circle" as const, brandIcon: "OB2" as const, iconColor: "#10B981", iconBg: "rgba(16, 185, 129, 0.15)", titleKey: "tour.slide2Title", descKey: "tour.slide2Desc" },
+  { id: "3", icon: "send" as const, brandIcon: "OB3" as const, iconColor: "#10B981", iconBg: "rgba(16, 185, 129, 0.15)", titleKey: "tour.slide3Title", descKey: "tour.slide3Desc" },
   { id: "4", icon: "shield-checkmark" as const, iconColor: "#8B5CF6", iconBg: "rgba(139, 92, 246, 0.15)", titleKey: "tour.slide4Title", descKey: "tour.slide4Desc" },
   { id: "5", icon: "rocket" as const, iconColor: "#EC4899", iconBg: "rgba(236, 72, 153, 0.15)", titleKey: "tour.slide5Title", descKey: "tour.slide5Desc" },
 ];
@@ -57,7 +59,15 @@ function getSlides(t: (key: string) => string): Slide[] {
     iconBg: s.iconBg,
     title: t(s.titleKey),
     description: t(s.descKey),
+    brandIcon: (s as any).brandIcon,
   }));
+}
+
+function renderBrandIcon(kind: Slide["brandIcon"], size = 96) {
+  if (kind === "OB1") return <OnboardingIcon1 size={size} />;
+  if (kind === "OB2") return <OnboardingIcon2 size={size} />;
+  if (kind === "OB3") return <OnboardingIcon3 size={size} />;
+  return null;
 }
 
 // ── Pagination dot ───────────────────────────────────────────────────────────
@@ -109,7 +119,11 @@ function WebSlide({ item, tc }: { item: Slide; tc: ReturnType<typeof getThemeCol
           isWeb ? { boxShadow: `0 0 24px ${item.iconColor}25` } as any : {},
         ]}
       >
-        <Ionicons name={item.icon} size={48} color={item.iconColor} />
+        {item.brandIcon ? (
+          renderBrandIcon(item.brandIcon, 72)
+        ) : (
+          <Ionicons name={item.icon} size={48} color={item.iconColor} />
+        )}
       </View>
       <Text style={[s.webTitle, { color: tc.textPrimary }]}>{item.title}</Text>
       <Text style={[s.webDesc, { color: tc.textSecondary }]}>{item.description}</Text>
@@ -135,7 +149,11 @@ function MobileSlide({ item, width, tc }: { item: Slide; width: number; tc: Retu
             },
           ]}
         >
-          <Ionicons name={item.icon} size={48} color={item.iconColor} />
+          {item.brandIcon ? (
+            renderBrandIcon(item.brandIcon, 96)
+          ) : (
+            <Ionicons name={item.icon} size={48} color={item.iconColor} />
+          )}
         </View>
         <Text style={[s.mobileTitle, { color: tc.textPrimary }]}>{item.title}</Text>
         <Text style={[s.mobileDesc, { color: tc.textSecondary }]}>{item.description}</Text>
