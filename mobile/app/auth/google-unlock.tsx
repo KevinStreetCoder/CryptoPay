@@ -89,7 +89,7 @@ export default function GoogleUnlockScreen() {
         if (!hasHardware || !enrolled) return;
         setBiometricAvailable(true);
         const result = await LocalAuthentication.authenticateAsync({
-          promptMessage: "Unlock CryptoPay",
+          promptMessage: "Unlock Cpay",
           cancelLabel: "Use PIN instead",
           disableDeviceFallback: false,
         });
@@ -149,7 +149,7 @@ export default function GoogleUnlockScreen() {
   const retryBiometric = useCallback(async () => {
     try {
       const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: "Unlock CryptoPay",
+        promptMessage: "Unlock Cpay",
         cancelLabel: "Cancel",
       });
       if (result.success) {
@@ -204,7 +204,7 @@ export default function GoogleUnlockScreen() {
           maxWidth: isWide ? 360 : undefined,
         }}
       >
-        Google verified your identity. Now confirm this device with your CryptoPay PIN
+        Google verified your identity. Now confirm this device with your Cpay PIN
         {biometricAvailable ? " or biometric" : ""}. We do this every time you sign in
         with Google so a forgotten browser session can never open your wallet.
       </Text>

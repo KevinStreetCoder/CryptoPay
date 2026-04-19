@@ -28,6 +28,7 @@ import { getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
 import { BRAND_LOGOS } from "../../src/constants/logos";
 import { Spinner } from "../../src/components/brand/Spinner";
+import { Wordmark } from "../../src/components/brand/Wordmark";
 
 type Step = "phone" | "otp" | "name" | "pin";
 
@@ -86,38 +87,9 @@ function BrandPanel({ tc }: { tc: ReturnType<typeof getThemeColors> }) {
       />
 
       <View style={{ alignItems: "center", marginBottom: 32 }}>
-        <View
-          style={{
-            width: 56,
-            height: 56,
-            borderRadius: 16,
-            backgroundColor: tc.primary[500],
-            alignItems: "center",
-            justifyContent: "center",
-            marginBottom: 20,
-            ...(Platform.OS !== "web"
-              ? {
-                  shadowColor: tc.primary[500],
-                  shadowOffset: { width: 0, height: 6 },
-                  shadowOpacity: 0.35,
-                  shadowRadius: 16,
-                }
-              : { boxShadow: `0 8px 24px rgba(16, 185, 129, 0.35)` } as any),
-          }}
-        >
-          <Ionicons name="flash" size={28} color="#FFFFFF" />
+        <View style={{ marginBottom: 16 }}>
+          <Wordmark size={48} dark />
         </View>
-        <Text
-          style={{
-            color: tc.textPrimary,
-            fontSize: 36,
-            fontFamily: "DMSans_700Bold",
-            letterSpacing: -1,
-            marginBottom: 12,
-          }}
-        >
-          CryptoPay
-        </Text>
         <Text
           style={{
             color: tc.textSecondary,

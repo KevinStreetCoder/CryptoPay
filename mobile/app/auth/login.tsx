@@ -30,6 +30,7 @@ import { getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
 import { BRAND_LOGOS } from "../../src/constants/logos";
 import { Spinner } from "../../src/components/brand/Spinner";
+import { Wordmark } from "../../src/components/brand/Wordmark";
 
 type Step = "phone" | "pin" | "otp";
 
@@ -85,38 +86,11 @@ function BrandPanel({ tc }: { tc: ReturnType<typeof getThemeColors> }) {
         }}
       />
 
-      {/* Logo */}
+      {/* Brand wordmark — Cpay Coin-C + "Cpay" */}
       <View style={{ alignItems: "center", marginBottom: 32 }}>
-        <View
-          style={{
-            width: 56,
-            height: 56,
-            borderRadius: 16,
-            backgroundColor: tc.primary[500],
-            alignItems: "center",
-            justifyContent: "center",
-            marginBottom: 20,
-            ...(Platform.OS === "web" ? { boxShadow: `0 8px 24px ${tc.primary[500]}40` } as any : {
-              shadowColor: tc.primary[500],
-              shadowOffset: { width: 0, height: 6 },
-              shadowOpacity: 0.35,
-              shadowRadius: 16,
-            }),
-          }}
-        >
-          <Ionicons name="flash" size={28} color="#FFFFFF" />
+        <View style={{ marginBottom: 16 }}>
+          <Wordmark size={44} dark />
         </View>
-        <Text
-          style={{
-            color: tc.textPrimary,
-            fontSize: 32,
-            fontFamily: "DMSans_700Bold",
-            letterSpacing: -0.8,
-            marginBottom: 12,
-          }}
-        >
-          CryptoPay
-        </Text>
         <Text
           style={{
             color: tc.textSecondary,
@@ -413,43 +387,9 @@ export default function LoginScreen() {
             style={{ alignItems: "center", marginBottom: 36 }}
             accessibilityRole="header"
           >
-            <View
-              style={{
-                alignItems: "center",
-                justifyContent: "center",
-                marginBottom: 16,
-              }}
-            >
-              <View
-                style={{
-                  width: 52,
-                  height: 52,
-                  borderRadius: 16,
-                  backgroundColor: tc.primary[500],
-                  alignItems: "center",
-                  justifyContent: "center",
-                  shadowColor: tc.primary[500],
-                  shadowOffset: { width: 0, height: 6 },
-                  shadowOpacity: 0.35,
-                  shadowRadius: 14,
-                  elevation: 8,
-                }}
-              >
-                <Ionicons name="flash" size={26} color="#FFFFFF" />
-              </View>
+            <View style={{ marginBottom: 12 }}>
+              <Wordmark size={36} dark />
             </View>
-
-            <Text
-              style={{
-                color: tc.textPrimary,
-                fontSize: 26,
-                fontFamily: "DMSans_700Bold",
-                letterSpacing: -0.5,
-              }}
-              maxFontSizeMultiplier={1.3}
-            >
-              CryptoPay
-            </Text>
             <Text
               style={{
                 color: tc.textSecondary,
