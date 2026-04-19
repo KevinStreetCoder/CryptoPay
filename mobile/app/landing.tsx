@@ -141,7 +141,7 @@ const KENYAN_SERVICES = [
 // These are scenario cards, NOT testimonials. We don't have a public
 // customer roster yet, so anything with a fake name + initials would
 // fail the trust test the rest of the page is trying to build. Reframed
-// as "Common ways people use CryptoPay" — concrete situations a visitor
+// as "Common ways people use Cpay" — concrete situations a visitor
 // can self-identify with, no fake attribution.
 const USE_CASES = [
   { quote: "Pay a KPLC bill with USDT in under a minute, no P2P trader needed at midnight.", label: "Utility bills", icon: "flash-outline" as const, color: "#26A17B" },
@@ -152,7 +152,7 @@ const USE_CASES = [
 
 // ── FAQ ─────────────────────────────────────────────────────────────────────
 const FAQ_DATA = [
-  { q: "How does CryptoPay actually work?", a: "You deposit crypto (USDT, BTC, ETH, or SOL) to your personal CryptoPay wallet. When you want to pay a bill, enter the Paybill or Till number, pick your crypto, and we lock your exchange rate for 90 seconds. Confirm with your PIN, and the payment hits M-Pesa in under 30 seconds." },
+  { q: "How does Cpay actually work?", a: "You deposit crypto (USDT, BTC, ETH, or SOL) to your personal Cpay wallet. When you want to pay a bill, enter the Paybill or Till number, pick your crypto, and we lock your exchange rate for 90 seconds. Confirm with your PIN, and the payment hits M-Pesa in under 30 seconds." },
   { q: "What crypto can I use?", a: "USDT on Tron (TRC-20), Bitcoin (BTC), Ethereum (ETH), Solana (SOL), and USDC on Polygon. We pick the networks with the lowest fees so more of your money goes where it should." },
   { q: "How fast is the payment?", a: "Once your crypto deposit confirms on-chain, M-Pesa payments process in under 30 seconds. Most finish in 10-15 seconds. You'll see real-time status updates the entire time." },
   { q: "Is my money safe?", a: "Every wallet uses BIP-44 HD architecture — industry-standard key derivation. We add biometric auth, optional TOTP 2FA, and encrypt everything with AES-256. We never hold your private keys." },
@@ -561,7 +561,7 @@ export default function LandingPage() {
   // ── SEO ─────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!isWeb) return;
-    document.title = "CryptoPay \u2014 Pay Any Bill in Kenya with Crypto | USDT, BTC, ETH, SOL to M-Pesa";
+    document.title = "Cpay \u2014 Pay Any Bill in Kenya with Crypto | USDT, BTC, ETH, SOL to M-Pesa";
     const setMeta = (n: string, c: string, p?: boolean) => {
       const a = p ? "property" : "name";
       let el = document.querySelector(`meta[${a}="${n}"]`) as HTMLMetaElement | null;
@@ -569,13 +569,13 @@ export default function LandingPage() {
       el.content = c;
     };
     setMeta("description", "Pay any M-Pesa Paybill or Till number directly from cryptocurrency. Convert USDT, BTC, ETH, SOL to KES instantly.");
-    setMeta("keywords", "crypto payments Kenya, USDT to M-Pesa, Bitcoin to KES, pay bills with crypto, CryptoPay");
-    setMeta("og:title", "CryptoPay \u2014 Pay Any Bill in Kenya with Crypto", true);
+    setMeta("keywords", "crypto payments Kenya, USDT to M-Pesa, Bitcoin to KES, pay bills with crypto, Cpay");
+    setMeta("og:title", "Cpay \u2014 Pay Any Bill in Kenya with Crypto", true);
     setMeta("og:description", "Convert USDT, BTC, ETH, SOL to M-Pesa payments in 30 seconds.", true);
     setMeta("og:type", "website", true); setMeta("og:url", "https://cpay.co.ke", true);
-    setMeta("og:site_name", "CryptoPay", true); setMeta("og:locale", "en_KE", true);
+    setMeta("og:site_name", "Cpay", true); setMeta("og:locale", "en_KE", true);
     setMeta("twitter:card", "summary_large_image"); setMeta("twitter:site", "@CPayKenya");
-    setMeta("robots", "index, follow"); setMeta("author", "CryptoPay Technologies"); setMeta("theme-color", "#060E1F");
+    setMeta("robots", "index, follow"); setMeta("author", "Cpay Technologies"); setMeta("theme-color", "#060E1F");
     setMeta("geo.region", "KE"); setMeta("geo.placename", "Nairobi");
 
     let canonical = document.querySelector('link[rel="canonical"]') as HTMLLinkElement | null;
@@ -589,7 +589,7 @@ export default function LandingPage() {
       s.textContent = JSON.stringify(data);
     };
     addSchema("faq", { "@context": "https://schema.org", "@type": "FAQPage", mainEntity: FAQ_DATA.map(f => ({ "@type": "Question", name: f.q, acceptedAnswer: { "@type": "Answer", text: f.a } })) });
-    addSchema("org", { "@context": "https://schema.org", "@type": "Organization", name: "CryptoPay", url: "https://cpay.co.ke", description: "Pay any M-Pesa Paybill or Till number directly from cryptocurrency.", sameAs: ["https://twitter.com/CPayKenya", "https://t.me/cryptopaykenya"] });
+    addSchema("org", { "@context": "https://schema.org", "@type": "Organization", name: "Cpay", url: "https://cpay.co.ke", description: "Pay any M-Pesa Paybill or Till number directly from cryptocurrency.", sameAs: ["https://twitter.com/CPayKenya", "https://t.me/cryptopaykenya"] });
 
     // ── Font preloader: force Ionicons + DM Sans to load reliably ──────
     // This bypasses Cloudflare QUIC partial-content errors by using
@@ -1390,7 +1390,7 @@ export default function LandingPage() {
               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
                   <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: "rgba(16,185,129,0.12)", alignItems: "center", justifyContent: "center", ...(isWeb ? { boxShadow: "0 4px 12px rgba(16,185,129,0.15)" } as any : {}) }}><Ionicons name="flash" size={20} color={tc.primary[400]} /></View>
-                  <Text style={{ color: tc.primary[400], fontSize: 17, fontFamily: "DMSans_700Bold" }}>With CryptoPay</Text>
+                  <Text style={{ color: tc.primary[400], fontSize: 17, fontFamily: "DMSans_700Bold" }}>With Cpay</Text>
                 </View>
                 <View style={{ opacity: 0.85 }}><SpeedRing size={isMobile ? 50 : 80} /></View>
               </View>
@@ -1501,7 +1501,7 @@ export default function LandingPage() {
         <View style={{ flexDirection: isMobile ? "column" : "row", gap: isMobile ? 20 : 28, position: "relative", maxWidth: 1200, width: "100%" }}>
           {isDesktop && isWeb && <View style={{ position: "absolute", top: 56, left: "18%", right: "18%", height: 2, zIndex: 0, ...(isWeb ? { background: "linear-gradient(90deg, rgba(16,185,129,0.1) 0%, rgba(16,185,129,0.25) 50%, rgba(16,185,129,0.1) 100%)" } as any : {}) }} />}
           {[
-            { num: "01", icon: "wallet" as const, title: "Deposit crypto", desc: "Send USDT, BTC, ETH, or SOL to your personal CryptoPay wallet address.", img: CDN_IMAGES.cryptoCoins, brand: "wallet" as const },
+            { num: "01", icon: "wallet" as const, title: "Deposit crypto", desc: "Send USDT, BTC, ETH, or SOL to your personal Cpay wallet address.", img: CDN_IMAGES.cryptoCoins, brand: "wallet" as const },
             { num: "02", icon: "lock-closed" as const, title: "Pick a payment", desc: "Enter a Paybill number, Till number, or phone number. Rate locks for 90 seconds.", img: CDN_IMAGES.mobilePayment, brand: "ratelock" as const },
             { num: "03", icon: "checkmark-circle" as const, title: "Done", desc: "Confirm with your PIN. M-Pesa settles in 10–30 seconds typical.", img: CDN_IMAGES.speedTrails, brand: "speed" as const },
           ].map((step, i) => (
@@ -1783,7 +1783,7 @@ export default function LandingPage() {
         <RevealOnScroll delay={300} variant="fade-up">
           <View style={{ flexDirection: isMobile ? "column" : "row", gap: isMobile ? 14 : 20, marginTop: 36, justifyContent: "center" }}>
             {[
-              { name: "CryptoPay", fee: "1.5%", hl: true, desc: "Transparent" },
+              { name: "Cpay", fee: "1.5%", hl: true, desc: "Transparent" },
               { name: "Binance P2P", fee: "3-8%", hl: false, desc: "Hidden spreads" },
               { name: "Manual OTC", fee: "5-10%", hl: false, desc: "Negotiated" },
             ].map((item) => (
@@ -1850,7 +1850,7 @@ export default function LandingPage() {
                 <View style={{ flex: 1.2, padding: isMobile ? 14 : 20, backgroundColor: "rgba(16,185,129,0.05)", borderLeftWidth: 1, borderLeftColor: "rgba(16,185,129,0.12)", borderRightWidth: 1, borderRightColor: "rgba(16,185,129,0.12)" }}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                     <Image source={APP_LOGO} style={{ width: 20, height: 20, borderRadius: 6 }} resizeMode="cover" />
-                    <Text style={{ color: tc.primary[400], fontSize: 14, fontFamily: "DMSans_700Bold" }}>CryptoPay</Text>
+                    <Text style={{ color: tc.primary[400], fontSize: 14, fontFamily: "DMSans_700Bold" }}>Cpay</Text>
                   </View>
                 </View>
                 <View style={{ flex: 1, padding: isMobile ? 14 : 20 }}>
@@ -1915,7 +1915,7 @@ export default function LandingPage() {
             <View style={{ alignItems: isDesktop ? "flex-start" : "center", flex: 1 }}>
               <Text style={{ color: tc.primary[400], fontSize: 13, fontFamily: "DMSans_700Bold", textTransform: "uppercase", letterSpacing: 3, marginBottom: 12 }}>What people use it for</Text>
               <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 28 : 42, fontFamily: "DMSans_700Bold", textAlign: isDesktop ? "left" : "center", letterSpacing: -1, lineHeight: isMobile ? 36 : 52 }}>
-                Common ways CryptoPay fits real life
+                Common ways Cpay fits real life
               </Text>
               <Text style={{ color: tc.textSecondary, fontSize: isMobile ? 15 : 17, fontFamily: "DMSans_400Regular", marginTop: 10, textAlign: isDesktop ? "left" : "center", lineHeight: isMobile ? 23 : 26 }}>
                 Four situations our flow is built for. If yours looks like one of these, you're in the right place.
@@ -2180,7 +2180,7 @@ export default function LandingPage() {
           </View>
         </View>
         <View style={{ marginTop: isMobile ? 32 : 44, paddingTop: 20, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.03)", alignItems: "center" }}>
-          <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_400Regular", textAlign: "center", opacity: 0.7 }}>{"\u00A9"} 2026 CryptoPay Technologies {"\u00B7"} Nairobi, Kenya</Text>
+          <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_400Regular", textAlign: "center", opacity: 0.7 }}>{"\u00A9"} 2026 Cpay Technologies {"\u00B7"} Nairobi, Kenya</Text>
         </View>
       </Section>
     </View>
