@@ -1,6 +1,50 @@
 # CryptoPay — Development Progress
 
-**Last updated:** 2026-04-17
+**Last updated:** 2026-04-19
+
+## 2026-04-19 session summary
+
+Brand refresh + referral program shipped:
+
+- **Brand refresh (Cpay v3)**: new logo system (Wordmark + SpinnerCoinC +
+  Coin-C variant A as favicon/app icon), landing page overhaul (killed 11
+  looping animations, refined glassmorphism to hero-only), settings/help
+  pages updated, email templates refreshed.
+- **Landing assets**: HeroFlow, RateSparkline, RateLockRing, ChainConverge,
+  PaymentTicker components added; 8 new icon components
+  (WalletIcon/SecurityLock/SpeedRing/KenyaCorridor/FeeBreakdown).
+- **Polish assets**: EmptyNoTransactions, EmptyNoNotifications wired into
+  wallet history + notifications inbox; TxStatusIcon + NetworkBadge +
+  Kyc screens + OnboardingSlide + PushNotifIcon + EmailHeader +
+  ReceiptTemplate components created for future polish passes.
+- **Lock-screen bugs**: fixed `Math.max` floor that broke very-short
+  timeouts; added pub/sub so lock-timeout changes propagate live;
+  removed stray biometric gate; added "Never" (-1) option.
+- **Referral program (production-ready)**: end-to-end implementation.
+  - Backend: `apps.referrals` app — models (ReferralCode, Referral,
+    RewardLedger, ReferralEvent, all append-only + idempotency keys),
+    attribute_signup service with fraud gates (self, caps, device
+    reuse, age), check_qualification signal on Transaction save,
+    apply_credit_to_fee FIFO consumption hook at 3 payment endpoints
+    (PAYBILL/TILL/SEND_MPESA), grant/release/expire/clawback Celery
+    tasks, REST API (me/, history/, share-event/, validate/,
+    admin/, admin/{id}/clawback/), public landing endpoint with
+    AnonRateThrottle + 5-min cache, admin interface with bulk
+    clawback action, accounts.RegisterSerializer +
+    GoogleCompleteProfileSerializer accept optional `referral_code`.
+  - Migration 0001_initial applied.
+  - **23 referrals tests passing** (code generation, attribution gates,
+    qualification state transitions, reward grant idempotency, FIFO
+    consumption, ledger aggregations, API endpoints).
+  - Mobile: `/settings/referrals` dashboard (share code/link/WhatsApp/
+    SMS, totals, history, how-it-works), `/r/{code}` public landing
+    (first-name + reward preview + claim CTA), referral_code auto-fill
+    from storage on register + google-complete-profile, EN + SW i18n,
+    settings menu entry with "KES 50" badge.
+- **Regression**: full backend suite still passes (235 tests; 14 pre-
+  existing KMS seed-decryption failures unrelated to this session).
+
+---
 
 > See also: [BETA-LAUNCH-TRACKER.md](./BETA-LAUNCH-TRACKER.md) — hard blockers before opening beta (CoinGecko cold-start, forex fallback, BTC mainnet default, Smile Identity signup, ToS/Privacy review, bank letter). **Read this first.**
 > See also: [API-TRACKING.md](./API-TRACKING.md) — every external API the app depends on, current status, fallback chain, who owns it.

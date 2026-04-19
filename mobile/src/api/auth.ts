@@ -88,7 +88,7 @@ export const authApi = {
   requestOTP: (phone: string, email?: string) =>
     api.post("/auth/otp/", { phone, ...(email ? { email } : {}) }),
 
-  register: async (data: { phone: string; pin: string; otp: string; full_name?: string; email?: string }) => {
+  register: async (data: { phone: string; pin: string; otp: string; full_name?: string; email?: string; referral_code?: string }) => {
     const device = await getDeviceInfo();
     return api.post<LoginResponse>("/auth/register/", { ...data, ...device });
   },
@@ -118,7 +118,7 @@ export const authApi = {
   setInitialPin: (pin: string) =>
     api.post<{ message: string }>("/auth/set-initial-pin/", { pin }),
 
-  googleCompleteProfile: async (data: { phone: string; otp: string; pin: string; full_name?: string; email?: string }) => {
+  googleCompleteProfile: async (data: { phone: string; otp: string; pin: string; full_name?: string; email?: string; referral_code?: string }) => {
     const device = await getDeviceInfo();
     return api.post<LoginResponse>("/auth/google/complete-profile/", { ...data, ...device });
   },

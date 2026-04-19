@@ -44,7 +44,26 @@ LOCAL_APPS = [
     "apps.blockchain",
     "apps.rates",
     "apps.notifications",
+    "apps.referrals",
 ]
+
+# Referral program — tunables consumed by apps.referrals.constants.
+# All values can be overridden per-env; defaults chosen to keep payouts
+# margin-safe at the current 1.5% + KES 10 fee structure.
+REFERRAL_PROGRAM = {
+    "ENABLED": True,
+    "REFERRER_BONUS_KES": "50.00",
+    "REFEREE_BONUS_KES": "50.00",
+    "QUALIFYING_MIN_KES": "500.00",
+    "QUALIFYING_MIN_KES_TIER0": "1000.00",
+    "ATTRIBUTION_WINDOW_DAYS": 60,
+    "CLAWBACK_HOLD_DAYS": 7,
+    "CREDIT_EXPIRY_DAYS": 180,
+    "REFERRER_MONTHLY_CAP": 20,
+    "REFERRER_LIFETIME_CAP": 100,
+    "MIN_REFERRER_AGE_HOURS": 24,
+}
+REFERRAL_BASE_URL = os.getenv("REFERRAL_BASE_URL", "https://cpay.co.ke")
 
 # Daphne must come before django.contrib.staticfiles
 INSTALLED_APPS = ["daphne"] + DJANGO_APPS + [a for a in THIRD_PARTY_APPS if a != "daphne"] + LOCAL_APPS
