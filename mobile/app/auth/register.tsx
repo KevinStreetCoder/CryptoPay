@@ -27,6 +27,7 @@ import { useGoogleAuth } from "../../src/hooks/useGoogleAuth";
 import { getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
 import { BRAND_LOGOS } from "../../src/constants/logos";
+import { Spinner } from "../../src/components/brand/Spinner";
 
 type Step = "phone" | "otp" | "name" | "pin";
 
@@ -741,7 +742,7 @@ export default function RegisterScreen() {
                 testID="google-signup-button"
               >
                 {googleLoading ? (
-                  <ActivityIndicator size="small" color={tc.textSecondary} />
+                  <Spinner size={16} color={tc.textSecondary} />
                 ) : (
                   <Image
                     source={{ uri: BRAND_LOGOS.google }}

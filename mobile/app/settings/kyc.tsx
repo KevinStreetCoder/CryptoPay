@@ -18,6 +18,7 @@ import { useToast } from "../../src/components/Toast";
 import { colors, getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
 import { useLocale } from "../../src/hooks/useLocale";
+import { Spinner } from "../../src/components/brand/Spinner";
 
 const DOCUMENT_TYPES = [
   {
@@ -479,7 +480,7 @@ export default function KYCScreen() {
                       accessibilityLabel={`${t("kyc.upload")} ${t(doc.labelKey)}`}
                     >
                       {isUploading ? (
-                        <ActivityIndicator size="small" color="#fff" />
+                        <Spinner size={16} color="#fff" />
                       ) : (
                         <Ionicons name="cloud-upload-outline" size={16} color="#fff" />
                       )}

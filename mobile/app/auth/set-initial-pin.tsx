@@ -20,6 +20,7 @@ import { normalizeError } from "../../src/utils/apiErrors";
 import { useScreenSecurity } from "../../src/hooks/useScreenSecurity";
 import { getThemeColors } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
+import { Spinner } from "../../src/components/brand/Spinner";
 
 type Step = "enter" | "confirm";
 
@@ -233,7 +234,7 @@ export default function SetInitialPinScreen() {
                   gap: 8,
                 }}
               >
-                <ActivityIndicator size="small" color={tc.primary[400]} />
+                <Spinner size={16} color={tc.primary[400]} />
                 <Text
                   style={{
                     color: tc.primary[400],

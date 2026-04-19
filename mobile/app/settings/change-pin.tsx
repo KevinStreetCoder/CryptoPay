@@ -20,6 +20,7 @@ import { normalizeError } from "../../src/utils/apiErrors";
 import { useScreenSecurity } from "../../src/hooks/useScreenSecurity";
 import { colors, getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
+import { Spinner } from "../../src/components/brand/Spinner";
 
 type Step = "current" | "new";
 
@@ -261,7 +262,7 @@ export default function ChangePinScreen() {
                   gap: 8,
                 }}
               >
-                <ActivityIndicator size="small" color={colors.primary[400]} />
+                <Spinner size={16} color={colors.primary[400]} />
                 <Text
                   style={{
                     color: colors.primary[400],

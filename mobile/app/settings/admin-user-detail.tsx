@@ -21,6 +21,7 @@ import { useToast } from "../../src/components/Toast";
 import { normalizeError } from "../../src/utils/apiErrors";
 import { colors, getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
+import { Spinner } from "../../src/components/brand/Spinner";
 
 const isWeb = Platform.OS === "web";
 
@@ -228,7 +229,7 @@ export default function AdminUserDetailScreen() {
   if (loading) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg, justifyContent: "center", alignItems: "center" }}>
-        <ActivityIndicator size="large" color={colors.primary[400]} />
+        <Spinner size={32} color={colors.primary[400]} />
       </SafeAreaView>
     );
   }
@@ -742,7 +743,7 @@ export default function AdminUserDetailScreen() {
 
                         {/* Loading spinner while reviewing */}
                         {isReviewing && (
-                          <ActivityIndicator size="small" color={colors.primary[400]} style={{ marginLeft: 8 }} />
+                          <Spinner size={16} color={colors.primary[400]} style={{ marginLeft: 8 }} />
                         )}
                       </View>
 
@@ -1099,7 +1100,7 @@ export default function AdminUserDetailScreen() {
                   })}
                 >
                   {suspending ? (
-                    <ActivityIndicator size="small" color="#fff" />
+                    <Spinner size={16} color="#fff" />
                   ) : (
                     <Text style={{ color: "#fff", fontSize: 15, fontFamily: "DMSans_700Bold" }}>
                       {suspendModal === "suspend" ? "Suspend" : "Unsuspend"}

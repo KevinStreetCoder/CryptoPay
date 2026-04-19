@@ -1,3 +1,4 @@
+import { Spinner } from "./brand/Spinner";
 /**
  * NotificationDetailModal — full-content popup for a single inbox entry.
  *
@@ -304,7 +305,7 @@ export function NotificationDetailModal({
           >
             {loading ? (
               <View style={{ paddingVertical: 48, alignItems: "center" }}>
-                <ActivityIndicator color={tc.primary[500]} />
+                <Spinner size={20} color={tc.primary[500]} />
               </View>
             ) : error ? (
               <View style={{ paddingVertical: 32 }}>
@@ -389,7 +390,7 @@ export function NotificationDetailModal({
                         })}
                       >
                         {saving ? (
-                          <ActivityIndicator color="#FFF" />
+                          <Spinner size={20} color="#FFF" />
                         ) : (
                           <Text style={{ color: "#FFF", fontFamily: "DMSans_600SemiBold" }}>Save changes</Text>
                         )}

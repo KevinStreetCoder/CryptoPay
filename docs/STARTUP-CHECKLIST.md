@@ -5,14 +5,14 @@
 ## Legal & Regulatory (Do FIRST — Before Writing Code)
 
 ### Company Registration
-- [ ] Choose company name: "CryptoPay Technologies Ltd" (check availability at eCitizen)
-- [ ] Register Limited Company at Registrar of Companies (eCitizen portal)
-- [ ] Obtain Certificate of Incorporation
-- [ ] Obtain CR12 (company directors/shareholders)
-- [ ] Register for KRA PIN (company)
-- [ ] Open business bank account (Equity Bank recommended — fintech-friendly)
+- [x] Choose company name: **"CPAY TECHNOLOGIES"** (reserved on eCitizen BRS, ref BN-B8S6JP89)
+- [x] Register Business Name at Registrar of Companies (eCitizen BRS portal) — submitted 2026-03-15, KES 950 paid
+- [x] Name Reservation Certificate issued 2026-03-25 (valid 30 days, expires 2026-04-24)
+- [ ] **WAITING:** Certificate of Registration of Business Name (Stage: Approval — check BRS portal daily)
+- [ ] Register for KRA PIN (company) — needs Certificate of Registration first
+- [ ] Open business bank account (Equity Bank recommended — fintech-friendly) — needs Certificate + KRA PIN
 - [ ] Register business with NSSF and NHIF
-- [ ] Appoint at least 1 Kenyan national director (VASP Act requirement)
+- **Note:** Currently registered as Business Name (sole prop). For VASP license, will later need to register **Limited Company** (CPAY TECHNOLOGIES LTD) with Certificate of Incorporation + CR12.
 
 ### VASP License Preparation (MANDATORY — Act No. 20 of 2025)
 - [ ] Engage a Kenyan fintech lawyer (firms: Bowmans, AMG Advocates, Njaga Advocates, KDS Advocates)

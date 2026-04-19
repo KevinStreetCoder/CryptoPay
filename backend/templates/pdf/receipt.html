@@ -187,7 +187,13 @@
   <div class="receipt">
     <!-- Header -->
     <div class="receipt-header">
-      <div class="logo">CryptoPay</div>
+      <div class="logo" style="display:flex;align-items:center;justify-content:center;gap:10px;">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="36" height="36" style="display:block;">
+          <circle cx="100" cy="100" r="72" fill="none" stroke="#10B981" stroke-width="22" stroke-linecap="round" stroke-dasharray="380 500" transform="rotate(-135 100 100)"/>
+          <rect x="100" y="92" width="46" height="16" rx="3" fill="#10B981"/>
+        </svg>
+        <span><span style="color:#10B981;">C</span><span style="color:#f1f5f9;">pay</span></span>
+      </div>
       <div class="logo-sub">Transaction Receipt</div>
       <div class="receipt-title">{{ type_label }}</div>
       <span class="status-badge {% if tx.status == 'COMPLETED' %}status-completed{% elif tx.status == 'FAILED' %}status-failed{% else %}status-pending{% endif %}">
@@ -251,10 +257,10 @@
     <!-- Footer -->
     <div class="receipt-footer">
       <div class="footer-text">
-        This is an official receipt from CryptoPay Technologies Ltd.<br>
+        This is an official receipt from Cpay Technologies Ltd.<br>
         All transactions are subject to the Virtual Assets Service Provider Act 2025.
       </div>
-      <div class="footer-logo">CryptoPay</div>
+      <div class="footer-logo"><span style="color:#10B981;">C</span>pay</div>
       <div class="support-text">
         support@cpay.co.ke &bull; cpay.co.ke
       </div>

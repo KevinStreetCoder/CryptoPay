@@ -8,7 +8,7 @@
     "userInterfaceStyle": "dark",
     "scheme": "cryptopay",
     "splash": {
-      "image": "./assets/icon.png",
+      "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#060E1F"
     },
@@ -69,8 +69,8 @@
       "package": "ke.co.cryptopay.app",
       "versionCode": 1,
       "adaptiveIcon": {
-        "backgroundColor": "#10B981",
-        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#0B1220",
+        "foregroundImage": "./assets/android-icon-foreground.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "permissions": [

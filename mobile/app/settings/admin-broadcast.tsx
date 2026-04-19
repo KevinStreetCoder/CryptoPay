@@ -16,6 +16,7 @@ import { getThemeColors, getThemeShadows, colors } from "../../src/constants/the
 import { useThemeMode } from "../../src/stores/theme";
 import { api } from "../../src/api/client";
 import { NotificationDetailModal } from "../../src/components/NotificationDetailModal";
+import { Spinner } from "../../src/components/brand/Spinner";
 
 const isWeb = Platform.OS === "web";
 
@@ -274,7 +275,7 @@ export default function AdminBroadcastScreen() {
 
         {/* ═══ STATS CARDS ═══ */}
         {loadingStats ? (
-          <ActivityIndicator color={colors.primary[500]} style={{ marginBottom: 24 }} />
+          <Spinner size={20} color={colors.primary[500]} style={{ marginBottom: 24 }} />
         ) : stats ? (
           <View style={{
             flexDirection: "row",
@@ -530,7 +531,7 @@ export default function AdminBroadcastScreen() {
             })}
           >
             {sending ? (
-              <ActivityIndicator color="#fff" size="small" />
+              <Spinner size={16} color="#fff" />
             ) : (
               <>
                 <Ionicons name="send" size={18} color="#fff" />
@@ -556,7 +557,7 @@ export default function AdminBroadcastScreen() {
           </View>
 
           {loadingHistory ? (
-            <ActivityIndicator color={colors.primary[500]} style={{ marginVertical: 24 }} />
+            <Spinner size={20} color={colors.primary[500]} style={{ marginVertical: 24 }} />
           ) : history.length === 0 ? (
             <View style={{
               ...cardStyle,

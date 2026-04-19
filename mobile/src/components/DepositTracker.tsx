@@ -1,3 +1,4 @@
+import { Spinner } from "./brand/Spinner";
 /**
  * DepositTracker — shows recent blockchain deposits with real-time status,
  * confirmation progress, and expandable details.
@@ -767,7 +768,7 @@ export function DepositTracker({
             borderColor: tc.glass.border,
           }}
         >
-          <ActivityIndicator size="small" color={colors.primary[400]} />
+          <Spinner size={16} color={colors.primary[400]} />
         </View>
       </View>
     );

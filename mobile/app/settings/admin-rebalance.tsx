@@ -20,6 +20,7 @@ import { useAuth } from "../../src/stores/auth";
 import { colors, getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
 import { GlassCard } from "../../src/components/GlassCard";
+import { Spinner } from "../../src/components/brand/Spinner";
 
 const isWeb = Platform.OS === "web";
 
@@ -657,7 +658,7 @@ export default function AdminRebalanceScreen() {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 16 }}>
-          <ActivityIndicator size="large" color={colors.primary[500]} />
+          <Spinner size={32} color={colors.primary[500]} />
           <Text
             style={{
               color: tc.textMuted,
@@ -1355,7 +1356,7 @@ export default function AdminRebalanceScreen() {
                 })}
               >
                 {triggering ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
+                  <Spinner size={16} color="#FFFFFF" />
                 ) : (
                   <Ionicons name="flash" size={18} color="#FFFFFF" />
                 )}
@@ -1618,7 +1619,7 @@ export default function AdminRebalanceScreen() {
               })}
             >
               {confirming ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
+                <Spinner size={16} color="#FFFFFF" />
               ) : (
                 <Ionicons name="checkmark-circle" size={18} color="#FFFFFF" />
               )}

@@ -36,6 +36,8 @@ import { DepositTracker, usePendingDeposits } from "../../src/components/Deposit
 import { DepositStatusModal } from "../../src/components/DepositStatusModal";
 import { BlockchainDeposit } from "../../src/api/wallets";
 import { useLocale } from "../../src/hooks/useLocale";
+import { Spinner } from "../../src/components/brand/Spinner";
+import { TxStatusIcon, type TxStatusKind, EmptyNoTransactions } from "../../src/components/brand/PolishAssets";
 const SUPPORTED_CRYPTOS: CurrencyCode[] = ["USDC", "USDT", "BTC", "SOL", "ETH"];
 
 function useRates() {
@@ -1338,7 +1340,7 @@ export default function WalletScreen() {
               })}
             >
               {generatingAddress === w.id ? (
-                <ActivityIndicator size="small" color={colors.primary[400]} />
+                <Spinner size={16} color={colors.primary[400]} />
               ) : (
                 <Ionicons name="add-circle-outline" size={16} color={colors.primary[400]} />
               )}
@@ -1461,13 +1463,22 @@ export default function WalletScreen() {
               gap: 4,
             }}
           >
-            <View
-              style={{
-                width: 6,
-                height: 6,
-                borderRadius: 3,
-                backgroundColor: statusConfig.color,
-              }}
+            {/* Brand TxStatusIcon per design handoff — 4 canonical glyphs
+                (pending / processing / confirmed / failed). Map backend
+                statuses onto those: `completed` → confirmed, transient
+                in-flight (awaiting, processing, confirming) → processing,
+                `reversed` → failed. */}
+            <TxStatusIcon
+              kind={(
+                tx.status === "completed"
+                  ? "confirmed"
+                  : tx.status === "failed" || tx.status === "reversed"
+                    ? "failed"
+                    : tx.status === "pending"
+                      ? "pending"
+                      : "processing"
+              ) as TxStatusKind}
+              size={14}
             />
             <Text
               style={{
@@ -1664,7 +1675,7 @@ export default function WalletScreen() {
                     })}
                   >
                     {generatingAddress ? (
-                      <ActivityIndicator size="small" color="#FFFFFF" />
+                      <Spinner size={16} color="#FFFFFF" />
                     ) : (
                       <View
                         style={{
@@ -1891,7 +1902,7 @@ export default function WalletScreen() {
                     accessibilityLabel="Export transactions as CSV"
                   >
                     {exporting ? (
-                      <ActivityIndicator size={14} color={colors.primary[400]} />
+                      <Spinner size={14} color={colors.primary[400]} />
                     ) : (
                       <Ionicons name="download-outline" size={14} color={colors.primary[400]} />
                     )}
@@ -1930,24 +1941,14 @@ export default function WalletScreen() {
                         alignSelf: "center",
                       }}
                     >
-                      <View
-                        style={{
-                          width: 64,
-                          height: 64,
-                          borderRadius: 20,
-                          backgroundColor: tc.dark.elevated + "60",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          marginBottom: 16,
-                        }}
-                      >
-                        <Ionicons name="time-outline" size={28} color={tc.dark.muted} />
+                      <View style={{ marginBottom: 16, opacity: 0.9 }}>
+                        <EmptyNoTransactions size={140} />
                       </View>
                       <Text
                         style={{
                           color: tc.textSecondary,
                           fontSize: 15,
-                          fontFamily: "DMSans_500Medium",
+                          fontFamily: "DMSans_600SemiBold",
                           marginBottom: 4,
                         }}
                       >
@@ -2175,7 +2176,7 @@ export default function WalletScreen() {
               })}
             >
               {generatingAddress ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
+                <Spinner size={16} color="#FFFFFF" />
               ) : (
                 <View
                   style={{
@@ -2359,7 +2360,7 @@ export default function WalletScreen() {
                   accessibilityLabel="Export transactions as CSV"
                 >
                   {exporting ? (
-                    <ActivityIndicator size={12} color={colors.primary[400]} />
+                    <Spinner size={12} color={colors.primary[400]} />
                   ) : (
                     <Ionicons name="download-outline" size={13} color={colors.primary[400]} />
                   )}
@@ -2394,24 +2395,14 @@ export default function WalletScreen() {
             >
               {transactions.length === 0 ? (
                 <View style={{ paddingVertical: 48, alignItems: "center" }}>
-                  <View
-                    style={{
-                      width: 64,
-                      height: 64,
-                      borderRadius: 20,
-                      backgroundColor: tc.dark.elevated + "60",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      marginBottom: 16,
-                    }}
-                  >
-                    <Ionicons name="time-outline" size={28} color={tc.dark.muted} />
+                  <View style={{ marginBottom: 16, opacity: 0.9 }}>
+                    <EmptyNoTransactions size={140} />
                   </View>
                   <Text
                     style={{
                       color: tc.textSecondary,
                       fontSize: 15,
-                      fontFamily: "DMSans_500Medium",
+                      fontFamily: "DMSans_600SemiBold",
                       marginBottom: 4,
                     }}
                   >

@@ -20,6 +20,7 @@ import { useToast } from "../../src/components/Toast";
 import { normalizeError } from "../../src/utils/apiErrors";
 import { colors, getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
+import { Spinner } from "../../src/components/brand/Spinner";
 
 const isWeb = Platform.OS === "web";
 
@@ -493,7 +494,7 @@ export default function AdminUsersScreen() {
         {/* User List */}
         {loading ? (
           <View style={{ padding: 40, alignItems: "center" }}>
-            <ActivityIndicator size="large" color={colors.primary[400]} />
+            <Spinner size={32} color={colors.primary[400]} />
           </View>
         ) : (
           <View
@@ -612,7 +613,7 @@ export default function AdminUsersScreen() {
                       <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
                         {/* Tier buttons */}
                         {verifying === u.id ? (
-                          <ActivityIndicator size="small" color={colors.primary[400]} />
+                          <Spinner size={16} color={colors.primary[400]} />
                         ) : (
                           <View style={{ flexDirection: "row", gap: 4 }}>
                             {[0, 1, 2, 3].map((t) => (
@@ -718,7 +719,7 @@ export default function AdminUsersScreen() {
                     <View style={{ width: 260, flexDirection: "row", gap: 6, justifyContent: "center", alignItems: "center", flexWrap: "wrap" }}>
                       {/* Tier buttons */}
                       {verifying === u.id ? (
-                        <ActivityIndicator size="small" color={colors.primary[400]} />
+                        <Spinner size={16} color={colors.primary[400]} />
                       ) : (
                         [0, 1, 2, 3].map((t) => (
                           <Pressable
@@ -997,7 +998,7 @@ export default function AdminUsersScreen() {
                   })}
                 >
                   {suspending ? (
-                    <ActivityIndicator size="small" color="#fff" />
+                    <Spinner size={16} color="#fff" />
                   ) : (
                     <Text style={{ color: "#fff", fontSize: 15, fontFamily: "DMSans_700Bold" }}>
                       {suspendModal.action === "suspend" ? "Suspend" : "Unsuspend"}

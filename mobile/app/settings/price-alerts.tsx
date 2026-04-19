@@ -21,6 +21,7 @@ import { ratesApi, PriceAlert, CreateAlertPayload } from "../../src/api/rates";
 import { CRYPTO_LOGOS } from "../../src/constants/logos";
 import { useToast } from "../../src/components/Toast";
 import { useLocale } from "../../src/hooks/useLocale";
+import { Spinner } from "../../src/components/brand/Spinner";
 
 const isWeb = Platform.OS === "web";
 
@@ -654,7 +655,7 @@ function CreateAlertModal({
             accessibilityLabel="Create alert"
           >
             {submitting ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
+              <Spinner size={16} color="#FFFFFF" />
             ) : (
               <Text
                 style={{
@@ -860,7 +861,7 @@ export default function PriceAlertsScreen() {
     >
       {loading ? (
         <View style={{ paddingTop: 80, alignItems: "center" }}>
-          <ActivityIndicator size="large" color={colors.primary[500]} />
+          <Spinner size={32} color={colors.primary[500]} />
         </View>
       ) : alerts.length === 0 ? (
         <EmptyState tc={tc} onAdd={() => setShowModal(true)} />

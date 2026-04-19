@@ -46,6 +46,7 @@ import * as LocalAuthentication from "expo-local-authentication";
 import { Ionicons } from "@expo/vector-icons";
 
 import { PinInput } from "../../src/components/PinInput";
+import { Wordmark } from "../../src/components/brand/Wordmark";
 import { authApi } from "../../src/api/auth";
 import {
   useAuth,
@@ -56,7 +57,8 @@ import { useToast } from "../../src/components/Toast";
 import { getThemeColors, colors } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
 
-const APP_LOGO = require("../../assets/icon.png");
+// Transparent-bg Coin-C mark for in-app chrome (dark surface behind it).
+const APP_LOGO = require("../../assets/brand-mark.png");
 
 export default function GoogleUnlockScreen() {
   const { user, logout } = useAuth();
@@ -161,25 +163,7 @@ export default function GoogleUnlockScreen() {
 
   // ── Pieces ─────────────────────────────────────────────────────────
 
-  const brandMark = (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-      <Image
-        source={APP_LOGO}
-        style={{ width: 28, height: 28, borderRadius: 8 }}
-        resizeMode="cover"
-      />
-      <Text
-        style={{
-          color: tc.textPrimary,
-          fontSize: 16,
-          fontFamily: "DMSans_700Bold",
-          letterSpacing: -0.3,
-        }}
-      >
-        CryptoPay
-      </Text>
-    </View>
-  );
+  const brandMark = <Wordmark size={26} dark />;
 
   const narrativePanel = (
     <View style={{ flex: 1, paddingRight: isWide ? 32 : 0 }}>
