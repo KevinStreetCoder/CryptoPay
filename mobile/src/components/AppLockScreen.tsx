@@ -30,7 +30,7 @@ export function AppLockScreen({ onUnlock, userPhone, onForgotPin }: AppLockScree
       return;
     }
 
-    const success = await authenticate("Unlock CryptoPay");
+    const success = await authenticate("Unlock Cpay");
     if (success) {
       setBiometricFailed(false);
       onUnlock();
@@ -127,7 +127,7 @@ export function AppLockScreen({ onUnlock, userPhone, onForgotPin }: AppLockScree
               textAlign: "center",
             }}
           >
-            CryptoPay Locked
+            Cpay Locked
           </Text>
 
           <Text

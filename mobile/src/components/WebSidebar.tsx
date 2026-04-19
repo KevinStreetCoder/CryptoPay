@@ -4,6 +4,7 @@ import { useRouter, usePathname } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../stores/auth";
 import { colors, getThemeColors, getThemeShadows } from "../constants/theme";
+import { Wordmark } from "./brand/Wordmark";
 import { useThemeMode } from "../stores/theme";
 import { config } from "../constants/config";
 import { TourStep } from "./AppTour";
@@ -196,29 +197,11 @@ export function WebSidebar() {
             ...(Platform.OS === "web" ? { cursor: "pointer" } as any : {}),
           }}
         >
-          <View
-            style={{
-              width: 38,
-              height: 38,
-              borderRadius: 12,
-              backgroundColor: colors.primary[500],
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Ionicons name="flash" size={20} color="#FFFFFF" />
-          </View>
-          {!collapsed && (
-            <Text
-              style={{
-                color: tc.textPrimary,
-                fontSize: 18,
-                fontFamily: "DMSans_700Bold",
-                letterSpacing: -0.3,
-              }}
-            >
-              CryptoPay
-            </Text>
+          {/* Brand Wordmark — Coin-C + "Cpay". Collapses to Coin-C-only on narrow sidebar. */}
+          {collapsed ? (
+            <Wordmark size={28} dark textOnly={false} />
+          ) : (
+            <Wordmark size={32} dark />
           )}
         </Pressable>
 
