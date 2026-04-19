@@ -25,6 +25,7 @@ import { useThemeMode } from "../../src/stores/theme";
 import { GlassCard } from "../../src/components/GlassCard";
 import { useLocale } from "../../src/hooks/useLocale";
 import { Spinner } from "../../src/components/brand/Spinner";
+import { NetworkBadge, currencyToChain, type ChainKey } from "../../src/components/brand/NetworkBadge";
 // Lazy import — WalletConnect modules crash if loaded before AppKit context is ready
 // Expo Router eagerly imports all route files at startup, so static import crashes
 const LazyWalletConnectDeposit = React.lazy(() =>
@@ -895,54 +896,63 @@ export default function DepositScreen() {
               >
                 Supported Networks
               </Text>
-              {[
-                { currency: "USDT", network: "Tron (TRC-20)", time: "~2 min" },
-                { currency: "BTC", network: "Bitcoin", time: "~30 min" },
-                { currency: "ETH", network: "Ethereum (ERC-20)", time: "~3 min" },
-                { currency: "SOL", network: "Solana", time: "~15 sec" },
-                { currency: "USDC", network: "Ethereum (ERC-20)", time: "~3 min" },
-              ].map((net) => (
-                <View
-                  key={net.currency}
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 12,
-                    paddingVertical: 6,
-                  }}
-                >
-                  <CryptoLogo currency={net.currency} size={24} />
-                  <View style={{ flex: 1 }}>
-                    <Text
-                      style={{
-                        color: tc.textPrimary,
-                        fontSize: 14,
-                        fontFamily: "DMSans_600SemiBold",
-                      }}
-                    >
-                      {net.currency}
-                    </Text>
+              {/* Chip row — brand NetworkBadge, same palette as ChainConverge */}
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, paddingVertical: 4 }}>
+                {(["usdt-tron", "btc", "eth-erc20", "sol", "usdc-polygon"] as ChainKey[]).map((chain) => (
+                  <NetworkBadge key={chain} chain={chain} dark />
+                ))}
+              </View>
+              {/* Confirmation-time details */}
+              <View style={{ gap: 6, marginTop: 2 }}>
+                {[
+                  { currency: "USDT", network: "Tron (TRC-20)", time: "~2 min" },
+                  { currency: "BTC", network: "Bitcoin", time: "~30 min" },
+                  { currency: "ETH", network: "Ethereum (ERC-20)", time: "~3 min" },
+                  { currency: "SOL", network: "Solana", time: "~15 sec" },
+                  { currency: "USDC", network: "Ethereum (ERC-20)", time: "~3 min" },
+                ].map((net) => (
+                  <View
+                    key={net.currency}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 12,
+                      paddingVertical: 4,
+                    }}
+                  >
+                    <CryptoLogo currency={net.currency} size={20} />
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={{
+                          color: tc.textPrimary,
+                          fontSize: 13,
+                          fontFamily: "DMSans_600SemiBold",
+                        }}
+                      >
+                        {net.currency}
+                      </Text>
+                      <Text
+                        style={{
+                          color: tc.textMuted,
+                          fontSize: 11,
+                          fontFamily: "DMSans_400Regular",
+                        }}
+                      >
+                        {net.network}
+                      </Text>
+                    </View>
                     <Text
                       style={{
                         color: tc.textMuted,
-                        fontSize: 12,
-                        fontFamily: "DMSans_400Regular",
+                        fontSize: 11,
+                        fontFamily: "DMSans_500Medium",
                       }}
                     >
-                      {net.network}
+                      {net.time}
                     </Text>
                   </View>
-                  <Text
-                    style={{
-                      color: tc.textMuted,
-                      fontSize: 12,
-                      fontFamily: "DMSans_500Medium",
-                    }}
-                  >
-                    {net.time}
-                  </Text>
-                </View>
-              ))}
+                ))}
+              </View>
             </View>
 
             <Button

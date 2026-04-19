@@ -19,6 +19,7 @@ import { colors, getThemeColors, getThemeShadows } from "../../src/constants/the
 import { useThemeMode } from "../../src/stores/theme";
 import { useLocale } from "../../src/hooks/useLocale";
 import { Spinner } from "../../src/components/brand/Spinner";
+import { KycIdFront, KycSelfie, KycReview } from "../../src/components/brand/PolishAssets";
 
 const DOCUMENT_TYPES = [
   {
@@ -246,7 +247,7 @@ export default function KYCScreen() {
           paddingBottom: 32,
         }}
       >
-        {/* Current Tier Card */}
+        {/* Current Tier Card with brand KYC illustration */}
         <View
           style={{
             backgroundColor: tc.dark.card,
@@ -255,50 +256,68 @@ export default function KYCScreen() {
             marginBottom: 20,
             borderWidth: 1,
             borderColor: tc.glass.border,
+            flexDirection: isDesktop ? "row" : "column",
+            alignItems: isDesktop ? "center" : "flex-start",
+            gap: isDesktop ? 20 : 12,
           }}
         >
-          <Text
-            style={{
-              color: tc.textMuted,
-              fontSize: 11,
-              fontFamily: "DMSans_600SemiBold",
-              textTransform: "uppercase",
-              letterSpacing: 0.8,
-              marginBottom: 8,
-            }}
-          >
-            {t("kyc.currentVerificationLevel")}
-          </Text>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <View
-              style={{
-                width: 10,
-                height: 10,
-                borderRadius: 5,
-                backgroundColor: colors.primary[500],
-              }}
-            />
+          <View style={{ alignItems: "center", justifyContent: "center" }}>
+            {(() => {
+              // Illustration reflects where the user is in the flow:
+              //  · No ID yet → KycIdFront (show them what to upload)
+              //  · ID uploaded, no selfie → KycSelfie
+              //  · Both uploaded, review pending → KycReview
+              const idDoc = getDocStatus("national_id") ?? getDocStatus("passport");
+              const selfieDoc = getDocStatus("selfie");
+              if (!idDoc) return <KycIdFront size={100} />;
+              if (!selfieDoc) return <KycSelfie size={100} />;
+              return <KycReview size={100} />;
+            })()}
+          </View>
+          <View style={{ flex: 1 }}>
             <Text
               style={{
-                color: tc.textPrimary,
-                fontSize: 18,
-                fontFamily: "DMSans_700Bold",
+                color: tc.textMuted,
+                fontSize: 11,
+                fontFamily: "DMSans_600SemiBold",
+                textTransform: "uppercase",
+                letterSpacing: 0.8,
+                marginBottom: 8,
               }}
             >
-              {t("kyc.tier")} {user?.kyc_tier ?? 0}
+              {t("kyc.currentVerificationLevel")}
+            </Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <View
+                style={{
+                  width: 10,
+                  height: 10,
+                  borderRadius: 5,
+                  backgroundColor: colors.primary[500],
+                }}
+              />
+              <Text
+                style={{
+                  color: tc.textPrimary,
+                  fontSize: 18,
+                  fontFamily: "DMSans_700Bold",
+                }}
+              >
+                {t("kyc.tier")} {user?.kyc_tier ?? 0}
+              </Text>
+            </View>
+            <Text
+              style={{
+                color: tc.textSecondary,
+                fontSize: 13,
+                fontFamily: "DMSans_400Regular",
+                marginTop: 8,
+                lineHeight: 18,
+              }}
+            >
+              {t("kyc.uploadDocumentsDesc")}
             </Text>
           </View>
-          <Text
-            style={{
-              color: tc.textSecondary,
-              fontSize: 13,
-              fontFamily: "DMSans_400Regular",
-              marginTop: 8,
-              lineHeight: 18,
-            }}
-          >
-            {t("kyc.uploadDocumentsDesc")}
-          </Text>
         </View>
 
         {/* Document Cards */}

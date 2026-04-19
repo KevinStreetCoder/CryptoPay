@@ -1,268 +1,337 @@
-<!DOCTYPE html>
+{% load static %}<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <title>Cpay · Receipt {{ reference }}</title>
   <style>
-    @page {
-      size: A4;
-      margin: 0;
-    }
+    @page { size: A4; margin: 0; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-      background: #0f172a;
-      color: #e2e8f0;
+    html, body { background: #FFFFFF; color: #0B1220;
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      -webkit-print-color-adjust: exact; print-color-adjust: exact;
     }
 
-    .receipt {
-      max-width: 600px;
+    /* Print-ready paper size — matches ReceiptTemplate design (420×600 scaled) */
+    .sheet {
+      width: 560px;
       margin: 0 auto;
-      padding: 40px 48px;
-      background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+      padding: 0;
+      background: #FFFFFF;
+      position: relative;
+      overflow: hidden;
+      min-height: 820px;
     }
 
-    /* Header */
-    .receipt-header {
-      text-align: center;
-      padding-bottom: 28px;
-      border-bottom: 2px solid #10B981;
-      margin-bottom: 32px;
+    /* Top emerald stripe — gradient 6px */
+    .stripe {
+      height: 6px;
+      background: linear-gradient(90deg, #10B981 0%, #059669 100%);
     }
-    .logo {
-      font-size: 32px;
-      font-weight: 800;
-      color: #10B981;
-      letter-spacing: -1px;
-      margin-bottom: 4px;
+
+    /* Watermark — large Coin-C, low opacity, absolute bottom-right */
+    .watermark {
+      position: absolute;
+      right: -80px;
+      top: 240px;
+      opacity: 0.05;
+      pointer-events: none;
     }
-    .logo-sub {
-      font-size: 12px;
-      color: #64748b;
+
+    .content { padding: 28px 34px 0 34px; }
+
+    /* Header row: brand left, meta right */
+    .head { display: table; width: 100%; margin-bottom: 24px; }
+    .head .brand { display: table-cell; vertical-align: top; }
+    .head .meta  { display: table-cell; vertical-align: top; text-align: right; }
+    .brand-row {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .brand-row .coin-c { display: inline-block; }
+    .brand-row .word {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+    .brand-row .word .C { color: #10B981; }
+    .brand-row .word .rest { color: #0B1220; }
+    .tagline {
+      margin-top: 6px;
+      font-size: 9px;
+      color: #64748B;
+      letter-spacing: 1.5px;
+    }
+
+    .meta .label {
+      font-size: 9px;
+      color: #64748B;
       letter-spacing: 2px;
-      text-transform: uppercase;
     }
-    .receipt-title {
-      font-size: 18px;
-      font-weight: 600;
-      color: #f1f5f9;
-      margin-top: 20px;
-    }
-
-    /* Status badge */
-    .status-badge {
-      display: inline-block;
-      padding: 4px 16px;
-      border-radius: 20px;
+    .meta .ref {
       font-size: 13px;
       font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      margin-top: 12px;
-    }
-    .status-completed {
-      background: rgba(16, 185, 129, 0.15);
-      color: #10B981;
-      border: 1px solid rgba(16, 185, 129, 0.3);
-    }
-    .status-pending {
-      background: rgba(245, 158, 11, 0.15);
-      color: #f59e0b;
-      border: 1px solid rgba(245, 158, 11, 0.3);
-    }
-    .status-failed {
-      background: rgba(239, 68, 68, 0.15);
-      color: #ef4444;
-      border: 1px solid rgba(239, 68, 68, 0.3);
-    }
-
-    /* Amount section */
-    .amount-section {
-      text-align: center;
-      padding: 24px;
-      background: rgba(16, 185, 129, 0.06);
-      border-radius: 12px;
-      border: 1px solid rgba(16, 185, 129, 0.15);
-      margin-bottom: 28px;
-    }
-    .amount-label {
-      font-size: 12px;
-      color: #64748b;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      margin-bottom: 8px;
-    }
-    .amount-value {
-      font-size: 36px;
-      font-weight: 800;
-      color: #10B981;
-      letter-spacing: -1px;
-    }
-    .amount-sub {
-      font-size: 14px;
-      color: #94a3b8;
       margin-top: 4px;
+      font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      color: #0B1220;
+    }
+    .meta .when {
+      font-size: 9px;
+      color: #64748B;
+      margin-top: 2px;
     }
 
-    /* Details table */
-    .details {
+    /* Amount hero card — emerald tinted */
+    .hero {
+      background: linear-gradient(180deg, #D1FAE5 0%, rgba(16,185,129,0.06) 100%);
+      border: 1px solid rgba(16,185,129,0.25);
+      border-radius: 14px;
+      padding: 18px 20px;
+      display: table;
       width: 100%;
-      margin-bottom: 28px;
     }
-    .details tr {
-      border-bottom: 1px solid rgba(100, 116, 139, 0.15);
-    }
-    .details tr:last-child {
-      border-bottom: none;
-    }
-    .details td {
-      padding: 12px 0;
-      font-size: 14px;
-      vertical-align: top;
-    }
-    .details .label {
-      color: #64748b;
-      width: 45%;
-    }
-    .details .value {
-      color: #e2e8f0;
+    .hero .left  { display: table-cell; vertical-align: bottom; }
+    .hero .right { display: table-cell; vertical-align: bottom; text-align: right; }
+    .hero .cap {
+      font-size: 10px;
       font-weight: 600;
-      text-align: right;
-    }
-
-    /* Divider */
-    .divider {
-      border: none;
-      border-top: 1px dashed #334155;
-      margin: 24px 0;
-    }
-
-    /* Reference section */
-    .reference-section {
-      background: #1e293b;
-      border-radius: 10px;
-      padding: 20px 24px;
-      margin-bottom: 28px;
-      border: 1px solid #334155;
-    }
-    .reference-label {
-      font-size: 11px;
-      color: #64748b;
-      text-transform: uppercase;
       letter-spacing: 1.5px;
-      margin-bottom: 6px;
+      color: #059669;
+      text-transform: uppercase;
     }
-    .reference-value {
-      font-size: 20px;
+    .hero .amt {
+      font-size: 30px;
       font-weight: 700;
-      color: #f1f5f9;
-      letter-spacing: 2px;
-      font-family: 'Courier New', monospace;
+      letter-spacing: -0.8px;
+      margin-top: 2px;
+      font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      color: #0B1220;
+      line-height: 1;
+    }
+    .hero .amt .sub { font-size: 20px; color: #64748B; }
+    .pill {
+      display: inline-block;
+      padding: 5px 10px;
+      border-radius: 999px;
+      background: #10B981;
+      color: #FFFFFF;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 1.2px;
+    }
+    .pill-failed { background: #1F2937; }
+    .pill-pending { background: #F59E0B; }
+    .pill .dot {
+      display: inline-block;
+      width: 6px; height: 6px;
+      border-radius: 3px;
+      background: #FFFFFF;
+      margin-right: 4px;
+      vertical-align: 1px;
     }
 
-    /* Footer */
-    .receipt-footer {
-      text-align: center;
-      padding-top: 24px;
-      border-top: 1px solid #334155;
+    /* Paid-to block */
+    .paid-cap {
+      margin-top: 20px;
+      font-size: 10px;
+      color: #64748B;
+      letter-spacing: 1.5px;
     }
-    .footer-text {
-      font-size: 11px;
-      color: #64748b;
-      line-height: 1.6;
-    }
-    .footer-logo {
-      font-size: 14px;
+    .paid-title {
+      font-size: 16px;
       font-weight: 700;
-      color: #10B981;
-      margin-top: 12px;
+      margin-top: 2px;
+      color: #0B1220;
     }
-    .support-text {
+    .paid-sub {
       font-size: 11px;
-      color: #475569;
-      margin-top: 8px;
+      color: #64748B;
+      font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      margin-top: 1px;
+    }
+
+    /* Detail rows */
+    .rows {
+      margin-top: 18px;
+      border-top: 1px solid #E5E7EB;
+    }
+    .row {
+      display: table;
+      width: 100%;
+      padding: 8px 0;
+      border-bottom: 1px dashed #E5E7EB;
+    }
+    .row.last { border-bottom: none; }
+    .row .k { display: table-cell; color: #64748B; font-size: 11px; }
+    .row .v { display: table-cell; color: #0B1220; font-size: 11px; text-align: right;
+              font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+              font-weight: 500; }
+
+    /* Footer: QR + verify + company — border-top */
+    .footer {
+      margin-top: 28px;
+      padding: 18px 34px 20px;
+      border-top: 1px solid #E5E7EB;
+      background: #FAFBFC;
+      display: table;
+      width: 100%;
+    }
+    .footer-col { display: table-cell; vertical-align: middle; }
+    .footer .qr-col { width: 80px; padding-right: 12px; }
+    .footer .verify-col { padding-right: 12px; }
+    .footer .company-col { width: 140px; text-align: right; }
+    .verify-h {
+      font-size: 10px;
+      font-weight: 600;
+      color: #0B1220;
+    }
+    .verify-sub {
+      font-size: 9px;
+      color: #64748B;
+      margin-top: 2px;
+      line-height: 1.4;
+    }
+    .company {
+      font-size: 8px;
+      color: #64748B;
+      letter-spacing: 0.5px;
+      line-height: 1.4;
+    }
+    .qr-box {
+      width: 64px;
+      height: 64px;
+      background: #FFFFFF;
+      border: 1px solid #E5E7EB;
+      border-radius: 6px;
+      padding: 4px;
+    }
+    .qr-dot { width: 100%; height: 100%; background: #FFFFFF;
+      background-image:
+        radial-gradient(circle at 10% 10%, #0B1220 1.5px, transparent 2px),
+        radial-gradient(circle at 30% 10%, #0B1220 1.5px, transparent 2px),
+        radial-gradient(circle at 50% 10%, #0B1220 1.5px, transparent 2px),
+        radial-gradient(circle at 90% 10%, #0B1220 1.5px, transparent 2px),
+        radial-gradient(circle at 10% 30%, #0B1220 1.5px, transparent 2px),
+        radial-gradient(circle at 70% 30%, #0B1220 1.5px, transparent 2px),
+        radial-gradient(circle at 90% 30%, #0B1220 1.5px, transparent 2px),
+        radial-gradient(circle at 30% 50%, #0B1220 1.5px, transparent 2px),
+        radial-gradient(circle at 50% 50%, #0B1220 1.5px, transparent 2px),
+        radial-gradient(circle at 70% 50%, #0B1220 1.5px, transparent 2px),
+        radial-gradient(circle at 10% 70%, #0B1220 1.5px, transparent 2px),
+        radial-gradient(circle at 50% 70%, #0B1220 1.5px, transparent 2px),
+        radial-gradient(circle at 90% 70%, #0B1220 1.5px, transparent 2px),
+        radial-gradient(circle at 10% 90%, #0B1220 1.5px, transparent 2px),
+        radial-gradient(circle at 30% 90%, #0B1220 1.5px, transparent 2px),
+        radial-gradient(circle at 70% 90%, #0B1220 1.5px, transparent 2px);
     }
   </style>
 </head>
 <body>
-  <div class="receipt">
-    <!-- Header -->
-    <div class="receipt-header">
-      <div class="logo" style="display:flex;align-items:center;justify-content:center;gap:10px;">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="36" height="36" style="display:block;">
-          <circle cx="100" cy="100" r="72" fill="none" stroke="#10B981" stroke-width="22" stroke-linecap="round" stroke-dasharray="380 500" transform="rotate(-135 100 100)"/>
-          <rect x="100" y="92" width="46" height="16" rx="3" fill="#10B981"/>
-        </svg>
-        <span><span style="color:#10B981;">C</span><span style="color:#f1f5f9;">pay</span></span>
+  <div class="sheet">
+    <div class="stripe"></div>
+
+    <!-- Watermark Coin-C -->
+    <div class="watermark">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="340" height="340" style="display:block;">
+        <circle cx="100" cy="100" r="72" fill="none" stroke="#10B981" stroke-width="22" stroke-linecap="round" stroke-dasharray="380 500" transform="rotate(-135 100 100)"/>
+        <rect x="100" y="92" width="46" height="16" rx="3" fill="#10B981"/>
+      </svg>
+    </div>
+
+    <div class="content">
+      <!-- Header -->
+      <div class="head">
+        <div class="brand">
+          <div class="brand-row">
+            <svg class="coin-c" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="28" height="28" style="display:block;">
+              <circle cx="100" cy="100" r="72" fill="none" stroke="#10B981" stroke-width="22" stroke-linecap="round" stroke-dasharray="380 500" transform="rotate(-135 100 100)"/>
+              <rect x="100" y="92" width="46" height="16" rx="3" fill="#10B981"/>
+            </svg>
+            <span class="word"><span class="C">C</span><span class="rest">pay</span></span>
+          </div>
+          <div class="tagline">CPAY KENYA LTD &middot; cpay.co.ke</div>
+        </div>
+        <div class="meta">
+          <div class="label">PAYMENT RECEIPT</div>
+          <div class="ref">{{ reference }}</div>
+          <div class="when">{{ date }}</div>
+        </div>
       </div>
-      <div class="logo-sub">Transaction Receipt</div>
-      <div class="receipt-title">{{ type_label }}</div>
-      <span class="status-badge {% if tx.status == 'COMPLETED' %}status-completed{% elif tx.status == 'FAILED' %}status-failed{% else %}status-pending{% endif %}">
-        {{ tx.status }}
-      </span>
-    </div>
 
-    <!-- Amount -->
-    <div class="amount-section">
-      <div class="amount-label">Amount Paid</div>
-      <div class="amount-value">{{ dest_display }}</div>
-      <div class="amount-sub">{{ source_display }}</div>
-    </div>
+      <!-- Hero amount -->
+      <div class="hero">
+        <div class="left">
+          <div class="cap">Amount paid</div>
+          <div class="amt">{{ dest_display }}</div>
+        </div>
+        <div class="right">
+          <span class="pill {% if tx.status == 'COMPLETED' %}{% elif tx.status == 'FAILED' %}pill-failed{% else %}pill-pending{% endif %}">
+            <span class="dot"></span>
+            {% if tx.status == 'COMPLETED' %}SETTLED{% elif tx.status == 'FAILED' %}FAILED{% else %}PENDING{% endif %}
+          </span>
+        </div>
+      </div>
 
-    <!-- Transaction Details -->
-    <table class="details">
-      <tr>
-        <td class="label">Date &amp; Time</td>
-        <td class="value">{{ date }}</td>
-      </tr>
+      <!-- Paid to -->
       {% if recipient %}
-      <tr>
-        <td class="label">Recipient</td>
-        <td class="value">{{ recipient }}</td>
-      </tr>
+      <div class="paid-cap">PAID TO</div>
+      <div class="paid-title">{{ recipient }}</div>
+      <div class="paid-sub">{{ type_label }}</div>
       {% endif %}
-      <tr>
-        <td class="label">Exchange Rate</td>
-        <td class="value">{{ rate_display }}</td>
-      </tr>
-      <tr>
-        <td class="label">Platform Fee</td>
-        <td class="value">{{ fee_display }}</td>
-      </tr>
-      {% if excise_display != "N/A" %}
-      <tr>
-        <td class="label">Excise Duty (10%)</td>
-        <td class="value">{{ excise_display }}</td>
-      </tr>
-      {% endif %}
-      {% if mpesa_receipt != "Pending" %}
-      <tr>
-        <td class="label">M-Pesa Receipt</td>
-        <td class="value">{{ mpesa_receipt }}</td>
-      </tr>
-      {% endif %}
-      <tr>
-        <td class="label">Paid By</td>
-        <td class="value">{{ user.full_name|default:user.phone }}</td>
-      </tr>
-    </table>
 
-    <!-- Reference -->
-    <div class="reference-section">
-      <div class="reference-label">Transaction Reference</div>
-      <div class="reference-value">{{ reference }}</div>
+      <!-- Detail rows -->
+      <div class="rows">
+        {% if source_display and source_display != dest_display %}
+        <div class="row">
+          <div class="k">From wallet</div>
+          <div class="v">{{ source_display }}</div>
+        </div>
+        {% endif %}
+        <div class="row">
+          <div class="k">Exchange rate</div>
+          <div class="v">{{ rate_display }}</div>
+        </div>
+        <div class="row">
+          <div class="k">Platform fee</div>
+          <div class="v">{{ fee_display }}</div>
+        </div>
+        {% if excise_display != "N/A" %}
+        <div class="row">
+          <div class="k">Excise duty (10%)</div>
+          <div class="v">{{ excise_display }}</div>
+        </div>
+        {% endif %}
+        {% if mpesa_receipt and mpesa_receipt != "Pending" %}
+        <div class="row">
+          <div class="k">M-Pesa ref</div>
+          <div class="v">{{ mpesa_receipt }}</div>
+        </div>
+        {% endif %}
+        <div class="row last">
+          <div class="k">Paid by</div>
+          <div class="v">{{ user.full_name|default:user.phone }}</div>
+        </div>
+      </div>
     </div>
 
-    <hr class="divider">
-
-    <!-- Footer -->
-    <div class="receipt-footer">
-      <div class="footer-text">
-        This is an official receipt from Cpay Technologies Ltd.<br>
-        All transactions are subject to the Virtual Assets Service Provider Act 2025.
+    <!-- Footer: QR + verify + company -->
+    <div class="footer">
+      <div class="footer-col qr-col">
+        <div class="qr-box"><div class="qr-dot"></div></div>
       </div>
-      <div class="footer-logo"><span style="color:#10B981;">C</span>pay</div>
-      <div class="support-text">
-        support@cpay.co.ke &bull; cpay.co.ke
+      <div class="footer-col verify-col">
+        <div class="verify-h">Verify this receipt</div>
+        <div class="verify-sub">
+          Scan the QR or visit cpay.co.ke/r/{{ reference }}.<br>
+          Questions? support@cpay.co.ke
+        </div>
+      </div>
+      <div class="footer-col company-col">
+        <div class="company">
+          Cpay Kenya Ltd<br>
+          PIN P051&bull;&bull;&bull;&bull;&bull;&bull;<br>
+          Page 1 of 1
+        </div>
       </div>
     </div>
   </div>

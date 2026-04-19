@@ -15,6 +15,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useNavigation } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { BalanceCard } from "../../src/components/BalanceCard";
+import { EmptyNoTransactions } from "../../src/components/brand/PolishAssets";
 import { QuickAction, DesktopQuickActionCard } from "../../src/components/QuickAction";
 import { TransactionItem } from "../../src/components/TransactionItem";
 import { RateTicker } from "../../src/components/RateTicker";
@@ -1780,42 +1781,16 @@ function HomeScreenContent() {
               {(txLoading && activityLoading) ? (
                 <TransactionSkeleton />
               ) : recentTx.length === 0 ? (
-                /* Empty State */
+                /* Empty State — brand EmptyNoTransactions */
                 <View
                   style={{
-                    paddingVertical: 48,
+                    paddingVertical: 40,
                     paddingHorizontal: 32,
                     alignItems: "center",
                   }}
                 >
-                  {/* Layered icon */}
-                  <View
-                    style={{
-                      width: 88,
-                      height: 88,
-                      borderRadius: 28,
-                      backgroundColor: "rgba(13, 159, 110, 0.08)",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      marginBottom: 20,
-                    }}
-                  >
-                    <View
-                      style={{
-                        width: 60,
-                        height: 60,
-                        borderRadius: 20,
-                        backgroundColor: "rgba(13, 159, 110, 0.12)",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <Ionicons
-                        name="receipt-outline"
-                        size={28}
-                        color={colors.primary[400]}
-                      />
-                    </View>
+                  <View style={{ marginBottom: 16 }}>
+                    <EmptyNoTransactions size={140} />
                   </View>
                   <Text
                     style={{
@@ -2403,38 +2378,13 @@ function HomeScreenContent() {
               ) : recentTx.length === 0 ? (
                 <View
                   style={{
-                    paddingVertical: 48,
+                    paddingVertical: 40,
                     paddingHorizontal: 32,
                     alignItems: "center",
                   }}
                 >
-                  <View
-                    style={{
-                      width: 88,
-                      height: 88,
-                      borderRadius: 28,
-                      backgroundColor: "rgba(13, 159, 110, 0.08)",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      marginBottom: 20,
-                    }}
-                  >
-                    <View
-                      style={{
-                        width: 60,
-                        height: 60,
-                        borderRadius: 20,
-                        backgroundColor: "rgba(13, 159, 110, 0.12)",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <Ionicons
-                        name="receipt-outline"
-                        size={28}
-                        color={colors.primary[400]}
-                      />
-                    </View>
+                  <View style={{ marginBottom: 16 }}>
+                    <EmptyNoTransactions size={140} />
                   </View>
                   <Text
                     style={{

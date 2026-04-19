@@ -46,11 +46,18 @@ export interface NetworkBadgeProps {
   compact?: boolean;
   /** Force monochrome ink rendering (emerald-only surfaces). */
   mono?: boolean;
+  /** Dark-surface variant — use on app screens (deposit, send). */
+  dark?: boolean;
 }
 
-export function NetworkBadge({ chain, compact = false, mono = false }: NetworkBadgeProps) {
+export function NetworkBadge({ chain, compact = false, mono = false, dark = false }: NetworkBadgeProps) {
   const m = META[chain];
   const dot = mono ? "#10B981" : m.color;
+
+  const bg = dark ? "rgba(22,39,66,0.55)" : PAPER_SUBTLE;
+  const border = dark ? "rgba(255,255,255,0.1)" : LINE;
+  const assetColor = dark ? "#E8EEF7" : INK2;
+  const netColor = dark ? "#8396AD" : MUTED;
 
   return (
     <View
@@ -61,9 +68,9 @@ export function NetworkBadge({ chain, compact = false, mono = false }: NetworkBa
         paddingVertical: 6,
         paddingHorizontal: 10,
         borderRadius: 999,
-        backgroundColor: PAPER_SUBTLE,
+        backgroundColor: bg,
         borderWidth: 1,
-        borderColor: LINE,
+        borderColor: border,
       }}
     >
       <View
@@ -79,20 +86,20 @@ export function NetworkBadge({ chain, compact = false, mono = false }: NetworkBa
           fontSize: 12,
           fontFamily: "DMSans_700Bold",
           letterSpacing: -0.2,
-          color: INK2,
+          color: assetColor,
         }}
       >
         {m.asset}
       </Text>
       {!compact ? (
         <>
-          <Text style={{ fontSize: 10, color: MUTED }}>·</Text>
+          <Text style={{ fontSize: 10, color: netColor }}>·</Text>
           <Text
             style={{
               fontSize: 11,
               fontFamily: Platform.OS === "web" ? "JetBrainsMono_500Medium, 'JetBrains Mono', monospace" : "JetBrainsMono_500Medium",
               letterSpacing: 0.5,
-              color: MUTED,
+              color: netColor,
             }}
           >
             {m.net}
@@ -101,4 +108,16 @@ export function NetworkBadge({ chain, compact = false, mono = false }: NetworkBa
       ) : null}
     </View>
   );
+}
+
+/** Helper: map our app currency codes to ChainKey. */
+export function currencyToChain(currency: string): ChainKey {
+  switch (currency) {
+    case "USDT": return "usdt-tron";
+    case "BTC": return "btc";
+    case "ETH": return "eth-erc20";
+    case "SOL": return "sol";
+    case "USDC": return "usdc-polygon";
+    default: return "usdt-tron";
+  }
 }
