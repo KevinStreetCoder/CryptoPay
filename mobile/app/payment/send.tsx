@@ -25,6 +25,7 @@ import { SectionHeader } from "../../src/components/SectionHeader";
 import { PaymentStepper } from "../../src/components/PaymentStepper";
 import { GlassCard } from "../../src/components/GlassCard";
 import { useLocale } from "../../src/hooks/useLocale";
+import { NetworkBadge, currencyToChain } from "../../src/components/brand/NetworkBadge";
 
 const CRYPTO_OPTIONS: CurrencyCode[] = ["USDT", "USDC", "BTC", "ETH", "SOL"];
 
@@ -361,6 +362,10 @@ export default function SendMpesaScreen() {
                 wallets={wallets}
                 onSelect={(c) => { setSelectedCrypto(c); setQuote(null); }}
               />
+              {/* NetworkBadge — confirms which chain the payment settles on */}
+              <View style={{ flexDirection: "row", marginTop: 10 }}>
+                <NetworkBadge chain={currencyToChain(selectedCrypto)} dark />
+              </View>
 
               {/* Quote Display */}
               {quote && (
