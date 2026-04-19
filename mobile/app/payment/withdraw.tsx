@@ -1,7 +1,7 @@
 /**
  * Crypto Withdrawal Screen
  *
- * Allows users to withdraw crypto from their CryptoPay wallet to an external
+ * Allows users to withdraw crypto from their Cpay wallet to an external
  * blockchain address. Supports network selection, fee estimation, PIN
  * confirmation, and real-time status polling.
  */

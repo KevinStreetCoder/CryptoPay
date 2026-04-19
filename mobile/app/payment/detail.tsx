@@ -202,7 +202,7 @@ export default function TransactionDetailScreen() {
     const kesAmount = getTxKesAmount(tx);
     const crypto = getTxCrypto(tx);
     const message = [
-      `CryptoPay Transaction`,
+      `Cpay Transaction`,
       `Type: ${typeConfig?.label || tx.type}`,
       `Amount: KSh ${kesAmount.toLocaleString("en-KE")}`,
       crypto.currency ? `Crypto: ${crypto.amount} ${crypto.currency}` : "",

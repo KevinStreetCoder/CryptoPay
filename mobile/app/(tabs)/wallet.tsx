@@ -212,7 +212,7 @@ export default function WalletScreen() {
         const fileName = `cryptopay_transactions_${new Date().toISOString().split("T")[0]}.csv`;
         const filePath = `${cacheDirectory}${fileName}`;
         await writeAsStringAsync(filePath, data, { encoding: EncodingType.UTF8 });
-        await Share.share({ url: filePath, title: "CryptoPay Transactions" });
+        await Share.share({ url: filePath, title: "Cpay Transactions" });
         toast.success("Exported", "CSV file ready to share");
       }
     } catch {

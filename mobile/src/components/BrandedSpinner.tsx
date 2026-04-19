@@ -24,7 +24,7 @@ const BORDER_WIDTH_MAP: Record<SpinnerSize, number> = {
 };
 
 /**
- * Branded spinning ring loader for CryptoPay.
+ * Branded spinning ring loader for Cpay.
  *
  * On native it uses Animated.loop with useNativeDriver for smooth 60 fps rotation.
  * On web it injects a CSS @keyframes rule and applies it via inline style,

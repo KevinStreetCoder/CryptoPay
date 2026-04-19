@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, getThemeColors, getThemeShadows } from "../src/constants/theme";
+import { Wordmark } from "../src/components/brand/Wordmark";
 
 const isWeb = Platform.OS === "web";
 const useNative = Platform.OS !== "web";
@@ -28,7 +29,7 @@ const PROBLEM_STEPS = [
 ];
 
 const SOLUTION_STEPS = [
-  "Open CryptoPay, select bill",
+  "Open Cpay, select bill",
   "Confirm amount, tap Pay",
   "Done. M-Pesa payment sent.",
 ];
@@ -62,7 +63,7 @@ const REVENUE_PROJECTIONS = [
 ];
 
 const COMPETITIVE_TABLE = {
-  headers: ["Feature", "CryptoPay", "Rift Finance", "Yellow Card"],
+  headers: ["Feature", "Cpay", "Rift Finance", "Yellow Card"],
   rows: [
     ["Speed", "< 30 seconds", "Minutes", "15-60 min"],
     ["Fees", "1.5% + KES 10", "~2-3%", "3-8%"],
@@ -206,25 +207,9 @@ export default function PitchPage() {
           marginBottom: 32,
         }}
       >
-        {/* Logo */}
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 16 }}>
-          <View
-            style={{
-              width: 48,
-              height: 48,
-              borderRadius: 14,
-              backgroundColor: colors.primary[500] + "20",
-              alignItems: "center",
-              justifyContent: "center",
-              borderWidth: 1,
-              borderColor: colors.primary[500] + "40",
-            }}
-          >
-            <Ionicons name="flash" size={26} color={colors.primary[400]} />
-          </View>
-          <Text style={{ color: tc.textPrimary, fontSize: 28, fontFamily: "DMSans_700Bold", letterSpacing: -0.5 }}>
-            CryptoPay
-          </Text>
+        {/* Brand Wordmark */}
+        <View style={{ marginBottom: 16 }}>
+          <Wordmark size={44} dark />
         </View>
 
         {/* Badge */}
@@ -267,7 +252,7 @@ export default function PitchPage() {
             maxWidth: 600,
           }}
         >
-          CryptoPay bridges crypto wallets to M-Pesa, enabling instant bill payments, money transfers, and merchant
+          Cpay bridges crypto wallets to M-Pesa, enabling instant bill payments, money transfers, and merchant
           payments for 733,000+ crypto users in Kenya.
         </Text>
       </Animated.View>
@@ -348,7 +333,7 @@ export default function PitchPage() {
       <SectionTitle
         label="Solution"
         title="The 30-Second Solution"
-        subtitle="CryptoPay automates the entire flow. One tap from crypto to M-Pesa."
+        subtitle="Cpay automates the entire flow. One tap from crypto to M-Pesa."
         tc={tc}
       />
       <GlassBox tc={tc} style={{ borderColor: colors.primary[500] + "40" }}>
@@ -485,7 +470,7 @@ export default function PitchPage() {
       <SectionTitle
         label="Competition"
         title="Competitive Advantage"
-        subtitle="CryptoPay vs. existing alternatives in the Kenyan market."
+        subtitle="Cpay vs. existing alternatives in the Kenyan market."
         tc={tc}
       />
       <GlassBox tc={tc} style={{ padding: 0, overflow: "hidden" }}>
@@ -580,7 +565,7 @@ export default function PitchPage() {
             lineHeight: 22,
           }}
         >
-          Built the entire CryptoPay stack solo: Django backend with payment saga orchestration, React Native mobile
+          Built the entire Cpay stack solo: Django backend with payment saga orchestration, React Native mobile
           app with glassmorphism UI, blockchain listeners for 5 networks, M-Pesa Daraja integration, Docker deployment,
           and production infrastructure on a VPS. 136 automated tests, 57-finding security audit, live at cpay.co.ke
           with real USDT deposits credited.
@@ -637,7 +622,7 @@ export default function PitchPage() {
       {/* ── CTA ─────────────────────────────────────────────────── */}
       <View style={{ marginTop: 56, alignItems: "center", gap: 16 }}>
         <Pressable
-          onPress={() => Linking.openURL("mailto:kevinisaackareithi@gmail.com?subject=CryptoPay%20Investment%20Inquiry")}
+          onPress={() => Linking.openURL("mailto:kevinisaackareithi@gmail.com?subject=Cpay%20Investment%20Inquiry")}
           style={({ pressed, hovered }: any) => ({
             backgroundColor: hovered ? colors.primary[400] : colors.primary[500],
             paddingVertical: 18,

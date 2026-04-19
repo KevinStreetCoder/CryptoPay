@@ -287,8 +287,8 @@ export default function PaymentSuccessScreen() {
 
   const handleShare = async () => {
     const receiptText = isSwap
-      ? `CryptoPay Swap Receipt\n\nReceived: ${params.crypto_amount} ${params.crypto_currency}\nConversion: ${params.recipient}\nStatus: ${statusLabel}\n${params.transaction_id ? `Ref: ${params.transaction_id.slice(0, 8)}` : ""}\n\nPowered by CryptoPay`
-      : `CryptoPay Receipt\n\nTotal: KSh ${amountKES.toLocaleString()}\n${isBuyFlow ? "Received" : "Used"}: ${params.crypto_amount} ${params.crypto_currency}\n${isBuyFlow ? "Phone" : "Sent To"}: ${params.recipient}\nStatus: ${statusLabel}\n${params.transaction_id ? `Ref: ${params.transaction_id.slice(0, 8)}` : ""}\n\nPowered by CryptoPay`;
+      ? `Cpay Swap Receipt\n\nReceived: ${params.crypto_amount} ${params.crypto_currency}\nConversion: ${params.recipient}\nStatus: ${statusLabel}\n${params.transaction_id ? `Ref: ${params.transaction_id.slice(0, 8)}` : ""}\n\nPowered by Cpay`
+      : `Cpay Receipt\n\nTotal: KSh ${amountKES.toLocaleString()}\n${isBuyFlow ? "Received" : "Used"}: ${params.crypto_amount} ${params.crypto_currency}\n${isBuyFlow ? "Phone" : "Sent To"}: ${params.recipient}\nStatus: ${statusLabel}\n${params.transaction_id ? `Ref: ${params.transaction_id.slice(0, 8)}` : ""}\n\nPowered by Cpay`;
 
     if (isWeb) {
       if (navigator.clipboard) {
@@ -297,15 +297,15 @@ export default function PaymentSuccessScreen() {
       }
     } else {
       try {
-        await Share.share({ message: receiptText, title: "CryptoPay Receipt" });
+        await Share.share({ message: receiptText, title: "Cpay Receipt" });
       } catch {}
     }
   };
 
   const handleShareWhatsApp = () => {
     const message = isSwap
-      ? `I just swapped crypto on CryptoPay! ${params.crypto_amount} ${params.crypto_currency} received instantly. Try it: https://cpay.co.ke`
-      : `I just paid my bill with crypto using CryptoPay! KSh ${amountKES.toLocaleString()} sent via M-Pesa in seconds. Try it: https://cpay.co.ke`;
+      ? `I just swapped crypto on Cpay! ${params.crypto_amount} ${params.crypto_currency} received instantly. Try it: https://cpay.co.ke`
+      : `I just paid my bill with crypto using Cpay! KSh ${amountKES.toLocaleString()} sent via M-Pesa in seconds. Try it: https://cpay.co.ke`;
     const encoded = encodeURIComponent(message);
     Linking.openURL(`https://wa.me/?text=${encoded}`);
   };
