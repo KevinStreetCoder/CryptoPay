@@ -164,17 +164,38 @@ export function useAuth() {
   }, []);
 
   const register = useCallback(
-    async (phone: string, pin: string, otp: string, fullName?: string, email?: string) => {
+    async (
+      phone: string,
+      pin: string,
+      otp: string,
+      fullName?: string,
+      email?: string,
+      referralCode?: string,
+    ) => {
+      // If the caller didn't pass a referral code, check for a stored one
+      // from a /r/{code} landing visit.
+      let code = referralCode;
+      if (!code) {
+        try {
+          const stored = await storage.getItemAsync("pending_referral_code");
+          if (stored) code = stored;
+        } catch {}
+      }
       const { data } = await authApi.register({
         phone,
         pin,
         otp,
         full_name: fullName,
         email,
+        referral_code: code || undefined,
       });
       await storage.setItemAsync("access_token", data.tokens.access);
       await storage.setItemAsync("refresh_token", data.tokens.refresh);
       resetSessionExpired();
+      // Clear the one-time referral cookie now that it's been used.
+      try {
+        await storage.deleteItemAsync("pending_referral_code");
+      } catch {}
       _user = data.user;
       notify();
       return data;
@@ -208,12 +229,18 @@ export function useAuth() {
   }, []);
 
   const googleCompleteProfile = useCallback(async (data: { phone: string; otp: string; pin: string; full_name?: string }) => {
-    // Get the email stored during Google login
     const email = await storage.getItemAsync("google_pending_email");
     const { forceResetSessionExpired } = require("../api/client");
     forceResetSessionExpired();
-    const { data: responseData } = await authApi.googleCompleteProfile({ ...data, email: email || "" });
+    // Pick up referral code if the user came via /r/{code}.
+    let referral_code: string | undefined;
+    try {
+      const stored = await storage.getItemAsync("pending_referral_code");
+      if (stored) referral_code = stored;
+    } catch {}
+    const { data: responseData } = await authApi.googleCompleteProfile({ ...data, email: email || "", referral_code });
     await storage.deleteItemAsync("google_pending_email");
+    try { await storage.deleteItemAsync("pending_referral_code"); } catch {}
     await storage.setItemAsync("access_token", responseData.tokens.access);
     await storage.setItemAsync("refresh_token", responseData.tokens.refresh);
     resetSessionExpired();

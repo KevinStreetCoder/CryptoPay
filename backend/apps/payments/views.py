@@ -71,6 +71,26 @@ def _verify_pin_with_lockout(user, pin: str):
     return None
 
 
+def _apply_referral_credit(tx) -> Decimal:
+    """Consume available referral credit against the tx fee.
+
+    Reduces tx.fee_amount, writes a consumed ledger row (via
+    apps.referrals.services). Returns the amount applied (Decimal).
+    Idempotent per tx.id. Silent no-op on failure — never fails payments.
+    """
+    try:
+        from apps.referrals.services import apply_credit_to_fee
+        if tx.fee_amount and tx.fee_amount > 0:
+            reduced_fee, applied = apply_credit_to_fee(tx, Decimal(tx.fee_amount))
+            if applied > 0:
+                tx.fee_amount = reduced_fee
+                tx.save(update_fields=["fee_amount"])
+            return applied
+    except Exception as e:
+        logger.warning(f"Referral credit application failed for tx {tx.id}: {e}")
+    return Decimal("0.00")
+
+
 def _check_rate_slippage(quote: dict) -> str | None:
     """
     Compare the quote's locked rate against the current live rate.
@@ -213,6 +233,9 @@ class PayBillView(APIView):
                 status=status.HTTP_409_CONFLICT,
             )
 
+        # Apply referral credit (reduces fee; idempotent per tx)
+        _apply_referral_credit(tx)
+
         # Run the payment saga
         try:
             saga = PaymentSaga(tx)
@@ -346,6 +369,9 @@ class PayTillView(APIView):
                 return Response(TransactionSerializer(existing).data)
             return Response({"error": "Duplicate payment"}, status=status.HTTP_409_CONFLICT)
 
+        # Apply referral credit (reduces fee; idempotent per tx)
+        _apply_referral_credit(tx)
+
         try:
             saga = PaymentSaga(tx)
             saga.execute()
@@ -446,6 +472,9 @@ class SendMpesaView(APIView):
             if existing:
                 return Response(TransactionSerializer(existing).data)
             return Response({"error": "Duplicate payment"}, status=status.HTTP_409_CONFLICT)
+
+        # Apply referral credit (reduces fee; idempotent per tx)
+        _apply_referral_credit(tx)
 
         try:
             saga = PaymentSaga(tx)

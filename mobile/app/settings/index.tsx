@@ -568,6 +568,16 @@ export default function SettingsScreen() {
           badge: "NEW",
         },
         {
+          key: "referrals",
+          icon: "people-outline",
+          iconColor: "#10B981",
+          iconBg: "rgba(16,185,129,0.15)",
+          label: t("referrals.title"),
+          description: t("referrals.heroHeadline"),
+          route: "/settings/referrals",
+          badge: "KES 50",
+        },
+        {
           key: "language",
           icon: "language-outline",
           iconColor: "#60A5FA",

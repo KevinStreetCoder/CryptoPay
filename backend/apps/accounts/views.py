@@ -207,6 +207,23 @@ class RegisterView(APIView):
         except Exception as e:
             logger.error(f"Post-registration notification dispatch failed for {user.phone}: {e}")
 
+        # Referral attribution (non-blocking — never fail signup)
+        referral_code = serializer.validated_data.get("referral_code", "")
+        if referral_code:
+            try:
+                from apps.referrals.services import attribute_signup
+                attribute_signup(
+                    user=user,
+                    code=referral_code,
+                    request_meta={
+                        "ip": self._get_client_ip(request),
+                        "device_id": device_id,
+                        "user_agent": request.META.get("HTTP_USER_AGENT", "")[:500],
+                    },
+                )
+            except Exception as e:
+                logger.warning(f"Referral attribution failed for {user.phone} (code={referral_code}): {e}")
+
         return Response(
             {
                 "user": UserSerializer(user, context={"request": request}).data,
@@ -922,6 +939,23 @@ class GoogleCompleteProfileView(APIView):
             send_admin_new_user_alert(user)
         except Exception as e:
             logger.error(f"Google profile completion notifications failed: {e}")
+
+        # Referral attribution (non-blocking)
+        referral_code = serializer.validated_data.get("referral_code", "")
+        if referral_code:
+            try:
+                from apps.referrals.services import attribute_signup
+                attribute_signup(
+                    user=user,
+                    code=referral_code,
+                    request_meta={
+                        "ip": self._get_client_ip(request),
+                        "device_id": device_id,
+                        "user_agent": request.META.get("HTTP_USER_AGENT", "")[:500],
+                    },
+                )
+            except Exception as e:
+                logger.warning(f"Referral attribution (google) failed for {user.phone} (code={referral_code}): {e}")
 
         return Response(
             {

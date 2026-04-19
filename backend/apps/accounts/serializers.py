@@ -37,6 +37,15 @@ class RegisterSerializer(serializers.Serializer):
     otp = serializers.CharField(max_length=6, write_only=True)
     full_name = serializers.CharField(max_length=NAME_MAX_LENGTH, required=False, default="")
     email = serializers.EmailField(required=False, default="")
+    referral_code = serializers.CharField(max_length=16, required=False, default="", allow_blank=True)
+
+    def validate_referral_code(self, value):
+        value = (value or "").strip().upper()
+        if not value:
+            return ""
+        if not re.match(r"^[A-Z0-9]{4,16}$", value):
+            raise serializers.ValidationError("Invalid referral code format")
+        return value
 
     def validate_phone(self, value):
         # Normalize Kenyan phone: 07XX → +2547XX
@@ -113,6 +122,15 @@ class GoogleCompleteProfileSerializer(serializers.Serializer):
     otp = serializers.CharField(max_length=6)
     pin = serializers.CharField(min_length=6, max_length=6, write_only=True)
     full_name = serializers.CharField(max_length=NAME_MAX_LENGTH, required=False, default="")
+    referral_code = serializers.CharField(max_length=16, required=False, default="", allow_blank=True)
+
+    def validate_referral_code(self, value):
+        value = (value or "").strip().upper()
+        if not value:
+            return ""
+        if not re.match(r"^[A-Z0-9]{4,16}$", value):
+            raise serializers.ValidationError("Invalid referral code format")
+        return value
 
     def validate_phone(self, value):
         value = value.strip().replace(" ", "")

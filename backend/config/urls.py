@@ -32,6 +32,15 @@ urlpatterns = [
     path("api/v1/hooks/", include("apps.mpesa.hooks_urls")),
     path("api/v1/rates/", include("apps.rates.urls")),
     path("api/v1/notifications/", include("apps.notifications.urls")),
+    path("api/v1/referrals/", include("apps.referrals.urls")),
+    # Public referral landing JSON — consumed by the mobile /r/[code]
+    # screen and any server-rendered OG card. Top-level (not under
+    # /api/v1) so the shareable URL cpay.co.ke/r/{code} resolves cleanly.
+    path(
+        "r/<str:code>/public/",
+        __import__("apps.referrals.views", fromlist=["PublicReferrerLandingView"]).PublicReferrerLandingView.as_view(),
+        name="referral-public-landing",
+    ),
     # SasaPay callbacks (at top level to match registered callback URL)
     path("api/v1/sasapay/callback/", __import__("apps.mpesa.sasapay_views", fromlist=["sasapay_callback"]).sasapay_callback, name="sasapay-callback-root"),
     # OpenAPI / Swagger — only in development (exposes full API surface)
