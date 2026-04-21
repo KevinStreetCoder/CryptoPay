@@ -18,7 +18,7 @@ const IS_WEB_DEV = (() => {
 })();
 
 export function NetworkStatus() {
-  // Never render on web dev — CORS failures and API errors are not connectivity issues
+  // Never render on web dev · CORS failures and API errors are not connectivity issues
   if (IS_WEB_DEV) return null;
 
   return <NetworkStatusInner />;

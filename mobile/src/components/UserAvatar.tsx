@@ -1,5 +1,5 @@
 /**
- * UserAvatar — works on ALL platforms including BlueStacks.
+ * UserAvatar · works on ALL platforms including BlueStacks.
  *
  * The backend returns avatar as a base64 data URI in the profile response,
  * so no network image loading is needed. This bypasses all Android

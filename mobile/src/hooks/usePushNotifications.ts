@@ -123,7 +123,7 @@ async function registerForPushNotifications(): Promise<string | null> {
       await authApi.registerPushToken(token, platform);
       console.log("Push token registered with backend successfully.");
     } catch (error) {
-      // Don't block the app if token registration fails — it will retry next launch
+      // Don't block the app if token registration fails · it will retry next launch
       console.warn("Failed to register push token with backend:", error);
     }
 

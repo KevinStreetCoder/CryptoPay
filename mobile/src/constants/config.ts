@@ -52,7 +52,7 @@ export const config: AppConfig = {
 };
 
 // ── WalletConnect / Reown AppKit ────────────────────────────────────────────
-// Project ID from https://cloud.reown.com — required for WalletConnect v2.
+// Project ID from https://cloud.reown.com · required for WalletConnect v2.
 // Set via EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID env var or in app.json extra.
 export const WALLETCONNECT_PROJECT_ID =
   process.env.EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID || "";
@@ -64,7 +64,7 @@ export const WALLETCONNECT_CHAINS = {
   bsc: { chainId: 56, name: "BNB Smart Chain", symbol: "BNB" },
 } as const;
 
-// Non-EVM chains — WalletConnect v2 does NOT support these natively.
+// Non-EVM chains · WalletConnect v2 does NOT support these natively.
 // Users must use manual deposit addresses for Tron, Bitcoin, Solana.
 export const MANUAL_DEPOSIT_CHAINS = {
   tron: { name: "Tron (TRC-20)", tokens: ["USDT"] },

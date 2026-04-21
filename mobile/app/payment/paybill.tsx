@@ -55,7 +55,7 @@ export default function PayBillScreen() {
       const { data } = await paymentsApi.savedPaybills();
       setSavedBills(data);
     } catch {
-      // Silently fail — not critical
+      // Silently fail · not critical
     } finally {
       setLoadingSaved(false);
     }
@@ -178,7 +178,7 @@ export default function PayBillScreen() {
               : undefined
           }
         >
-          {/* Top-level back button — desktop only */}
+          {/* Top-level back button · desktop only */}
           {isDesktop && (
             <Pressable
               onPress={() => {

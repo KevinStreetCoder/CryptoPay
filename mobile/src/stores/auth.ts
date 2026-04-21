@@ -37,7 +37,7 @@ setOnSessionExpired(forceLogout);
  *
  * Kept as a module-level synchronous mirror of the SecureStore flag so
  * the route guard in _layout.tsx can react WITHOUT waiting for an async
- * read — avoiding the race where /(tabs) briefly renders between
+ * read · avoiding the race where /(tabs) briefly renders between
  * SecureStore writes and React state updates.
  */
 let _googleUnlockSync: boolean | null = null;
@@ -109,7 +109,7 @@ export function useAuth() {
     try {
       const token = await storage.getItemAsync("access_token");
       if (token) {
-        // Always load the user profile — lock screen handles auth gating
+        // Always load the user profile · lock screen handles auth gating
         _biometricEnabled = await isBiometricEnabled();
 
         try {
@@ -117,7 +117,7 @@ export function useAuth() {
           _user = data;
           notify();
         } catch (profileErr: any) {
-          // Profile fetch failed — try refreshing the token before giving up
+          // Profile fetch failed · try refreshing the token before giving up
           const refreshToken = await storage.getItemAsync("refresh_token");
           if (refreshToken) {
             try {
@@ -128,7 +128,7 @@ export function useAuth() {
               _user = data;
               notify();
             } catch {
-              // Refresh also failed — clear everything
+              // Refresh also failed · clear everything
               await storage.deleteItemAsync("access_token");
               await storage.deleteItemAsync("refresh_token");
               _user = null;
@@ -153,7 +153,7 @@ export function useAuth() {
 
   const login = useCallback(async (phone: string, pin: string, otp?: string, challenge_id?: string) => {
     // challenge_id is set when the user approved the sign-in via push on
-    // another trusted device — backend consumes it as proof and skips OTP.
+    // another trusted device · backend consumes it as proof and skips OTP.
     const { data } = await authApi.login({ phone, pin, otp, challenge_id });
     await storage.setItemAsync("access_token", data.tokens.access);
     await storage.setItemAsync("refresh_token", data.tokens.refresh);
@@ -206,7 +206,7 @@ export function useAuth() {
   const googleLogin = useCallback(async (idToken: string) => {
     const { data } = await authApi.googleLogin(idToken);
     if (data.phone_required) {
-      // Don't store tokens or set user — profile is incomplete
+      // Don't store tokens or set user · profile is incomplete
       // Store email for the complete-profile step
       await storage.setItemAsync("google_pending_email", data.user?.email || "");
     } else {
@@ -215,7 +215,7 @@ export function useAuth() {
       // Set the "needs local unlock" flag BEFORE exposing the user. The
       // route guard in _layout.tsx sees this and forces /auth/google-
       // unlock. Cleared on successful PIN/biometric. Uses the atomic
-      // helper so the sync mirror flips instantly — eliminates the race
+      // helper so the sync mirror flips instantly · eliminates the race
       // where the auth gate runs before the async SecureStore read
       // resolves and briefly lets the user through to (tabs).
       if (!data.pin_required) {
@@ -255,7 +255,7 @@ export function useAuth() {
       _user = data;
       notify();
     } catch {
-      // Non-critical — profile will refresh on next bootstrap
+      // Non-critical · profile will refresh on next bootstrap
     }
   }, []);
 

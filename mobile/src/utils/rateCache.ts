@@ -43,7 +43,7 @@ export async function getCachedRates(): Promise<CachedRate[] | null> {
   if (!raw) return null;
   try {
     const data: CachedRate[] = JSON.parse(raw);
-    // Return even if stale — caller decides what to show
+    // Return even if stale · caller decides what to show
     return data;
   } catch {
     return null;

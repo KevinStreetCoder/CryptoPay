@@ -1,6 +1,6 @@
 import { Spinner } from "./brand/Spinner";
 /**
- * NotificationDetailModal — full-content popup for a single inbox entry.
+ * NotificationDetailModal · full-content popup for a single inbox entry.
  *
  * Used by BOTH the user inbox and the admin inbox (admin gets the extra
  * stats block + edit controls via the `adminMode` prop). Rather than two
@@ -16,7 +16,7 @@ import { Spinner } from "./brand/Spinner";
  *     than the stale "unread" state).
  *   - Admin mode: shows recipients / read / opened / total opens and
  *     reveals an "Edit" flyout that PATCHes the broadcast. The edit form
- *     lives inline — no nested modal — so the admin flow is one surface.
+ *     lives inline · no nested modal · so the admin flow is one surface.
  *
  * Aesthetic: financial-instrument minimalism. No gradients except a
  * single hairline divider. Emerald accents only for positive actions.
@@ -49,7 +49,7 @@ import { useToast } from "./Toast";
 type Props = {
   /** The id of the UserNotification (not the AdminNotification). */
   notificationId: string | null;
-  /** If true, the caller is a staff user viewing any broadcast — shows
+  /** If true, the caller is a staff user viewing any broadcast · shows
    *  stats panel + edit UI. For staff-viewing-their-own-inbox the caller
    *  should pass false; the normal user view renders. */
   adminMode?: boolean;
@@ -80,9 +80,9 @@ const PRIORITY_META: Record<
 };
 
 function formatStamp(iso: string | null | undefined) {
-  if (!iso) return "—";
+  if (!iso) return "·";
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
+  if (Number.isNaN(d.getTime())) return "·";
   return d.toLocaleString(undefined, {
     dateStyle: "medium",
     timeStyle: "short",
@@ -229,7 +229,7 @@ export function NotificationDetailModal({
       transparent
       statusBarTranslucent
     >
-      {/* Backdrop — dismisses on tap outside. */}
+      {/* Backdrop · dismisses on tap outside. */}
       <Pressable
         onPress={onClose}
         style={{
@@ -239,7 +239,7 @@ export function NotificationDetailModal({
           paddingHorizontal: isDesktop ? 24 : 0,
         }}
       >
-        {/* stopPropagation — inner tap shouldn't close the modal. */}
+        {/* stopPropagation · inner tap shouldn't close the modal. */}
         <Pressable
           onPress={() => {}}
           style={[
@@ -486,7 +486,7 @@ export function NotificationDetailModal({
                   >
                     <Ionicons name="create-outline" size={16} color={tc.primary[400]} />
                     <Text style={{ color: tc.primary[300], fontFamily: "DMSans_600SemiBold" }}>
-                      Edit — propagates to {adminStats?.totals.recipients ?? "all"} recipients
+                      Edit · propagates to {adminStats?.totals.recipients ?? "all"} recipients
                     </Text>
                   </Pressable>
                 ) : null}

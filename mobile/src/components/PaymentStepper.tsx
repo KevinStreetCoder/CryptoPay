@@ -1,5 +1,5 @@
 /**
- * PaymentStepper — compact 3-step progress indicator for payment flow.
+ * PaymentStepper · compact 3-step progress indicator for payment flow.
  * Steps: Details → Confirm → Done
  */
 import { View, Text, Platform } from "react-native";

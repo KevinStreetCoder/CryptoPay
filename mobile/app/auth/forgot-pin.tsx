@@ -118,7 +118,7 @@ export default function ForgotPINScreen() {
       }
     } catch (err: any) {
       const data = err?.response?.data;
-      // Backend requires TOTP — show TOTP step
+      // Backend requires TOTP · show TOTP step
       if (data?.totp_required && !totpCode) {
         setPendingOtp(otp);
         setTotpRequired(true);

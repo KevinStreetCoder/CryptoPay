@@ -53,24 +53,24 @@ export interface PublicReferralLanding {
   reward_preview_kes?: string;
 }
 
-/** GET /referrals/me/ — the logged-in user's code, share URL, totals. */
+/** GET /referrals/me/ · the logged-in user's code, share URL, totals. */
 export async function getMyReferral(): Promise<MyReferralResponse> {
   const { data } = await api.get<MyReferralResponse>("/referrals/me/");
   return data;
 }
 
-/** GET /referrals/history/?page=N — paginated referrals this user made. */
+/** GET /referrals/history/?page=N · paginated referrals this user made. */
 export async function getReferralHistory(page = 1): Promise<ReferralHistoryPage> {
   const { data } = await api.get<ReferralHistoryPage>(`/referrals/history/?page=${page}`);
   return data;
 }
 
-/** POST /referrals/share-event/ — record a share action (increments counter + logs). */
+/** POST /referrals/share-event/ · record a share action (increments counter + logs). */
 export async function logShareEvent(channel: string): Promise<void> {
   await api.post("/referrals/share-event/", { channel });
 }
 
-/** POST /referrals/validate/ — preflight check a code at sign-up time. Unauthenticated. */
+/** POST /referrals/validate/ · preflight check a code at sign-up time. Unauthenticated. */
 export async function validateCode(code: string): Promise<ValidateCodeResponse> {
   try {
     const { data } = await api.post<ValidateCodeResponse>("/referrals/validate/", {
@@ -82,7 +82,7 @@ export async function validateCode(code: string): Promise<ValidateCodeResponse> 
   }
 }
 
-/** GET /r/{code}/public/ — served publicly for the share-preview landing page.
+/** GET /r/{code}/public/ · served publicly for the share-preview landing page.
  *  Lives at the site root (not under /api/v1/) so we strip the api prefix. */
 export async function getPublicReferral(code: string): Promise<PublicReferralLanding> {
   try {

@@ -68,7 +68,7 @@ export const notificationsApi = {
   },
 
   /** Fetch full notification detail. Records an "opened" event server-side
-   *  — the returned `open_count` reflects this call. */
+   *  · the returned `open_count` reflects this call. */
   detail: (id: string) =>
     api.get<NotificationDetail>(`/notifications/${id}/`),
 

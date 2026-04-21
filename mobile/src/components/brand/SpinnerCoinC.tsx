@@ -1,12 +1,12 @@
 /**
- * SpinnerCoinC — the brand-strong loader.
+ * SpinnerCoinC · the brand-strong loader.
  *
  * Canonical version from the design handoff (logos.jsx · SpinnerCoinC).
  * Pure SVG: a rotating emerald arc wraps a central pulsing bar (the
  * Coin-C "slot"). No raster mark, so it stays sharp at any size and
  * doesn't pull in brand-mark.png.
  *
- * Timing: 1.1s arc rotation, 1.4s bar pulse — same as the designer's.
+ * Timing: 1.1s arc rotation, 1.4s bar pulse · same as the designer's.
  * Both respect prefers-reduced-motion (static composition).
  *
  * Size 48–80 px. Use for full-screen overlays, payment processing,
@@ -26,7 +26,7 @@ export interface SpinnerCoinCProps {
   color?: string;
 }
 
-// Inject the keyframes once per web document — the designer's
+// Inject the keyframes once per web document · the designer's
 // `@keyframes cpaySpin` / `cpayPulse`. On native we drive the same
 // motion via RN Animated.
 function injectKeyframes() {

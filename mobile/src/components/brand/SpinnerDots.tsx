@@ -1,8 +1,8 @@
 /**
- * SpinnerDots — three emerald dots with a staggered opacity pulse.
+ * SpinnerDots · three emerald dots with a staggered opacity pulse.
  * Use inline in copy or chat-bubble "thinking" contexts. Size 24–36.
  *
- * Deliberately quieter than SpinnerArc — it fades rather than rotates,
+ * Deliberately quieter than SpinnerArc · it fades rather than rotates,
  * so it won't compete with surrounding text for attention.
  */
 import { useEffect, useRef } from "react";
@@ -22,7 +22,7 @@ export function SpinnerDots({ size = 28, color = colors.primary[500] }: SpinnerD
   const d = size / 4; // dot diameter
   const gap = d * 0.7;
 
-  // Three Animated values for native — each staggered by 200ms.
+  // Three Animated values for native · each staggered by 200ms.
   const a1 = useRef(new Animated.Value(0.35)).current;
   const a2 = useRef(new Animated.Value(0.35)).current;
   const a3 = useRef(new Animated.Value(0.35)).current;

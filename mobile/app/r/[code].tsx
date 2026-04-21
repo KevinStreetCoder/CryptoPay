@@ -14,7 +14,7 @@ import { storage } from "../../src/utils/storage";
 const isWeb = Platform.OS === "web";
 
 /**
- * Public referral landing — GET /r/{code}
+ * Public referral landing · GET /r/{code}
  *
  *  1. Fetches first-name + reward preview from backend
  *  2. Stores the code to be auto-filled on the next Register screen

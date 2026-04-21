@@ -1,6 +1,6 @@
 import { Spinner } from "./brand/Spinner";
 /**
- * DepositTracker — shows recent blockchain deposits with real-time status,
+ * DepositTracker · shows recent blockchain deposits with real-time status,
  * confirmation progress, and expandable details.
  */
 import React, { useState, useEffect, useRef, useCallback } from "react";

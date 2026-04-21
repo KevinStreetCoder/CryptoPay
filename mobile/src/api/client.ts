@@ -2,7 +2,7 @@ import axios from "axios";
 import { storage } from "../utils/storage";
 import { config } from "../constants/config";
 
-// Callback for session expiry — set by auth store to avoid circular imports
+// Callback for session expiry · set by auth store to avoid circular imports
 let _onSessionExpired: (() => void) | null = null;
 export function setOnSessionExpired(cb: () => void) {
   _onSessionExpired = cb;
@@ -45,7 +45,7 @@ const AUTH_ENDPOINTS = ["/auth/login/", "/auth/register/", "/auth/otp/", "/auth/
 // Endpoints that bypass session-expired check but DO send auth token
 const AUTH_WITH_TOKEN = ["/auth/google/complete-profile/", "/auth/set-initial-pin/", "/auth/profile/"];
 
-// Force reset session expired flag — used after Google OAuth stores new tokens
+// Force reset session expired flag · used after Google OAuth stores new tokens
 export function forceResetSessionExpired() {
   _sessionExpired = false;
 }
@@ -65,7 +65,7 @@ api.interceptors.request.use(async (cfg) => {
   const isPublicAuth = AUTH_ENDPOINTS.some((ep) => cfg.url?.includes(ep));
   const isAuthWithToken = AUTH_WITH_TOKEN.some((ep) => cfg.url?.includes(ep));
 
-  // If session already expired, reject immediately — but allow auth endpoints through
+  // If session already expired, reject immediately · but allow auth endpoints through
   if (_sessionExpired && !isPublicAuth && !isAuthWithToken) {
     return Promise.reject(new SessionExpiredError());
   }
@@ -83,17 +83,17 @@ api.interceptors.response.use(
     const isAuthEndpoint = AUTH_ENDPOINTS.some((ep) => originalRequest?.url?.includes(ep)) ||
       AUTH_WITH_TOKEN.some((ep) => originalRequest?.url?.includes(ep));
 
-    // Auth endpoints (login, register, etc.) — always pass errors through as-is
+    // Auth endpoints (login, register, etc.) · always pass errors through as-is
     if (isAuthEndpoint) {
       return Promise.reject(error);
     }
 
-    // Already handled — don't re-process (but only for non-auth endpoints)
+    // Already handled · don't re-process (but only for non-auth endpoints)
     if (error instanceof SessionExpiredError || _sessionExpired) {
       return Promise.reject(new SessionExpiredError());
     }
 
-    // Transient upstream failures (502/503/504) — usually a brief deploy
+    // Transient upstream failures (502/503/504) · usually a brief deploy
     // window or a connection reset between nginx and daphne. Retry twice
     // with 700ms / 1600ms backoff before surfacing the error. Auth
     // endpoints skipped above, so logins still fail fast.
@@ -126,7 +126,7 @@ api.interceptors.response.use(
           refresh,
         });
         await storage.setItemAsync("access_token", data.access);
-        // Save rotated refresh token — backend blacklists the old one
+        // Save rotated refresh token · backend blacklists the old one
         if (data.refresh) {
           await storage.setItemAsync("refresh_token", data.refresh);
         }

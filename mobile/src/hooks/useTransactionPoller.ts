@@ -28,11 +28,11 @@ export function useTransactionPoller() {
       const startTime = Date.now();
 
       if (!transactionId) {
-        // No transaction ID — can't poll, return immediately
+        // No transaction ID · can't poll, return immediately
         return { status: "processing", transaction: null };
       }
 
-      // Initial delay — give backend time to process STK Push
+      // Initial delay · give backend time to process STK Push
       onStatusChange?.("processing");
       await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL));
 
@@ -47,12 +47,12 @@ export function useTransactionPoller() {
             return { status, transaction: data };
           }
         } catch {
-          // Network error — keep polling (backend might be temporarily unavailable)
+          // Network error · keep polling (backend might be temporarily unavailable)
         }
 
         // Check timeout
         if (Date.now() - startTime > MAX_POLL_DURATION) {
-          // Timed out — still processing, navigate with current status
+          // Timed out · still processing, navigate with current status
           return { status: "processing", transaction: null };
         }
 

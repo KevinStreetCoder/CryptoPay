@@ -1,8 +1,8 @@
 /**
- * OnboardingSlide — 3 slides shown on first cold-start after sign-up.
+ * OnboardingSlide · 3 slides shown on first cold-start after sign-up.
  *
  * Ported from the design handoff (cpay/project/polish-assets.jsx ·
- * OnboardingSlide). Matches the app's native dark theme — ink background,
+ * OnboardingSlide). Matches the app's native dark theme · ink background,
  * glass card, per-slide glow tint.
  *
  * Usage:
@@ -11,9 +11,9 @@
  *                    onSkip={() => ...} />
  *
  * 3 steps:
- *   1. WELCOME — Pay any Paybill or Till with crypto.
- *   2. HOW IT WORKS — Any crypto, into Kenyan Shillings.
- *   3. RATE LOCK — Your rate is locked for 90 seconds.
+ *   1. WELCOME · Pay any Paybill or Till with crypto.
+ *   2. HOW IT WORKS · Any crypto, into Kenyan Shillings.
+ *   3. RATE LOCK · Your rate is locked for 90 seconds.
  */
 import { View, Text, Pressable, Platform, useWindowDimensions } from "react-native";
 import { OnboardingIcon1, OnboardingIcon2, OnboardingIcon3 } from "./PolishAssets";
@@ -73,13 +73,13 @@ export function OnboardingSlide({ step, onContinue, onSkip }: OnboardingSlidePro
         overflow: "hidden",
         ...((isWeb
           ? {
-              // Radial glow tint behind the glass card — per-slide colour.
+              // Radial glow tint behind the glass card · per-slide colour.
               background: `radial-gradient(ellipse at 50% 0%, ${slide.glow}22 0%, ${INK_BG} 55%)`,
             }
           : {}) as any),
       }}
     >
-      {/* Skip — hidden on last slide since the CTA is the only action */}
+      {/* Skip · hidden on last slide since the CTA is the only action */}
       {!isLast && onSkip ? (
         <Pressable
           onPress={onSkip}

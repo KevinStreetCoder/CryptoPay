@@ -1,5 +1,5 @@
 /**
- * PaymentFlowLottie — plays a Lottie animation exactly ONCE when it
+ * PaymentFlowLottie · plays a Lottie animation exactly ONCE when it
  * scrolls into view, then freezes on its final frame. No looping, no
  * scrubbing, no attempt to "catch the user's eye" a second time.
  *
@@ -9,7 +9,7 @@
  *   2. Triggered by IntersectionObserver at 35% visibility. Disposes
  *      cleanly on unmount.
  *   3. Respects `prefers-reduced-motion`. Users who set that flag see
- *      only the static fallback — never the animation.
+ *      only the static fallback · never the animation.
  *   4. If the Lottie JSON fails to load (404, CORS, parse error), we
  *      render the fallback silently. Never a broken icon on the page.
  *   5. Target asset size ≤150 KB. The README in mobile/assets/lottie/
@@ -24,7 +24,7 @@ type LottieSource =
   | Record<string, any>; // inline JSON object
 
 type Props = {
-  /** Lottie JSON — either a URL or a bundled object. */
+  /** Lottie JSON · either a URL or a bundled object. */
   source: LottieSource;
   /** Fallback shown before play, on error, or on prefers-reduced-motion. */
   fallback: ImageSourcePropType;
@@ -73,7 +73,7 @@ export function PaymentFlowLottie({
     return () => mq.removeEventListener?.("change", listener);
   }, []);
 
-  // IntersectionObserver — fire once, then disconnect.
+  // IntersectionObserver · fire once, then disconnect.
   useEffect(() => {
     if (reduceMotion) return; // don't even arm the observer
     const node = hostRef.current;
@@ -98,7 +98,7 @@ export function PaymentFlowLottie({
   }, [threshold, reduceMotion]);
 
   // Lazy-load the Lottie library once we know we're going to play.
-  // This keeps the initial landing bundle lean — Lottie is ~60 KB
+  // This keeps the initial landing bundle lean · Lottie is ~60 KB
   // gzipped and non-critical for first paint.
   useEffect(() => {
     if (!visible || reduceMotion || LottieComp) return;

@@ -1,17 +1,17 @@
 /**
- * NetworkBadge — asset · network chip used on Deposit + Send screens.
+ * NetworkBadge · asset · network chip used on Deposit + Send screens.
  *
  * Replaces labels like "USDT (TRON)" with a proper chip with a
  * color-coded dot + monospace code. Colors match ChainConverge so a
  * user's eye ties them together across screens.
  *
- *   USDT · TRON    — emerald
- *   BTC            — amber
- *   ETH · ERC-20   — indigo
- *   SOL            — violet
+ *   USDT · TRON    · emerald
+ *   BTC            · amber
+ *   ETH · ERC-20   · indigo
+ *   SOL            · violet
  *
  * Note: the brand brief overrides these on app surfaces where "emerald
- * is the ONLY accent" — pass `mono` to render all chips in ink-2 +
+ * is the ONLY accent" · pass `mono` to render all chips in ink-2 +
  * single-dot style for those contexts.
  */
 import { View, Text, Platform } from "react-native";
@@ -46,7 +46,7 @@ export interface NetworkBadgeProps {
   compact?: boolean;
   /** Force monochrome ink rendering (emerald-only surfaces). */
   mono?: boolean;
-  /** Dark-surface variant — use on app screens (deposit, send). */
+  /** Dark-surface variant · use on app screens (deposit, send). */
   dark?: boolean;
 }
 

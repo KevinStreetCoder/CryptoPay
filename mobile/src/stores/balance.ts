@@ -3,7 +3,7 @@ import { storage } from "../utils/storage";
 
 const STORAGE_KEY = "cpay_balance_hidden";
 
-// Module-level state — synced with persistent storage
+// Module-level state · synced with persistent storage
 let _balanceHidden: boolean = true; // default hidden until loaded from storage
 let _loaded = false;
 let _listeners: Set<() => void> = new Set();

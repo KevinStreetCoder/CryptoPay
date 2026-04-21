@@ -18,7 +18,7 @@ const isWeb = Platform.OS === "web";
 const useNative = Platform.OS !== "web";
 
 /* ═══════════════════════════════════════════════════════════════════════════════
-   Animated Success Checkmark — ring expand + check draw + particle burst
+   Animated Success Checkmark · ring expand + check draw + particle burst
    ═══════════════════════════════════════════════════════════════════════════════ */
 function AnimatedCheckmark() {
   const ringScale = useRef(new Animated.Value(0)).current;
@@ -190,7 +190,7 @@ export default function PaymentSuccessScreen() {
     queryClient.invalidateQueries({ queryKey: ["transactions"] });
   }, []);
 
-  // Auto-poll when status is processing — update live when backend confirms
+  // Auto-poll when status is processing · update live when backend confirms
   useEffect(() => {
     if (liveStatus === "completed" || liveStatus === "failed" || !params.transaction_id) return;
 
@@ -358,7 +358,7 @@ export default function PaymentSuccessScreen() {
               : t("payment.paymentProcessingDesc")}
         </Text>
 
-        {/* Receipt Card — animated */}
+        {/* Receipt Card · animated */}
         <Animated.View
           style={{
             width: "100%",
@@ -452,7 +452,7 @@ export default function PaymentSuccessScreen() {
           </GlassCard>
         </Animated.View>
 
-        {/* Action Buttons — PDF Receipt & Share */}
+        {/* Action Buttons · PDF Receipt & Share */}
         {!isFailed && (
           <Animated.View style={{ flexDirection: "row", gap: 12, marginTop: 20, width: "100%", opacity: buttonsFade }}>
             <Pressable
@@ -551,7 +551,7 @@ export default function PaymentSuccessScreen() {
           </Text>
         </Animated.View>
 
-        {/* Primary action buttons — inline with content */}
+        {/* Primary action buttons · inline with content */}
         <Animated.View
           style={{
             width: "100%",
@@ -600,7 +600,7 @@ export default function PaymentSuccessScreen() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
-   Animated Failure — shake + X mark
+   Animated Failure · shake + X mark
    ═══════════════════════════════════════════════════════════════════════════════ */
 function AnimatedFailure() {
   const ringScale = useRef(new Animated.Value(0)).current;

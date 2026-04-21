@@ -1,5 +1,5 @@
 /**
- * Cpay polish assets — empty states, error, QR frame, KYC illos, tx
+ * Cpay polish assets · empty states, error, QR frame, KYC illos, tx
  * status icons, network badges, onboarding icons + slide.
  *
  * Ported from the design handoff (cpay/project/polish-assets.jsx). Uses
@@ -9,7 +9,7 @@
  * Brand contract:
  *   - 200×200 viewBox, 1.5px ink-2 stroke, single emerald accent
  *   - prefers-reduced-motion safe
- *   - No emoji, no red — failed = ink-2 outline, not red
+ *   - No emoji, no red · failed = ink-2 outline, not red
  */
 import { useEffect, useRef } from "react";
 import { Animated, Easing, Platform, View, Text } from "react-native";
@@ -68,7 +68,7 @@ export function EmptyNoNotifications({ size = 200 }: { size?: number }) {
 }
 
 // ═════════════════════════════════════════════════════════════════════════
-// ERROR STATE — ink outline circle-X with emerald mark. Deliberately not red.
+// ERROR STATE · ink outline circle-X with emerald mark. Deliberately not red.
 // ═════════════════════════════════════════════════════════════════════════
 
 export function ErrorState({ size = 200 }: { size?: number }) {
@@ -82,7 +82,7 @@ export function ErrorState({ size = 200 }: { size?: number }) {
 }
 
 // ═════════════════════════════════════════════════════════════════════════
-// TX STATUS ICONS — 24×24 monochrome glyphs. Use in transaction lists.
+// TX STATUS ICONS · 24×24 monochrome glyphs. Use in transaction lists.
 // `processing` rotates; others are static.
 // ═════════════════════════════════════════════════════════════════════════
 
@@ -158,7 +158,7 @@ export function TxStatusIcon({ kind, size = 24 }: { kind: TxStatusKind; size?: n
 }
 
 // ═════════════════════════════════════════════════════════════════════════
-// NETWORK BADGE — asset-on-network chip. Use on deposit/send surfaces.
+// NETWORK BADGE · asset-on-network chip. Use on deposit/send surfaces.
 // ═════════════════════════════════════════════════════════════════════════
 
 const NETWORK_COLORS: Record<string, string> = {
@@ -215,7 +215,7 @@ export function NetworkBadge({ asset, network, color }: { asset: string; network
 }
 
 // ═════════════════════════════════════════════════════════════════════════
-// KYC ILLUSTRATIONS — focus-frame with corner brackets + subject hint.
+// KYC ILLUSTRATIONS · focus-frame with corner brackets + subject hint.
 // ═════════════════════════════════════════════════════════════════════════
 
 export function KycIdFront({ size = 200 }: { size?: number }) {
@@ -265,7 +265,7 @@ export function KycReview({ size = 200 }: { size?: number }) {
 }
 
 // ═════════════════════════════════════════════════════════════════════════
-// ONBOARDING ICONS — used inside OnboardingSlide cards.
+// ONBOARDING ICONS · used inside OnboardingSlide cards.
 // ═════════════════════════════════════════════════════════════════════════
 
 export function OnboardingIcon1({ size = 160 }: { size?: number }) {
@@ -332,7 +332,7 @@ export function OnboardingIcon3({ size = 160 }: { size?: number }) {
 }
 
 // ═════════════════════════════════════════════════════════════════════════
-// PUSH NOTIF ICON — white Coin-C on ink circle. Used by notification
+// PUSH NOTIF ICON · white Coin-C on ink circle. Used by notification
 // subsystem + lock-screen icons.
 // ═════════════════════════════════════════════════════════════════════════
 

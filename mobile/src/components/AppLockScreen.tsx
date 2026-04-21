@@ -49,7 +49,7 @@ export function AppLockScreen({ onUnlock, userPhone, onForgotPin }: AppLockScree
 
   const handlePinComplete = useCallback(async (pin: string) => {
     if (!userPhone) {
-      // No phone available — can't verify PIN, just unlock
+      // No phone available · can't verify PIN, just unlock
       onUnlock();
       return;
     }

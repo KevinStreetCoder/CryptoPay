@@ -177,75 +177,91 @@ export function WebSidebar() {
               position: "sticky",
               top: 0,
               transition: "width 0.2s ease",
-              overflow: "hidden",
+              overflow: "visible", // was "hidden" — allow the edge toggle to stick out
             } as any)
           : {}),
       }}
     >
+      {/* Floating edge toggle · always visible, always reachable. Sits on
+          the sidebar's right border so it works identically in the
+          collapsed and expanded states. Inspired by VS Code / Notion. */}
+      {Platform.OS === "web" ? (
+        <Pressable
+          onPress={toggleCollapsed}
+          style={({ pressed, hovered }: any) => ({
+            position: "absolute",
+            right: -13,
+            top: 56, // aligns with the center of the 32px Wordmark mark
+            width: 26,
+            height: 26,
+            borderRadius: 13,
+            backgroundColor: hovered
+              ? colors.primary[500]
+              : isDark
+                ? "#0F1E33"
+                : "#FFFFFF",
+            borderWidth: 1,
+            borderColor: hovered
+              ? colors.primary[500]
+              : isDark
+                ? "rgba(255,255,255,0.14)"
+                : "rgba(0,0,0,0.10)",
+            alignItems: "center",
+            justifyContent: "center",
+            opacity: pressed ? 0.85 : 1,
+            zIndex: 20,
+            cursor: "pointer",
+            transition: "background-color 0.15s ease, transform 0.15s ease, border-color 0.15s ease",
+            transform: hovered ? "scale(1.08)" : "scale(1)",
+            boxShadow: hovered
+              ? `0 4px 12px ${colors.primary[500]}40`
+              : "0 1px 3px rgba(0,0,0,0.12)",
+          } as any)}
+          accessibilityRole="button"
+          accessibilityLabel={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {({ hovered }: any) => (
+            <Ionicons
+              name={collapsed ? "chevron-forward" : "chevron-back"}
+              size={14}
+              color={
+                hovered ? "#FFFFFF" : isDark ? "rgba(255,255,255,0.7)" : "#4B5563"
+              }
+            />
+          )}
+        </Pressable>
+      ) : null}
       {/* Top section */}
       <View>
-        {/* Logo + toggle */}
+        {/* Brand logo · clickable → dashboard */}
         <Pressable
           onPress={() => router.push("/(tabs)" as any)}
           style={{
             paddingHorizontal: collapsed ? 0 : 24,
-            paddingBottom: 12,
+            paddingVertical: 8,
             flexDirection: "row",
             alignItems: "center",
             justifyContent: collapsed ? "center" : "flex-start",
-            gap: collapsed ? 0 : 12,
             ...(Platform.OS === "web" ? { cursor: "pointer" } as any : {}),
           }}
+          accessibilityRole="link"
+          accessibilityLabel="Go to dashboard"
         >
-          {/* Brand Wordmark — Coin-C + "Cpay". Collapses to Coin-C-only on narrow sidebar. */}
+          {/* Brand Wordmark · Coin-C + "Cpay". Collapses to Coin-C-only on narrow sidebar. */}
           {collapsed ? (
-            <Wordmark size={28} dark textOnly={false} />
+            <Wordmark size={32} dark markOnly />
           ) : (
             <Wordmark size={32} dark />
           )}
         </Pressable>
 
-        {/* Toggle button */}
-        <View
-          style={{
-            paddingHorizontal: collapsed ? 0 : 16,
-            alignItems: collapsed ? "center" : "flex-end",
-            marginBottom: 12,
-          }}
-        >
-          <Pressable
-            onPress={toggleCollapsed}
-            style={({ pressed, hovered }: any) => ({
-              width: 32,
-              height: 32,
-              borderRadius: 8,
-              backgroundColor: hovered
-                ? isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.06)"
-                : isDark ? "rgba(255, 255, 255, 0.04)" : "rgba(0, 0, 0, 0.03)",
-              alignItems: "center",
-              justifyContent: "center",
-              opacity: pressed ? 0.7 : 1,
-              ...(Platform.OS === "web"
-                ? ({ cursor: "pointer", transition: "background-color 0.15s ease" } as any)
-                : {}),
-            })}
-            accessibilityRole="button"
-            accessibilityLabel={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          >
-            <Ionicons
-              name={collapsed ? "chevron-forward" : "chevron-back"}
-              size={16}
-              color={tc.textMuted}
-            />
-          </Pressable>
-        </View>
-
-        {/* Divider */}
+        {/* Divider · sits just under the brand in both states */}
         <View
           style={{
             height: 1,
             backgroundColor: isDark ? "rgba(255, 255, 255, 0.06)" : "rgba(0, 0, 0, 0.06)",
             marginHorizontal: collapsed ? 10 : 16,
+            marginTop: 14,
             marginBottom: 16,
           }}
         />
@@ -459,7 +475,7 @@ export function WebSidebar() {
       </View>
 
       {/* Bottom section: User card + Logout.
-          Redesigned 2026-04-17 — enterprise-grade minimal footer that
+          Redesigned 2026-04-17 · enterprise-grade minimal footer that
           (a) shows KYC verification at a glance via the same emerald tick
           used on the dashboard header, (b) turns the tier into a quiet pill
           (KYC 1/2/3/ADMIN) instead of just a coloured avatar border, and
@@ -475,7 +491,7 @@ export function WebSidebar() {
             ? "UNVERIFIED"
             : `TIER ${tier}`;
         const tierTone = isAdmin
-          ? "#F59E0B" // gold — matches admin border on avatars
+          ? "#F59E0B" // gold · matches admin border on avatars
           : isVerified
             ? colors.primary[400]
             : "#64748B"; // muted slate for unverified
@@ -496,7 +512,7 @@ export function WebSidebar() {
                     : {}),
                 })}
                 accessibilityRole="button"
-                accessibilityLabel={`Profile — ${tierLabel}`}
+                accessibilityLabel={`Profile · ${tierLabel}`}
               >
                 <View style={{ position: "relative" }}>
                   <UserAvatar
@@ -553,7 +569,7 @@ export function WebSidebar() {
                     : {}),
                 })}
                 accessibilityRole="button"
-                accessibilityLabel={`Open profile — ${tierLabel}`}
+                accessibilityLabel={`Open profile · ${tierLabel}`}
               >
                 <UserAvatar
                   avatarUrl={user?.avatar_url}
@@ -615,7 +631,7 @@ export function WebSidebar() {
               </Pressable>
             )}
 
-            {/* Logout — ghost button style, quiet at rest, red on hover. */}
+            {/* Logout · ghost button style, quiet at rest, red on hover. */}
             <Pressable
               onPress={handleLogout}
               style={({ pressed, hovered }: any) => ({

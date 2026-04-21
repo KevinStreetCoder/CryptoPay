@@ -1,9 +1,9 @@
 /**
- * TxStatus — four monochrome 24×24 glyphs for transaction states.
+ * TxStatus · four monochrome 24×24 glyphs for transaction states.
  * Single emerald on `confirmed`. Ink-2 outlines for pending/processing/failed.
  *
  * Replaces the emoji / unicode indicators currently used in tx lists and
- * detail screens. Per the brand brief: failed is NOT red — the status
+ * detail screens. Per the brand brief: failed is NOT red · the status
  * colour palette is emerald ∪ ink, nothing else.
  *
  * `processing` has a subtle rotating arc; others are static.
@@ -74,7 +74,7 @@ export function TxStatus({ status, size = 24 }: TxStatusProps) {
   }
 
   if (status === "pending") {
-    // Clock face — ink-2, no emerald.
+    // Clock face · ink-2, no emerald.
     return (
       <Svg width={s} height={s} viewBox="0 0 24 24">
         <Circle cx="12" cy="12" r="10" fill="none" stroke={INK2} strokeWidth="1.6" />
@@ -84,7 +84,7 @@ export function TxStatus({ status, size = 24 }: TxStatusProps) {
     );
   }
 
-  // processing — rotating emerald arc
+  // processing · rotating emerald arc
   const arc = (
     <Svg width={s} height={s} viewBox="0 0 24 24">
       <Circle cx="12" cy="12" r="10" fill="none" stroke={INK2} strokeWidth="1.6" opacity="0.2" />

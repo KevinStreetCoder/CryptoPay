@@ -30,7 +30,7 @@ export function useUnreadCount(transactions: Transaction[]) {
       const { data } = await notificationsApi.unreadCount();
       setServerUnread(data.unread_count);
     } catch {
-      // silently ignore — don't break the UI
+      // silently ignore · don't break the UI
     }
   }, []);
 

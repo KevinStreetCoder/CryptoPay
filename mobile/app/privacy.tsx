@@ -8,7 +8,7 @@ const TermsScreen = require("./settings/terms").default;
 
 /**
  * Public route: /privacy
- * Renders privacy policy directly — accessible without login.
+ * Renders privacy policy directly · accessible without login.
  * Required by Google OAuth consent screen and app store listings.
  */
 export default function PrivacyPage() {

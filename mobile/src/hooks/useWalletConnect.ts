@@ -1,5 +1,5 @@
 /**
- * Unified WalletConnect hook — wraps Reown AppKit to provide a clean API
+ * Unified WalletConnect hook · wraps Reown AppKit to provide a clean API
  * for connecting/disconnecting wallets, reading session state, and sending
  * transactions from the connected external wallet.
  *
@@ -7,7 +7,7 @@
  *
  * Supported wallets: MetaMask, Trust Wallet, Rainbow, Zerion, etc. (EVM)
  * Non-EVM chains (Tron, Bitcoin, Solana) are not supported by WalletConnect v2
- * natively — users should use manual deposit addresses for those networks.
+ * natively · users should use manual deposit addresses for those networks.
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
@@ -37,7 +37,7 @@ export type WalletConnectStatus =
   | "connected"
   | "error";
 
-// ── Dynamic imports — avoid crashing when AppKit not available ───────────────
+// ── Dynamic imports · avoid crashing when AppKit not available ───────────────
 
 let _useAppKit: any;
 let _useAppKitAccount: any;
@@ -122,7 +122,7 @@ function useWalletConnectInner() {
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Derived chain ID — AppKit may return it as caip-2 or number
+  // Derived chain ID · AppKit may return it as caip-2 or number
   const chainId = typeof rawChainId === "number" ? rawChainId : 1;
   const chainName = CHAIN_NAMES[chainId] || `Chain ${chainId}`;
 
@@ -301,7 +301,7 @@ export function useWalletConnect() {
     _appKitHooksAvailable && appKitInitialized && Platform.OS !== "web";
 
   if (ready) {
-    // Safe to call hooks — this path is stable (won't flip during component lifecycle
+    // Safe to call hooks · this path is stable (won't flip during component lifecycle
     // because appKitInitialized is set at module load time before any render)
     return useWalletConnectInner();
   }
@@ -310,7 +310,7 @@ export function useWalletConnect() {
 }
 
 /**
- * Supported EVM deposit networks — re-exported for convenience.
+ * Supported EVM deposit networks · re-exported for convenience.
  */
 export { DEPOSIT_NETWORKS } from "../config/appkit";
 

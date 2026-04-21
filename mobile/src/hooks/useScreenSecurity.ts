@@ -23,7 +23,7 @@ export function useScreenSecurity(enabled: boolean = true) {
           };
         }
       } catch {
-        // expo-screen-capture not installed — skip silently
+        // expo-screen-capture not installed · skip silently
       }
     })();
 

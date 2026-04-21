@@ -205,7 +205,7 @@ function DeviceCard({
         </View>
       </View>
 
-      {/* Remove button — not shown for current device */}
+      {/* Remove button · not shown for current device */}
       {!isCurrent && (
         <Pressable
           onPress={onRemove}
@@ -335,7 +335,7 @@ export default function DevicesScreen() {
     [toast]
   );
 
-  // Identify the current device — the first item with is_trusted or the most recently seen
+  // Identify the current device · the first item with is_trusted or the most recently seen
   // In a real implementation, the backend would mark the current session's device.
   // For now, we use the first device (most recently active, since sorted by -last_seen).
   const currentDeviceId = devices.length > 0 ? devices[0].id : null;

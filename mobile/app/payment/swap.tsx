@@ -49,7 +49,7 @@ const isWeb = Platform.OS === "web";
 type SwapCurrency = "USDT" | "USDC" | "BTC" | "ETH" | "SOL";
 
 const CRYPTO_OPTIONS: SwapCurrency[] = ["USDT", "USDC", "BTC", "ETH", "SOL"];
-// Default fee — updated from backend rate API response
+// Default fee · updated from backend rate API response
 let SWAP_FEE_PERCENT = 0.5;
 
 type RateInfo = RateApiResponse;

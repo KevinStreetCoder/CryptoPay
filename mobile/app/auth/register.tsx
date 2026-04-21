@@ -571,7 +571,7 @@ export default function RegisterScreen() {
                 />
               </View>
 
-              {/* Email field — for OTP delivery fallback */}
+              {/* Email field · for OTP delivery fallback */}
               <View
                 style={{
                   flexDirection: "row",

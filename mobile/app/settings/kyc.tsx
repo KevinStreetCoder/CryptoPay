@@ -111,7 +111,7 @@ export default function KYCScreen() {
       const { data } = await authApi.getKYCDocuments();
       setDocuments(Array.isArray(data) ? data : []);
     } catch {
-      // Documents not loaded — show empty state
+      // Documents not loaded · show empty state
     } finally {
       setLoading(false);
     }

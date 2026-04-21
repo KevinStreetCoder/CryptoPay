@@ -6,7 +6,7 @@
  *
  * `expo-auth-session` normally handles this silently by closing the popup
  * window and resolving the promise started by `promptAsync()`. But when the
- * OAuth flow opens in the SAME browser tab (no popup — common on mobile
+ * OAuth flow opens in the SAME browser tab (no popup · common on mobile
  * Safari, some in-app browsers, or when the OAuth client is a pure "Web
  * application" type), the browser lands on this URL and Expo Router renders
  * "Unmatched Route" because there was no file at this path.
@@ -25,7 +25,7 @@ import { useAuth } from "../../../src/stores/auth";
 import { useToast } from "../../../src/components/Toast";
 import { LoadingScreen } from "../../../src/components/LoadingScreen";
 
-// Complete any in-flight OAuth session — closes the popup if one is open
+// Complete any in-flight OAuth session · closes the popup if one is open
 // and resolves the promptAsync() promise back in the origin tab. Must run
 // at module scope for expo-auth-session to pick it up.
 WebBrowser.maybeCompleteAuthSession();
@@ -36,7 +36,7 @@ export default function GoogleCallback() {
 
   useEffect(() => {
     if (Platform.OS !== "web") {
-      // Native devices never land here — the auth proxy returns directly to
+      // Native devices never land here · the auth proxy returns directly to
       // the app via the custom scheme. Safety net: go to login.
       router.replace("/auth/login" as any);
       return;
@@ -77,7 +77,7 @@ export default function GoogleCallback() {
         } else if (data?.pin_required) {
           router.replace("/auth/set-initial-pin" as any);
         } else {
-          // Returning Google user — force PIN/biometric gate before the
+          // Returning Google user · force PIN/biometric gate before the
           // wallet opens. Matches the handleGoogleLogin path in login.tsx.
           router.replace("/auth/google-unlock" as any);
         }

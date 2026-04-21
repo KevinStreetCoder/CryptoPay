@@ -1,17 +1,17 @@
 /**
- * KesRateSparkline — a single-stroke, data-driven sparkline of crypto/USD
+ * KesRateSparkline · a single-stroke, data-driven sparkline of crypto/USD
  * price over the last 7 days, drawn as a plain SVG polyline.
  *
  * Aesthetic: financial-instrument minimalism. One hairline stroke (1px
  * primary-500), a 12% opacity area fill beneath, no axes, no grid, no
  * labels at rest. The chart is an atmospheric underlay behind the stats
- * tiles — present but not clamouring for attention.
+ * tiles · present but not clamouring for attention.
  *
  * Motion rule: NO idle animation. Hover (or tap on mobile web) reveals
  * a vertical guide line, a dot on the curve, and a compact value tooltip.
  * Everything else is static.
  *
- * Data source: GET /api/v1/rates/history/?currency=<X>&period=7d — a
+ * Data source: GET /api/v1/rates/history/?currency=<X>&period=7d · a
  * public, cached endpoint backed by CoinGecko → CryptoCompare → DB
  * fallback. If the fetch fails, the component renders nothing rather
  * than showing fake data.
@@ -55,7 +55,7 @@ export function KesRateSparkline({
   const svgRef = useRef<any>(null);
 
   // Fetch once on mount. We deliberately don't refetch on re-render or on
-  // interval — the 7-day window is cached 30 minutes server-side anyway,
+  // interval · the 7-day window is cached 30 minutes server-side anyway,
   // and a fresh sparkline every minute would be aesthetic noise.
   useEffect(() => {
     let cancelled = false;
@@ -131,7 +131,7 @@ export function KesRateSparkline({
   const hover = hoverIdx != null ? geometry.coords[hoverIdx] : null;
   const gradientId = `cpay-spark-grad-${currency}`;
 
-  // On native we just render a flat placeholder — the stats section is
+  // On native we just render a flat placeholder · the stats section is
   // web-dominant and sparkline interactivity requires DOM events.
   if (Platform.OS !== "web") {
     return <View style={{ width, height }} />;
@@ -148,7 +148,7 @@ export function KesRateSparkline({
 
   return (
     <View
-      // @ts-expect-error — web-only DOM events; RN-web forwards these.
+      // @ts-expect-error · web-only DOM events; RN-web forwards these.
       onMouseMove={(e: any) => onMove(e.clientX)}
       onMouseLeave={() => setHoverIdx(null)}
       // @ts-expect-error
@@ -220,11 +220,11 @@ export function KesRateSparkline({
           </linearGradient>
         </defs>
 
-        {/* Area fill under the line. Low opacity — this is atmosphere. */}
+        {/* Area fill under the line. Low opacity · this is atmosphere. */}
         <polygon points={geometry.area} fill={`url(#${gradientId})`} />
 
         {/* The price line itself. 1.2px reads as ~1px on 1x displays and
-            half-a-hair on retina — deliberately fine. */}
+            half-a-hair on retina · deliberately fine. */}
         <polyline
           points={geometry.polyline}
           fill="none"

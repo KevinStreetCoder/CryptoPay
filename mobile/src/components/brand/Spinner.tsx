@@ -1,5 +1,5 @@
 /**
- * Spinner — the single-entry component that picks the right variant
+ * Spinner · the single-entry component that picks the right variant
  * based on the context you're rendering in.
  *
  * Contract (from the design brief):

@@ -31,7 +31,7 @@ import { config } from "../../src/constants/config";
 
 const isWeb = Platform.OS === "web";
 
-/** Resolve avatar URL — handles relative paths from Django */
+/** Resolve avatar URL · handles relative paths from Django */
 function resolveAvatarUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:")) return url;
@@ -795,7 +795,7 @@ export default function ProfileScreen() {
               }}
               numberOfLines={1}
             >
-              {t("kyc.enhancedDd")} — {currentTier?.limit}
+              {t("kyc.enhancedDd")} · {currentTier?.limit}
             </Text>
           </View>
           <Ionicons name="checkmark-circle" size={18} color={colors.success} />
@@ -922,7 +922,7 @@ export default function ProfileScreen() {
                   marginTop: 2,
                 }}
               >
-                {t("kyc.enhancedDd")} — {currentTier?.limit}
+                {t("kyc.enhancedDd")} · {currentTier?.limit}
               </Text>
             </View>
             <View
@@ -1024,7 +1024,7 @@ export default function ProfileScreen() {
             />
           )}
         </View>
-        {/* Lock Timeout — available even without biometric (PIN fallback) */}
+        {/* Lock Timeout · available even without biometric (PIN fallback) */}
         <View style={{ height: 1, backgroundColor: dividerColor, marginLeft: 76 }} />
         <MenuItem
           icon="timer-outline"
@@ -1484,7 +1484,7 @@ export default function ProfileScreen() {
           }}
         >
           {isDesktop ? (
-            /* Desktop: horizontal layout — avatar+name | info chips & KYC | actions */
+            /* Desktop: horizontal layout · avatar+name | info chips & KYC | actions */
             <View style={{ flexDirection: "row", gap: 32 }}>
               {/* Left: Avatar + Name + Phone */}
               <View style={{ alignItems: "center", minWidth: 180, flex: 1 }}>
@@ -1715,7 +1715,7 @@ export default function ProfileScreen() {
                   badge={emailBadge}
                 />
                 {isMaxTier ? (
-                  /* Verified badge chip for max-tier — mobile */
+                  /* Verified badge chip for max-tier · mobile */
                   <View
                     style={{
                       flexDirection: "row",
@@ -1751,7 +1751,7 @@ export default function ProfileScreen() {
                         {t("profile.identityVerified")}
                       </Text>
                       <Text style={{ color: tc.textSecondary, fontSize: 11, fontFamily: "DMSans_400Regular", marginTop: 1 }}>
-                        {t("kyc.enhancedDd")} — {currentTier?.limit}
+                        {t("kyc.enhancedDd")} · {currentTier?.limit}
                       </Text>
                     </View>
                     <View

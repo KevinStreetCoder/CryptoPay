@@ -1,5 +1,5 @@
 /**
- * GlassCard — reusable glassmorphism container with optional glow border.
+ * GlassCard · reusable glassmorphism container with optional glow border.
  * Uses expo-blur on native, CSS backdrop-filter on web.
  */
 import { View, Platform, ViewStyle, StyleProp } from "react-native";
@@ -10,7 +10,7 @@ import { useThemeMode } from "../stores/theme";
 interface GlassCardProps {
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
-  /** Glow border color — defaults to emerald primary */
+  /** Glow border color · defaults to emerald primary */
   glowColor?: string;
   /** Glow intensity 0–1 */
   glowOpacity?: number;

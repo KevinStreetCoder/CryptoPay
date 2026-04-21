@@ -221,7 +221,7 @@ export default function NotificationsInboxScreen() {
   const [, forceUpdate] = useState(0);
   // The detail modal shows the full notification content (long bodies,
   // sender, timestamps, delivery channel, read status). `openId` holds
-  // the UserNotification id of the row that was tapped — null when the
+  // the UserNotification id of the row that was tapped · null when the
   // modal is closed.
   const [openId, setOpenId] = useState<string | null>(null);
 
@@ -997,7 +997,7 @@ function EmptyState({
         transform: [{ scale: scaleAnim }],
       }}
     >
-      {/* Brand EmptyNoNotifications illustration — bell outline with
+      {/* Brand EmptyNoNotifications illustration · bell outline with
           emerald "zzz". Replaces the prior ring + bell Ionicon composite. */}
       <View style={{ marginBottom: 24, opacity: 0.9 }}>
         <EmptyNoNotifications size={140} />

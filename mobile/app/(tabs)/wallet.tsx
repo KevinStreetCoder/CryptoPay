@@ -358,7 +358,7 @@ export default function WalletScreen() {
   const cryptoWallets = safeWallets.filter((w) => w.currency !== "KES");
   const transactions = txData?.results || [];
 
-  // Use kes_value from backend wallet API (includes spread) — matches BalanceCard
+  // Use kes_value from backend wallet API (includes spread) · matches BalanceCard
   const totalKES = cryptoWallets.reduce((sum, w) => {
     const kesVal = (w as any).kes_value ? parseFloat((w as any).kes_value) : 0;
     if (kesVal > 0) return sum + kesVal;
@@ -1451,7 +1451,7 @@ export default function WalletScreen() {
               gap: 4,
             }}
           >
-            {/* Brand TxStatusIcon per design handoff — 4 canonical glyphs
+            {/* Brand TxStatusIcon per design handoff · 4 canonical glyphs
                 (pending / processing / confirmed / failed). Map backend
                 statuses onto those: `completed` → confirmed, transient
                 in-flight (awaiting, processing, confirming) → processing,

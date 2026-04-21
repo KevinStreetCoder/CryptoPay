@@ -26,7 +26,7 @@ import { GlassCard } from "../../src/components/GlassCard";
 import { useLocale } from "../../src/hooks/useLocale";
 import { Spinner } from "../../src/components/brand/Spinner";
 import { NetworkBadge, currencyToChain, type ChainKey } from "../../src/components/brand/NetworkBadge";
-// Lazy import — WalletConnect modules crash if loaded before AppKit context is ready
+// Lazy import · WalletConnect modules crash if loaded before AppKit context is ready
 // Expo Router eagerly imports all route files at startup, so static import crashes
 const LazyWalletConnectDeposit = React.lazy(() =>
   import("../../src/components/WalletConnectDeposit").then(mod => ({
@@ -132,7 +132,7 @@ export default function DepositScreen() {
           width: "100%",
         }}
       >
-        {/* Page Title — mobile only */}
+        {/* Page Title · mobile only */}
         {!isDesktop && (
           <View style={{ marginBottom: 8, marginTop: 4 }}>
             <Text
@@ -727,7 +727,7 @@ export default function DepositScreen() {
         {/* Crypto Deposit */}
         {method === "crypto" && (
           <View style={{ marginTop: 20, gap: 16 }}>
-            {/* WalletConnect — deposit from MetaMask, Trust, etc. */}
+            {/* WalletConnect · deposit from MetaMask, Trust, etc. */}
             <View
               style={{
                 backgroundColor: tc.dark.card,
@@ -896,7 +896,7 @@ export default function DepositScreen() {
               >
                 Supported Networks
               </Text>
-              {/* Chip row — brand NetworkBadge, same palette as ChainConverge */}
+              {/* Chip row · brand NetworkBadge, same palette as ChainConverge */}
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, paddingVertical: 4 }}>
                 {(["usdt-tron", "btc", "eth-erc20", "sol", "usdc-polygon"] as ChainKey[]).map((chain) => (
                   <NetworkBadge key={chain} chain={chain} dark />

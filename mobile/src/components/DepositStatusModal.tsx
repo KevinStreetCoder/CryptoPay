@@ -1,5 +1,5 @@
 /**
- * DepositStatusModal — full-screen modal with animated timeline stepper
+ * DepositStatusModal · full-screen modal with animated timeline stepper
  * showing deposit progress: Detected -> Confirming (X/N) -> Credited.
  * Success animation when credited. Links to block explorer.
  */
@@ -257,7 +257,7 @@ function CircularProgress({
           borderColor: color + "20",
         }}
       />
-      {/* Progress ring — use conic gradient on web, simplified on native */}
+      {/* Progress ring · use conic gradient on web, simplified on native */}
       {isWeb ? (
         <View
           style={{

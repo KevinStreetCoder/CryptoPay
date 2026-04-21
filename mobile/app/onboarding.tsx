@@ -1,5 +1,5 @@
 /**
- * OnboardingModal — 3-slide introduction, shown once after first login.
+ * OnboardingModal · 3-slide introduction, shown once after first login.
  *
  * Uses the brand OnboardingSlide component (ported from design handoff).
  * Slides: WELCOME → HOW IT WORKS → RATE LOCK.
@@ -67,7 +67,7 @@ export function OnboardingModal({
 
   const Overlay = (
     <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
-      {/* Language toggle — top-left */}
+      {/* Language toggle · top-left */}
       <Pressable
         onPress={() => setLocale(locale === "en" ? "sw" : "en")}
         style={{

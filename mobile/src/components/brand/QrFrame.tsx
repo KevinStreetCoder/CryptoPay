@@ -1,5 +1,5 @@
 /**
- * QrFrame — wraps a QR code with brand corner brackets, wordmark stamp
+ * QrFrame · wraps a QR code with brand corner brackets, wordmark stamp
  * top-right, and a monospace code label below.
  *
  * Use for every QR surface: deposit address, paybill receive, referral.
@@ -51,13 +51,13 @@ export function QrFrame({ children, size = 220, label, showStamp = true }: QrFra
             : { elevation: 4 }),
         }}
       >
-        {/* Corner brackets — emerald, drawn with L-shapes via borders. */}
+        {/* Corner brackets · emerald, drawn with L-shapes via borders. */}
         <View style={{ ...bracket, top: 8, left: 8, borderTopWidth: bt, borderLeftWidth: bt, borderColor: EMERALD }} />
         <View style={{ ...bracket, top: 8, right: 8, borderTopWidth: bt, borderRightWidth: bt, borderColor: EMERALD }} />
         <View style={{ ...bracket, bottom: 8, left: 8, borderBottomWidth: bt, borderLeftWidth: bt, borderColor: EMERALD }} />
         <View style={{ ...bracket, bottom: 8, right: 8, borderBottomWidth: bt, borderRightWidth: bt, borderColor: EMERALD }} />
 
-        {/* Wordmark stamp — top-right inside the paper frame. */}
+        {/* Wordmark stamp · top-right inside the paper frame. */}
         {showStamp ? (
           <View style={{ position: "absolute", top: 14, right: 22 }}>
             <Text style={{ fontSize: 11, fontFamily: "DMSans_700Bold", letterSpacing: -0.3, color: INK }}>

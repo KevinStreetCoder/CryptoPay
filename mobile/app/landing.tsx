@@ -48,7 +48,7 @@ const COIN_ICONS = [
 
 const KENYA_FLAG = "https://flagcdn.com/48x36/ke.png";
 
-// ── Real CDN Images (Unsplash — free, hotlink-ready) ────────────────────────
+// ── Real CDN Images (Unsplash · free, hotlink-ready) ────────────────────────
 const CDN_IMAGES = {
   cryptoCoins: "https://images.unsplash.com/photo-1622630998477-20aa696ecb05?w=900&q=80",
   nairobiSkyline: "https://images.unsplash.com/photo-1611348524140-53c9a25263d6?w=1200&q=75",
@@ -97,7 +97,7 @@ const STORE_ICONS = {
 };
 
 // App logo from store listing
-// Transparent-bg Coin-C mark — sits cleanly on the dark app chrome.
+// Transparent-bg Coin-C mark · sits cleanly on the dark app chrome.
 // app-store / home-screen icons use the paper-bg version at assets/icon.png;
 // for in-app UI we want the mark to float over whatever background is
 // behind it, so we use brand-mark.png (emerald on transparent).
@@ -121,12 +121,12 @@ const KENYAN_SERVICES = [
 // These are scenario cards, NOT testimonials. We don't have a public
 // customer roster yet, so anything with a fake name + initials would
 // fail the trust test the rest of the page is trying to build. Reframed
-// as "Common ways people use Cpay" — concrete situations a visitor
+// as "Common ways people use Cpay" · concrete situations a visitor
 // can self-identify with, no fake attribution.
 const USE_CASES = [
   { quote: "Pay a KPLC bill with USDT in under a minute, no P2P trader needed at midnight.", label: "Utility bills", icon: "flash-outline" as const, color: "#26A17B" },
-  { quote: "Settle school fees from a Binance wallet in one flow — no off-ramping in advance.", label: "School fees", icon: "school-outline" as const, color: "#627EEA" },
-  { quote: "Lock the exchange rate for 90 seconds before confirming — no surprise spread on the way out.", label: "Locked-rate trading", icon: "lock-closed-outline" as const, color: "#F7931A" },
+  { quote: "Settle school fees from a Binance wallet in one flow · no off-ramping in advance.", label: "School fees", icon: "school-outline" as const, color: "#627EEA" },
+  { quote: "Lock the exchange rate for 90 seconds before confirming · no surprise spread on the way out.", label: "Locked-rate trading", icon: "lock-closed-outline" as const, color: "#F7931A" },
   { quote: "Send money home as BTC or USDT, recipient gets KES on M-Pesa. No correspondent bank middlemen.", label: "Diaspora remittance", icon: "globe-outline" as const, color: "#9945FF" },
 ];
 
@@ -135,8 +135,8 @@ const FAQ_DATA = [
   { q: "How does Cpay actually work?", a: "You deposit crypto (USDT, BTC, ETH, or SOL) to your personal Cpay wallet. When you want to pay a bill, enter the Paybill or Till number, pick your crypto, and we lock your exchange rate for 90 seconds. Confirm with your PIN, and the payment hits M-Pesa in under 30 seconds." },
   { q: "What crypto can I use?", a: "USDT on Tron (TRC-20), Bitcoin (BTC), Ethereum (ETH), Solana (SOL), and USDC on Polygon. We pick the networks with the lowest fees so more of your money goes where it should." },
   { q: "How fast is the payment?", a: "Once your crypto deposit confirms on-chain, M-Pesa payments process in under 30 seconds. Most finish in 10-15 seconds. You'll see real-time status updates the entire time." },
-  { q: "Is my money safe?", a: "Every wallet uses BIP-44 HD architecture — industry-standard key derivation. We add biometric auth, optional TOTP 2FA, and encrypt everything with AES-256. We never hold your private keys." },
-  { q: "What does it cost?", a: "A 1.5% conversion spread plus KES 10 flat fee per transaction. No hidden charges. The rate you see on the confirmation screen is exactly what you get — locked for 90 seconds while you decide." },
+  { q: "Is my money safe?", a: "Every wallet uses BIP-44 HD architecture · industry-standard key derivation. We add biometric auth, optional TOTP 2FA, and encrypt everything with AES-256. We never hold your private keys." },
+  { q: "What does it cost?", a: "A 1.5% conversion spread plus KES 10 flat fee per transaction. No hidden charges. The rate you see on the confirmation screen is exactly what you get · locked for 90 seconds while you decide." },
   { q: "Do I need to verify my identity?", a: "For transactions up to KES 5,000/day, just verify your phone number. Higher limits (up to KES 1M/day) require a quick ID check that takes about 2 minutes through our partner Smile Identity." },
 ];
 
@@ -152,7 +152,7 @@ const COMPARISON_ROWS = [
 
 // ── Features (bento layout) ────────────────────────────────────────────────
 const FEATURES = [
-  { icon: "flash" as const, title: "Pay any bill, instantly", desc: "KPLC, DSTV, water, school fees — enter the Paybill number and it's done. No manual M-Pesa steps.", size: "large" as const, accent: "#10B981" },
+  { icon: "flash" as const, title: "Pay any bill, instantly", desc: "KPLC, DSTV, water, school fees · enter the Paybill number and it's done. No manual M-Pesa steps.", size: "large" as const, accent: "#10B981" },
   { icon: "lock-closed" as const, title: "Your rate, locked for 90 seconds", desc: "We freeze your exchange rate. What you see is what you pay. No slippage, no surprises, no anxiety.", size: "large" as const, accent: "#F59E0B" },
   { icon: "send" as const, title: "Send to any phone", desc: "M-Pesa to any number, funded by your crypto balance.", size: "medium" as const, accent: "#3B82F6" },
   { icon: "trending-up" as const, title: "Live rates from CoinGecko", desc: "Real-time pricing. No stale quotes.", size: "medium" as const, accent: "#8B5CF6" },
@@ -229,7 +229,7 @@ function RevealOnScroll({
 // ── Floating Coin ─────────────────────────────────────────────────────────
 // Physics-respecting float: sine-eased sine wave with a per-coin phase
 // offset (via `delay` as both a mount stagger AND the CSS animation-delay
-// so coins aren't in lockstep). 8px amplitude, 3.4-3.8s period — slow
+// so coins aren't in lockstep). 8px amplitude, 3.4-3.8s period · slow
 // enough to read as "breathing," not jittery. Each coin keeps a slightly
 // different duration so their phases drift relative to each other over
 // time (otherwise 4 coins moving together reads as mechanical).
@@ -533,7 +533,7 @@ export default function LandingPage() {
       .then(r => r.json()).then(d => { const rate = d?.tether?.kes; if (rate) setLiveRate(`KES ${rate.toFixed(2)}`); }).catch(() => {});
   }, []);
 
-  // Removed the animated "730K users" counter — we don't publish fabricated
+  // Removed the animated "730K users" counter · we don't publish fabricated
   // user-count stats. If you want to surface adoption, use the live USDT/KES
   // rate below or quote a cited source (e.g. Triple-A 2023 Kenya report).
   const speedCounter = useAnimatedCounter(30, 1200);
@@ -541,7 +541,7 @@ export default function LandingPage() {
   // ── SEO ─────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!isWeb) return;
-    document.title = "Cpay \u2014 Pay Any Bill in Kenya with Crypto | USDT, BTC, ETH, SOL to M-Pesa";
+    document.title = "Cpay · Pay Any Bill in Kenya with Crypto";
     const setMeta = (n: string, c: string, p?: boolean) => {
       const a = p ? "property" : "name";
       let el = document.querySelector(`meta[${a}="${n}"]`) as HTMLMetaElement | null;
@@ -550,7 +550,7 @@ export default function LandingPage() {
     };
     setMeta("description", "Pay any M-Pesa Paybill or Till number directly from cryptocurrency. Convert USDT, BTC, ETH, SOL to KES instantly.");
     setMeta("keywords", "crypto payments Kenya, USDT to M-Pesa, Bitcoin to KES, pay bills with crypto, Cpay");
-    setMeta("og:title", "Cpay \u2014 Pay Any Bill in Kenya with Crypto", true);
+    setMeta("og:title", "Cpay · Pay Any Bill in Kenya with Crypto", true);
     setMeta("og:description", "Convert USDT, BTC, ETH, SOL to M-Pesa payments in 30 seconds.", true);
     setMeta("og:type", "website", true); setMeta("og:url", "https://cpay.co.ke", true);
     setMeta("og:site_name", "Cpay", true); setMeta("og:locale", "en_KE", true);
@@ -626,7 +626,7 @@ export default function LandingPage() {
 
       /* Hero coin float: sine-ish bob. Sym about 0 so the coin returns
          to its anchor cleanly. Using translate3d forces GPU composite
-         (no repaint cost). Amplitude 8px — subtle, reads as "floating
+         (no repaint cost). Amplitude 8px · subtle, reads as "floating
          in zero-g," not as "mascot bouncing." */
       @keyframes cpay-coin-float {
         0%   { transform: translate3d(0, 0, 0); }
@@ -634,10 +634,10 @@ export default function LandingPage() {
         100% { transform: translate3d(0, 0, 0); }
       }
 
-      /* Hero headline accent — static linear gradient, no animation. */
+      /* Hero headline accent · static linear gradient, no animation. */
       .cpay-gradient-headline { background: linear-gradient(135deg, #34D399 0%, #10B981 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
 
-      /* Brand carousel: one slow continuous loop is acceptable — it
+      /* Brand carousel: one slow continuous loop is acceptable · it
          signals "scrolling list of partners" semantically. Pauses on
          hover so users can read individual logos. */
       .cpay-carousel-track { display:flex; animation: cpay-scroll-left 35s linear infinite; width: max-content; }
@@ -695,17 +695,17 @@ export default function LandingPage() {
       .cpay-bento-card:hover .cpay-icon-bounce,
       .cpay-step-card:hover .cpay-icon-bounce { transform: scale(1.15) rotate(-5deg); }
 
-      /* Brand illustration hover — a subtle bring-to-eye lift on the
+      /* Brand illustration hover · a subtle bring-to-eye lift on the
          paper card wrapping brand icons (WalletIcon, SecurityLock,
          SpeedRing, etc.) + a tiny scale on the SVG inside. Keeps the
-         "one motion per fold" rule at rest — only fires on hover. */
+         "one motion per fold" rule at rest · only fires on hover. */
       .cpay-brand-illus { transition: transform 0.35s cubic-bezier(0.4,0,0.2,1), box-shadow 0.35s ease; }
       .cpay-brand-illus:hover { transform: translateY(-4px); box-shadow: 0 14px 36px rgba(16,185,129,0.12); }
       .cpay-brand-illus svg { transition: transform 0.45s cubic-bezier(0.34,1.56,0.64,1); }
       .cpay-brand-illus:hover svg { transform: scale(1.04); }
 
       /* Illustrations: no idle animation (distracting, AI-templatey).
-         Motion triggered by hover only — subtle lift + glow + gentle tilt. */
+         Motion triggered by hover only · subtle lift + glow + gentle tilt. */
       .cpay-illustration {
         transform: translateY(0) rotate(0deg) scale(1);
         transition: transform 0.45s cubic-bezier(0.34,1.56,0.64,1), filter 0.45s ease;
@@ -717,7 +717,7 @@ export default function LandingPage() {
         filter: drop-shadow(0 14px 32px rgba(16,185,129,0.28)) brightness(1.08);
       }
 
-      /* Animated gradient border for featured cards — hover-only.
+      /* Animated gradient border for featured cards · hover-only.
          Previously ran an infinite border-color loop; now only tints
          on hover so the page reads as static and professional at rest. */
       .cpay-glow-border-anim {
@@ -729,7 +729,7 @@ export default function LandingPage() {
         box-shadow: 0 0 0 1px rgba(16,185,129,0.15), 0 10px 30px rgba(16,185,129,0.08);
       }
 
-      /* Pill badge: static — pulse removed (was idle motion noise). */
+      /* Pill badge: static · pulse removed (was idle motion noise). */
       .cpay-badge-pulse { /* legacy class retained for compat; no animation */ }
 
       /* Feature icon: subtle hover lift only. */
@@ -756,7 +756,7 @@ export default function LandingPage() {
       /* Card magnetic tilt on mouse move */
       .cpay-tilt-card { transition: transform 0.15s ease, box-shadow 0.3s ease; will-change: transform; }
 
-      /* CTA section glow ring — static gradient, no sweep animation. */
+      /* CTA section glow ring · static gradient, no sweep animation. */
       .cpay-glow-ring { background: linear-gradient(90deg, rgba(16,185,129,0.15), rgba(245,158,11,0.2), rgba(16,185,129,0.15)); }
 
       /* Stagger children entrance */
@@ -777,7 +777,7 @@ export default function LandingPage() {
   }, []);
 
   // ═══════════════════════════════════════════════════════════════════════
-  // SECTION 1: HERO — Full-width 2-col on desktop, stacked on mobile
+  // SECTION 1: HERO · Full-width 2-col on desktop, stacked on mobile
   // ═══════════════════════════════════════════════════════════════════════
   const heroMockupWidth = isMobile ? Math.min(width - 40, 400) : isTablet ? 420 : Math.min(width * 0.38, 520);
   const heroPad = width >= 1400 ? 80 : width >= 1024 ? 48 : width >= 768 ? 32 : 20;
@@ -790,7 +790,7 @@ export default function LandingPage() {
     }}>
       {/* Background effects */}
       {isWeb && <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, opacity: 0.25, ...(isWeb ? { backgroundImage: "radial-gradient(circle, rgba(16,185,129,0.06) 1px, transparent 1px)", backgroundSize: "36px 36px" } as any : {}) }} />}
-      {/* Static atmospheric glows — give the dark hero depth without idle
+      {/* Static atmospheric glows · give the dark hero depth without idle
           motion. Two glows max (was three + animated); restraint signals
           intent. Particle field removed entirely (decoration with no
           purpose). */}
@@ -809,7 +809,7 @@ export default function LandingPage() {
         <FloatingCoin uri={COIN_ICONS[1].uri} color={COIN_ICONS[1].color} size={36} left="85%" top="5%" delay={300} />
       </>}
 
-      {/* ── HERO MAIN CONTENT — 2-col on desktop, centered max-width ── */}
+      {/* ── HERO MAIN CONTENT · 2-col on desktop, centered max-width ── */}
       <View style={{
         flexDirection: isDesktop ? "row" : "column",
         alignItems: "center",
@@ -833,7 +833,7 @@ export default function LandingPage() {
               )}
             </Text>
             <Text style={{ color: tc.textSecondary, fontSize: isMobile ? 16 : 18, fontFamily: "DMSans_400Regular", textAlign: isDesktop ? "left" : "center", lineHeight: isMobile ? 26 : 30, maxWidth: isMobile ? "100%" : 540, marginBottom: 24 }}>
-              Drop your USDT, BTC, ETH, or SOL — we convert and send KES to any Paybill, Till, or phone number via M-Pesa. M-Pesa B2B settles in 10–30 seconds.
+              Drop your USDT, BTC, ETH, or SOL · we convert and send KES to any Paybill, Till, or phone number via M-Pesa. M-Pesa B2B settles in 10–30 seconds.
             </Text>
             {/* Feature pills */}
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 28, justifyContent: isDesktop ? "flex-start" : "center" }}>
@@ -873,11 +873,11 @@ export default function LandingPage() {
               </Pressable>
             </View>
 
-            {/* Trust strip — only signals that resolve to a real artifact:
+            {/* Trust strip · only signals that resolve to a real artifact:
                 Kenyan registration in progress, AES-256 + non-custodial
                 architecture, M-Pesa via Daraja/SasaPay (named providers).
                 "Bank-grade", "millions of users", and other unverifiable
-                language is removed — substituting specifics where we have
+                language is removed · substituting specifics where we have
                 them and saying nothing where we don't. */}
             <View
               style={{
@@ -931,7 +931,7 @@ export default function LandingPage() {
           </View>
         </RevealOnScroll>
 
-        {/* RIGHT: App Mockup — 3D float animation */}
+        {/* RIGHT: App Mockup · 3D float animation */}
         <RevealOnScroll delay={200} variant="slide-right" style={{ alignItems: "center" }}>
           <View
             ref={(ref: any) => { if (isWeb && ref instanceof HTMLElement) ref.className = "cpay-hero-mockup"; }}
@@ -999,7 +999,7 @@ export default function LandingPage() {
         </RevealOnScroll>
       </View>
 
-      {/* Trusted tech — full-bleed strip beneath the hero. Previously read
+      {/* Trusted tech · full-bleed strip beneath the hero. Previously read
           as a tiny centered clump with dead space either side on wide
           screens. Now: a label column on the left, cards stretched
           evenly across the remaining row on desktop. Wraps to a simple
@@ -1022,7 +1022,7 @@ export default function LandingPage() {
               gap: isMobile ? 18 : 28,
             }}
           >
-            {/* Label column — left on desktop, centered top on mobile. */}
+            {/* Label column · left on desktop, centered top on mobile. */}
             <View
               style={{
                 flexShrink: 0,
@@ -1054,7 +1054,7 @@ export default function LandingPage() {
               </Text>
             </View>
 
-            {/* Cards — stretch to fill the row on desktop. */}
+            {/* Cards · stretch to fill the row on desktop. */}
             <View
               style={{
                 flex: isDesktop ? 1 : undefined,
@@ -1110,7 +1110,7 @@ export default function LandingPage() {
   );
 
   // ═══════════════════════════════════════════════════════════════════════
-  // SECTION 2: SERVICES CAROUSEL — slide-right reveal
+  // SECTION 2: SERVICES CAROUSEL · slide-right reveal
   // ═══════════════════════════════════════════════════════════════════════
   const serviceCard = (service: typeof KENYAN_SERVICES[0], idx: number) => (
     <View
@@ -1132,8 +1132,8 @@ export default function LandingPage() {
   const doubledRow1 = [...row1, ...row1]; const doubledRow2 = [...row2, ...row2];
 
   // ═══════════════════════════════════════════════════════════════════════
-  // PAYMENT TICKER — sits above the closing CTA. Scrolling row of
-  // anonymised settled transactions — honest social proof without
+  // PAYMENT TICKER · sits above the closing CTA. Scrolling row of
+  // anonymised settled transactions · honest social proof without
   // testimonial copy. Paper card on dark chrome.
   // ═══════════════════════════════════════════════════════════════════════
   const paymentTickerSection = (
@@ -1166,7 +1166,7 @@ export default function LandingPage() {
   );
 
   // ═══════════════════════════════════════════════════════════════════════
-  // CHAIN CONVERGE BAND — sits between hero and services.
+  // CHAIN CONVERGE BAND · sits between hero and services.
   // USDT / BTC / ETH / SOL streams converging into the Cpay hub → KES payout.
   // Wraps the animated component in a paper card so the dark app chrome
   // doesn't wash out the design's light palette. Constrained to 1200px
@@ -1205,7 +1205,7 @@ export default function LandingPage() {
             maxWidth: 680,
           }}
         >
-          USDT, BTC, ETH, or SOL — all land as KES on M-Pesa.
+          USDT, BTC, ETH, or SOL · all land as KES on M-Pesa.
         </Text>
         <View
           style={{
@@ -1240,7 +1240,7 @@ export default function LandingPage() {
               <Text style={{ color: tc.primary[400], fontSize: 13, fontFamily: "DMSans_700Bold", textTransform: "uppercase", letterSpacing: 3, marginBottom: 12 }}>Supported Services</Text>
               <Text style={{ color: tc.textPrimary, fontSize: isMobile ? 28 : 40, fontFamily: "DMSans_700Bold", textAlign: isDesktop ? "left" : "center", letterSpacing: -1 }}>Every bill, every provider</Text>
               <Text style={{ color: tc.textSecondary, fontSize: isMobile ? 15 : 17, fontFamily: "DMSans_400Regular", lineHeight: isMobile ? 23 : 26, marginTop: 10, textAlign: isDesktop ? "left" : "center", maxWidth: 500 }}>
-                From KPLC electricity tokens to school fees, DSTV subscriptions to Safaricom airtime — if it has a Paybill or Till number, you can pay it with crypto.
+                From KPLC electricity tokens to school fees, DSTV subscriptions to Safaricom airtime · if it has a Paybill or Till number, you can pay it with crypto.
               </Text>
             </View>
             {isDesktop && <View style={{ opacity: 0.9, flexShrink: 0 }}><KenyaCorridor size={100} /></View>}
@@ -1317,7 +1317,7 @@ export default function LandingPage() {
   );
 
   // ═══════════════════════════════════════════════════════════════════════
-  // SECTION 3: PROBLEM — slide-left/right split + CDN image
+  // SECTION 3: PROBLEM · slide-left/right split + CDN image
   // Background: warmer tint with Unsplash accent image
   // ═══════════════════════════════════════════════════════════════════════
   const problemSection = (
@@ -1374,7 +1374,7 @@ export default function LandingPage() {
                 </View>
                 <View style={{ opacity: 0.85 }}><SpeedRing size={isMobile ? 50 : 80} /></View>
               </View>
-              {[{ step: "Enter Paybill or Till number", icon: "receipt" as const }, { step: "Rate locks for 90 seconds — no surprises", icon: "lock-closed" as const }, { step: "Confirm with PIN. M-Pesa delivers instantly.", icon: "checkmark-circle" as const }].map((item, i) => (
+              {[{ step: "Enter Paybill or Till number", icon: "receipt" as const }, { step: "Rate locks for 90 seconds · no surprises", icon: "lock-closed" as const }, { step: "Confirm with PIN. M-Pesa delivers instantly.", icon: "checkmark-circle" as const }].map((item, i) => (
                 <View key={i} style={{ flexDirection: "row", gap: 12, marginBottom: 14 }}>
                   <View style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: "rgba(16,185,129,0.1)", alignItems: "center", justifyContent: "center", marginTop: 1 }}><Ionicons name={item.icon} size={14} color={tc.primary[400]} /></View>
                   <Text style={{ color: tc.textPrimary, fontSize: 15, fontFamily: "DMSans_500Medium", lineHeight: 23, flex: 1 }}>{item.step}</Text>
@@ -1393,7 +1393,7 @@ export default function LandingPage() {
   );
 
   // ═══════════════════════════════════════════════════════════════════════
-  // SECTION 4: STATS — scale-up oversized numbers + Nairobi image
+  // SECTION 4: STATS · scale-up oversized numbers + Nairobi image
   // ═══════════════════════════════════════════════════════════════════════
   const statsSection = (
     <View style={{
@@ -1403,7 +1403,7 @@ export default function LandingPage() {
       {/* Nairobi skyline background */}
       {isWeb && !isMobile && <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "60%", opacity: 0.04, ...(isWeb ? { backgroundImage: `url(${CDN_IMAGES.nairobiSkyline})`, backgroundSize: "cover", backgroundPosition: "bottom center", filter: "blur(1px)" } as any : {}) } as any} />}
       {/* Real 7-day BTC price sparkline underlay (web only). Data-driven
-          substitute for decorative unDraw-style illustrations — "look how
+          substitute for decorative unDraw-style illustrations · "look how
           accurate our rates are" rather than a cartoon. Hover reveals a
           scrubbing cursor with the exact value. */}
       {isWeb && !isMobile ? (
@@ -1450,7 +1450,7 @@ export default function LandingPage() {
   );
 
   // ═══════════════════════════════════════════════════════════════════════
-  // SECTION 5: HOW IT WORKS — fade-up staggered + CDN image
+  // SECTION 5: HOW IT WORKS · fade-up staggered + CDN image
   // ═══════════════════════════════════════════════════════════════════════
   const howItWorksSection = (
     <View ref={(ref) => { sectionRefs.current["howItWorks"] = ref; }} style={{
@@ -1462,7 +1462,7 @@ export default function LandingPage() {
           <View style={{ alignItems: "center", marginBottom: isMobile ? 36 : 56 }}>
           <View style={{ flexDirection: isDesktop ? "row" : "column", alignItems: "center", justifyContent: "center", gap: isDesktop ? 48 : 16, maxWidth: 960, width: "100%" }}>
             {/* Kept: product-chrome mockup (paybill entry → rate lock →
-                paid) — reads as the real app. Design brief asked to
+                paid) · reads as the real app. Design brief asked to
                 preserve both hero + how-it-works mockups in place rather
                 than substituting HeroFlow here. HeroFlow / other animated
                 assets already live elsewhere (ChainConverge between hero
@@ -1504,11 +1504,11 @@ export default function LandingPage() {
                 </View>
                 <Text style={{ color: tc.textPrimary, fontSize: 18, fontFamily: "DMSans_700Bold", textAlign: "center", marginBottom: 8 }}>{step.title}</Text>
                 <Text style={{ color: tc.textSecondary, fontSize: 14, fontFamily: "DMSans_400Regular", textAlign: "center", lineHeight: 22, maxWidth: 300 }}>{step.desc}</Text>
-                {/* Brand illustration — one animated per step. Step 02
+                {/* Brand illustration · one animated per step. Step 02
                     gets the full RateLockRing (the product's key promise).
                     Step 01 + 03 get brand icons to keep "one motion per
                     fold." The illustration wrapper lets the SVG breathe
-                    — overflow visible + enough height so the ring's glow
+                    · overflow visible + enough height so the ring's glow
                     + pill ("1 USDT = 131.47") don't clip on the white
                     card edges. */}
                 {!isMobile && (
@@ -1549,7 +1549,7 @@ export default function LandingPage() {
   );
 
   // ═══════════════════════════════════════════════════════════════════════
-  // SECTION 6: FEATURES — TRUE bento grid (large cards span 2 cols)
+  // SECTION 6: FEATURES · TRUE bento grid (large cards span 2 cols)
   // ═══════════════════════════════════════════════════════════════════════
   const featuresSection = (
     <View ref={(ref) => { sectionRefs.current["features"] = ref; }} style={{
@@ -1585,7 +1585,7 @@ export default function LandingPage() {
                   } as any : {}),
                 } as any}
               >
-                {/* Icon — centered */}
+                {/* Icon · centered */}
                 <View style={{ alignSelf: "flex-start", marginBottom: 24 }}>
                   <View
                     ref={(ref: any) => { if (isWeb && ref instanceof HTMLElement) ref.className = "cpay-feat-icon"; }}
@@ -1601,7 +1601,7 @@ export default function LandingPage() {
                   </View>
                 </View>
 
-                {/* Title — block level, clear separation */}
+                {/* Title · block level, clear separation */}
                 <View style={{ marginBottom: 12 }}>
                   <Text style={{
                     color: tc.textPrimary, fontSize: feat.size === "large" ? 22 : 18,
@@ -1611,7 +1611,7 @@ export default function LandingPage() {
                   </Text>
                 </View>
 
-                {/* Description — clearly separated */}
+                {/* Description · clearly separated */}
                 <View style={{ flex: 1 }}>
                   <Text style={{
                     color: tc.textSecondary, fontSize: isMobile ? 14 : 15,
@@ -1629,7 +1629,7 @@ export default function LandingPage() {
   );
 
   // ═══════════════════════════════════════════════════════════════════════
-  // SECTION 7: CRYPTO — slide-left reveal + float animation
+  // SECTION 7: CRYPTO · slide-left reveal + float animation
   // ═══════════════════════════════════════════════════════════════════════
   const cryptoSection = (
     <View style={{ paddingVertical: isMobile ? 56 : 80, position: "relative", overflow: "hidden", ...(isWeb ? { background: "linear-gradient(180deg, #060E1F 0%, #0B1520 30%, #101820 60%, #060E1F 100%)", borderTop: "1px solid rgba(245,158,11,0.06)", borderBottom: "1px solid rgba(245,158,11,0.06)" } as any : { backgroundColor: "#0B1520" }) }}>
@@ -1667,7 +1667,7 @@ export default function LandingPage() {
   );
 
   // ═══════════════════════════════════════════════════════════════════════
-  // SECTION 8: PRICING — with illustrations + visual comparison
+  // SECTION 8: PRICING · with illustrations + visual comparison
   // ═══════════════════════════════════════════════════════════════════════
   const pricingSection = (
     <View ref={(ref) => { sectionRefs.current["pricing"] = ref; }} style={{
@@ -1686,13 +1686,13 @@ export default function LandingPage() {
                 You'll always know{"\n"}what you're paying
               </Text>
               <Text style={{ color: tc.textSecondary, fontSize: isMobile ? 15 : 17, fontFamily: "DMSans_400Regular", lineHeight: isMobile ? 23 : 26, marginTop: 12, textAlign: isDesktop ? "left" : "center", maxWidth: 440 }}>
-                No hidden spreads, no surprise deductions. The rate on your screen is the rate you get — locked for 90 seconds while you decide.
+                No hidden spreads, no surprise deductions. The rate on your screen is the rate you get · locked for 90 seconds while you decide.
               </Text>
             </View>
           </View>
         </RevealOnScroll>
 
-        {/* Main pricing card — premium glass */}
+        {/* Main pricing card · premium glass */}
         <RevealOnScroll delay={150} variant="scale-up">
           <View
             ref={(ref: any) => { if (isWeb && ref instanceof HTMLElement) ref.className = "cpay-pricing-card"; }}
@@ -1730,10 +1730,10 @@ export default function LandingPage() {
               {isDesktop && (
                 <View style={{ flex: 1, gap: 16 }}>
                   {[
-                    { icon: "checkmark-circle" as const, text: "Rate locked for 90 seconds — no slippage" },
+                    { icon: "checkmark-circle" as const, text: "Rate locked for 90 seconds · no slippage" },
                     { icon: "eye" as const, text: "See exact amount before confirming" },
                     { icon: "shield-checkmark" as const, text: "No hidden charges, ever" },
-                    { icon: "gift" as const, text: "First KES 5,000 — KES 10 flat fee waived" },
+                    { icon: "gift" as const, text: "First KES 5,000 · KES 10 flat fee waived" },
                   ].map((b) => (
                     <View key={b.text} style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
                       <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: "rgba(16,185,129,0.1)", alignItems: "center", justifyContent: "center" }}>
@@ -1754,7 +1754,7 @@ export default function LandingPage() {
               ...(isWeb ? { boxShadow: "0 4px 20px rgba(16,185,129,0.08)" } as any : {}),
             }}>
               <Ionicons name="gift" size={18} color={tc.primary[400]} />
-              <Text style={{ color: tc.primary[300], fontSize: 15, fontFamily: "DMSans_600SemiBold" }}>First KES 5,000 — KES 10 flat fee waived</Text>
+              <Text style={{ color: tc.primary[300], fontSize: 15, fontFamily: "DMSans_600SemiBold" }}>First KES 5,000 · KES 10 flat fee waived</Text>
             </View>
           </View>
         </RevealOnScroll>
@@ -1791,7 +1791,7 @@ export default function LandingPage() {
   );
 
   // ═══════════════════════════════════════════════════════════════════════
-  // SECTION 9: COMPARISON — with illustrations + hover effects
+  // SECTION 9: COMPARISON · with illustrations + hover effects
   // ═══════════════════════════════════════════════════════════════════════
   const comparisonSection = (
     <View style={{
@@ -1879,7 +1879,7 @@ export default function LandingPage() {
   );
 
   // ═══════════════════════════════════════════════════════════════════════
-  // SECTION 10: USE_CASES — premium card design
+  // SECTION 10: USE_CASES · premium card design
   // ═══════════════════════════════════════════════════════════════════════
   const testimonialsSection = (
     <View style={{
@@ -1922,7 +1922,7 @@ export default function LandingPage() {
                     <Text style={{ color: t.color, fontSize: isMobile ? 40 : 52, fontFamily: "DMSans_700Bold", lineHeight: isMobile ? 40 : 52, marginBottom: 16, opacity: 0.6 }}>
                       {"\u201C"}
                     </Text>
-                    {/* Quote text — bigger, more readable */}
+                    {/* Quote text · bigger, more readable */}
                     <Text style={{
                       color: tc.textPrimary, fontSize: isMobile ? 16 : 18,
                       fontFamily: "DMSans_500Medium", lineHeight: isMobile ? 26 : 30,
@@ -1930,7 +1930,7 @@ export default function LandingPage() {
                     }}>
                       {t.quote}
                     </Text>
-                    {/* Footer — use-case label + matching icon. Honest
+                    {/* Footer · use-case label + matching icon. Honest
                         attribution: this is a category, not a person. */}
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: "auto", paddingTop: 16, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.04)" } as any}>
                       <View style={{
@@ -1986,7 +1986,7 @@ export default function LandingPage() {
   );
 
   // ═══════════════════════════════════════════════════════════════════════
-  // SECTION 11: FAQ — two-column layout on desktop
+  // SECTION 11: FAQ · two-column layout on desktop
   // ═══════════════════════════════════════════════════════════════════════
   const faqSection = (
     <View style={{
@@ -2015,7 +2015,7 @@ export default function LandingPage() {
               )}
             </View>
 
-            {/* Right: FAQ items — full width */}
+            {/* Right: FAQ items · full width */}
             <View style={{ flex: 1, width: "100%" }}>
               {FAQ_DATA.map((faq, i) => (
                 <RevealOnScroll key={i} delay={i * 60} variant="fade-up">
@@ -2030,7 +2030,7 @@ export default function LandingPage() {
   );
 
   // ═══════════════════════════════════════════════════════════════════════
-  // SECTION 12: CTA — premium with illustrations + animated elements
+  // SECTION 12: CTA · premium with illustrations + animated elements
   // ═══════════════════════════════════════════════════════════════════════
   const ctaSection = (
     <View style={{
@@ -2080,7 +2080,7 @@ export default function LandingPage() {
               {[
                 { icon: "timer-outline" as const, text: "2 min setup", color: tc.primary[400] },
                 { icon: "flash" as const, text: "30 sec payments", color: "#F59E0B" },
-                { icon: "gift" as const, text: "First KES 5K — no flat fee", color: "#8B5CF6" },
+                { icon: "gift" as const, text: "First KES 5K · no flat fee", color: "#8B5CF6" },
               ].map((v) => (
                 <View key={v.text} style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, backgroundColor: "rgba(255,255,255,0.03)", borderRadius: 14, paddingVertical: 14, paddingHorizontal: 16, borderWidth: 1, borderColor: "rgba(255,255,255,0.05)" }}>
                   <Ionicons name={v.icon} size={18} color={v.color} />

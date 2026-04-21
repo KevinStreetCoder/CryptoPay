@@ -21,7 +21,7 @@ const LINE = "#E5E7EB";
 const isWeb = Platform.OS === "web";
 
 // ─────────────────────────────────────────────────────────────────────────
-// EmptyTransactions — a Coin-C mark with a faint dashed ledger row.
+// EmptyTransactions · a Coin-C mark with a faint dashed ledger row.
 // ─────────────────────────────────────────────────────────────────────────
 export function EmptyTransactions({ size = 200 }: { size?: number }) {
   return (
@@ -35,7 +35,7 @@ export function EmptyTransactions({ size = 200 }: { size?: number }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// EmptyWallet — open wallet outline with the slot hollow.
+// EmptyWallet · open wallet outline with the slot hollow.
 // ─────────────────────────────────────────────────────────────────────────
 export function EmptyWallet({ size = 200 }: { size?: number }) {
   return (
@@ -49,7 +49,7 @@ export function EmptyWallet({ size = 200 }: { size?: number }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// EmptyNotifications — quiet bell, single emerald dot (cleared).
+// EmptyNotifications · quiet bell, single emerald dot (cleared).
 // ─────────────────────────────────────────────────────────────────────────
 export function EmptyNotifications({ size = 200 }: { size?: number }) {
   return (
@@ -62,7 +62,7 @@ export function EmptyNotifications({ size = 200 }: { size?: number }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// ErrorState — ink circle-x. Deliberately NOT red — brand stays calm.
+// ErrorState · ink circle-x. Deliberately NOT red · brand stays calm.
 // The CTA under it is the emerald one.
 // ─────────────────────────────────────────────────────────────────────────
 export function ErrorState({ size = 200 }: { size?: number }) {
@@ -77,7 +77,7 @@ export function ErrorState({ size = 200 }: { size?: number }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// SuccessCheck — animated draw-on emerald checkmark.
+// SuccessCheck · animated draw-on emerald checkmark.
 // One-shot on mount (doesn't loop). Reduced-motion: static final frame.
 // ─────────────────────────────────────────────────────────────────────────
 export function SuccessCheck({ size = 120 }: { size?: number }) {
@@ -141,7 +141,7 @@ export function SuccessCheck({ size = 120 }: { size?: number }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// KycIdFront — outline ID card + photo box + emerald chip accent.
+// KycIdFront · outline ID card + photo box + emerald chip accent.
 // ─────────────────────────────────────────────────────────────────────────
 export function KycIdFront({ size = 200 }: { size?: number }) {
   return (
@@ -159,7 +159,7 @@ export function KycIdFront({ size = 200 }: { size?: number }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// KycSelfie — head outline + phone frame + emerald shutter dot.
+// KycSelfie · head outline + phone frame + emerald shutter dot.
 // ─────────────────────────────────────────────────────────────────────────
 export function KycSelfie({ size = 200 }: { size?: number }) {
   return (
@@ -174,7 +174,7 @@ export function KycSelfie({ size = 200 }: { size?: number }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// KycReview — clipboard with emerald check-in-progress dot.
+// KycReview · clipboard with emerald check-in-progress dot.
 // ─────────────────────────────────────────────────────────────────────────
 export function KycReview({ size = 200 }: { size?: number }) {
   return (

@@ -1,9 +1,9 @@
 /**
- * SpinnerArc — emerald arc rotating on a muted track.
+ * SpinnerArc · emerald arc rotating on a muted track.
  * 1s linear rotation, respects prefers-reduced-motion (static 3/4 arc
  * on the axis so the user still reads "this is working").
  *
- * Use for: buttons, data fetches, inline loading — size 16–32.
+ * Use for: buttons, data fetches, inline loading · size 16–32.
  * For full-screen processing, use <SpinnerCoinC> instead.
  */
 import { useEffect, useRef } from "react";
@@ -33,7 +33,7 @@ export function SpinnerArc({
   const sw = strokeWidth ?? Math.max(2, size / 10);
   const r = (size - sw) / 2;
   const circumference = 2 * Math.PI * r;
-  // 25% visible arc — a pleasant fraction that reads as "progress," not
+  // 25% visible arc · a pleasant fraction that reads as "progress," not
   // a full ring (which would look like a finished circle).
   const visible = circumference * 0.25;
   const gap = circumference - visible;

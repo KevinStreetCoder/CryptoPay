@@ -8,8 +8,8 @@ export const CRYPTO_LOGOS: Record<string, string> = {
   ETH: "https://assets.coingecko.com/coins/images/279/small/ethereum.png",
 };
 
-// Local logo assets — require() returns an asset module (number on native, object on web)
-// Pass directly to <Image source={...} /> — React Native handles resolution internally
+// Local logo assets · require() returns an asset module (number on native, object on web)
+// Pass directly to <Image source={...} /> · React Native handles resolution internally
 export const SERVICE_LOGOS: Record<string, any> = {
   "KPLC Prepaid": require("../../assets/logos/services/kplc.png"),
   "KPLC Postpaid": require("../../assets/logos/services/kplc.png"),

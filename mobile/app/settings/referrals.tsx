@@ -612,7 +612,7 @@ export default function ReferralsScreen() {
                       </View>
                       <View style={{ flex: 1 }}>
                         <Text style={{ color: tc.textPrimary, fontFamily: "DMSans_600SemiBold", fontSize: 14 }}>
-                          {item.referee_masked_name || item.referee_masked_phone || "—"}
+                          {item.referee_masked_name || item.referee_masked_phone || "·"}
                         </Text>
                         <Text style={{ color: tc.textSecondary, fontFamily: "DMSans_400Regular", fontSize: 12, marginTop: 2 }}>
                           {item.status_display}
@@ -625,7 +625,7 @@ export default function ReferralsScreen() {
                           fontSize: 13,
                         }}
                       >
-                        {item.status === "rewarded" ? `+KES ${parseFloat(item.reward_amount_kes).toFixed(0)}` : "—"}
+                        {item.status === "rewarded" ? `+KES ${parseFloat(item.reward_amount_kes).toFixed(0)}` : "·"}
                       </Text>
                     </View>
                   ))}

@@ -59,7 +59,7 @@ interface PresenceSummary {
 function timeAgo(iso?: string | null): string {
   if (!iso) return "never";
   const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return "—";
+  if (Number.isNaN(then)) return "·";
   const diff = (Date.now() - then) / 1000;
   if (diff < 60) return "just now";
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
@@ -238,7 +238,7 @@ export default function AdminUsersScreen() {
           </Text>
         </View>
 
-        {/* Presence strip — live counts of users active now vs today.
+        {/* Presence strip · live counts of users active now vs today.
             Wraps on narrow viewports (<420px) so it never overflows. The
             "N-minute window" caption drops below the metrics on mobile to
             keep the tile row intact. */}
@@ -507,7 +507,7 @@ export default function AdminUsersScreen() {
               ...ts.sm,
             }}
           >
-            {/* Header — only on desktop */}
+            {/* Header · only on desktop */}
             {isDesktop && (
               <View
                 style={{
@@ -553,7 +553,7 @@ export default function AdminUsersScreen() {
                       {/* Row 1: Name + Presence dot + Status */}
                       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
                         <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flex: 1 }}>
-                          {/* Online presence dot — green if active in last
+                          {/* Online presence dot · green if active in last
                               5 min, amber if active today, grey otherwise.
                               Matches the Slack/Discord convention. */}
                           <View
@@ -584,7 +584,7 @@ export default function AdminUsersScreen() {
                         </View>
                       </View>
 
-                      {/* Row 1b: presence meta — "Online · KE" / "Active 2h ago" */}
+                      {/* Row 1b: presence meta · "Online · KE" / "Active 2h ago" */}
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 }}>
                         <Text style={{ color: u.is_online ? colors.success : tc.textMuted, fontSize: 11, fontFamily: "DMSans_500Medium", letterSpacing: 0.2 }}>
                           {u.is_online ? "ONLINE NOW" : `Active ${timeAgo(u.last_activity_at)}`}

@@ -7,7 +7,7 @@ const TermsScreen = require("./settings/terms").default;
 
 /**
  * Public route: /terms
- * Renders terms of service directly — accessible without login.
+ * Renders terms of service directly · accessible without login.
  * Required by Google OAuth consent screen and app store listings.
  */
 export default function TermsPage() {

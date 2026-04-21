@@ -77,7 +77,7 @@ function formatPrice(value: number): string {
   return `KES ${value.toFixed(6)}`;
 }
 
-/** Compact Y-axis label — no "KES" prefix, abbreviate large numbers */
+/** Compact Y-axis label · no "KES" prefix, abbreviate large numbers */
 function formatAxisPrice(value: number): string {
   if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
   if (value >= 10000) return `${(value / 1000).toFixed(1)}K`;
@@ -96,7 +96,7 @@ function formatDate(timestamp: string): string {
   });
 }
 
-/** X-axis date label — short format based on period */
+/** X-axis date label · short format based on period */
 function formatXAxisDate(timestamp: string, period: Period): string {
   const d = new Date(timestamp);
   if (period === "1D") {
@@ -407,7 +407,7 @@ export function CryptoChart({
   const svgWidth = Math.max(0, containerWidth - Y_AXIS_WIDTH);
   const svgHeight = height - X_AXIS_HEIGHT;
 
-  // Data is already filtered by period from API — use directly
+  // Data is already filtered by period from API · use directly
   const filteredData = useMemo(() => data || [], [data]);
 
   // Downsample to max ~120 points for performance
@@ -738,7 +738,7 @@ export function CryptoChart({
                 {/* Gradient fill area */}
                 <Path d={areaPath} fill={`url(#grad-${currency})`} clipPath={`url(#clip-${currency})`} />
 
-                {/* Line — glow layer */}
+                {/* Line · glow layer */}
                 <Path
                   d={linePath}
                   fill="none"
@@ -749,7 +749,7 @@ export function CryptoChart({
                   opacity={0.15}
                   clipPath={`url(#clip-${currency})`}
                 />
-                {/* Line — main */}
+                {/* Line · main */}
                 <Path
                   d={linePath}
                   fill="none"

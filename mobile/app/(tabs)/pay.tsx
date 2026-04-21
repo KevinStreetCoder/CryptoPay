@@ -31,7 +31,7 @@ function ServiceLogo({
 }) {
   const [failed, setFailed] = useState(false);
 
-  // Render image if we have a valid asset (require() result — number on native, object/string on web)
+  // Render image if we have a valid asset (require() result · number on native, object/string on web)
   if (logos && !failed) {
     return (
       <Image

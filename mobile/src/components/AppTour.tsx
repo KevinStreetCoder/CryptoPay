@@ -31,7 +31,7 @@ export function triggerAppTour() {
 }
 
 /**
- * Glassmorphic tooltip — uses useCopilot() for state + navigation
+ * Glassmorphic tooltip · uses useCopilot() for state + navigation
  */
 function GlassTooltip() {
   const { isDark } = useThemeMode();
@@ -284,7 +284,7 @@ function GlassTooltip() {
 }
 
 /**
- * Tour step wrapper — accepts i18n keys and translates automatically
+ * Tour step wrapper · accepts i18n keys and translates automatically
  */
 export function TourStep({
   nameKey,
@@ -315,7 +315,7 @@ export function TourStep({
 }
 
 /**
- * Tour auto-starter — waits for onboarding slides, then starts tour
+ * Tour auto-starter · waits for onboarding slides, then starts tour
  */
 export function TourAutoStart() {
   const { start, copilotEvents } = useCopilot();
@@ -338,7 +338,7 @@ export function TourAutoStart() {
     return () => { _tourStartCallback = null; };
   }, [doStart]);
 
-  // Method 2: Fallback — if onboarding was already completed (returning user)
+  // Method 2: Fallback · if onboarding was already completed (returning user)
   useEffect(() => {
     (async () => {
       const onboardingDone = await storage.getItemAsync(ONBOARDING_KEY);

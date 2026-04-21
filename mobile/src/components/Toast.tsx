@@ -27,7 +27,7 @@ const ToastContext = createContext<ToastContextType | null>(null);
 export function useToast(): ToastContextType {
   const ctx = useContext(ToastContext);
   if (!ctx) {
-    // Fallback for use outside provider — no-op
+    // Fallback for use outside provider · no-op
     return {
       show: () => {},
       success: () => {},

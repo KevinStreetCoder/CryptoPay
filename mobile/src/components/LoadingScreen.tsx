@@ -8,7 +8,7 @@ const useNative = Platform.OS !== "web";
 
 /**
  * Clean, modern loading screen. One animation (indeterminate progress bar) and
- * one micro fade-in for the content block — nothing else. Inspired by how
+ * one micro fade-in for the content block · nothing else. Inspired by how
  * Wise / Revolut / Cash App handle cold-load: the logo and wordmark are stable,
  * only the progress bar moves. This feels instant at ~200ms instead of the old
  * screen's perceived 4-6s due to six parallel loops.
@@ -39,12 +39,12 @@ export function LoadingScreen({ status }: { status?: string }) {
         opacity: fadeIn,
       }}
     >
-      {/* Brand loader — Coin-C mark with an orbiting emerald arc. Replaces
+      {/* Brand loader · Coin-C mark with an orbiting emerald arc. Replaces
           the previous Image + indeterminate bar combo. One motion element,
           on-brand, respects reduced-motion. */}
       <SpinnerCoinC size={72} />
 
-      {/* Wordmark — matches the design brief (C in emerald, rest in text). */}
+      {/* Wordmark · matches the design brief (C in emerald, rest in text). */}
       <Text
         style={{
           color: tc.textPrimary,
@@ -57,7 +57,7 @@ export function LoadingScreen({ status }: { status?: string }) {
         <Text style={{ color: colors.primary[500] }}>C</Text>pay
       </Text>
 
-      {/* Status — only renders if caller provided one. No generic filler. */}
+      {/* Status · only renders if caller provided one. No generic filler. */}
       {status ? (
         <Text
           style={{

@@ -1,17 +1,17 @@
 /**
- * HowItWorksMockup — a small phone-shaped card rendering three real
+ * HowItWorksMockup · a small phone-shaped card rendering three real
  * product states stacked vertically:
  *
- *   1. Paybill entry    — account number typed, amount filled
- *   2. Rate lock        — "131.47 KES/USDT locked · 1:27 remaining"
- *   3. Confirmation     — green tick, "KES 450 sent"
+ *   1. Paybill entry    · account number typed, amount filled
+ *   2. Rate lock        · "131.47 KES/USDT locked · 1:27 remaining"
+ *   3. Confirmation     · green tick, "KES 450 sent"
  *
  * Replaces the generic `credit_card_payment_vzc8.svg` unDraw cartoon in
  * the "How it works" section. Renders with theme tokens so the palette
  * stays consistent with the live app.
  *
  * Motion: entirely static by default. Whole card lifts 4 px and the
- * emerald ring brightens by ~30% on hover — nothing else moves. No
+ * emerald ring brightens by ~30% on hover · nothing else moves. No
  * internal animations, no ticking countdown, no blinking cursors. The
  * design philosophy is "this is what the product actually looks like",
  * not "here's something vaguely resembling a phone".
@@ -46,7 +46,7 @@ export function HowItWorksMockup({ width = 280, aspect = 0.54 }: Props) {
       // Hover-only lift. RN-web forwards onHoverIn/Out on Pressable but
       // not on View, so we rely on CSS :hover via className for web and
       // a clean static card on native. See the <style> injection below.
-      // @ts-expect-error — className is an RN-web-only prop.
+      // @ts-expect-error · className is an RN-web-only prop.
       className={Platform.OS === "web" ? "cpay-howitworks-mockup" : undefined}
       style={{
         width,
@@ -58,7 +58,7 @@ export function HowItWorksMockup({ width = 280, aspect = 0.54 }: Props) {
         overflow: "hidden",
         ...(Platform.OS === "web"
           ? ({
-              // Subtle ring, not a glow — production apps don't halo.
+              // Subtle ring, not a glow · production apps don't halo.
               boxShadow: `0 20px 40px rgba(0,0,0,0.35), inset 0 0 0 1px ${divider}`,
               transition: "transform 0.35s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.35s ease",
             } as any)
@@ -69,7 +69,7 @@ export function HowItWorksMockup({ width = 280, aspect = 0.54 }: Props) {
         // Inject the hover rule once per page. Cheaper than styled-components
         // and keeps the transition local to this component's class.
         <style
-          // @ts-expect-error — raw <style> is web-only.
+          // @ts-expect-error · raw <style> is web-only.
           dangerouslySetInnerHTML={{
             __html: `
               .cpay-howitworks-mockup:hover {
@@ -81,7 +81,7 @@ export function HowItWorksMockup({ width = 280, aspect = 0.54 }: Props) {
         />
       ) : null}
 
-      {/* Status bar — notch + signal/time, very subtle. */}
+      {/* Status bar · notch + signal/time, very subtle. */}
       <View
         style={{
           flexDirection: "row",
@@ -113,7 +113,7 @@ export function HowItWorksMockup({ width = 280, aspect = 0.54 }: Props) {
       {/* Three stacked product steps. Each is a real card state the user
           sees in-app, rendered at reduced fidelity. */}
       <View style={{ paddingHorizontal: 16, paddingTop: 4, gap: 10 }}>
-        {/* Step 1 — Paybill entry */}
+        {/* Step 1 · Paybill entry */}
         <StepCard
           index={1}
           title="Enter paybill"
@@ -144,7 +144,7 @@ export function HowItWorksMockup({ width = 280, aspect = 0.54 }: Props) {
           </View>
         </StepCard>
 
-        {/* Step 2 — Rate lock */}
+        {/* Step 2 · Rate lock */}
         <StepCard
           index={2}
           title="Rate locked"
@@ -170,7 +170,7 @@ export function HowItWorksMockup({ width = 280, aspect = 0.54 }: Props) {
           </View>
         </StepCard>
 
-        {/* Step 3 — Confirmation */}
+        {/* Step 3 · Confirmation */}
         <StepCard
           index={3}
           title="Paid"
@@ -216,7 +216,7 @@ export function HowItWorksMockup({ width = 280, aspect = 0.54 }: Props) {
   );
 }
 
-// Private sub-component — a single labelled step card. Kept in the same
+// Private sub-component · a single labelled step card. Kept in the same
 // file because it's only meaningful inside the mockup and keeps the
 // import story tight.
 function StepCard({

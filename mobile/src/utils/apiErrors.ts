@@ -67,7 +67,7 @@ export function normalizeError(error: unknown): AppError {
       }
     }
 
-    // No response data — use status code mapping
+    // No response data · use status code mapping
     if (status && ERROR_MESSAGES[status]) {
       return {
         ...ERROR_MESSAGES[status],

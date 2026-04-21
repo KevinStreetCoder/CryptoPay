@@ -144,7 +144,7 @@ export default function SendMpesaScreen() {
               : undefined
           }
         >
-          {/* Top-level back button — desktop only */}
+          {/* Top-level back button · desktop only */}
           {isDesktop && (
             <Pressable
               onPress={() => {
@@ -362,7 +362,7 @@ export default function SendMpesaScreen() {
                 wallets={wallets}
                 onSelect={(c) => { setSelectedCrypto(c); setQuote(null); }}
               />
-              {/* NetworkBadge — confirms which chain the payment settles on */}
+              {/* NetworkBadge · confirms which chain the payment settles on */}
               <View style={{ flexDirection: "row", marginTop: 10 }}>
                 <NetworkBadge chain={currencyToChain(selectedCrypto)} dark />
               </View>

@@ -1,6 +1,6 @@
 import { Spinner } from "./brand/Spinner";
 /**
- * WalletConnect deposit component — allows users to deposit crypto
+ * WalletConnect deposit component · allows users to deposit crypto
  * directly from MetaMask, Trust Wallet, etc. into their CryptoPay wallet.
  *
  * Renders:
@@ -83,7 +83,7 @@ interface Props {
 }
 
 /**
- * Public export — renders the connected version only when AppKit is ready.
+ * Public export · renders the connected version only when AppKit is ready.
  * This avoids conditional hook calls (Rules of Hooks violation).
  */
 /** Error boundary to catch AppKit context errors at runtime */
@@ -169,7 +169,7 @@ function WalletConnectFallback() {
   );
 }
 
-/** Inner component — only rendered when AppKit is fully initialized */
+/** Inner component · only rendered when AppKit is fully initialized */
 function WalletConnectDepositInner({ depositAddress, onDepositInitiated }: Props) {
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
@@ -181,7 +181,7 @@ function WalletConnectDepositInner({ depositAddress, onDepositInitiated }: Props
   const [amount, setAmount] = useState("");
   const [selectedNetwork, setSelectedNetwork] = useState<DepositNetwork>(__DEPOSIT_NETWORKS[0]);
 
-  // Hooks always called — this component only renders when AppKit is ready
+  // Hooks always called · this component only renders when AppKit is ready
   const appKit = _useAppKit();
   const account = _useAppKitAccount();
   const providerHook = _useAppKitProvider("eip155");

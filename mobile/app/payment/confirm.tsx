@@ -258,7 +258,7 @@ export default function ConfirmPaymentScreen() {
     if (biometricOn && biometric.isAvailable && Platform.OS !== "web") {
       const success = await biometric.authenticate("Authorize Payment");
       if (success) {
-        // Biometric approved — use a special PIN bypass marker
+        // Biometric approved · use a special PIN bypass marker
         // The backend still requires PIN, so fall through to PIN entry
         setStep("pin");
         return;

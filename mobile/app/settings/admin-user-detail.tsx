@@ -126,7 +126,7 @@ export default function AdminUserDetailScreen() {
   const [devices, setDevices] = useState<DeviceInfo[]>([]);
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
   const [kycDocs, setKycDocs] = useState<KycDoc[]>([]);
-  // Presence + activity — surfaced via the new admin-detail endpoint
+  // Presence + activity · surfaced via the new admin-detail endpoint
   // additions. `currentDevice` is populated only when the user is online
   // RIGHT NOW (≤ 5 min) so admins see what they're using live.
   const [currentDevice, setCurrentDevice] = useState<DeviceInfo | null>(null);
@@ -491,7 +491,7 @@ export default function AdminUserDetailScreen() {
 
         {activeTab === "overview" && (
           <>
-            {/* Presence + activity — enterprise admin signal. Shows
+            {/* Presence + activity · enterprise admin signal. Shows
                 whether user is online right now, on which device, where
                 from, and their recent activity / login history. */}
             {sectionTitle("Presence & activity", "pulse-outline", colors.success)}
@@ -549,7 +549,7 @@ export default function AdminUserDetailScreen() {
                 </View>
               ) : null}
 
-              {/* Login history — last 5 */}
+              {/* Login history · last 5 */}
               <View style={{ padding: 18 }}>
                 <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_700Bold", letterSpacing: 0.8, marginBottom: 10 }}>
                   RECENT LOGINS
@@ -574,7 +574,7 @@ export default function AdminUserDetailScreen() {
                           {ev.action.replace(/_/g, " ")}
                         </Text>
                         <Text style={{ color: tc.textMuted, fontSize: 10, fontFamily: "DMSans_400Regular", marginTop: 2 }}>
-                          {ev.ip || "—"} · {new Date(ev.created_at).toLocaleString()}
+                          {ev.ip || "·"} · {new Date(ev.created_at).toLocaleString()}
                         </Text>
                       </View>
                     </View>

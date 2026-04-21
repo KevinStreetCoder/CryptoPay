@@ -80,7 +80,7 @@ function useRates() {
         }
         return rates;
       } catch {
-        // Network failed — try cached rates
+        // Network failed · try cached rates
         const cached = await getCachedRates();
         if (cached && cached.length > 0) {
           return cached.map((c) => ({
@@ -340,7 +340,7 @@ function PortfolioChart({
       );
     });
 
-  // Single overlay for mouse tracking — no per-zone re-renders
+  // Single overlay for mouse tracking · no per-zone re-renders
   const chartRef = useRef<View>(null);
   const handleChartMouse = useCallback(
     (e: any) => {
@@ -450,7 +450,7 @@ function PortfolioChart({
         </View>
       </View>
 
-      {/* Interactive tooltip — fixed height to prevent layout shift */}
+      {/* Interactive tooltip · fixed height to prevent layout shift */}
       <View
         style={{
           height: 36,
@@ -575,7 +575,7 @@ function PortfolioChart({
           </View>
         )}
 
-        {/* Single overlay for smooth mouse tracking — no flickering */}
+        {/* Single overlay for smooth mouse tracking · no flickering */}
         {isWeb ? (
           <View
             ref={chartRef}
@@ -1455,7 +1455,7 @@ function HomeScreenContent() {
           </View>
           </TourStep>
 
-          {/* KYC Upgrade Banner — show for Tier 0 users */}
+          {/* KYC Upgrade Banner · show for Tier 0 users */}
           {(user?.kyc_tier ?? 0) === 0 && (
             <Pressable
               onPress={() => router.push("/settings/kyc" as any)}
@@ -1781,7 +1781,7 @@ function HomeScreenContent() {
               {(txLoading && activityLoading) ? (
                 <TransactionSkeleton />
               ) : recentTx.length === 0 ? (
-                /* Empty State — brand EmptyNoTransactions */
+                /* Empty State · brand EmptyNoTransactions */
                 <View
                   style={{
                     paddingVertical: 40,
@@ -2048,7 +2048,7 @@ function HomeScreenContent() {
           </TourStep>
         </View>
 
-        {/* Live Stats Row — visible on large desktop */}
+        {/* Live Stats Row · visible on large desktop */}
         {isLargeDesktop && ratesLoading && tickerRates.length === 0 && (
           <View style={{ flexDirection: "row", gap: 16, marginBottom: 20 }}>
             {[1, 2, 3, 4].map((i) => (
@@ -2208,7 +2208,7 @@ function HomeScreenContent() {
           </View>
         </View>
 
-        {/* KYC Upgrade Banner — desktop, show for Tier 0 users */}
+        {/* KYC Upgrade Banner · desktop, show for Tier 0 users */}
         {(user?.kyc_tier ?? 0) === 0 && (
           <Pressable
             onPress={() => router.push("/settings/kyc" as any)}

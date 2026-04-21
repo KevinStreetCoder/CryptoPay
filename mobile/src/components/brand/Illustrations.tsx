@@ -1,5 +1,5 @@
 /**
- * Brand illustrations — ported 1:1 from the Cpay design handoff
+ * Brand illustrations · ported 1:1 from the Cpay design handoff
  * (`Cpay-handoff-resources/cpay/project/assets.jsx`).
  *
  * Replaces the unDraw stock art with the design's in-brand SVGs.
@@ -457,7 +457,7 @@ export function KenyaCorridor({ size = 200 }: { size?: number }) {
 
 // ═════════════════════════════════════════════════════════════════════
 // FeeBreakdown · replaces finance_0dk + bitcoin2
-// Transparent pricing panel — spread, flat fee, waiver, footnote
+// Transparent pricing panel · spread, flat fee, waiver, footnote
 // ═════════════════════════════════════════════════════════════════════
 export function FeeBreakdown({ width = 320, height = 220 }: { width?: number; height?: number }) {
   return (

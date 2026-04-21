@@ -4,17 +4,17 @@
  * Enables external wallet connections: MetaMask, Trust Wallet, Phantom, etc.
  * Users can deposit crypto directly from their connected wallet.
  *
- * NOTE: This does NOT work in Expo Go — requires EAS Build / custom dev client.
+ * NOTE: This does NOT work in Expo Go · requires EAS Build / custom dev client.
  */
 
-// Must be imported first — handles crypto/Buffer polyfills
+// Must be imported first · handles crypto/Buffer polyfills
 import "@walletconnect/react-native-compat";
 
 import { createAppKit } from "@reown/appkit-react-native";
 import { EthersAdapter } from "@reown/appkit-ethers-react-native";
 import { storage } from "../utils/storage";
 
-// Reown Project ID — get from https://cloud.reown.com
+// Reown Project ID · get from https://cloud.reown.com
 // Set via EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID env var.
 // See also: mobile/src/constants/config.ts for the exported constant.
 const PROJECT_ID = process.env.EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID || "";
@@ -101,7 +101,7 @@ export function initAppKit() {
     storage: appKitStorage,
     metadata: {
       name: "CryptoPay",
-      description: "Crypto to M-Pesa payments — deposit, pay bills, send money",
+      description: "Crypto to M-Pesa payments · deposit, pay bills, send money",
       url: "https://cpay.co.ke",
       icons: ["https://cpay.co.ke/icon.png"],
       redirect: {

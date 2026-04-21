@@ -23,7 +23,7 @@ import { Platform, View } from "react-native";
 
 const isWeb = Platform.OS === "web";
 
-// ── Brand palette — locked to the design, not the theme. ────────────────
+// ── Brand palette · locked to the design, not the theme. ────────────────
 const CPAY = {
   emerald: "#10B981",
   emeraldDark: "#059669",
@@ -42,7 +42,7 @@ function useLoop(duration = 4000) {
   const [t, setT] = useState(0);
   useEffect(() => {
     // `requestAnimationFrame` must be called with `window` as `this` on
-    // web — yanking it out of a ternary throws "Illegal invocation" in
+    // web · yanking it out of a ternary throws "Illegal invocation" in
     // modern browsers. Bind (or closure-capture) it instead.
     const raf = isWeb
       ? (cb: FrameRequestCallback) => window.requestAnimationFrame(cb)
@@ -74,7 +74,7 @@ function useLoop(duration = 4000) {
 const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
 
 // ── Native guard ────────────────────────────────────────────────────────
-// These components render heavy animated SVG — web is the primary target.
+// These components render heavy animated SVG · web is the primary target.
 // On native we render a lightweight placeholder so the screen doesn't
 // blank out, and a real port can land in a follow-up.
 function NativeFallback({ width, height, label }: { width: number; height: number; label: string }) {
@@ -93,13 +93,13 @@ function NativeFallback({ width, height, label }: { width: number; height: numbe
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// 1. HeroFlow — Coin → phone → M-Pesa receipt, 6s loop
+// 1. HeroFlow · Coin → phone → M-Pesa receipt, 6s loop
 // ═══════════════════════════════════════════════════════════════════════
 export function HeroFlow({ width = 520, height = 420 }: { width?: number; height?: number }) {
   const t = useLoop(6000);
   if (!isWeb) return <NativeFallback width={width} height={height} label="Hero flow" />;
 
-  // Fixed internal canvas — the designer's layout (phone at x=200, receipt
+  // Fixed internal canvas · the designer's layout (phone at x=200, receipt
   // at x≈360) assumes a 520x420 stage. External width/height just scale
   // the SVG, so the whole flow (coin + phone + receipt) stays visible at
   // any render size without clipping.
@@ -194,7 +194,7 @@ export function HeroFlow({ width = 520, height = 420 }: { width?: number; height
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// 2. RateSparkline — USDT/KES 7-day animated draw
+// 2. RateSparkline · USDT/KES 7-day animated draw
 // ═══════════════════════════════════════════════════════════════════════
 export function RateSparkline({ width = 520, height = 240 }: { width?: number; height?: number }) {
   const points = useMemo(() => {
@@ -233,7 +233,7 @@ export function RateSparkline({ width = 520, height = 240 }: { width?: number; h
             <stop offset="100%" stopColor={CPAY.emerald} stopOpacity="0" />
           </linearGradient>
         </defs>
-        <text x={pad} y="24" fontSize="11" fontWeight="500" fill={CPAY.muted} fontFamily="'DM Sans', system-ui" letterSpacing="1">USDT / KES — LAST 7 DAYS</text>
+        <text x={pad} y="24" fontSize="11" fontWeight="500" fill={CPAY.muted} fontFamily="'DM Sans', system-ui" letterSpacing="1">USDT / KES · LAST 7 DAYS</text>
         <g transform={`translate(${width - pad}, 24)`}>
           <circle cx="-84" cy="-4" r="3" fill={CPAY.emerald} />
           <circle cx="-84" cy="-4" r="3" fill={CPAY.emerald} opacity="0.35">
@@ -262,14 +262,14 @@ export function RateSparkline({ width = 520, height = 240 }: { width?: number; h
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// 3. RateLockRing — 90-second countdown (9s loop = 10x speed)
+// 3. RateLockRing · 90-second countdown (9s loop = 10x speed)
 // ═══════════════════════════════════════════════════════════════════════
 export function RateLockRing({ width = 360, height = 360 }: { width?: number; height?: number }) {
   const t = useLoop(9000);
   if (!isWeb) return <NativeFallback width={width} height={height} label="Rate lock" />;
 
   const remaining = Math.ceil(90 * (1 - t));
-  // Internal viewBox is fixed at 360x360 — the designer's ring radius
+  // Internal viewBox is fixed at 360x360 · the designer's ring radius
   // (110), glow radius (150), and pill offsets all assume this canvas.
   // External `width`/`height` just scale the SVG, so the component is
   // safely responsive without clipping its glow at smaller sizes.
@@ -320,14 +320,14 @@ export function RateLockRing({ width = 360, height = 360 }: { width?: number; he
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// 4. ChainConverge — USDT/BTC/ETH/SOL → Cpay hub → KES
+// 4. ChainConverge · USDT/BTC/ETH/SOL → Cpay hub → KES
 // ═══════════════════════════════════════════════════════════════════════
 export function ChainConverge({ width = 620, height = 380 }: { width?: number; height?: number }) {
   const t = useLoop(3500);
   if (!isWeb) return <NativeFallback width={width} height={height} label="Chain converge" />;
 
   // Fixed viewBox matches the designer's baseline (620×380) so proportions
-  // never change. width/height props only control the rendered size — the
+  // never change. width/height props only control the rendered size · the
   // SVG scales internally via preserveAspectRatio. This keeps the
   // handoff design intact on mobile (220 tall) and desktop (380 tall).
   const VB_W = 620;
@@ -393,7 +393,7 @@ export function ChainConverge({ width = 620, height = 380 }: { width?: number; h
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// 5. PaymentTicker — scrolling settled-tx chips, 20s loop
+// 5. PaymentTicker · scrolling settled-tx chips, 20s loop
 // ═══════════════════════════════════════════════════════════════════════
 export function PaymentTicker({ width = 620, height = 140 }: { width?: number; height?: number }) {
   const t = useLoop(20000);

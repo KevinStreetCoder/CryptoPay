@@ -136,7 +136,7 @@ export default function PayTillScreen() {
               : undefined
           }
         >
-          {/* Top-level back button — desktop only */}
+          {/* Top-level back button · desktop only */}
           {isDesktop && (
             <Pressable
               onPress={() => {

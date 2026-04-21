@@ -53,7 +53,7 @@ async function setLastActive(): Promise<void> {
  *
  * Lock fires on cold start AND on background→foreground transitions, gated
  * by the user's chosen timeout. Lock is enabled whenever the user is
- * authenticated — `AppLockScreen` falls back to PIN when biometric isn't
+ * authenticated · `AppLockScreen` falls back to PIN when biometric isn't
  * available, so PIN-only users still get the gate.
  *
  * `biometricEnabled` is no longer required (but accepted for callsite
@@ -69,7 +69,7 @@ export function useAppLock(_biometricEnabled: boolean, isAuthenticated: boolean)
   const appState = useRef<AppStateStatus>(AppState.currentState);
   const lockTimeoutRef = useRef<LockTimeout>(0);
 
-  // Subscribe to timeout setting changes — the settings screen calls
+  // Subscribe to timeout setting changes · the settings screen calls
   // setLockTimeout() which fires _notifyTimeoutChange, so the active
   // session picks up the new value immediately instead of waiting for
   // a bg→fg transition or app restart.

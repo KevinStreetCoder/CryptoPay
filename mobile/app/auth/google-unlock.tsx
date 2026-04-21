@@ -180,7 +180,7 @@ export default function GoogleUnlockScreen() {
           marginBottom: 18,
         }}
       >
-        <Ionicons name="shield-checkmark-outline" size={22} color={colors.primary[400]} />
+        <Wordmark size={26} dark markOnly />
       </View>
       <Text
         style={{
@@ -209,7 +209,7 @@ export default function GoogleUnlockScreen() {
         with Google so a forgotten browser session can never open your wallet.
       </Text>
 
-      {/* Trust signals — quiet, single-line. Stacks on mobile. */}
+      {/* Trust signals · quiet, single-line. Stacks on mobile. */}
       <View
         style={{
           flexDirection: isWide ? "column" : "row",
@@ -232,8 +232,8 @@ export default function GoogleUnlockScreen() {
           fontFamily: "DMSans_700Bold",
           letterSpacing: 1.4,
           textTransform: "uppercase",
-          alignSelf: "flex-start",
           marginBottom: 14,
+          textAlign: "center",
         }}
       >
         Enter PIN
@@ -241,7 +241,7 @@ export default function GoogleUnlockScreen() {
 
       {/* Reuse the existing PinInput component. error takes a boolean
           (the component clears + re-focuses on truthy). */}
-      <View style={{ alignItems: "center", width: "100%" }}>
+      <View style={{ alignItems: "center", justifyContent: "center", width: "100%" }}>
         <PinInput
           length={6}
           onComplete={handlePin}
@@ -255,10 +255,11 @@ export default function GoogleUnlockScreen() {
         style={{
           flexDirection: "row",
           alignItems: "center",
-          justifyContent: "space-between",
+          justifyContent: "center",
           width: "100%",
           marginTop: 18,
-          gap: 10,
+          gap: 14,
+          flexWrap: "wrap",
         }}
       >
         <Pressable
@@ -315,7 +316,7 @@ export default function GoogleUnlockScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
-      {/* Atmospheric brand glow — soft radial under the card, web only.
+      {/* Atmospheric brand glow · soft radial under the card, web only.
           Anchored centre-bottom so the card sits in its halo. */}
       {isWeb ? (
         <View

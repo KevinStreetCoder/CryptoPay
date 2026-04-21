@@ -104,7 +104,7 @@ export function useWebSocket(
         setLastMessage(data);
         onMessageRef.current?.(data);
       } catch {
-        // Non-JSON message — ignore
+        // Non-JSON message · ignore
       }
     };
 

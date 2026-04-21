@@ -636,7 +636,7 @@ function PinStep({
       inputRefs.current[index + 1]?.focus();
     }
 
-    // Auto-submit when all 6 digits entered — pass newPin directly
+    // Auto-submit when all 6 digits entered · pass newPin directly
     // because React state hasn't flushed yet at this point
     if (digit && index === 5 && newPin.every((d) => d !== "")) {
       onSubmit(newPin);
@@ -1264,7 +1264,7 @@ export default function EditProfileScreen() {
   const [nameFocused, setNameFocused] = useState(false);
   const [emailFocused, setEmailFocused] = useState(false);
 
-  // Handle ?verify=1 param — jump straight to email verification
+  // Handle ?verify=1 param · jump straight to email verification
   useEffect(() => {
     if (params.verify && user?.email && !user?.email_verified) {
       setEmail(user.email);
@@ -1355,7 +1355,7 @@ export default function EditProfileScreen() {
       setPinError("");
       setPin(["", "", "", "", "", ""]);
     } else {
-      // Avatar-only change — submit directly without PIN
+      // Avatar-only change · submit directly without PIN
       submitProfileUpdate();
     }
   };

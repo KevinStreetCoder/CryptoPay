@@ -10,7 +10,7 @@ import { ERC20_CONTRACTS } from "../config/appkit";
 
 /**
  * Validate Ethereum address format (0x + 40 hex chars).
- * Does NOT verify checksum — wallets handle that.
+ * Does NOT verify checksum · wallets handle that.
  */
 function isValidEVMAddress(address: string): boolean {
   return /^0x[0-9a-fA-F]{40}$/.test(address);

@@ -19,7 +19,7 @@ export function PinInput({ length = 6, onComplete, error, testID }: PinInputProp
   const inputRef = useRef<TextInput>(null);
   const { width: screenWidth } = useWindowDimensions();
 
-  // Fixed box sizes — simple and reliable across all screen sizes
+  // Fixed box sizes · simple and reliable across all screen sizes
   const isMobile = screenWidth < 768;
   const isVerySmall = screenWidth < 360;
   const gap = isVerySmall ? 6 : isMobile ? 8 : 10;
@@ -28,7 +28,7 @@ export function PinInput({ length = 6, onComplete, error, testID }: PinInputProp
   const boxHeight = Math.round(boxSize * 1.15);
   const boxRadius = 12;
   const dotSize = isVerySmall ? 10 : 12;
-  // Total width of all boxes + gaps — used to constrain the container
+  // Total width of all boxes + gaps · used to constrain the container
   const totalWidth = (boxSize * length) + (gap * (length - 1));
 
   // Auto-focus on native with delay (web uses autoFocus prop)

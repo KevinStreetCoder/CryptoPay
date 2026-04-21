@@ -31,7 +31,7 @@ import { LanguageProvider } from "../src/contexts/LanguageContext";
 import { OnboardingModal, ONBOARDING_COMPLETED_KEY } from "./onboarding";
 import { AppTourProvider, triggerAppTour } from "../src/components/AppTour";
 
-// WalletConnect AppKit — initialized LAZILY inside deposit screen only
+// WalletConnect AppKit · initialized LAZILY inside deposit screen only
 // DO NOT import appkit.ts or @reown/appkit-react-native here.
 // Their module-level side effects register React context hooks that crash
 // with "AppKit instance is not yet available in context" before the
@@ -45,7 +45,7 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: (failureCount, error) => {
-        // Don't retry if session expired — user needs to re-login
+        // Don't retry if session expired · user needs to re-login
         if (error && (error as any).name === "SessionExpiredError") return false;
         return failureCount < 2;
       },
@@ -86,7 +86,7 @@ function RootNavigator() {
     const init = async () => {
       try {
         setInitStatus("Connecting...");
-        // Race bootstrap against a 8s timeout — don't hang forever
+        // Race bootstrap against a 8s timeout · don't hang forever
         await Promise.race([
           Promise.all([
             bootstrap().then(() => setInitStatus("Authenticated")),
@@ -99,7 +99,7 @@ function RootNavigator() {
           }, 8000)),
         ]);
       } catch (e: any) {
-        // Timeout or error — proceed anyway (user will land on login screen).
+        // Timeout or error · proceed anyway (user will land on login screen).
         // We intentionally don't log to console here: on flaky mobile networks
         // this path fires frequently and would spam the JS console; the status
         // message already surfaces the issue in the loading screen itself.
@@ -124,7 +124,7 @@ function RootNavigator() {
     })();
   }, [user]);
 
-  // Google-unlock sentinel — read synchronously from a module-level
+  // Google-unlock sentinel · read synchronously from a module-level
   // mirror populated atomically by setGoogleUnlockPendingFlag() /
   // clearGoogleUnlockFlag() so the auth gate never sees a stale value
   // during Google sign-in or PIN-verify transitions.
@@ -132,7 +132,7 @@ function RootNavigator() {
     getGoogleUnlockPendingSync(),
   );
   // Hydrate the mirror from SecureStore on mount (and whenever user
-  // changes) — handles cold starts where the mirror hasn't been
+  // changes) · handles cold starts where the mirror hasn't been
   // initialised yet (e.g. user re-opens the tab after closing it).
   useEffect(() => {
     if (!user) {
@@ -172,7 +172,7 @@ function RootNavigator() {
       }
     }
 
-    // Skip onboarding route — redirect to proper place
+    // Skip onboarding route · redirect to proper place
     if (inOnboarding) {
       if (user) router.replace("/(tabs)");
       else router.replace("/auth/login");
@@ -195,7 +195,7 @@ function RootNavigator() {
           router.replace("/auth/login");
           return;
         }
-        // Root index.tsx handles landing page rendering — no redirect needed
+        // Root index.tsx handles landing page rendering · no redirect needed
         // Only redirect if user navigated to a non-public route directly
         if (segments[0]) {
           router.replace("/");
@@ -207,8 +207,8 @@ function RootNavigator() {
       // Exempt the Google-unlock gate and the initial-PIN setup from the
       // default "authenticated user bounces back to tabs" rule. Without
       // this, a returning Google user is instantly redirected to (tabs)
-      // the moment tokens are stored — before the async
-      // `googleUnlockPending` state has caught up — and the unlock
+      // the moment tokens are stored · before the async
+      // `googleUnlockPending` state has caught up · and the unlock
       // screen is bypassed.
       const isUnlockScreen = segments[0] === "auth" && (
         segments[1] === "google-unlock" || segments[1] === "set-initial-pin"
@@ -281,7 +281,7 @@ function RootNavigator() {
         stackContent
       )}
 
-      {/* Onboarding popup — shown once after first login */}
+      {/* Onboarding popup · shown once after first login */}
       <OnboardingModal
         visible={showOnboarding}
         onComplete={handleOnboardingComplete}

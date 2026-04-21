@@ -17,7 +17,7 @@ function notify() {
 }
 
 async function persist() {
-  // Store as JSON array — keep last 200 IDs to avoid unbounded growth
+  // Store as JSON array · keep last 200 IDs to avoid unbounded growth
   const arr = Array.from(_readIds).slice(-200);
   await storage.setItemAsync(STORAGE_KEY, JSON.stringify(arr));
 }

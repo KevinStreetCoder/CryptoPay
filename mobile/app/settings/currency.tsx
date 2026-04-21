@@ -247,7 +247,7 @@ export default function CurrencyScreen() {
         paddingBottom: 40,
       }}
     >
-      {/* Page Title — mobile only */}
+      {/* Page Title · mobile only */}
       {!isDesktop && (
         <View style={{ marginBottom: 8, marginTop: 4 }}>
           <Text

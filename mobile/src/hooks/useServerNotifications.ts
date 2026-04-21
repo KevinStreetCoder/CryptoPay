@@ -14,7 +14,7 @@ export function useServerUnreadCount() {
       const { data } = await notificationsApi.unreadCount();
       setUnreadCount(data.unread_count);
     } catch {
-      // silently fail — don't disrupt UI
+      // silently fail · don't disrupt UI
     }
   }, []);
 

@@ -1,11 +1,11 @@
 /**
- * Cpay wordmark — Coin-C mark + "Cpay" text with the "C" in emerald.
+ * Cpay wordmark · Coin-C mark + "Cpay" text with the "C" in emerald.
  *
  * Ported from the design handoff (cpay/project/logos.jsx · Wordmark).
  * Visual contract from the design canvas:
  *   - "C" always emerald #10B981
  *   - "pay" is ink #0B1220 on paper backgrounds, pure white #FFFFFF on
- *     ink backgrounds — the dark variant in the design.
+ *     ink backgrounds · the dark variant in the design.
  *   - Gap between mark and text = size * 0.24 (tight, as shown in the
  *     Wordmark · light / dark artboards).
  *   - Letter-spacing: -0.02em relative to size.
@@ -15,7 +15,7 @@
  *   - `size`       : pixel height of the mark (text scales with it). Default 36.
  *   - `dark`       : true → "pay" is white. Default false.
  *   - `pill`       : true → wrap in an ink pill (use only when sitting on
- *                    a non-ink background — e.g. an email header inside
+ *                    a non-ink background · e.g. an email header inside
  *                    a paper card). Default false.
  *   - `color`      : explicit override for "pay" color. Skip it unless
  *                    you're matching a non-standard chrome tint.
@@ -38,6 +38,9 @@ export interface WordmarkProps {
   pill?: boolean;
   color?: string;
   textOnly?: boolean;
+  /** Render only the Coin-C mark, no "Cpay" text. Used on tight
+   *  surfaces (collapsed sidebar, favicons, push icons). */
+  markOnly?: boolean;
 }
 
 export function Wordmark({
@@ -46,6 +49,7 @@ export function Wordmark({
   pill = false,
   color,
   textOnly = false,
+  markOnly = false,
 }: WordmarkProps) {
   const textColor = color ?? (dark ? BRAND_PAPER : BRAND_INK);
   const pillStyle =
@@ -57,6 +61,18 @@ export function Wordmark({
           borderRadius: 12,
         }
       : {};
+
+  // Mark-only → render just the Coin-C, no text + no gap.
+  if (markOnly) {
+    return (
+      <Image
+        source={LOGO_MARK}
+        style={{ width: size, height: size }}
+        resizeMode="contain"
+        accessibilityLabel="Cpay"
+      />
+    );
+  }
 
   return (
     <View

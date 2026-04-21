@@ -6,7 +6,7 @@
  * Triggered when the user taps a "Someone is trying to sign in" push
  * notification on their trusted device. Shows the requesting device + IP
  * and offers Approve / Deny buttons. One tap completes (or rejects) the
- * sign-in on the original device — no codes to type, no SIM-swap risk.
+ * sign-in on the original device · no codes to type, no SIM-swap risk.
  *
  * This screen requires the user to already be authenticated on this device
  * (that's the whole point: this IS the trusted device). If the token is
@@ -47,7 +47,7 @@ export default function ApproveLogin() {
   const [acting, setActing] = useState<"approve" | "deny" | null>(null);
   const [done, setDone] = useState<null | "approved" | "denied" | "expired">(null);
 
-  // Bounce unauthenticated users back to login — they can't approve anything
+  // Bounce unauthenticated users back to login · they can't approve anything
   // without proving they own the account.
   useEffect(() => {
     if (!authLoading && !user) {
@@ -183,7 +183,7 @@ export default function ApproveLogin() {
           }}
         >
           {done === "approved"
-            ? "You can return to the other device — you're signed in."
+            ? "You can return to the other device · you're signed in."
             : done === "denied"
               ? "We've stopped the sign-in attempt. If this wasn't you, your account is safe. Consider changing your PIN."
               : done === "expired"
@@ -205,12 +205,12 @@ export default function ApproveLogin() {
             }}
           >
             <DetailRow label="Device" value={detail.requesting_device_name || "Unknown device"} tc={tc} />
-            <DetailRow label="IP address" value={detail.requesting_ip || "—"} tc={tc} />
+            <DetailRow label="IP address" value={detail.requesting_ip || "·"} tc={tc} />
             <DetailRow label="Time" value="Just now" tc={tc} />
           </View>
         ) : null}
 
-        {/* Action buttons — only show while pending */}
+        {/* Action buttons · only show while pending */}
         {done === null ? (
           <View style={{ gap: 12 }}>
             <Pressable
@@ -240,7 +240,7 @@ export default function ApproveLogin() {
                 <Spinner size={20} color="#FFFFFF" />
               ) : (
                 <Text style={{ color: "#FFFFFF", fontSize: 16, fontFamily: "DMSans_600SemiBold" }}>
-                  Yes, it's me — approve
+                  Yes, it's me · approve
                 </Text>
               )}
             </Pressable>
@@ -265,7 +265,7 @@ export default function ApproveLogin() {
                 <Spinner size={20} color={textSecondary} />
               ) : (
                 <Text style={{ color: textSecondary, fontSize: 16, fontFamily: "DMSans_500Medium" }}>
-                  No — this wasn't me
+                  No · this wasn't me
                 </Text>
               )}
             </Pressable>

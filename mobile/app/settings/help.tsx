@@ -39,7 +39,7 @@ const CATEGORIES: { key: CategoryKey; labelKey: string; icon: keyof typeof Ionic
   { key: "general", labelKey: "help.general", icon: "information-circle-outline", color: "#A78BFA" },
 ];
 
-// FAQ keys map to i18n translations — no hardcoded content
+// FAQ keys map to i18n translations · no hardcoded content
 const FAQ_KEYS: { questionKey: string; answerKey: string; category: string }[] = [
   { questionKey: "help.faqDepositHow", answerKey: "help.faqDepositHowAnswer", category: "deposits" },
   { questionKey: "help.faqDepositTime", answerKey: "help.faqDepositTimeAnswer", category: "deposits" },
@@ -405,7 +405,7 @@ export default function HelpScreen() {
     Linking.openURL("mailto:support@cpay.co.ke");
   };
 
-  // Support WhatsApp — routes to Kevin's line until we provision a
+  // Support WhatsApp · routes to Kevin's line until we provision a
   // dedicated support number. Swap this constant when that happens.
   // Previous value "+254700000000" was a placeholder that 404'd.
   const SUPPORT_WHATSAPP_NUMBER = "254701961618";

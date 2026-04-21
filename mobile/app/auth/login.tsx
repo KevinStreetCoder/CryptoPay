@@ -86,7 +86,7 @@ function BrandPanel({ tc }: { tc: ReturnType<typeof getThemeColors> }) {
         }}
       />
 
-      {/* Brand wordmark — Cpay Coin-C + "Cpay" */}
+      {/* Brand wordmark · Cpay Coin-C + "Cpay" */}
       <View style={{ alignItems: "center", marginBottom: 32 }}>
         <View style={{ marginBottom: 16 }}>
           <Wordmark size={44} dark />
@@ -196,7 +196,7 @@ export default function LoginScreen() {
       if (data.phone_required) {
         router.replace("/auth/google-complete-profile" as any);
       } else if (data.pin_required) {
-        // First-time Google user — set their PIN then enter the app.
+        // First-time Google user · set their PIN then enter the app.
         router.replace("/auth/set-initial-pin" as any);
       } else {
         // Returning Google user. Even though Google verified them server-
@@ -282,7 +282,7 @@ export default function LoginScreen() {
   // Poll the push-challenge status while the OTP screen is shown.
   // Stops when: challenge is consumed, OTP flow ends, or 5 min elapse.
   // If the user has no second device, pushChallengeId is null and this
-  // effect is a no-op — the SMS OTP flow works exactly as before.
+  // effect is a no-op · the SMS OTP flow works exactly as before.
   useEffect(() => {
     if (!pushChallengeId || !otpRequired) return;
     let cancelled = false;
@@ -296,7 +296,7 @@ export default function LoginScreen() {
         const { data } = await authApi.getChallengeStatus(pushChallengeId);
         if (cancelled) return;
         if (data.status === "approved") {
-          // The other device approved — finish login with challenge_id as proof.
+          // The other device approved · finish login with challenge_id as proof.
           setLoading(true);
           try {
             await login(phone, pendingPin, undefined, pushChallengeId);
@@ -825,10 +825,10 @@ export default function LoginScreen() {
           ) : (
             /* OTP Challenge Step */
             <View>
-              {/* Push-approval banner — only shown when the server dispatched
+              {/* Push-approval banner · only shown when the server dispatched
                   a push challenge to another trusted device. If the user has
                   no other device, pushChallengeId is null and this hides
-                  entirely — they just see the normal OTP input below. */}
+                  entirely · they just see the normal OTP input below. */}
               {pushChallengeId ? (
                 <View
                   style={{
@@ -849,7 +849,7 @@ export default function LoginScreen() {
                       Check your other device
                     </Text>
                     <Text style={{ color: "#3B82F6", opacity: 0.85, fontSize: 12, fontFamily: "DMSans_400Regular", marginTop: 2 }}>
-                      Tap "Approve" on the notification — or just enter the code below.
+                      Tap "Approve" on the notification · or just enter the code below.
                     </Text>
                   </View>
                 </View>
