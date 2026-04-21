@@ -1,6 +1,67 @@
-# CryptoPay — Development Progress
+# Cpay — Development Progress
 
-**Last updated:** 2026-04-19
+**Last updated:** 2026-04-20
+
+## 2026-04-20 session · brand + referrals + APK + security scrub
+
+Live on cpay.co.ke at session end. 23+ commits on `origin/main`.
+
+- **Brand refresh (Cpay v3)** — every `CryptoPay` + lightning-icon logo
+  swapped for the `Wordmark` component (Coin-C + emerald `C` + ink
+  `pay`). New `markOnly` prop for tight surfaces. App name in
+  `app.json` → "Cpay". Landing titles dropped em-dash for middot.
+  Global em-dash → middot sweep across `mobile/app` + `mobile/src`
+  (grep for `—` now returns zero).
+- **Illustrations 1:1 port** — `WalletIcon`, `SecurityLock`, `SpeedRing`
+  (animated), `FaqMark`, `TargetMark`, `KenyaCorridor` (animated
+  Nairobi pulse), `FeeBreakdown` rewritten to match the design
+  handoff's `assets.jsx` detail. Shared 320×320 `IllFrame` with
+  `ill-em` gradient. Replaces unDraw stock art 1:1 per the design's
+  replacement map.
+- **Referral program end-to-end** — `backend/apps/referrals/` app
+  (models, services, signals, tasks, REST, 23 passing pytest). Wired
+  into accounts RegisterSerializer + GoogleCompleteProfileSerializer
+  and into the payments saga via `apply_credit_to_fee` FIFO
+  consumption. Mobile: `settings/referrals.tsx` dashboard + `r/[code].tsx`
+  public landing + `pending_referral_code` storage auto-fill on
+  signup.
+- **Polish assets wired** — `EmptyNoTransactions` in wallet history,
+  `EmptyNoNotifications` in notifications inbox, `NetworkBadge` (new
+  `dark` variant) on deposit + send, `KycIdFront/Selfie/Review`
+  state-driven on `settings/kyc.tsx`, `QrFrame` wrapping the deposit
+  QR, `OnboardingSlide` driving the 3-slide welcome flow.
+- **Email + PDF** — `backend/templates/email/base.html` ported to the
+  `EmailHeader` spec (ink bg, wordmark left, 3 fading emerald coin
+  dots right, 4px emerald bottom strip). `backend/templates/pdf/receipt.html`
+  rewritten to the `ReceiptTemplate` spec (paper bg, 6px emerald
+  gradient stripe, Coin-C watermark, JetBrains Mono numbers,
+  `SETTLED` pill). `pdf_receipt.py` context extended with
+  `chain_label`, `settlement_display`, `crypto_amount_display`,
+  masked paybill account.
+- **APK shipped** — 110 MB at
+  `/var/www/cpay-downloads/cryptopay.apk` on the VPS, served at
+  `https://cpay.co.ke/download/cryptopay.apk`. Build via
+  `scripts/_build-apk-wsl.sh` (WSL Ubuntu, `EXPO_TOKEN` sourced from
+  `/root/.android_env` — **never** hardcoded; see below).
+- **Security incident + fix** — token was accidentally committed in
+  `_build-apk-wsl.sh` and pushed. Scrubbed with
+  `git filter-repo --replace-text`, force-pushed, `.gitignore` hardened
+  (`.env*`, `*.secret*`, `.android_env`, `credentials.json`). **Token
+  at `expo.dev` must still be rotated** — history rewrite doesn't
+  un-leak a briefly-public value.
+- **Sidebar polish** — floating edge toggle finalised: 30×30 emerald
+  pill, `top: 31, right: -15`, same row as the logo, half-protruding
+  past the border. Sidebar container gets `zIndex: 30` + `overflow:
+  visible` so the pill isn't clipped by the main-content panel.
+  Collapsed state persists via `localStorage.cpay_sidebar_collapsed`.
+  Collapsed width 72 (not 68). Locked design — see memory.
+- **Back-button alignment** — every `/payment/*` sub-page (paybill,
+  till, send, swap, withdraw, deposit) now uses the hub's hPad
+  (`width ≥ 1200 ? 48 : width ≥ 900 ? 32 : 16`) and `paddingTop: 20`
+  so the Back chip lands pixel-perfect on the same X across all
+  screens.
+
+---
 
 ## 2026-04-19 session summary
 
