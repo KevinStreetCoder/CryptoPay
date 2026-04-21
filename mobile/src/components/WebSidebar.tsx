@@ -201,18 +201,18 @@ export function WebSidebar() {
           : {}),
       }}
     >
-      {/* Floating edge toggle · vertically centered on the sidebar's right
-          border, half-off the edge. Identical placement in collapsed and
-          expanded states (classic VS Code / Notion pattern). Never
-          overlaps the brand or any nav item. */}
+      {/* Floating edge toggle · pinned to the top of the right border,
+          aligned with the brand logo row. Identical placement in
+          collapsed and expanded states. Never overlaps the brand or any
+          nav item. */}
       {Platform.OS === "web" ? (
         <Pressable
           onPress={toggleCollapsed}
           style={({ pressed, hovered }: any) => ({
             position: "absolute",
             right: -14,
-            top: "50%",
-            marginTop: -14, // vertical centering (toggle is 28px tall)
+            // 24 sidebar paddingTop + 6 brand paddingVertical + 16 half-mark − 14 half-toggle = 32
+            top: 32,
             width: 28,
             height: 28,
             borderRadius: 14,
