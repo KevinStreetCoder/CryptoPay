@@ -116,11 +116,22 @@ function NavTooltip({
   );
 }
 
+const SIDEBAR_PERSIST_KEY = "cpay_sidebar_collapsed";
+
 export function WebSidebar() {
   const router = useRouter();
   const pathname = usePathname();
   const { user, logout } = useAuth();
-  const [collapsed, setCollapsed] = useState(false);
+  // Persist collapsed state across reloads. Read synchronously on first
+  // render so we never show the "wrong" layout on hydration.
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    if (Platform.OS !== "web" || typeof window === "undefined") return false;
+    try {
+      return window.localStorage.getItem(SIDEBAR_PERSIST_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
 
@@ -159,7 +170,15 @@ export function WebSidebar() {
   };
 
   const toggleCollapsed = useCallback(() => {
-    setCollapsed((prev) => !prev);
+    setCollapsed((prev) => {
+      const next = !prev;
+      if (Platform.OS === "web" && typeof window !== "undefined") {
+        try {
+          window.localStorage.setItem(SIDEBAR_PERSIST_KEY, next ? "1" : "0");
+        } catch {}
+      }
+      return next;
+    });
   }, []);
 
   return (
