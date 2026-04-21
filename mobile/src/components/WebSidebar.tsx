@@ -202,54 +202,42 @@ export function WebSidebar() {
       }}
     >
       {/* Floating edge toggle · pinned to the top of the right border,
-          aligned with the brand logo row. Identical placement in
-          collapsed and expanded states. Never overlaps the brand or any
-          nav item. */}
+          aligned with the brand logo row. High-contrast emerald pill so
+          it reads clearly both from the sidebar side AND from the main
+          content area (where the dark bg would otherwise swallow it). */}
       {Platform.OS === "web" ? (
         <Pressable
           onPress={toggleCollapsed}
           style={({ pressed, hovered }: any) => ({
             position: "absolute",
-            right: -14,
-            // 24 sidebar paddingTop + 6 brand paddingVertical + 16 half-mark − 14 half-toggle = 32
-            top: 32,
-            width: 28,
-            height: 28,
-            borderRadius: 14,
-            backgroundColor: hovered
-              ? colors.primary[500]
-              : isDark
-                ? "#0F1E33"
-                : "#FFFFFF",
-            borderWidth: 1,
-            borderColor: hovered
-              ? colors.primary[500]
-              : isDark
-                ? "rgba(255,255,255,0.14)"
-                : "rgba(0,0,0,0.10)",
+            right: -15,
+            // 24 sidebar paddingTop + 6 brand paddingVertical + 16 half-mark − 15 half-toggle = 31
+            top: 31,
+            width: 30,
+            height: 30,
+            borderRadius: 15,
+            backgroundColor: hovered ? colors.primary[500] : colors.primary[500] + "E6", // 90% emerald at rest, full on hover
+            borderWidth: 2,
+            borderColor: isDark ? "#0A1628" : "#FFFFFF", // ring matches sidebar/page bg so the pill visually "cuts through" the border
             alignItems: "center",
             justifyContent: "center",
             opacity: pressed ? 0.85 : 1,
             zIndex: 20,
             cursor: "pointer",
-            transition: "background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease",
-            transform: hovered ? "scale(1.1)" : "scale(1)",
+            transition: "background-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease",
+            transform: hovered ? "scale(1.08)" : "scale(1)",
             boxShadow: hovered
-              ? `0 6px 16px ${colors.primary[500]}55`
-              : isDark
-                ? "0 2px 6px rgba(0,0,0,0.4)"
-                : "0 2px 6px rgba(0,0,0,0.12)",
+              ? `0 6px 18px ${colors.primary[500]}66`
+              : `0 3px 10px ${colors.primary[500]}44`,
           } as any)}
           accessibilityRole="button"
           accessibilityLabel={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
-          {({ hovered }: any) => (
-            <Ionicons
-              name={collapsed ? "chevron-forward" : "chevron-back"}
-              size={15}
-              color={hovered ? "#FFFFFF" : isDark ? "rgba(255,255,255,0.7)" : "#4B5563"}
-            />
-          )}
+          <Ionicons
+            name={collapsed ? "chevron-forward" : "chevron-back"}
+            size={16}
+            color="#FFFFFF"
+          />
         </Pressable>
       ) : null}
       {/* Top section */}
