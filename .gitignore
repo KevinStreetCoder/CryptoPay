@@ -76,3 +76,15 @@ credentials.json
 # Claude / AI dev files
 .claude/
 CLAUDE-PROMPT.md
+
+# Secrets — NEVER commit
+.env
+.env.local
+.env.*.local
+*.secret
+*.secrets
+android_env
+.android_env
+eas-credentials.json
+credentials.json
+

@@ -3,7 +3,11 @@
 set -e
 
 source /root/.android_env
-export EXPO_TOKEN=REDACTED_TOKEN
+# EXPO_TOKEN must live in /root/.android_env (or be exported before
+# invoking this script) — NEVER hardcode here. Rotate any previously
+# committed token at https://expo.dev/accounts/*/settings/access-tokens.
+: "${EXPO_TOKEN:?EXPO_TOKEN is required — set it in /root/.android_env}"
+export EXPO_TOKEN
 export EAS_LOCAL_BUILD_WORKINGDIR=/root/eas-sandbox
 
 rm -rf /root/eas-sandbox /tmp/metro-cache 2>/dev/null || true
