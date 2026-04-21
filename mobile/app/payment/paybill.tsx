@@ -180,7 +180,7 @@ export default function PayBillScreen() {
         >
           {/* Top-level back button · matches Payments index (pay.tsx) placement */}
           {isDesktop && (
-            <View style={{ paddingHorizontal: 32, marginBottom: 16 }}>
+            <View style={{ paddingHorizontal: width >= 1200 ? 48 : 32, marginBottom: 16 }}>
               <Pressable
                 onPress={() => {
                   if (router.canGoBack()) router.back();

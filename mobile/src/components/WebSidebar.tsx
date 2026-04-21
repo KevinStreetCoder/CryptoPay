@@ -213,7 +213,7 @@ export function WebSidebar() {
             position: "absolute",
             // Push the full 30px circle past the sidebar's right border so
             // it's visible in one piece (not cut by the border).
-            right: -34,
+            right: -15,
             // 24 sidebar paddingTop + 6 brand paddingVertical + 16 half-mark − 15 half-toggle = 31
             top: 31,
             width: 30,

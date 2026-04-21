@@ -806,7 +806,7 @@ export default function SwapScreen() {
         >
           {/* Desktop back button */}
           {isDesktop && (
-            <View style={{ paddingHorizontal: 32, marginBottom: 16 }}>
+            <View style={{ paddingHorizontal: width >= 1200 ? 48 : 32, marginBottom: 16 }}>
               <Pressable
               onPress={() => {
                 if (router.canGoBack()) router.back();

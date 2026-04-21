@@ -146,7 +146,7 @@ export default function SendMpesaScreen() {
         >
           {/* Top-level back button · desktop only */}
           {isDesktop && (
-            <View style={{ paddingHorizontal: 32, marginBottom: 16 }}>
+            <View style={{ paddingHorizontal: width >= 1200 ? 48 : 32, marginBottom: 16 }}>
               <Pressable
               onPress={() => {
                 if (router.canGoBack()) router.back();

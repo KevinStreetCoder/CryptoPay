@@ -971,7 +971,7 @@ export default function DepositScreen() {
   if (isDesktop) {
     return (
       <View style={{ flex: 1, backgroundColor: tc.dark.bg }}>
-        <View style={{ paddingHorizontal: 24, paddingTop: 24 }}>
+        <View style={{ paddingHorizontal: width >= 1200 ? 48 : 32, paddingTop: 20, marginBottom: 16 }}>
           <Pressable
             onPress={() => {
               if (router.canGoBack()) router.back();
