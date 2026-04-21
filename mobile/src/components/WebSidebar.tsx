@@ -18,7 +18,8 @@ function resolveAvatarUrl(url: string | null | undefined): string | null {
 }
 
 const SIDEBAR_EXPANDED = 260;
-const SIDEBAR_COLLAPSED = 68;
+// 76 = 16 padding + 32 Coin-C + 28 toggle — fits both side-by-side without overlap.
+const SIDEBAR_COLLAPSED = 76;
 
 const NAV_ITEMS = [
   {
@@ -177,83 +178,78 @@ export function WebSidebar() {
               position: "sticky",
               top: 0,
               transition: "width 0.2s ease",
-              overflow: "visible", // was "hidden" — allow the edge toggle to stick out
+              overflow: "hidden",
             } as any)
           : {}),
       }}
     >
-      {/* Floating edge toggle · always visible, always reachable. Sits on
-          the sidebar's right border so it works identically in the
-          collapsed and expanded states. Inspired by VS Code / Notion. */}
-      {Platform.OS === "web" ? (
-        <Pressable
-          onPress={toggleCollapsed}
-          style={({ pressed, hovered }: any) => ({
-            position: "absolute",
-            right: -13,
-            top: 56, // aligns with the center of the 32px Wordmark mark
-            width: 26,
-            height: 26,
-            borderRadius: 13,
-            backgroundColor: hovered
-              ? colors.primary[500]
-              : isDark
-                ? "#0F1E33"
-                : "#FFFFFF",
-            borderWidth: 1,
-            borderColor: hovered
-              ? colors.primary[500]
-              : isDark
-                ? "rgba(255,255,255,0.14)"
-                : "rgba(0,0,0,0.10)",
-            alignItems: "center",
-            justifyContent: "center",
-            opacity: pressed ? 0.85 : 1,
-            zIndex: 20,
-            cursor: "pointer",
-            transition: "background-color 0.15s ease, transform 0.15s ease, border-color 0.15s ease",
-            transform: hovered ? "scale(1.08)" : "scale(1)",
-            boxShadow: hovered
-              ? `0 4px 12px ${colors.primary[500]}40`
-              : "0 1px 3px rgba(0,0,0,0.12)",
-          } as any)}
-          accessibilityRole="button"
-          accessibilityLabel={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        >
-          {({ hovered }: any) => (
-            <Ionicons
-              name={collapsed ? "chevron-forward" : "chevron-back"}
-              size={14}
-              color={
-                hovered ? "#FFFFFF" : isDark ? "rgba(255,255,255,0.7)" : "#4B5563"
-              }
-            />
-          )}
-        </Pressable>
-      ) : null}
+      {/* Toggle renders inline on the logo row — see below. */}
       {/* Top section */}
       <View>
-        {/* Brand logo · clickable → dashboard */}
-        <Pressable
-          onPress={() => router.push("/(tabs)" as any)}
+        {/* Header row · brand logo LEFT, toggle RIGHT, always same line. */}
+        <View
           style={{
-            paddingHorizontal: collapsed ? 0 : 24,
-            paddingVertical: 8,
             flexDirection: "row",
             alignItems: "center",
-            justifyContent: collapsed ? "center" : "flex-start",
-            ...(Platform.OS === "web" ? { cursor: "pointer" } as any : {}),
+            justifyContent: "space-between",
+            paddingHorizontal: collapsed ? 10 : 20,
+            paddingVertical: 6,
           }}
-          accessibilityRole="link"
-          accessibilityLabel="Go to dashboard"
         >
-          {/* Brand Wordmark · Coin-C + "Cpay". Collapses to Coin-C-only on narrow sidebar. */}
-          {collapsed ? (
-            <Wordmark size={32} dark markOnly />
-          ) : (
-            <Wordmark size={32} dark />
-          )}
-        </Pressable>
+          <Pressable
+            onPress={() => router.push("/(tabs)" as any)}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              ...(Platform.OS === "web" ? { cursor: "pointer" } as any : {}),
+            }}
+            accessibilityRole="link"
+            accessibilityLabel="Go to dashboard"
+          >
+            {collapsed ? (
+              <Wordmark size={32} dark markOnly />
+            ) : (
+              <Wordmark size={32} dark />
+            )}
+          </Pressable>
+
+          {/* Toggle · modern 28px pill, always on the logo row. */}
+          <Pressable
+            onPress={toggleCollapsed}
+            style={({ pressed, hovered }: any) => ({
+              width: 28,
+              height: 28,
+              borderRadius: 8,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: hovered
+                ? colors.primary[500] + "18"
+                : isDark
+                  ? "rgba(255, 255, 255, 0.04)"
+                  : "rgba(0, 0, 0, 0.04)",
+              borderWidth: 1,
+              borderColor: hovered
+                ? colors.primary[500] + "40"
+                : isDark
+                  ? "rgba(255, 255, 255, 0.08)"
+                  : "rgba(0, 0, 0, 0.06)",
+              opacity: pressed ? 0.7 : 1,
+              ...(Platform.OS === "web"
+                ? ({ cursor: "pointer", transition: "all 0.15s ease" } as any)
+                : {}),
+            })}
+            accessibilityRole="button"
+            accessibilityLabel={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {({ hovered }: any) => (
+              <Ionicons
+                name={collapsed ? "chevron-forward-outline" : "chevron-back-outline"}
+                size={15}
+                color={hovered ? colors.primary[400] : isDark ? "rgba(255,255,255,0.65)" : "#4B5563"}
+              />
+            )}
+          </Pressable>
+        </View>
 
         {/* Divider · sits just under the brand in both states */}
         <View
