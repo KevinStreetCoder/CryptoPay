@@ -197,6 +197,7 @@ export function WebSidebar() {
               top: 0,
               transition: "width 0.2s ease",
               overflow: "visible", // let the floating edge toggle stick out past the right border
+              zIndex: 30, // stack above the main content so the floating toggle is never clipped
             } as any)
           : {}),
       }}
