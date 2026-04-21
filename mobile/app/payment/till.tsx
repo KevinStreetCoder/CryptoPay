@@ -132,13 +132,14 @@ export default function PayTillScreen() {
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={
             isDesktop
-              ? { alignItems: "center", paddingVertical: 32 }
+              ? { alignItems: "stretch", paddingTop: 20, paddingBottom: 32 }
               : undefined
           }
         >
           {/* Top-level back button · desktop only */}
           {isDesktop && (
-            <Pressable
+            <View style={{ paddingHorizontal: 32, marginBottom: 16 }}>
+              <Pressable
               onPress={() => {
                 if (router.canGoBack()) router.back();
                 else router.replace("/(tabs)" as any);
@@ -156,7 +157,6 @@ export default function PayTillScreen() {
                     ? tc.dark.elevated
                     : "transparent",
                 alignSelf: "flex-start",
-                marginBottom: 12,
                 opacity: pressed ? 0.85 : 1,
                 cursor: "pointer",
                 transition: "all 0.15s ease",
@@ -169,6 +169,7 @@ export default function PayTillScreen() {
                 {t("common.back")}
               </Text>
             </Pressable>
+            </View>
           )}
 
           {/* Desktop wrapper card */}
@@ -178,6 +179,7 @@ export default function PayTillScreen() {
                 ? {
                     width: "100%",
                     maxWidth: 600,
+                    alignSelf: "center",
                     backgroundColor: tc.dark.card,
                     borderRadius: 20,
                     padding: 36,

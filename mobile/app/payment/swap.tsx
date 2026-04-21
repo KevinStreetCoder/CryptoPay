@@ -300,7 +300,7 @@ export default function SwapScreen() {
         <ScrollView
           contentContainerStyle={
             isDesktop
-              ? { alignItems: "center", paddingVertical: 32 }
+              ? { alignItems: "stretch", paddingTop: 20, paddingBottom: 32 }
               : { flex: 1 }
           }
         >
@@ -482,7 +482,7 @@ export default function SwapScreen() {
         <ScrollView
           contentContainerStyle={
             isDesktop
-              ? { alignItems: "center", paddingVertical: 32 }
+              ? { alignItems: "stretch", paddingTop: 20, paddingBottom: 32 }
               : undefined
           }
         >
@@ -492,6 +492,7 @@ export default function SwapScreen() {
                 ? {
                     width: "100%",
                     maxWidth: 600,
+                    alignSelf: "center",
                     backgroundColor: tc.dark.card,
                     borderRadius: 20,
                     padding: 36,
@@ -799,13 +800,14 @@ export default function SwapScreen() {
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={
             isDesktop
-              ? { alignItems: "center", paddingVertical: 32 }
+              ? { alignItems: "stretch", paddingTop: 20, paddingBottom: 32 }
               : undefined
           }
         >
           {/* Desktop back button */}
           {isDesktop && (
-            <Pressable
+            <View style={{ paddingHorizontal: 32, marginBottom: 16 }}>
+              <Pressable
               onPress={() => {
                 if (router.canGoBack()) router.back();
                 else router.replace("/(tabs)" as any);
@@ -823,7 +825,6 @@ export default function SwapScreen() {
                     ? tc.dark.elevated
                     : "transparent",
                 alignSelf: "flex-start",
-                marginBottom: 12,
                 opacity: pressed ? 0.85 : 1,
                 cursor: "pointer",
                 transition: "all 0.15s ease",
@@ -846,6 +847,7 @@ export default function SwapScreen() {
                 {t("common.back")}
               </Text>
             </Pressable>
+            </View>
           )}
 
           {/* Desktop wrapper card */}

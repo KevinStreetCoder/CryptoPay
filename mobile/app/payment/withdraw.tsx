@@ -261,7 +261,7 @@ export default function WithdrawScreen() {
         <ScrollView
           contentContainerStyle={
             isDesktop
-              ? { alignItems: "center", paddingVertical: 32 }
+              ? { alignItems: "stretch", paddingTop: 20, paddingBottom: 32 }
               : { flex: 1 }
           }
         >
@@ -374,7 +374,7 @@ export default function WithdrawScreen() {
         <ScrollView
           contentContainerStyle={
             isDesktop
-              ? { alignItems: "center", paddingVertical: 32 }
+              ? { alignItems: "stretch", paddingTop: 20, paddingBottom: 32 }
               : undefined
           }
         >
@@ -384,6 +384,7 @@ export default function WithdrawScreen() {
                 ? {
                     width: "100%",
                     maxWidth: 600,
+                    alignSelf: "center",
                     backgroundColor: tc.dark.card,
                     borderRadius: 20,
                     padding: 36,
@@ -548,43 +549,44 @@ export default function WithdrawScreen() {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={
           isDesktop
-            ? { alignItems: "center", paddingVertical: 32 }
+            ? { alignItems: "stretch", paddingTop: 20, paddingBottom: 32 }
             : undefined
         }
       >
         {/* Desktop back button */}
         {isDesktop && (
-          <Pressable
-            onPress={() => {
-              if (router.canGoBack()) router.back();
-              else router.replace("/(tabs)" as any);
-            }}
-            style={({ pressed, hovered }: any) => ({
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 8,
-              paddingVertical: 8,
-              paddingHorizontal: 12,
-              borderRadius: 12,
-              backgroundColor: hovered
-                ? tc.glass.highlight
-                : pressed
-                  ? tc.dark.elevated
-                  : "transparent",
-              alignSelf: "flex-start",
-              marginBottom: 12,
-              opacity: pressed ? 0.85 : 1,
-              cursor: "pointer",
-              transition: "all 0.15s ease",
-            } as any)}
-            accessibilityRole="button"
-            accessibilityLabel="Go back"
-          >
-            <Ionicons name="arrow-back" size={20} color={tc.textSecondary} />
-            <Text style={{ color: tc.textSecondary, fontSize: 15, fontFamily: "DMSans_500Medium" }}>
-              {t("common.back")}
-            </Text>
-          </Pressable>
+          <View style={{ paddingHorizontal: 32, marginBottom: 16 }}>
+            <Pressable
+              onPress={() => {
+                if (router.canGoBack()) router.back();
+                else router.replace("/(tabs)" as any);
+              }}
+              style={({ pressed, hovered }: any) => ({
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 8,
+                paddingVertical: 8,
+                paddingHorizontal: 12,
+                borderRadius: 12,
+                backgroundColor: hovered
+                  ? tc.glass.highlight
+                  : pressed
+                    ? tc.dark.elevated
+                    : "transparent",
+                alignSelf: "flex-start",
+                opacity: pressed ? 0.85 : 1,
+                cursor: "pointer",
+                transition: "all 0.15s ease",
+              } as any)}
+              accessibilityRole="button"
+              accessibilityLabel="Go back"
+            >
+              <Ionicons name="arrow-back" size={20} color={tc.textSecondary} />
+              <Text style={{ color: tc.textSecondary, fontSize: 15, fontFamily: "DMSans_500Medium" }}>
+                {t("common.back")}
+              </Text>
+            </Pressable>
+          </View>
         )}
 
         {/* Desktop wrapper card */}
@@ -594,6 +596,7 @@ export default function WithdrawScreen() {
               ? {
                   width: "100%",
                   maxWidth: 600,
+                  alignSelf: "center",
                   backgroundColor: tc.dark.card,
                   borderRadius: 20,
                   padding: 36,
