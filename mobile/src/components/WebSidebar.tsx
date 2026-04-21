@@ -210,7 +210,9 @@ export function WebSidebar() {
           onPress={toggleCollapsed}
           style={({ pressed, hovered }: any) => ({
             position: "absolute",
-            right: -15,
+            // Push the full 30px circle past the sidebar's right border so
+            // it's visible in one piece (not cut by the border).
+            right: -34,
             // 24 sidebar paddingTop + 6 brand paddingVertical + 16 half-mark − 15 half-toggle = 31
             top: 31,
             width: 30,
