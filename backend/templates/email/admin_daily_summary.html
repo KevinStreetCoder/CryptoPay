@@ -4,9 +4,14 @@
 
 {% block content %}
 <h2>Daily Operations Summary</h2>
-<p style="color: #94a3b8; font-size: 13px;">{{ date }}</p>
+<p style="color: #94a3b8; font-size: 13px; margin-bottom: 4px;">{{ date }}</p>
 
-<h3 style="font-size: 15px; margin-top: 20px; color: #0f172a;">Users</h3>
+<!--
+  Section headers use the same bright slate as the page h2 (not a near-black
+  slate) so they stay legible on the dark navy email body. Uppercase +
+  letter-spaced so they read as section labels rather than page titles.
+-->
+<p style="margin:24px 0 8px 0; font-size:11px; font-weight:700; color:#10B981; letter-spacing:1.5px; text-transform:uppercase;">Users</p>
 <div class="info-card">
   <table role="presentation" cellpadding="0" cellspacing="0">
     <tr>
@@ -20,7 +25,7 @@
   </table>
 </div>
 
-<h3 style="font-size: 15px; margin-top: 20px; color: #0f172a;">Logins (last 24 h)</h3>
+<p style="margin:24px 0 8px 0; font-size:11px; font-weight:700; color:#10B981; letter-spacing:1.5px; text-transform:uppercase;">Logins (last 24 h)</p>
 <div class="info-card">
   <table role="presentation" cellpadding="0" cellspacing="0">
     <tr>
@@ -42,7 +47,7 @@
   </table>
 </div>
 
-<h3 style="font-size: 15px; margin-top: 20px; color: #0f172a;">Activity</h3>
+<p style="margin:24px 0 8px 0; font-size:11px; font-weight:700; color:#10B981; letter-spacing:1.5px; text-transform:uppercase;">Activity</p>
 <div class="info-card">
   <table role="presentation" cellpadding="0" cellspacing="0">
     <tr>
@@ -56,7 +61,7 @@
   </table>
 </div>
 
-<h3 style="font-size: 15px; margin-top: 20px; color: #0f172a;">Transactions (last 24 h)</h3>
+<p style="margin:24px 0 8px 0; font-size:11px; font-weight:700; color:#10B981; letter-spacing:1.5px; text-transform:uppercase;">Transactions (last 24 h)</p>
 <div class="info-card">
   <table role="presentation" cellpadding="0" cellspacing="0">
     <tr>
@@ -79,7 +84,7 @@
 </div>
 
 {% if wallet_balances %}
-<h3 style="font-size: 15px; margin-top: 20px; color: #0f172a;">Wallet Balances</h3>
+<p style="margin:24px 0 8px 0; font-size:11px; font-weight:700; color:#10B981; letter-spacing:1.5px; text-transform:uppercase;">Wallet Balances</p>
 <div class="info-card">
   <table role="presentation" cellpadding="0" cellspacing="0">
     {% for wallet in wallet_balances %}
@@ -92,7 +97,7 @@
 </div>
 {% endif %}
 
-<p style="text-align: center; padding-top: 8px;">
+<p style="text-align: center; padding-top: 16px;">
   <a href="https://cpay.co.ke/admin/" style="display:inline-block;background-color:#10B981;color:#FFFFFF;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px;">Open Admin Panel</a>
 </p>
 {% endblock %}

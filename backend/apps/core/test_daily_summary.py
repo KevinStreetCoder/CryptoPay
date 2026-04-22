@@ -104,6 +104,52 @@ class DailySummaryEmailTest(TestCase):
                 self.assertIn("New Users", alternative)
                 self.assertNotIn(">N/A<", alternative)
 
+    def test_section_headers_render_with_visible_color(self):
+        """
+        Every section label (Users/Logins/Activity/Transactions/Wallet Balances)
+        must be styled with the brand emerald (#10B981) so it stays readable on
+        the dark navy email background. Regression pin for the 2026-04-22
+        report where the labels were styled #0f172a (near-black) and vanished
+        against the #0E1D35 body.
+        """
+        User.objects.create_user(phone="+254711000999", pin="123456")
+        from apps.core.tasks import daily_summary_email
+
+        daily_summary_email.apply()
+        message = mail.outbox[0]
+
+        html = None
+        for alt, mime in getattr(message, "alternatives", []):
+            if "html" in mime.lower():
+                html = alt
+                break
+        self.assertIsNotNone(html, "HTML alternative missing from daily summary")
+
+        required_labels = [
+            "Users",
+            "Logins (last 24 h)",
+            "Activity",
+            "Transactions (last 24 h)",
+        ]
+        for label in required_labels:
+            self.assertIn(label, html, f"Missing section label: {label}")
+
+        # Must NOT use the near-black color that vanished on the dark bg.
+        self.assertNotIn(
+            "color:#0f172a", html.replace(" ", ""),
+            "Section headers must not use near-black color (invisible on dark bg)",
+        )
+        self.assertNotIn("color: #0f172a", html)
+
+        # Must use the brand emerald so the label is legible. Count ≥4
+        # because every section (Users, Logins, Activity, Transactions) uses
+        # that color for its header.
+        emerald_header_count = html.count("color:#10B981")
+        self.assertGreaterEqual(
+            emerald_header_count, 4,
+            f"Expected ≥4 emerald-coloured section headers, found {emerald_header_count}",
+        )
+
     def test_login_and_activity_counts(self):
         """Login events + activity signals render as integers."""
         # Create users with distinct login fingerprints:
