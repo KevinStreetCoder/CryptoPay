@@ -519,6 +519,11 @@ BTC_NETWORK = env("BTC_NETWORK", default="main")  # "main" or "test3" (testnet)
 # outbound sweep/withdraw path is gated.
 BTC_WITHDRAWALS_ENABLED = env.bool("BTC_WITHDRAWALS_ENABLED", default=False)
 BLOCKCYPHER_API_TOKEN = env("BLOCKCYPHER_API_TOKEN", default="")  # Free: 200 req/hr, with token: 2000 req/hr
+# Backup token held in env so an emergency rotation (active revoked / rate
+# limited) is a one-line env swap + container restart — no code change.
+# BlockCypher accounts can hold up to 5 tokens; keep at least one inactive
+# token ready at any time.
+BLOCKCYPHER_API_TOKEN_BACKUP = env("BLOCKCYPHER_API_TOKEN_BACKUP", default="")
 
 # --- Solana ---
 SOL_RPC_URL = env("SOL_RPC_URL", default="https://api.devnet.solana.com")  # Use mainnet-beta for production
