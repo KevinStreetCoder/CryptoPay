@@ -54,8 +54,11 @@ function PendingBadge() {
  * handles the focused / unfocused cross-fade at the tab-item level, so we
  * do NOT stack an icon + label inside it (doing so used to cause the whole
  * stack to render twice on web, doubling the effective tab-bar height and
- * clipping the label). Labels are rendered via the separate `tabBarLabel`
- * prop below, which is the idiomatic RN-Navigation pattern. */
+ * clipping the label). Labels come from the separate `tabBarLabel` prop.
+ * Icon is rendered at its exact size · no bounding container · so the
+ * React Navigation tab-item layout can compute the label position correctly
+ * (previously a 28 px container for a 24 px icon nudged the label past the
+ * tab-bar bottom edge, clipping it). */
 function TabIconOnly({
   name,
   color,
@@ -85,10 +88,9 @@ function TabIconOnly({
       style={{
         transform: [{ scale: scaleAnim }],
         position: "relative",
-        alignItems: "center",
-        justifyContent: "center",
-        width: size + 8,
-        height: size + 4,
+        // No explicit width/height · let the icon define its own box.
+        // Including the badge requires `overflow: visible` which is the
+        // default on View.
       }}
     >
       {showBadge && <PendingBadge />}
@@ -111,20 +113,29 @@ export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
 
-  // Responsive sizing · phones (< 600), small tablets (< 900), and web phone
-  // viewports all need enough vertical room for icon + label without clipping.
+  // Vertical budget (critical · the previous value clipped labels):
+  //
+  //   icon (24)  +  gap (4)  +  label line-box (16)  =  44 px content
+  //   + paddingTop (8)                                =  8 px top
+  //   + paddingBottom (8)                             =  8 px bottom
+  //   + safeBottom (system nav inset)                 =  variable
+  //   --------------------------------------------------
+  //   total                                           ≈ 60 px + safeBottom
+  //
+  // We size at 70 px content (vs. 44 px strict minimum) so the 11-pt label
+  // renders with comfortable ascender/descender clearance even when the
+  // browser's font metric rounding pushes the line box up to ~16 px.
   const isSmallPhone = width < 380;
   // iOS renders its own ~34 px home-indicator bar; Android gesture-nav has a
   // similar inset via useSafeAreaInsets. 3-button Android has insets.bottom = 0.
+  // Web viewports (no system nav) still get a small pad so the last baseline
+  // doesn't sit flush against the viewport edge.
   const safeBottom = isWeb
-    ? 14
+    ? 12
     : Platform.OS === "ios"
       ? Math.max(insets.bottom, 10)
       : Math.max(insets.bottom, 8);
-  // Content area above the safe bottom · icon (24) + gap (4) + label (~14)
-  // + top/bottom breathing (10). 62 px content fits 24 + 4 + 14 = 42 of text
-  // + 20 padding comfortably on every device.
-  const contentHeight = isSmallPhone ? 58 : 64;
+  const contentHeight = isSmallPhone ? 64 : 70;
   const tabBarHeight = contentHeight + safeBottom;
 
   return (
@@ -169,21 +180,30 @@ export default function TabLayout() {
         tabBarShowLabel: true,
         tabBarLabelStyle: {
           fontSize: 11,
+          lineHeight: 14,
           fontFamily: "DMSans_600SemiBold",
           letterSpacing: 0.2,
-          marginTop: 2,
+          // Explicit gap between icon and label. Matches the 4 px designers
+          // expect below the 24 px icon.
+          marginTop: 4,
           marginBottom: 0,
-          // Crucial: `includeFontPadding: false` removes the baseline padding
-          // Android adds around text, so descender letters (g, y, p) aren't
-          // clipped by the tab-bar bottom edge.
+          paddingBottom: 2,
+          // `includeFontPadding: false` removes Android's default baseline
+          // padding so descenders (g, y, p) don't clip.
           includeFontPadding: false,
+        },
+        // Icon sits at the top of the cell; the label flows naturally
+        // below it with the 4 px gap set above. This removes the vertical
+        // centering that was pushing the label past the tab-bar bottom
+        // edge on web viewports.
+        tabBarIconStyle: {
+          marginTop: 0,
+          marginBottom: 0,
         },
         tabBarItemStyle: {
           flex: 1,
           paddingVertical: 0,
-          paddingTop: 2,
-          paddingBottom: 2,
-          justifyContent: "center" as const,
+          justifyContent: "flex-start" as const,
           alignItems: "center" as const,
         },
       }}
