@@ -471,19 +471,51 @@ def daily_summary_email(self):
     yesterday = now - timedelta(hours=24)
     date_str = now.strftime("%Y-%m-%d")
 
-    # --- New users ---
+    # --- User counts ---
     # Our User model inherits AbstractBaseUser (NOT AbstractUser), so there is
     # no `date_joined` field — use the `created_at` column that the model
     # defines via auto_now_add=True. The previous code used `date_joined`
     # which raised FieldError on every run and produced "N/A" in the email.
     try:
         from apps.accounts.models import User
+        total_users_count = User.objects.count()
         new_users_count = User.objects.filter(created_at__gte=yesterday).count()
     except Exception as e:
         # Log loudly so a future model rename can't silently break the email
         # back to "N/A" without us noticing.
-        logger.error(f"Daily summary: new-users count query failed: {e}", exc_info=True)
+        logger.error(f"Daily summary: user counts query failed: {e}", exc_info=True)
+        total_users_count = "N/A"
         new_users_count = "N/A"
+
+    # --- Login + activity signals (last 24 h) ---
+    # AuditLog rows are created by LoginView/TOTP flows with action="LOGIN",
+    # "LOGIN_FAILED", "TOTP_LOGIN_VERIFIED". `last_activity_at` is written by
+    # ActivityHeartbeatMiddleware on every authenticated request, so it's the
+    # canonical "was this user active" signal regardless of login cadence.
+    try:
+        from apps.accounts.models import AuditLog, User as _User
+        login_qs = AuditLog.objects.filter(
+            created_at__gte=yesterday,
+            action__in=["LOGIN", "TOTP_LOGIN_VERIFIED"],
+        )
+        logins_total = login_qs.count()
+        unique_login_users = login_qs.exclude(user__isnull=True).values("user").distinct().count()
+        new_device_logins = login_qs.filter(details__new_device=True).count()
+        failed_logins = AuditLog.objects.filter(
+            created_at__gte=yesterday, action="LOGIN_FAILED",
+        ).count()
+
+        online_cutoff = now - timedelta(minutes=5)
+        active_24h = _User.objects.filter(last_activity_at__gte=yesterday).count()
+        online_now = _User.objects.filter(last_activity_at__gte=online_cutoff).count()
+    except Exception as e:
+        logger.error(f"Daily summary: login/activity query failed: {e}", exc_info=True)
+        logins_total = "N/A"
+        unique_login_users = "N/A"
+        new_device_logins = "N/A"
+        failed_logins = "N/A"
+        active_24h = "N/A"
+        online_now = "N/A"
 
     # --- Transaction stats ---
     try:
@@ -525,7 +557,14 @@ def daily_summary_email(self):
     # --- Render HTML email ---
     context = {
         "date": date_str,
+        "total_users_count": total_users_count,
         "new_users_count": new_users_count,
+        "logins_total": logins_total,
+        "unique_login_users": unique_login_users,
+        "new_device_logins": new_device_logins,
+        "failed_logins": failed_logins,
+        "active_24h": active_24h,
+        "online_now": online_now,
         "total_transactions": total_transactions,
         "completed_transactions": completed_transactions,
         "failed_transactions": failed_transactions,
@@ -536,21 +575,36 @@ def daily_summary_email(self):
 
     # --- Also send plain text to admins ---
     plain_text = (
-        f"CPay Daily Summary — {date_str}\n"
-        f"{'=' * 40}\n"
-        f"New users: {new_users_count}\n"
-        f"Transactions: {total_transactions} "
-        f"(completed: {completed_transactions}, failed: {failed_transactions})\n"
-        f"Volume (KES): {total_volume_kes}\n"
+        f"CPay · Daily Operations Summary · {date_str}\n"
+        f"{'=' * 48}\n"
+        f"Users\n"
+        f"  Total users:            {total_users_count}\n"
+        f"  New users (24 h):       {new_users_count}\n"
+        f"\n"
+        f"Logins (last 24 h)\n"
+        f"  Total login events:     {logins_total}\n"
+        f"  Unique users logged in: {unique_login_users}\n"
+        f"  New-device logins:      {new_device_logins}\n"
+        f"  Failed attempts:        {failed_logins}\n"
+        f"\n"
+        f"Activity\n"
+        f"  Active (last 24 h):     {active_24h}\n"
+        f"  Online now (≤5 min):    {online_now}\n"
+        f"\n"
+        f"Transactions (last 24 h)\n"
+        f"  Total:                  {total_transactions}\n"
+        f"  Completed:              {completed_transactions}\n"
+        f"  Failed:                 {failed_transactions}\n"
+        f"  Volume (KES):           {total_volume_kes}\n"
     )
     if wallet_balances:
-        plain_text += f"\nWallet Balances:\n"
+        plain_text += f"\nWallet Balances\n"
         for w in wallet_balances:
             plain_text += f"  {w['currency']} ({w['wallet_type']}): {w['balance']}\n"
 
     try:
         mail_admins(
-            subject=f"[CPay] Daily Summary — {date_str}",
+            subject=f"CPay · Daily Operations Summary · {date_str}",
             message=plain_text,
             html_message=html_content,
             fail_silently=False,
@@ -560,7 +614,16 @@ def daily_summary_email(self):
         logger.error(f"Failed to send daily summary email: {exc}")
         raise
 
-    return {"date": date_str, "new_users": new_users_count, "transactions": total_transactions}
+    return {
+        "date": date_str,
+        "total_users": total_users_count,
+        "new_users": new_users_count,
+        "logins": logins_total,
+        "unique_login_users": unique_login_users,
+        "active_24h": active_24h,
+        "online_now": online_now,
+        "transactions": total_transactions,
+    }
 
 
 # ---------------------------------------------------------------------------

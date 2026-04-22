@@ -1,27 +1,74 @@
 {% extends "email/base.html" %}
 
-{% block title %}CPay Daily Summary — {{ date }}{% endblock %}
+{% block title %}CPay · Daily Operations Summary · {{ date }}{% endblock %}
 
 {% block content %}
 <h2>Daily Operations Summary</h2>
 <p style="color: #94a3b8; font-size: 13px;">{{ date }}</p>
 
+<h3 style="font-size: 15px; margin-top: 20px; color: #0f172a;">Users</h3>
 <div class="info-card">
   <table role="presentation" cellpadding="0" cellspacing="0">
     <tr>
-      <td class="label">New Users Today</td>
-      <td class="value">{{ new_users_count }}</td>
+      <td class="label">Total Users</td>
+      <td class="value">{{ total_users_count }}</td>
     </tr>
+    <tr>
+      <td class="label">New Users (last 24 h)</td>
+      <td class="value" style="color: #10B981;">{{ new_users_count }}</td>
+    </tr>
+  </table>
+</div>
+
+<h3 style="font-size: 15px; margin-top: 20px; color: #0f172a;">Logins (last 24 h)</h3>
+<div class="info-card">
+  <table role="presentation" cellpadding="0" cellspacing="0">
+    <tr>
+      <td class="label">Total Login Events</td>
+      <td class="value">{{ logins_total }}</td>
+    </tr>
+    <tr>
+      <td class="label">Unique Users Logged In</td>
+      <td class="value">{{ unique_login_users }}</td>
+    </tr>
+    <tr>
+      <td class="label">New-Device Logins</td>
+      <td class="value" style="color: #f59e0b;">{{ new_device_logins }}</td>
+    </tr>
+    <tr>
+      <td class="label">Failed Login Attempts</td>
+      <td class="value" style="color: #ef4444;">{{ failed_logins }}</td>
+    </tr>
+  </table>
+</div>
+
+<h3 style="font-size: 15px; margin-top: 20px; color: #0f172a;">Activity</h3>
+<div class="info-card">
+  <table role="presentation" cellpadding="0" cellspacing="0">
+    <tr>
+      <td class="label">Active Users (last 24 h)</td>
+      <td class="value">{{ active_24h }}</td>
+    </tr>
+    <tr>
+      <td class="label">Online Now (≤ 5 min)</td>
+      <td class="value" style="color: #10B981;">{{ online_now }}</td>
+    </tr>
+  </table>
+</div>
+
+<h3 style="font-size: 15px; margin-top: 20px; color: #0f172a;">Transactions (last 24 h)</h3>
+<div class="info-card">
+  <table role="presentation" cellpadding="0" cellspacing="0">
     <tr>
       <td class="label">Total Transactions</td>
       <td class="value">{{ total_transactions }}</td>
     </tr>
     <tr>
-      <td class="label">Completed Transactions</td>
+      <td class="label">Completed</td>
       <td class="value" style="color: #10B981;">{{ completed_transactions }}</td>
     </tr>
     <tr>
-      <td class="label">Failed Transactions</td>
+      <td class="label">Failed</td>
       <td class="value" style="color: #ef4444;">{{ failed_transactions }}</td>
     </tr>
     <tr>
@@ -32,7 +79,7 @@
 </div>
 
 {% if wallet_balances %}
-<h2 style="font-size: 18px; margin-top: 24px;">Wallet Balances</h2>
+<h3 style="font-size: 15px; margin-top: 20px; color: #0f172a;">Wallet Balances</h3>
 <div class="info-card">
   <table role="presentation" cellpadding="0" cellspacing="0">
     {% for wallet in wallet_balances %}

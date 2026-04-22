@@ -776,6 +776,10 @@ LOGGING = {
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 DEFAULT_FROM_EMAIL = "CPay <noreply@cpay.co.ke>"
 SERVER_EMAIL = "CPay Alerts <alerts@cpay.co.ke>"
+# `mail_admins`/`mail_managers` prepend this to every subject. The Django
+# default of `[Django] ` leaks framework plumbing into ops emails; set it to
+# empty and let each task own its professional subject line.
+EMAIL_SUBJECT_PREFIX = ""
 
 # Admin email recipients (overridden in production.py)
 ADMINS = [("Admin", "admin@cpay.co.ke")]
