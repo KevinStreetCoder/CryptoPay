@@ -813,6 +813,9 @@ function CryptoPriceChartsSection({
   tc: ReturnType<typeof getThemeColors>;
   ts: ReturnType<typeof getThemeShadows>;
 }) {
+  // Display-currency hook · rate cards below render via `formatKes` so the
+  // USD/KES preference applied in Settings flows through here too.
+  const { formatKes } = useDisplayCurrency();
   const [expanded, setExpanded] = useState<string | null>("USDT");
   const [chartPeriod, setChartPeriod] = useState<string>("7d");
   const [chartLoading, setChartLoading] = useState(false);
@@ -1026,6 +1029,8 @@ function MobileCryptoCharts({
   tc: ReturnType<typeof getThemeColors>;
   ts: ReturnType<typeof getThemeShadows>;
 }) {
+  // Display-currency hook · see note in `CryptoPriceChartsSection`.
+  const { formatKes } = useDisplayCurrency();
   const [expanded, setExpanded] = useState<string | null>("USDT");
   const [chartPeriod, setChartPeriod] = useState<string>("7d");
 
