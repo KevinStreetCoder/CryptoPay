@@ -364,31 +364,55 @@ def send_kyc_status_email(user, document_type, status, rejection_reason=None):
 def send_transaction_notifications(user, transaction):
     """Send all notifications for a completed transaction: email receipt, SMS, push.
 
-    This is the single entry point for transaction notifications.
-    Call this when a transaction is completed successfully.
+    Honours per-channel preferences on the User:
+      - `notify_email_enabled` gates the receipt email
+      - `notify_sms_enabled` gates the SMS
+      - `notify_push_enabled` gates the push
+    Translates the SMS + push body into `user.language` via apps.core.i18n.
     """
+    from apps.core.i18n import t as i18n_t, user_lang
+
     TX_TYPE_LABELS = {
         "PAYBILL_PAYMENT": "Paybill payment",
         "TILL_PAYMENT": "Till payment",
         "SEND_MPESA": "M-Pesa transfer",
         "BUY": "Crypto purchase",
     }
+    ref = str(transaction.id)[:8].upper()
+    label = TX_TYPE_LABELS.get(transaction.type, transaction.type.replace("_", " ").title())
+    lang = user_lang(user)
 
-    # Email receipt (direct)
-    send_transaction_receipt(user, transaction)
+    # Email receipt · gated on email opt-in.
+    if getattr(user, "notify_email_enabled", True):
+        send_transaction_receipt(user, transaction)
+    else:
+        logger.info("Skipping transaction email · user opted out of email channel")
 
-    # SMS notification (direct)
-    if user.phone:
-        ref = str(transaction.id)[:8].upper()
-        label = TX_TYPE_LABELS.get(transaction.type, transaction.type.replace("_", " ").title())
-        message = (
-            f"Cpay: {label} of {transaction.dest_currency} {transaction.dest_amount} completed successfully. "
-            f"Ref: {ref}. Thank you for using CPay."
+    # SMS notification · gated on SMS opt-in, translated to user's language.
+    if user.phone and getattr(user, "notify_sms_enabled", True):
+        # Best-effort balance · cheaper than hitting the wallet service again.
+        recipient = (
+            transaction.mpesa_paybill
+            or transaction.mpesa_till
+            or transaction.mpesa_phone
+            or "M-Pesa"
+        )
+        message = i18n_t(
+            "sms.payment.success",
+            lang,
+            amount=str(transaction.dest_amount),
+            recipient=recipient,
+            ref=ref,
+            balance="—",
         )
         send_sms(user.phone, message)
-        logger.info(f"Transaction SMS sent to {user.phone}")
+        logger.info(f"Transaction SMS sent to {user.phone} (lang={lang})")
+    elif user.phone:
+        logger.info("Skipping transaction SMS · user opted out of SMS channel")
 
-    # PDF receipt generation (keep as Celery — heavy IO)
+    # PDF receipt generation (keep as Celery — heavy IO). PDF itself is
+    # emailed when the user chooses to receive it, so we always generate
+    # so the UI can link to it.
     try:
         from apps.core.tasks import generate_pdf_receipt_task
         generate_pdf_receipt_task.delay(transaction_id=str(transaction.id))
@@ -396,18 +420,33 @@ def send_transaction_notifications(user, transaction):
     except Exception as e:
         logger.error(f"Failed to queue PDF receipt: {e}")
 
-    # Push notification (keep as Celery — external API)
-    try:
-        from apps.core.tasks import send_push_task
-        label = TX_TYPE_LABELS.get(transaction.type, "Transaction")
-        send_push_task.delay(
-            user_id=str(user.id),
-            title="Payment Successful",
-            body=f"{label} of {transaction.dest_currency} {transaction.dest_amount} completed. Ref: {str(transaction.id)[:8].upper()}",
-            data={"transaction_id": str(transaction.id), "type": "transaction_complete"},
-        )
-    except Exception as e:
-        logger.error(f"Failed to queue push notification: {e}")
+    # Push notification · gated on push opt-in.
+    if getattr(user, "notify_push_enabled", True):
+        try:
+            from apps.core.tasks import send_push_task
+            body = i18n_t(
+                "sms.payment.success",
+                lang,
+                amount=str(transaction.dest_amount),
+                recipient=(
+                    transaction.mpesa_paybill
+                    or transaction.mpesa_till
+                    or transaction.mpesa_phone
+                    or label
+                ),
+                ref=ref,
+                balance="—",
+            )
+            send_push_task.delay(
+                user_id=str(user.id),
+                title="Payment Successful" if lang == "en" else "Malipo Yamefaulu",
+                body=body,
+                data={"transaction_id": str(transaction.id), "type": "transaction_complete"},
+            )
+        except Exception as e:
+            logger.error(f"Failed to queue push notification: {e}")
+    else:
+        logger.info("Skipping push notification · user opted out of push channel")
 
     # Admin alert for failed transactions + user failure email
     if str(transaction.status) == "failed":
@@ -523,22 +562,25 @@ def send_admin_new_user_alert(user):
 
 
 def send_welcome_sms(user):
-    """Send welcome SMS to a newly registered user directly.
+    """Send welcome SMS to a newly registered user.
 
-    Args:
-        user: User model instance (must have phone).
+    Honours user.notify_sms_enabled · skipped if user opted out. Also uses
+    user.language so Swahili-preferring users get a Swahili message.
     """
     if not user.phone or user.phone.startswith("+000"):
         logger.warning(f"Cannot send welcome SMS: user has no real phone.")
         return
 
-    message = (
-        "Welcome to CPay! Your account is ready. "
-        "Deposit KES, pay bills, and send money with crypto. "
-        "Visit cpay.co.ke"
-    )
+    # User preference opt-out · respects the SMS channel flag.
+    if not getattr(user, "notify_sms_enabled", True):
+        logger.info("Welcome SMS skipped · user opted out of SMS channel")
+        return
+
+    from apps.core.i18n import t, user_lang
+    name = (user.full_name or "").split(" ")[0] or "friend"
+    message = t("sms.welcome", user_lang(user), name=name)
     send_sms(user.phone, message)
-    logger.info(f"Welcome SMS sent to {user.phone}")
+    logger.info(f"Welcome SMS sent to {user.phone} (lang={user_lang(user)})")
 
 
 def send_pin_change_alert(user, ip_address="", device_info=""):

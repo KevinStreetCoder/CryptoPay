@@ -230,34 +230,72 @@ class PaymentSaga:
             self.complete(mpesa_receipt=f"SANDBOX-{conv_id[:12]}")
 
     def compensate_mpesa(self):
-        """Reverse Step 3: Request M-Pesa reversal if payment went through."""
-        mpesa_receipt = self.tx.mpesa_receipt
-        if mpesa_receipt:
-            from apps.mpesa.provider import get_payment_client
+        """Reverse Step 3: Request M-Pesa reversal if payment went through.
 
+        B19: when the active provider does not support automated reversal
+        (e.g. SasaPay), we MUST NOT silently log-and-continue — the caller
+        will then credit crypto back to the user, producing a double-spend
+        (money paid out AND crypto returned). Instead, raise SagaError so
+        the outer handler surfaces it and the ops team can reconcile.
+        """
+        mpesa_receipt = self.tx.mpesa_receipt
+        if not mpesa_receipt:
+            return
+
+        from apps.mpesa.provider import get_payment_client
+
+        try:
+            client = get_payment_client()
+            client.reversal(
+                transaction_id=mpesa_receipt,
+                amount=int(self.tx.dest_amount),
+                remarks=f"Reversal for CryptoPay-{self.tx.id}",
+            )
+            logger.info(f"Compensated: M-Pesa reversal requested for tx {self.tx.id}")
+        except NotImplementedError:
+            logger.critical(
+                f"Provider does not support reversal · tx {self.tx.id} "
+                f"receipt={mpesa_receipt} requires manual ops reconciliation"
+            )
             try:
-                client = get_payment_client()
-                client.reversal(
-                    transaction_id=mpesa_receipt,
-                    amount=int(self.tx.dest_amount),
-                    remarks=f"Reversal for CryptoPay-{self.tx.id}",
-                )
-                logger.info(f"Compensated: M-Pesa reversal requested for tx {self.tx.id}")
-            except Exception as e:
-                logger.critical(
-                    f"M-Pesa reversal failed for tx {self.tx.id}: {e}. "
-                    f"MANUAL INTERVENTION REQUIRED."
-                )
+                from apps.core.tasks import send_failed_transaction_alert_task
+                send_failed_transaction_alert_task.delay(transaction_id=str(self.tx.id))
+            except Exception:
+                pass
+            raise SagaError("reversal_not_supported")
+        except Exception as e:
+            logger.critical(
+                f"M-Pesa reversal failed for tx {self.tx.id}: {e}. "
+                f"MANUAL INTERVENTION REQUIRED."
+            )
+            raise SagaError(f"reversal_error: {e}")
 
     def complete(self, mpesa_receipt: str):
-        """Called when M-Pesa callback confirms success. Idempotent."""
-        # Guard: only transition from PROCESSING/CONFIRMING to COMPLETED
-        self.tx.refresh_from_db(fields=["status"])
+        """Called when M-Pesa callback confirms success. Idempotent.
+
+        B23: when a success callback arrives AFTER compensation (user's
+        crypto was already credited back because the tx was assumed
+        failed), we must NOT silently drop it · we need ops to reconcile
+        the double-settlement (M-Pesa paid + crypto returned)."""
+        self.tx.refresh_from_db(fields=["status", "saga_data"])
         if self.tx.status == Transaction.Status.COMPLETED:
             logger.info(f"Payment already completed: tx {self.tx.id} (duplicate callback)")
             return
         if self.tx.status == Transaction.Status.FAILED:
-            logger.warning(f"Cannot complete already-failed tx {self.tx.id}")
+            compensated = bool(self.tx.saga_data and self.tx.saga_data.get("compensated_at"))
+            if compensated:
+                logger.critical(
+                    f"Late M-Pesa success on compensated tx {self.tx.id} · "
+                    f"receipt {mpesa_receipt} · manual reconciliation required "
+                    f"(funds paid out but crypto already refunded)"
+                )
+                try:
+                    from apps.core.tasks import send_failed_transaction_alert_task
+                    send_failed_transaction_alert_task.delay(transaction_id=str(self.tx.id))
+                except Exception:
+                    pass
+            else:
+                logger.warning(f"Cannot complete already-failed tx {self.tx.id}")
             return
 
         self.tx.mpesa_receipt = mpesa_receipt

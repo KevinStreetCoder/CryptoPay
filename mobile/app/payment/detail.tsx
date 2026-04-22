@@ -988,11 +988,16 @@ export default function TransactionDetailScreen() {
                   setDownloadingReceipt(true);
                   try {
                     if (isWeb) {
-                      const { storage } = require("../../src/utils/storage");
+                      // C2: mint a short-lived HMAC-signed URL and open it.
+                      // The access token is NEVER placed in the query string.
+                      const { authApi } = require("../../src/api/auth");
                       const { config } = require("../../src/constants/config");
-                      const token = await storage.getItemAsync("access_token");
-                      const url = `${config.apiUrl}/payments/${tx.id}/receipt/?token=${encodeURIComponent(token || "")}`;
-                      window.open(url, "_blank");
+                      const { data } = await authApi.signReceipt(tx.id);
+                      // The backend returns a path like `/api/v1/payments/<id>/receipt/?sig=...`.
+                      // Strip any leading `/api/v1` mismatch by prepending config.apiUrl.
+                      const base = String(config.apiUrl || "").replace(/\/api\/v1\/?$/, "");
+                      const fullUrl = data.url.startsWith("http") ? data.url : `${base}${data.url}`;
+                      window.open(fullUrl, "_blank");
                       toast.success("Downloading", "Receipt opened in new tab");
                     } else {
                       const { authApi } = require("../../src/api/auth");

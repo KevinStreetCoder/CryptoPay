@@ -8,6 +8,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from apps.core.admin_views import admin_stats_dashboard, admin_sms_health
+from apps.core.media_views import ProtectedMediaView, public_media_forbidden
 from apps.core.views import HealthCheckView
 
 
@@ -17,13 +18,22 @@ def api_root(request):
     return Response({"name": "CryptoPay API", "version": "1.0.0", "status": "ok"})
 
 
+# D10: obfuscate the admin URL. Defaults to `admin/` for dev + backwards
+# compat; production operator sets `ADMIN_URL=<random-slug>/` in .env so
+# crawlers + credential-stuffing bots can't find the login page without
+# insider knowledge. Always ends with `/`.
+_admin_prefix = getattr(settings, "ADMIN_URL", "admin/")
+if not _admin_prefix.endswith("/"):
+    _admin_prefix = _admin_prefix + "/"
+
 urlpatterns = [
     path("", api_root, name="api-root"),
     path("", include("django_prometheus.urls")),
     path("health/", HealthCheckView.as_view(), name="health-check"),
-    path("admin/stats/", admin_stats_dashboard, name="admin-stats"),
-    path("admin/health/sms/", admin_sms_health, name="admin-sms-health"),
-    path("admin/", admin.site.urls),
+    # Stats dashboards stay under the obfuscated prefix too.
+    path(f"{_admin_prefix}stats/", admin_stats_dashboard, name="admin-stats"),
+    path(f"{_admin_prefix}health/sms/", admin_sms_health, name="admin-sms-health"),
+    path(_admin_prefix, admin.site.urls),
     path("api/v1/auth/", include("apps.accounts.urls")),
     path("api/v1/wallets/", include("apps.wallets.urls")),
     path("api/v1/payments/", include("apps.payments.urls")),
@@ -51,12 +61,15 @@ urlpatterns = [
     ] if settings.DEBUG else []),
 ]
 
-# Always serve media files — static() silently does nothing when DEBUG=False,
-# so we use re_path with django.views.static.serve directly for production.
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-else:
-    from django.views.static import serve
-    urlpatterns += [
-        re_path(r"^media/(?P<path>.*)$", serve, {"document_root": settings.MEDIA_ROOT}),
-    ]
+# D4: media is ALWAYS served via an authenticated gateway. The previous
+# code path used `django.views.static.serve` which exposed every file under
+# `media/` to anyone who could guess the URL — including KYC national-ID
+# scans. `ProtectedMediaView` authenticates + authorizes every request,
+# then either streams (dev) or `X-Accel-Redirect`s to nginx (production).
+urlpatterns += [
+    re_path(
+        r"^media/(?P<path>.*)$",
+        ProtectedMediaView.as_view(),
+        name="protected-media",
+    ),
+]

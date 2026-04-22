@@ -289,21 +289,25 @@ def _get_master_seed() -> bytes:
     """
     Get the master seed for HD wallet derivation.
 
-    Priority order:
-      1. KMS_ENABLED + WALLET_ENCRYPTED_SEED — decrypt via KMS envelope encryption
-      2. WALLET_MASTER_SEED env var (hex-encoded 64-byte seed) — direct seed
-      3. WALLET_MNEMONIC env var (BIP-39 24-word phrase) — derive seed via BIP-39
-      4. Fallback: PBKDF2 from SECRET_KEY (development only, NOT for production)
+    Priority order (ALL strict — no silent fallbacks):
+      1. KMS_ENABLED + WALLET_ENCRYPTED_SEED · KMS envelope-decrypted seed (recommended for production)
+      2. WALLET_MASTER_SEED env var (hex-encoded >= 16 bytes) · direct seed
+      3. WALLET_MNEMONIC env var (BIP-39 24-word phrase) · derive seed via BIP-39
 
-    In production, use KMS encryption:
-      - Encrypt with: python manage.py encrypt_wallet_seed
-      - Set KMS_ENABLED=True, WALLET_ENCRYPTED_SEED=<blob>
+    D6 (2026-04-22): the previous PBKDF2-from-SECRET_KEY fallback has been
+    REMOVED entirely. A SECRET_KEY leak can no longer derive user wallet
+    private keys. If no seed source is configured, this raises at call time
+    so no address or signature can be produced from an unsafe seed. A sibling
+    boot-time assertion (`_assert_production_env` in `config.settings.production`)
+    also fails the container at startup in production so ops sees the problem
+    before a single request lands.
 
-    Or use plaintext (less secure):
-      - A BIP-39 mnemonic stored in WALLET_MNEMONIC (preferred, human-readable backup)
-      - The hex seed in WALLET_MASTER_SEED (derived from mnemonic, for KMS/HSM storage)
-
-    Generate a mnemonic with: python manage.py generate_wallet_seed
+    Development setup:
+      - Generate a mnemonic: `python manage.py generate_wallet_seed`
+      - Copy the printed 24-word phrase into `.env` as WALLET_MNEMONIC
+    Production setup:
+      - Encrypt with KMS: `python manage.py encrypt_wallet_seed`
+      - Set KMS_ENABLED=True + WALLET_ENCRYPTED_SEED in the environment
     """
     # Option 0: KMS envelope encryption (highest priority)
     kms_enabled = getattr(settings, "KMS_ENABLED", False)
@@ -357,25 +361,13 @@ def _get_master_seed() -> bytes:
         logger.info("Using WALLET_MNEMONIC (BIP-39) for HD wallet derivation.")
         return seed
 
-    # Option 3: Fallback — derive from SECRET_KEY (development only)
-    if not settings.DEBUG:
-        raise RuntimeError(
-            "CRITICAL: WALLET_MNEMONIC or WALLET_MASTER_SEED must be set in production. "
-            "Refusing to derive wallet seed from SECRET_KEY. "
-            "Generate with: python manage.py generate_wallet_seed"
-        )
-
-    secret = getattr(settings, "SECRET_KEY", "dev-secret-key")
-    logger.warning(
-        "DEV ONLY: Using SECRET_KEY for wallet seed derivation. "
-        "Set WALLET_MNEMONIC or WALLET_MASTER_SEED for production use."
-    )
-    return hashlib.pbkdf2_hmac(
-        "sha512",
-        secret.encode(),
-        b"cryptopay-wallet-seed",
-        iterations=100_000,
-        dklen=64,
+    # D6: no fallback · fail loudly so no wallet operation can proceed with
+    # an unsafe (SECRET_KEY-derived) seed.
+    raise RuntimeError(
+        "CRITICAL: no wallet seed source configured. "
+        "Set one of: (a) KMS_ENABLED=True + WALLET_ENCRYPTED_SEED for production, "
+        "(b) WALLET_MNEMONIC (BIP-39 phrase), or (c) WALLET_MASTER_SEED (hex). "
+        "Generate with: python manage.py generate_wallet_seed"
     )
 
 

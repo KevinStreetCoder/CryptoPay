@@ -619,16 +619,18 @@ def _broadcast_tron_trc20(destination_address: str, amount: Decimal) -> str:
     """
     Broadcast a TRC-20 USDT transfer on Tron using tronpy.
 
-    Requires TRON_HOT_WALLET_PRIVATE_KEY in settings.
+    A14: key material is loaded just-in-time via `secure_keys.load_hot_wallet_key`
+    (which prefers KMS decryption when configured) and the buffer is wiped
+    immediately after the transaction is signed · so the signing key exists
+    in process memory only for the duration of a single transaction build.
     """
     from django.conf import settings as django_settings
+    from apps.blockchain.secure_keys import load_hot_wallet_key, wipe, HotWalletKeyMissing
 
-    private_key_hex = getattr(django_settings, "TRON_HOT_WALLET_PRIVATE_KEY", "")
-    if not private_key_hex:
-        raise RuntimeError(
-            "TRON_HOT_WALLET_PRIVATE_KEY not configured. "
-            "Cannot broadcast Tron withdrawals."
-        )
+    try:
+        key_ba = load_hot_wallet_key("tron")
+    except HotWalletKeyMissing as e:
+        raise RuntimeError(str(e))
 
     try:
         from tronpy import Tron
@@ -643,7 +645,7 @@ def _broadcast_tron_trc20(destination_address: str, amount: Decimal) -> str:
         contract_address = _get_usdt_contract()
         contract = client.get_contract(contract_address)
 
-        priv_key = PrivateKey(bytes.fromhex(private_key_hex))
+        priv_key = PrivateKey(bytes(key_ba))  # tronpy requires bytes; wiped below
         from_address = priv_key.public_key.to_base58check_address()
 
         # USDT has 6 decimals on TRC-20
@@ -669,6 +671,10 @@ def _broadcast_tron_trc20(destination_address: str, amount: Decimal) -> str:
         raise RuntimeError(
             "tronpy is required for Tron withdrawals. Install with: pip install tronpy"
         )
+    finally:
+        # A14: zero the buffer so a later memory dump / Sentry capture / core
+        # file cannot recover the signing key.
+        wipe(key_ba)
 
 
 def _broadcast_evm(network: str, currency: str, destination_address: str, amount: Decimal) -> str:
@@ -682,18 +688,28 @@ def _broadcast_evm(network: str, currency: str, destination_address: str, amount
     """
     from django.conf import settings as django_settings
 
+    from apps.blockchain.secure_keys import load_hot_wallet_key, wipe, HotWalletKeyMissing
+
     if network == "polygon":
         rpc_url = getattr(django_settings, "POLYGON_RPC_URL", "")
-        private_key = getattr(django_settings, "POLYGON_HOT_WALLET_PRIVATE_KEY", "")
+        chain_key = "polygon"
     else:
         rpc_url = getattr(django_settings, "ETH_RPC_URL", "")
-        private_key = getattr(django_settings, "ETH_HOT_WALLET_PRIVATE_KEY", "")
+        chain_key = "eth"
 
-    if not rpc_url or not private_key:
+    if not rpc_url:
         raise RuntimeError(
-            f"{network.upper()} RPC URL or hot wallet private key not configured. "
-            f"Cannot broadcast {network} withdrawals."
+            f"{network.upper()} RPC URL not configured. Cannot broadcast {network} withdrawals."
         )
+
+    try:
+        key_ba = load_hot_wallet_key(chain_key)
+    except HotWalletKeyMissing as e:
+        raise RuntimeError(str(e))
+
+    # `web3.py` accepts either a 0x-hex string or raw bytes. We feed bytes
+    # so the private key never exists as an immutable str in memory.
+    private_key = bytes(key_ba)
 
     try:
         from web3 import Web3
@@ -788,6 +804,16 @@ def _broadcast_evm(network: str, currency: str, destination_address: str, amount
         raise RuntimeError(
             "web3 is required for EVM withdrawals. Install with: pip install web3"
         )
+    finally:
+        # A14: wipe both the bytearray and the derived bytes view. `bytes`
+        # is immutable so we can only drop the reference · the wipe on the
+        # bytearray zeros the backing memory the `bytes` was copied from.
+        try:
+            wipe(key_ba)
+        except Exception:
+            pass
+        private_key = None  # type: ignore[assignment]  # nosec: reset reference
+        del private_key
 
 
 def _broadcast_solana(currency: str, destination_address: str, amount: Decimal) -> str:
@@ -797,18 +823,26 @@ def _broadcast_solana(currency: str, destination_address: str, amount: Decimal) 
     For SOL: native system transfer.
     For USDT/USDC on Solana: SPL token transfer.
 
-    Requires SOL_HOT_WALLET_PRIVATE_KEY (base58 or JSON array format).
+    A14: the hot-wallet keypair is loaded via `secure_keys.load_hot_wallet_key`
+    just-in-time and wiped from process memory immediately after the tx is
+    built. Stored format on disk is either base58 (default Solana keypair)
+    or a JSON byte array · both flow through the same bytearray wrapper.
     """
     from django.conf import settings as django_settings
+    from apps.blockchain.secure_keys import load_hot_wallet_key, wipe, HotWalletKeyMissing
 
-    private_key = getattr(django_settings, "SOL_HOT_WALLET_PRIVATE_KEY", "")
     rpc_url = getattr(django_settings, "SOL_RPC_URL", "https://api.mainnet-beta.solana.com")
 
-    if not private_key:
-        raise RuntimeError(
-            "SOL_HOT_WALLET_PRIVATE_KEY not configured. "
-            "Cannot broadcast Solana withdrawals."
-        )
+    try:
+        key_ba = load_hot_wallet_key("sol")
+    except HotWalletKeyMissing as e:
+        raise RuntimeError(str(e))
+
+    # `secure_keys` returns bytes for the non-hex path — Solana's base58 /
+    # JSON-array formats land here as utf-8 encoded strings. Decode back to
+    # str for `Keypair.from_*` without ever letting the key linger as an
+    # immutable settings attribute.
+    private_key = bytes(key_ba).decode("utf-8", errors="ignore")
 
     try:
         from solders.keypair import Keypair
@@ -968,6 +1002,14 @@ def _broadcast_solana(currency: str, destination_address: str, amount: Decimal) 
         raise RuntimeError(
             "solders is required for Solana withdrawals. Install with: pip install solders"
         )
+    finally:
+        # A14: zero the loaded key bytearray and drop the str reference.
+        try:
+            wipe(key_ba)
+        except Exception:
+            pass
+        private_key = None  # type: ignore[assignment]  # nosec: reset reference
+        del private_key
 
 
 def _broadcast_bitcoin(destination_address: str, amount: Decimal) -> str:
@@ -990,14 +1032,17 @@ def _broadcast_bitcoin(destination_address: str, amount: Decimal) -> str:
             "Enable only after verifying native SegWit addresses on mainnet."
         )
 
-    private_key_wif = getattr(django_settings, "BTC_HOT_WALLET_PRIVATE_KEY", "")
+    from apps.blockchain.secure_keys import load_hot_wallet_key, wipe, HotWalletKeyMissing
+
     btc_network = getattr(django_settings, "BTC_NETWORK", "testnet")
 
-    if not private_key_wif:
-        raise RuntimeError(
-            "BTC_HOT_WALLET_PRIVATE_KEY not configured (WIF format). "
-            "Cannot broadcast Bitcoin withdrawals."
-        )
+    try:
+        key_ba = load_hot_wallet_key("btc")
+    except HotWalletKeyMissing as e:
+        raise RuntimeError(f"{e} (WIF format required)")
+
+    # WIF strings are base58check-encoded; secure_keys returns utf-8 bytes.
+    private_key_wif = bytes(key_ba).decode("utf-8", errors="ignore")
 
     try:
         from bit import Key, PrivateKeyTestnet
@@ -1031,6 +1076,16 @@ def _broadcast_bitcoin(destination_address: str, amount: Decimal) -> str:
         raise RuntimeError(
             "bit is required for Bitcoin withdrawals. Install with: pip install bit"
         )
+    finally:
+        # A14: zero the WIF bytearray. `bit.Key(...)` retains the key
+        # internally so the process still holds it for the duration of
+        # `key.send`, but the env-derived buffer is gone.
+        try:
+            wipe(key_ba)
+        except Exception:
+            pass
+        private_key_wif = None  # type: ignore[assignment]  # nosec: reset reference
+        del private_key_wif
 
 
 def _is_retryable_error(error: Exception) -> bool:

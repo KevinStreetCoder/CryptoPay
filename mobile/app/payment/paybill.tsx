@@ -35,7 +35,7 @@ export default function PayBillScreen() {
   const { prefill, name: prefillName, account: prefillAccount } = useLocalSearchParams<{ prefill?: string; name?: string; account?: string }>();
   const { width } = useWindowDimensions();
   const isWeb = Platform.OS === "web";
-  const isDesktop = isWeb && width >= 768;
+  const isDesktop = isWeb && width >= 900;
   const { data: wallets } = useWallets();
   const [paybillNumber, setPaybillNumber] = useState(prefill || "");
   const [accountNumber, setAccountNumber] = useState(prefillAccount || "");
@@ -242,34 +242,12 @@ export default function PayBillScreen() {
                 marginBottom: isDesktop ? 16 : 4,
               }}
             >
-              <Pressable
-                onPress={() => router.replace("/(tabs)/pay" as any)}
-                hitSlop={12}
-                accessibilityRole="button"
-                accessibilityLabel="Go back"
-                testID="back-button"
-                style={({ pressed, hovered }: any) => ({
-                  width: 42,
-                  height: 42,
-                  borderRadius: 14,
-                  backgroundColor: isWeb && hovered ? tc.dark.elevated : tc.dark.card,
-                  borderColor: isWeb && hovered ? tc.glass.borderStrong : tc.glass.border,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  borderWidth: 1,
-                  opacity: pressed ? 0.85 : 1,
-                  ...(isWeb ? { cursor: "pointer", transition: "all 0.15s ease" } as any : {}),
-                })}
-              >
-                <Ionicons name="arrow-back" size={20} color={tc.textPrimary} />
-              </Pressable>
-
               <Text
                 style={{
                   color: tc.textPrimary,
                   fontSize: isDesktop ? 24 : 20,
                   fontFamily: "DMSans_700Bold",
-                  marginLeft: 14,
+                  marginLeft: 0,
                   flex: 1,
                   letterSpacing: -0.3,
                 }}

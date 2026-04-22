@@ -38,59 +38,81 @@ DEFAULT_SAFARICOM_IP_RANGES = [
 
 class MpesaIPWhitelistMiddleware:
     """
-    Restrict M-Pesa callback endpoints to Safaricom's known IP ranges.
+    Restrict payment-rail callback endpoints to the provider's known IP
+    ranges. B1 + B2: covers BOTH the `/api/v1/mpesa/callback/` prefix AND
+    `/api/v1/hooks/c2b/` (the Safaricom-imposed alternate path that omits
+    the word "mpesa") AND the SasaPay callback paths. Each prefix is
+    matched against its own provider's allow-list.
 
-    Only applies to paths starting with /api/v1/mpesa/callback/.
-    All other endpoints pass through untouched.
-
-    Configure MPESA_ALLOWED_IPS in settings to override defaults.
+    Configure `MPESA_ALLOWED_IPS` and `SASAPAY_ALLOWED_IPS` in settings.
     """
 
-    CALLBACK_PATH_PREFIX = "/api/v1/mpesa/callback/"
+    # B1 + B2: each entry is (path_prefix, settings_attr_for_allow_list).
+    # Callbacks not matching any prefix pass through untouched.
+    CALLBACK_PATH_PREFIXES = (
+        ("/api/v1/mpesa/callback/", "MPESA_ALLOWED_IPS"),
+        ("/api/v1/hooks/c2b/", "MPESA_ALLOWED_IPS"),
+        ("/api/v1/mpesa/sasapay/", "SASAPAY_ALLOWED_IPS"),
+        ("/api/v1/sasapay/", "SASAPAY_ALLOWED_IPS"),
+    )
 
     def __init__(self, get_response):
         self.get_response = get_response
-        raw_ranges = getattr(settings, "MPESA_ALLOWED_IPS", DEFAULT_SAFARICOM_IP_RANGES)
-        self.allowed_networks = [ip_network(r, strict=False) for r in raw_ranges]
+        # Cache per-provider networks lazily keyed on settings attr.
+        self._networks_by_attr: dict[str, list] = {}
+
+    def _networks_for(self, attr: str):
+        if attr not in self._networks_by_attr:
+            raw = getattr(settings, attr, DEFAULT_SAFARICOM_IP_RANGES)
+            self._networks_by_attr[attr] = [
+                ip_network(r, strict=False) for r in raw
+            ]
+        return self._networks_by_attr[attr]
+
+    def _match_prefix(self, path: str):
+        for prefix, attr in self.CALLBACK_PATH_PREFIXES:
+            if path.startswith(prefix):
+                return prefix, attr
+        return None, None
 
     def __call__(self, request):
-        if request.path.startswith(self.CALLBACK_PATH_PREFIX):
+        prefix, attr = self._match_prefix(request.path)
+        if prefix is not None:
             client_ip = self._get_client_ip(request)
-
-            # Log every callback request for audit
             logger.info(
-                "M-Pesa callback request: method=%s path=%s ip=%s content_length=%s",
+                "payment-callback request: method=%s path=%s ip=%s content_length=%s",
                 request.method,
                 request.path,
                 client_ip,
                 request.META.get("CONTENT_LENGTH", "0"),
             )
-
-            if not self._is_ip_allowed(client_ip):
+            if not self._is_ip_allowed(client_ip, attr):
                 logger.warning(
-                    "M-Pesa callback rejected: IP %s not in whitelist",
+                    "payment-callback rejected: IP %s not in whitelist for %s (attr=%s)",
                     client_ip,
+                    prefix,
+                    attr,
                 )
-                return JsonResponse(
-                    {"error": "Forbidden"},
-                    status=403,
-                )
+                return JsonResponse({"error": "Forbidden"}, status=403)
 
         return self.get_response(request)
 
     def _get_client_ip(self, request) -> str:
+        # Cloudflare-aware: prefer CF-Connecting-IP, then leftmost XFF, then REMOTE_ADDR.
+        cf_ip = request.META.get("HTTP_CF_CONNECTING_IP")
+        if cf_ip:
+            return cf_ip.strip()
         xff = request.META.get("HTTP_X_FORWARDED_FOR")
         if xff:
             return xff.split(",")[0].strip()
         return request.META.get("REMOTE_ADDR", "127.0.0.1")
 
-    def _is_ip_allowed(self, client_ip: str) -> bool:
+    def _is_ip_allowed(self, client_ip: str, attr: str) -> bool:
         try:
             addr = ip_address(client_ip)
         except ValueError:
             return False
-
-        return any(addr in network for network in self.allowed_networks)
+        return any(addr in network for network in self._networks_for(attr))
 
 
 # ---------------------------------------------------------------------------

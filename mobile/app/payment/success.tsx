@@ -182,7 +182,7 @@ export default function PaymentSuccessScreen() {
   const [liveStatus, setLiveStatus] = useState(params.tx_status || "processing");
 
   const { width } = useWindowDimensions();
-  const isDesktop = isWeb && width >= 768;
+  const isDesktop = isWeb && width >= 900;
 
   // Refresh wallet balances immediately
   useEffect(() => {
@@ -266,12 +266,13 @@ export default function PaymentSuccessScreen() {
     setDownloadingReceipt(true);
     try {
       if (isWeb) {
-        // Open in new tab with token query param to bypass IDM extension
-        const { storage } = require("../../src/utils/storage");
+        // C2: signed one-shot URL · the access token never rides in the query string.
+        const { authApi } = require("../../src/api/auth");
         const { config } = require("../../src/constants/config");
-        const token = await storage.getItemAsync("access_token");
-        const url = `${config.apiUrl}/payments/${txId}/receipt/?token=${encodeURIComponent(token || "")}`;
-        window.open(url, "_blank");
+        const { data } = await authApi.signReceipt(txId);
+        const base = String(config.apiUrl || "").replace(/\/api\/v1\/?$/, "");
+        const fullUrl = data.url.startsWith("http") ? data.url : `${base}${data.url}`;
+        window.open(fullUrl, "_blank");
         toast.success("Downloading", "Receipt opened in new tab");
       } else {
         const { authApi } = require("../../src/api/auth");

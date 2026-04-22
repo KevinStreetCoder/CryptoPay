@@ -110,9 +110,15 @@ class RequestOTPSerializer(serializers.Serializer):
 
 
 class GoogleLoginSerializer(serializers.Serializer):
-    """Google OAuth login — receives the idToken from the mobile client."""
+    """Google OAuth login — receives the idToken from the mobile client.
+
+    A3: optional `otp` field · consumed when the email already belongs to a
+    phone-registered user. First call without `otp` → backend sends an OTP
+    to the registered phone and returns 403; client retries with `otp`.
+    """
 
     id_token = serializers.CharField()
+    otp = serializers.CharField(required=False, allow_blank=True, max_length=10)
 
 
 class GoogleCompleteProfileSerializer(serializers.Serializer):
@@ -256,8 +262,16 @@ class UserSerializer(serializers.ModelSerializer):
             "id", "phone", "email", "full_name", "avatar_url",
             "kyc_tier", "kyc_status", "email_verified", "totp_enabled",
             "is_staff", "is_suspended", "created_at",
+            # Preferences persisted server-side so notifications honour them.
+            "language",
+            "notify_email_enabled", "notify_sms_enabled",
+            "notify_push_enabled", "notify_marketing_enabled",
         )
-        read_only_fields = fields
+        read_only_fields = (
+            "id", "phone", "kyc_tier", "kyc_status", "email_verified",
+            "totp_enabled", "is_staff", "is_suspended", "created_at",
+            "avatar_url", "email", "full_name",
+        )
 
     def get_avatar_url(self, obj):
         if not obj.avatar:
@@ -281,6 +295,15 @@ class UserSerializer(serializers.ModelSerializer):
 class ProfileUpdateSerializer(serializers.Serializer):
     full_name = serializers.CharField(max_length=NAME_MAX_LENGTH, required=False)
     email = serializers.EmailField(required=False, allow_blank=True)
+    # Preferences · same backing field as the UserSerializer GET side.
+    language = serializers.ChoiceField(
+        choices=[("en", "English"), ("sw", "Kiswahili")],
+        required=False,
+    )
+    notify_email_enabled = serializers.BooleanField(required=False)
+    notify_sms_enabled = serializers.BooleanField(required=False)
+    notify_push_enabled = serializers.BooleanField(required=False)
+    notify_marketing_enabled = serializers.BooleanField(required=False)
 
     def validate_full_name(self, value):
         return validate_full_name(value)

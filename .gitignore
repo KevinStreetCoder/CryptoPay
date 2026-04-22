@@ -10,9 +10,18 @@ build/
 
 # Django
 *.log
+*.log.*
+backend/logs/
 db.sqlite3
 staticfiles/
 media/
+
+# Expo build artifacts (local smoke tests / build verification)
+mobile/.build-check/
+mobile/.build-smoke/
+mobile/dist/
+mobile/web-build/
+.expo-shared/
 
 # Environment
 .env
@@ -87,4 +96,21 @@ android_env
 .android_env
 eas-credentials.json
 credentials.json
+
+# Handoff / brand / research archives (may contain raw secrets, large binaries, PII)
+Cpay-handoff-resources/
+Cpay-handoff-resources.zip
+cpay-brand-assets-*/
+cpay-brand-assets-*.zip
+cpay-mobile.tar.gz
+cpay-dist.tar.gz
+Temp delete/
+Temp_delete/
+cryptopay_full_playbook.md
+docs/research/
+docs/architecture/*.docx
+docs/*.pdf
+CryptoPay_Receipt_*.pdf
+*.tar.gz
+docs/mpesa*.txt
 

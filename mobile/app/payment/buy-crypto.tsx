@@ -99,7 +99,7 @@ export default function BuyCryptoScreen() {
   const { user } = useAuth();
   const { width } = useWindowDimensions();
   const isWeb = Platform.OS === "web";
-  const isDesktop = isWeb && width >= 768;
+  const isDesktop = isWeb && width >= 900;
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
   const ts = getThemeShadows(isDark);

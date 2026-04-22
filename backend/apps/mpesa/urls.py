@@ -29,6 +29,13 @@ urlpatterns = [
     path("callback/b2b/<str:token>/timeout/", views.TimeoutCallbackView.as_view(), name="b2b-timeout-token"),
     path("callback/b2c/<str:token>/", views.B2CCallbackView.as_view(), name="b2c-callback-token"),
     path("callback/b2c/<str:token>/timeout/", views.TimeoutCallbackView.as_view(), name="b2c-timeout-token"),
+    # B11 + B28: token routes for status/reversal/balance
+    path("callback/status/<str:token>/", views.TimeoutCallbackView.as_view(), name="status-callback-token"),
+    path("callback/status/timeout/<str:token>/", views.TimeoutCallbackView.as_view(), name="status-timeout-token"),
+    path("callback/reversal/<str:token>/", views.TimeoutCallbackView.as_view(), name="reversal-callback-token"),
+    path("callback/reversal/timeout/<str:token>/", views.TimeoutCallbackView.as_view(), name="reversal-timeout-token"),
+    path("callback/balance/<str:token>/", views.BalanceCallbackView.as_view(), name="balance-callback-token"),
+    path("callback/balance/timeout/<str:token>/", views.TimeoutCallbackView.as_view(), name="balance-timeout-token"),
 
     # SasaPay callbacks (alternative payment provider)
     path("sasapay/callback/", sasapay_views.sasapay_callback, name="sasapay-callback"),

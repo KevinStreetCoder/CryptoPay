@@ -1,6 +1,14 @@
 import axios from "axios";
+import { Platform } from "react-native";
 import { storage } from "../utils/storage";
 import { config } from "../constants/config";
+
+// C1: on web, the backend sets HttpOnly cookies (cpay_access, cpay_refresh)
+// when it sees `X-Cpay-Web: 1`. axios must send cookies on cross-origin
+// requests, so `withCredentials = true` is required in addition to the
+// server's `Access-Control-Allow-Credentials: true`. On native, SecureStore
+// continues to hold the bearer token · no cookies.
+const IS_WEB = Platform.OS === "web";
 
 // Callback for session expiry · set by auth store to avoid circular imports
 let _onSessionExpired: (() => void) | null = null;
@@ -35,7 +43,13 @@ export class SessionExpiredError extends Error {
 export const api = axios.create({
   baseURL: BASE_URL,
   timeout: 15000,
-  headers: { "Content-Type": "application/json" },
+  headers: {
+    "Content-Type": "application/json",
+    // C1: mark web-origin requests so the backend emits HttpOnly auth cookies.
+    ...(IS_WEB ? { "X-Cpay-Web": "1" } : {}),
+  },
+  // C1: send cross-origin cookies on web (api.cpay.co.ke ↔ cpay.co.ke).
+  withCredentials: IS_WEB,
 });
 
 // Auth endpoints that should work even after session expiry
@@ -69,9 +83,21 @@ api.interceptors.request.use(async (cfg) => {
   if (_sessionExpired && !isPublicAuth && !isAuthWithToken) {
     return Promise.reject(new SessionExpiredError());
   }
+  // C1: on web we rely on HttpOnly cookies. We still SEND a Bearer header
+  // when we have an `access_token` stored for backwards compat (older
+  // Expo web builds that haven't picked up the cookie cycle) but the
+  // cookie is the primary authenticator. Native continues to use Bearer.
   const token = await storage.getItemAsync("access_token");
   if (token && !isPublicAuth) {
     cfg.headers.Authorization = `Bearer ${token}`;
+  }
+  // C1: CSRF protection for cookie-authenticated mutations on web.
+  // Django emits `csrftoken` cookie; we mirror it into X-CSRFToken.
+  if (IS_WEB && typeof document !== "undefined") {
+    const csrf = (document.cookie.match(/csrftoken=([^;]+)/) || [])[1];
+    if (csrf && cfg.headers) {
+      cfg.headers["X-CSRFToken"] = csrf;
+    }
   }
   return cfg;
 });

@@ -3,18 +3,20 @@ Referrals REST API views.
 """
 from __future__ import annotations
 
+import hashlib
 from decimal import Decimal
 
 from django.conf import settings
 from django.core.cache import cache
-from django.db.models import Q
+from django.db.models import F, Q
 from django.shortcuts import get_object_or_404
-from rest_framework import permissions, status
+from django.utils import timezone
+from rest_framework import permissions, serializers, status
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
-from rest_framework.throttling import AnonRateThrottle
+from rest_framework.throttling import AnonRateThrottle, ScopedRateThrottle
 from rest_framework.views import APIView
 
 from .constants import (
@@ -32,6 +34,13 @@ from .serializers import (
     ShareEventSerializer,
     ValidateCodeSerializer,
 )
+
+
+class AdminClawbackSerializer(serializers.Serializer):
+    """B24: bounded reason length to prevent DB-bloat via admin endpoint."""
+    reason = serializers.CharField(
+        max_length=500, allow_blank=False, trim_whitespace=True
+    )
 
 
 def _base_share_url() -> str:
@@ -139,8 +148,10 @@ class ShareEventView(APIView):
         if not rc.code:
             rc.code = ReferralCode.get_or_create_for_user(request.user).code
             rc.save(update_fields=["code"])
-        rc.total_invites_sent = rc.total_invites_sent + 1
-        rc.save(update_fields=["total_invites_sent"])
+        # B22: atomic increment; prevents lost updates on concurrent shares.
+        ReferralCode.objects.filter(pk=rc.pk).update(
+            total_invites_sent=F("total_invites_sent") + 1
+        )
         ReferralEvent.objects.create(
             event_type=ReferralEvent.EventType.CODE_SHARED,
             user=request.user,
@@ -150,7 +161,12 @@ class ShareEventView(APIView):
 
 
 class ValidateCodeView(APIView):
+    """B9: constant-shape response (always 200, same payload keys) so response
+    codes and bodies can't be used to enumerate valid codes. Paired with an
+    explicit 10/hour throttle below."""
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "referral_validate"
 
     def post(self, request):
         ser = ValidateCodeSerializer(data=request.data)
@@ -160,26 +176,60 @@ class ValidateCodeView(APIView):
             rc = ReferralCode.objects.select_related("user").get(
                 code__iexact=code, is_active=True
             )
+            first_name = (
+                getattr(rc.user, "full_name", "").split(" ")[0]
+                if rc.user.full_name
+                else "A friend"
+            )
+            return Response({
+                "valid": True,
+                "referrer_first_name": first_name,
+                "reward_preview_kes": str(referee_bonus_kes()),
+            })
         except ReferralCode.DoesNotExist:
-            return Response({"valid": False}, status=status.HTTP_404_NOT_FOUND)
-        first_name = getattr(rc.user, "full_name", "").split(" ")[0] if rc.user.full_name else "A friend"
-        return Response({
-            "valid": True,
-            "referrer_first_name": first_name,
-            "reward_preview_kes": str(referee_bonus_kes()),
-        })
+            return Response({
+                "valid": False,
+                "referrer_first_name": "",
+                "reward_preview_kes": str(referee_bonus_kes()),
+            })
 
 
 class PublicReferrerLandingThrottle(AnonRateThrottle):
     rate = "30/minute"
 
 
+def _hashed_ip(ip: str) -> str:
+    """B29: daily-rotating salted hash so landing-page visitor IPs are not
+    recoverable from the ReferralEvent table."""
+    if not ip:
+        return ""
+    salt = f"referral-ip-{timezone.now().date().isoformat()}"
+    return hashlib.sha256(f"{salt}:{ip}".encode()).hexdigest()[:16]
+
+
+def _coarse_ua(ua: str) -> str:
+    """B29: reduce the stored UA to a device class so we can't profile."""
+    if not ua:
+        return ""
+    low = ua.lower()
+    if "mobile" in low or "android" in low or "iphone" in low:
+        return "mobile"
+    if "tablet" in low or "ipad" in low:
+        return "tablet"
+    if "bot" in low or "crawler" in low or "spider" in low:
+        return "bot"
+    return "desktop"
+
+
 class PublicReferrerLandingView(APIView):
-    """GET /r/{code}/public/ — served for the share-preview page.
-    Aggressively cached + rate-limited since it's unauthenticated."""
+    """GET /r/{code}/public/ · share-preview page.
+    Aggressively cached + double-rate-limited (global anon + per-scope) since
+    it's unauthenticated. B10: event logged only on cache-miss.
+    B29: IP hashed + UA coarsened before storage."""
 
     permission_classes = [AllowAny]
-    throttle_classes = [PublicReferrerLandingThrottle]
+    throttle_classes = [PublicReferrerLandingThrottle, ScopedRateThrottle]
+    throttle_scope = "referral_public"
 
     def get(self, request, code: str):
         code = code.strip().upper()
@@ -207,14 +257,25 @@ class PublicReferrerLandingView(APIView):
             "reward_preview_kes": str(referee_bonus_kes()),
         }
         cache.set(cache_key, payload, timeout=300)  # 5 min
-        # Log the view (fire-and-forget).
+        # B10: only on cache-miss so we don't write a row per botnet request.
+        # B29: the raw IP is never persisted · we stash a daily-rotating
+        # salted hash in the JSON payload and leave the GenericIPAddressField
+        # null so the table can't be used to re-identify visitors.
         try:
+            ip = request.META.get("HTTP_CF_CONNECTING_IP") or request.META.get(
+                "REMOTE_ADDR", ""
+            )
+            ua = request.META.get("HTTP_USER_AGENT", "")
             ReferralEvent.objects.create(
                 event_type=ReferralEvent.EventType.LINK_CLICKED,
                 user=rc.user,
-                payload={"code": code},
-                ip_address=request.META.get("REMOTE_ADDR"),
-                user_agent=request.META.get("HTTP_USER_AGENT", "")[:500],
+                payload={
+                    "code": code,
+                    "ua_class": _coarse_ua(ua),
+                    "ip_hash": _hashed_ip(ip),
+                },
+                ip_address=None,
+                user_agent=_coarse_ua(ua),
             )
         except Exception:
             pass
@@ -240,7 +301,10 @@ class AdminClawbackView(APIView):
     permission_classes = [IsAdminUser]
 
     def post(self, request, referral_id: str):
-        reason = request.data.get("reason", "admin_clawback")
+        # B24: bounded, non-blank reason field.
+        ser = AdminClawbackSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        reason = ser.validated_data["reason"]
         from . import tasks
         tasks.claw_back_reward.delay(referral_id, reason=reason)
         return Response({"ok": True, "queued": True})

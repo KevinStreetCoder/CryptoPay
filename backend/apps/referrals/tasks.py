@@ -31,7 +31,13 @@ logger = logging.getLogger(__name__)
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def grant_referral_rewards(self, referral_id: str) -> None:
     """Mint two HELD ledger rows (referrer + referee) for a qualified
-    referral. Idempotent via the ledger's unique idempotency_key."""
+    referral. Idempotent via the ledger's unique idempotency_key.
+
+    B7: referrer caps (monthly + lifetime) are re-checked WITH the referrer
+    User row locked so concurrent grants can't race past the cap.
+    B21: referrer must have either a completed tx or KYC >= 1 before any
+    reward row is minted.
+    """
     try:
         with db_tx.atomic():
             referral = Referral.objects.select_for_update().get(id=referral_id)
@@ -39,6 +45,35 @@ def grant_referral_rewards(self, referral_id: str) -> None:
                 logger.info(
                     "referrals.grant.skipped_not_qualified",
                     extra={"referral_id": referral_id, "status": referral.status},
+                )
+                return
+
+            # B7: lock the referrer row so parallel grants serialize.
+            referrer_type = type(referral.referrer)
+            referrer_type.objects.select_for_update().filter(
+                pk=referral.referrer_id
+            ).first()
+
+            # B7: re-check caps under the lock.
+            from .services import _referrer_hit_caps, referrer_qualifies_for_grant
+            if _referrer_hit_caps(referral.referrer):
+                referral.status = Referral.Status.REJECTED_FRAUD
+                referral.fraud_reason = "referrer_cap_reached_at_grant"
+                referral.save(update_fields=["status", "fraud_reason"])
+                logger.info(
+                    "referrals.grant.rejected_cap", extra={"referral_id": referral_id}
+                )
+                return
+
+            # B21: referrer must be established (has transacted or KYC 1+).
+            qualifies, why = referrer_qualifies_for_grant(referral.referrer)
+            if not qualifies:
+                referral.status = Referral.Status.REJECTED_FRAUD
+                referral.fraud_reason = why
+                referral.save(update_fields=["status", "fraud_reason"])
+                logger.info(
+                    "referrals.grant.rejected_unqualified_referrer",
+                    extra={"referral_id": referral_id, "reason": why},
                 )
                 return
 

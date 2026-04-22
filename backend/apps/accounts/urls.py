@@ -1,5 +1,4 @@
 from django.urls import path
-from rest_framework_simplejwt.views import TokenRefreshView
 
 from . import views
 
@@ -9,10 +8,11 @@ urlpatterns = [
     path("otp/", views.RequestOTPView.as_view(), name="request-otp"),
     path("register/", views.RegisterView.as_view(), name="register"),
     path("login/", views.LoginView.as_view(), name="login"),
+    path("logout/", views.LogoutView.as_view(), name="logout"),  # A1 + A27
     path("google/", views.GoogleLoginView.as_view(), name="google-login"),
     path("google/complete-profile/", views.GoogleCompleteProfileView.as_view(), name="google-complete-profile"),
     path("set-initial-pin/", views.SetInitialPINView.as_view(), name="set-initial-pin"),
-    path("token/refresh/", TokenRefreshView.as_view(), name="token-refresh"),
+    path("token/refresh/", views.HardenedTokenRefreshView.as_view(), name="token-refresh"),  # A27
     path("profile/", views.ProfileView.as_view(), name="profile"),
     path("devices/", views.DeviceListView.as_view(), name="devices"),
     path("devices/<uuid:device_id>/", views.DeviceDeleteView.as_view(), name="device-delete"),

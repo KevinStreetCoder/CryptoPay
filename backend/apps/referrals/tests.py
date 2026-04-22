@@ -88,7 +88,8 @@ class AttributeSignupTest(TestCase):
         referral = attribute_signup(
             user=referee,
             code=self.rc.code,
-            request_meta={"ip": "10.0.0.1", "device_id": "dev-A"},
+            # B8: device_id must be >=16 chars and not start with web-/dev-.
+            request_meta={"ip": "10.0.0.1", "device_id": "a1b2c3d4e5f6a7b8c9d0"},
         )
         self.assertIsNotNone(referral)
         self.assertEqual(referral.referrer_id, self.referrer.id)
@@ -128,12 +129,15 @@ class AttributeSignupTest(TestCase):
 
         r1 = _make_user(phone="+254722222222")
         r2 = _make_user(phone="+254733333333")
+        # B8: use a realistic 20-char device id that passes the plausibility
+        # gate, then re-use it to exercise the same-device-reuse fraud check.
+        good_device = "fedcba9876543210aaaa"
         ref1 = attribute_signup(
-            user=r1, code=self.rc.code, request_meta={"device_id": "DEV-X"}
+            user=r1, code=self.rc.code, request_meta={"device_id": good_device}
         )
         self.assertIsNotNone(ref1)
         ref2 = attribute_signup(
-            user=r2, code=self.rc.code, request_meta={"device_id": "DEV-X"}
+            user=r2, code=self.rc.code, request_meta={"device_id": good_device}
         )
         self.assertIsNone(ref2)
 
@@ -166,7 +170,12 @@ class QualificationTest(TestCase):
         from .models import Referral
         from .services import attribute_signup
 
-        attribute_signup(user=self.referee, code=self.rc.code, request_meta={})
+        # B8: device_id must be >=16 chars and not start with web-/dev-.
+        attribute_signup(
+            user=self.referee,
+            code=self.rc.code,
+            request_meta={"device_id": "abcdef0123456789abcdef"},
+        )
         # Patch BEFORE creating the tx — the post_save signal fires
         # check_qualification, which calls grant_referral_rewards.delay.
         with patch("apps.referrals.tasks.grant_referral_rewards.delay") as m:
@@ -182,7 +191,12 @@ class QualificationTest(TestCase):
         from .models import Referral
         from .services import attribute_signup
 
-        attribute_signup(user=self.referee, code=self.rc.code, request_meta={})
+        # B8: device_id must be >=16 chars and not start with web-/dev-.
+        attribute_signup(
+            user=self.referee,
+            code=self.rc.code,
+            request_meta={"device_id": "abcdef0123456789abcdef"},
+        )
         with patch("apps.referrals.tasks.grant_referral_rewards.delay") as m:
             self._make_tx(
                 tx_type=Transaction.Type.PAYBILL_PAYMENT, dest_amount="100.00"
@@ -197,7 +211,12 @@ class QualificationTest(TestCase):
         from .models import Referral
         from .services import attribute_signup
 
-        attribute_signup(user=self.referee, code=self.rc.code, request_meta={})
+        # B8: device_id must be >=16 chars and not start with web-/dev-.
+        attribute_signup(
+            user=self.referee,
+            code=self.rc.code,
+            request_meta={"device_id": "abcdef0123456789abcdef"},
+        )
         with patch("apps.referrals.tasks.grant_referral_rewards.delay") as m:
             self._make_tx(tx_type=Transaction.Type.BUY)
             m.assert_not_called()
@@ -210,7 +229,12 @@ class QualificationTest(TestCase):
         from .models import Referral
         from .services import attribute_signup
 
-        attribute_signup(user=self.referee, code=self.rc.code, request_meta={})
+        # B8: device_id must be >=16 chars and not start with web-/dev-.
+        attribute_signup(
+            user=self.referee,
+            code=self.rc.code,
+            request_meta={"device_id": "abcdef0123456789abcdef"},
+        )
         referral = Referral.objects.get(referee=self.referee)
         referral.attribution_window_ends_at = timezone.now() - timedelta(days=1)
         referral.save(update_fields=["attribution_window_ends_at"])
@@ -248,7 +272,12 @@ class RewardGrantTest(TestCase):
         from .models import RewardLedger
         from .services import attribute_signup
 
-        attribute_signup(user=self.referee, code=self.rc.code, request_meta={})
+        # B8: device_id must be >=16 chars and not start with web-/dev-.
+        attribute_signup(
+            user=self.referee,
+            code=self.rc.code,
+            request_meta={"device_id": "abcdef0123456789abcdef"},
+        )
         # Mock release so HELD stays HELD. Signal fires grant on tx save.
         with patch("apps.referrals.tasks.release_held_rewards.apply_async"):
             self._qualifying_tx("grant-test-1")
@@ -270,7 +299,12 @@ class RewardGrantTest(TestCase):
         from .services import attribute_signup
         from . import tasks
 
-        attribute_signup(user=self.referee, code=self.rc.code, request_meta={})
+        # B8: device_id must be >=16 chars and not start with web-/dev-.
+        attribute_signup(
+            user=self.referee,
+            code=self.rc.code,
+            request_meta={"device_id": "abcdef0123456789abcdef"},
+        )
         with patch("apps.referrals.tasks.release_held_rewards.apply_async"):
             self._qualifying_tx("grant-idem-1")
         referral = Referral.objects.get(referee=self.referee)
@@ -429,8 +463,14 @@ class MyReferralAPITest(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertTrue(resp.data["valid"])
 
-    def test_validate_code_returns_404_for_bad_code(self):
+    def test_validate_code_returns_200_valid_false_for_bad_code(self):
+        """B9: ValidateCodeView now returns a constant-shape 200 body so
+        response status + shape cannot be used to enumerate valid codes."""
         from rest_framework.test import APIClient
         anon = APIClient()
         resp = anon.post("/api/v1/referrals/validate/", {"code": "NOTREAL"})
-        self.assertEqual(resp.status_code, 404)
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(resp.data["valid"])
+        # Shape must match the valid-code response so length/keys can't leak.
+        self.assertIn("referrer_first_name", resp.data)
+        self.assertIn("reward_preview_kes", resp.data)

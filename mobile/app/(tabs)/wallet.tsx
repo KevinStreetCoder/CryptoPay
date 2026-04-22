@@ -27,6 +27,7 @@ import { ratesApi, Rate, normalizeRate } from "../../src/api/rates";
 import { walletsApi } from "../../src/api/wallets";
 import { CURRENCIES, CurrencyCode, colors, getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
+import { useDisplayCurrency } from "../../src/stores/displayCurrency";
 import { getTxKesAmount, getTxRecipient, paymentsApi } from "../../src/api/payments";
 import { usePhonePrivacy } from "../../src/utils/privacy";
 import { useBalanceVisibility } from "../../src/stores/balance";
@@ -173,6 +174,7 @@ export default function WalletScreen() {
   const [generatingAddress, setGeneratingAddress] = useState<string | null>(null);
   const [showSendPicker, setShowSendPicker] = useState(false);
   const { balanceHidden, toggleBalance, formatAmount, formatCrypto } = useBalanceVisibility();
+  const { code: displayCode, symbol: displaySymbol, formatKes } = useDisplayCurrency();
   const [modalCurrency, setModalCurrency] = useState<CurrencyCode>("USDT");
   const [depositStatusModal, setDepositStatusModal] = useState<BlockchainDeposit | null>(null);
   const { hasPending: hasPendingDeposits } = usePendingDeposits();
@@ -1210,11 +1212,7 @@ export default function WalletScreen() {
                   fontFamily: "DMSans_500Medium",
                 }}
               >
-                {balanceHidden
-                  ? "~KSh ****"
-                  : `~KSh ${kesValue.toLocaleString("en-KE", {
-                      maximumFractionDigits: 0,
-                    })}`}
+                {balanceHidden ? `~${displaySymbol} ****` : `~${formatKes(kesValue, { digits: 0, compact: true })}`}
               </Text>
               {locked > 0 && (
                 <View
@@ -1432,9 +1430,7 @@ export default function WalletScreen() {
               fontFamily: "DMSans_700Bold",
             }}
           >
-            {balanceHidden
-              ? "KSh ****"
-              : `KSh ${kesAmount.toLocaleString("en-KE", { minimumFractionDigits: 0 })}`}
+            {balanceHidden ? `${displaySymbol} ****` : formatKes(kesAmount, { digits: 0, compact: true })}
           </Text>
         </View>
 
@@ -1584,12 +1580,7 @@ export default function WalletScreen() {
                       marginBottom: 4,
                     }}
                   >
-                    {balanceHidden
-                      ? "KSh ****"
-                      : `KSh ${grandTotal.toLocaleString("en-KE", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}`}
+                    {balanceHidden ? `${displaySymbol} ****` : formatKes(grandTotal, { digits: 2 })}
                   </Text>
                   {kesBalance > 0 && (
                     <Text
@@ -1601,10 +1592,8 @@ export default function WalletScreen() {
                       }}
                     >
                       {balanceHidden
-                        ? "KES Balance: KSh ****"
-                        : `KES Balance: KSh ${kesBalance.toLocaleString("en-KE", {
-                            minimumFractionDigits: 2,
-                          })}`}
+                        ? `KES Balance: ${displaySymbol} ****`
+                        : `KES Balance: ${formatKes(kesBalance, { digits: 2 })}`}
                     </Text>
                   )}
                   <View style={{ flexDirection: "row", alignItems: "center", marginTop: 6, gap: 6 }}>
@@ -2120,12 +2109,7 @@ export default function WalletScreen() {
               marginBottom: 4,
             }}
           >
-            {balanceHidden
-              ? "KSh ****"
-              : `KSh ${grandTotal.toLocaleString("en-KE", {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}`}
+            {balanceHidden ? `${displaySymbol} ****` : formatKes(grandTotal, { digits: 2 })}
           </Text>
           {kesBalance > 0 && (
             <Text
@@ -2137,10 +2121,8 @@ export default function WalletScreen() {
               }}
             >
               {balanceHidden
-                ? "KES Balance: KSh ****"
-                : `KES Balance: KSh ${kesBalance.toLocaleString("en-KE", {
-                    minimumFractionDigits: 2,
-                  })}`}
+                ? `KES Balance: ${displaySymbol} ****`
+                : `KES Balance: ${formatKes(kesBalance, { digits: 2 })}`}
             </Text>
           )}
 

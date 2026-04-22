@@ -1,6 +1,39 @@
 # CryptoPay — Production Readiness Checklist
 
-**Last updated:** 2026-03-21
+**Last updated:** 2026-04-22
+
+## 🆕 Security pass 2026-04-22 — status
+
+### Done (landed in code this release)
+
+- **D6** SECRET_KEY-derived wallet seed fallback removed; `_assert_production_env` fails boot if no KMS/mnemonic/hex seed is configured.
+- **A1 + A27** `rest_framework_simplejwt.token_blacklist` installed + migration 0012 applied; `/api/v1/auth/logout/` ships; `HardenedTokenRefreshView` re-checks `is_active`/`is_suspended` on every refresh.
+- **A3** Google OAuth auto-link refuses when the email already belongs to a phone-registered account; prompts for a one-time SMS code on the registered phone before linking.
+- **A14** All five chain broadcast paths (Tron, Ethereum, Polygon, Solana, Bitcoin) now load keys just-in-time via `apps/blockchain/secure_keys.py` and `wipe()` the backing `bytearray` in `finally`. Production rejects plaintext keys unless `ALLOW_PLAINTEXT_HOT_WALLET=True`.
+- **A20** `LoginView.pin_otp_verified` gate · device / IP-change challenge can no longer be bypassed by submitting any non-empty `otp` string.
+- **C1** Web clients receive `HttpOnly; Secure; SameSite=Strict` cookies when the request carries `X-Cpay-Web: 1`. Native keeps Bearer. CSRF token is mirrored to `X-CSRFToken` for mutations. Logout wipes cookies + blacklists the refresh.
+- **C2** Mobile uses `authApi.signReceipt()` → 60-second HMAC-signed URL. The raw JWT no longer rides in any `?token=` query string.
+- **D2 + D21** `docker-compose.yml` requires `${POSTGRES_PASSWORD:?}` at boot. Postgres + Redis bind to `127.0.0.1` only. Redis accepts `--requirepass` when `REDIS_PASSWORD` is set.
+- **D4** `ProtectedMediaView` with per-subtree ACL (KYC uploads owner-only, receipts signed-URL-only). Production uses `X-Accel-Redirect` to hand off to nginx. The old `django.views.static.serve` mount is gone.
+- **D10** `ADMIN_URL` env-obfuscated; `AdminIPAllowListMiddleware` 403s admin requests outside `ADMIN_IP_ALLOWLIST` CIDR set.
+- **D22** `TrustedProxyMiddleware` strips `X-Forwarded-*` and `CF-Connecting-IP` when peer is not in Cloudflare's published IP ranges (gated by `CLOUDFLARE_ONLY_ORIGIN=True`).
+- **User preferences** persisted server-side: `User.language` + `notify_email/sms/push/marketing_enabled`. Profile API accepts + saves them. Welcome SMS and transaction-notification dispatcher honour both the language and the opt-out flags.
+- **Tests** 245/245 pytest pass (226 pre-existing + 19 new Critical/High regression tests in `apps/accounts/test_security_criticals.py`).
+
+### Pending for ops (not code — put on the next deploy)
+
+| # | Area | What to do | Owner |
+|---|------|------------|-------|
+| P1 | **EXPO_TOKEN rotation** | Revoke old token `8uhy…InEn` at [expo.dev/accounts/settings/access-tokens](https://expo.dev/accounts/settings/access-tokens). Put the new one in `/root/.android_env` on WSL and on the VPS if used. | Kevin |
+| P2 | **VPS firewall ↔ Cloudflare-only** | `ufw allow from <cf-range> to any port 443` for every Cloudflare IP range (https://www.cloudflare.com/ips/). Then `ufw deny 443`. With `CLOUDFLARE_ONLY_ORIGIN=True` in `.env.production`, any accidental direct-origin hit will be 403'd at middleware too. | Kevin |
+| P3 | **`.env.production` updates** | Add/confirm: `ADMIN_URL=<random-slug>/`, `ADMIN_IP_ALLOWLIST=<office-cidr,vpn-cidr>`, `CLOUDFLARE_ONLY_ORIGIN=True`, `USE_X_ACCEL_REDIRECT=True`, `AUTH_COOKIE_DOMAIN=cpay.co.ke`, `POSTGRES_PASSWORD=<strong>`, `REDIS_PASSWORD=<strong>`, and KMS-encrypted hot-wallet keys (`TRON_HOT_WALLET_ENCRYPTED`, `ETH_HOT_WALLET_ENCRYPTED`, `POLYGON_HOT_WALLET_ENCRYPTED`, `SOL_HOT_WALLET_ENCRYPTED`, `BTC_HOT_WALLET_ENCRYPTED`) once KMS is wired. | Kevin |
+| P4 | **nginx protected-media block** | Production nginx needs:<br>`location /protected-media/ { internal; alias /var/www/cpay-media/; }`<br>so `X-Accel-Redirect` from Django can hand off the file without streaming through Django. | Kevin |
+| P5 | **django_otp for admin** | Code-level `ADMIN_REQUIRE_TOTP` knob exists but the `django_otp` enrolment UI is not wired. Follow-up: `pip install django-otp qrcode` + add TOTPDevice enrolment to the staff onboarding flow. | Follow-up sprint |
+| P6 | **C1 · drop JSON tokens from login body** | Login/register responses still carry `{tokens: {access, refresh}}` in JSON for backwards compat with older Expo builds. After ~2 weeks of the cookie cycle being live (enough time for all user devices to update), drop the JSON copy. | 2 weeks post-deploy |
+| P7 | **Credentials rotation from the handoff archive** | The 2026-04-20 `Cpay-handoff-resources/` archive contained Safaricom Consumer Key/Secret, TronGrid key, Alchemy key, Google OAuth client secret, `MPESA_INITIATOR_PASSWORD`. Archive is gitignored now, but rotate each at the provider before going public-beta. | Kevin |
+| P8 | **SMS + email i18n coverage** | `apps/core/i18n.py` has the catalog; `send_welcome_sms` + `send_transaction_notifications` use it. Remaining: `send_otp_to_email`, `send_security_alert`, `send_pin_change_alert`, `send_failed_transaction_alert_task`. Mechanical migration. | Follow-up sprint |
+
+---
 
 Items needed before the app can go live with real users and money.
 

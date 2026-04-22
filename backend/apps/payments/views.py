@@ -43,7 +43,13 @@ logger = logging.getLogger(__name__)
 
 
 def _verify_pin_with_lockout(user, pin: str):
-    """Verify PIN with progressive lockout tracking. Returns None on success, or a Response on failure."""
+    """Verify PIN with progressive lockout tracking. Returns None on success, or a Response on failure.
+
+    B17: on success, reset ONLY `pin_attempts`. Never flip
+    `otp_challenge_required` back to False from a payment endpoint ·
+    that flag is an authentication-layer concern; only a successful
+    login + OTP verification path may clear it.
+    """
     if user.pin_locked_until and user.pin_locked_until > timezone.now():
         return Response(
             {"error": "Account temporarily locked. Try again later."},
@@ -62,11 +68,10 @@ def _verify_pin_with_lockout(user, pin: str):
         user.save(update_fields=["pin_attempts", "pin_locked_until", "otp_challenge_required"])
         return Response({"error": "Invalid PIN"}, status=status.HTTP_401_UNAUTHORIZED)
 
-    # Success — reset attempts
+    # Success · reset attempts counter only; leave otp_challenge_required alone.
     if user.pin_attempts > 0:
         user.pin_attempts = 0
-        user.otp_challenge_required = False
-        user.save(update_fields=["pin_attempts", "otp_challenge_required"])
+        user.save(update_fields=["pin_attempts"])
 
     return None
 
@@ -94,23 +99,42 @@ def _apply_referral_credit(tx) -> Decimal:
 def _check_rate_slippage(quote: dict) -> str | None:
     """
     Compare the quote's locked rate against the current live rate.
-    Returns an error message if slippage exceeds DEPOSIT_SLIPPAGE_TOLERANCE, else None.
+    Returns an error message when the payment should be rejected.
+
+    B5: on any exception in the rate lookup, FAIL CLOSED and return a
+    non-None string so the caller rejects the payment. Returning None
+    previously allowed unlimited slippage during rate-provider outages.
+
+    B14: if the rate cache has the stale flag set, also reject.
+
+    B20: compare raw_rate to raw_rate so admin-adjustable PLATFORM_SPREAD
+    changes between lock + verify can't register as "slippage".
     """
     from apps.rates.services import RateService
 
     try:
+        if cache.get("rate:stale"):
+            return (
+                "Rate feed temporarily unavailable · please request a fresh "
+                "quote in a moment."
+            )
         currency = quote["currency"]
-        quote_rate = Decimal(quote["exchange_rate"])
         live_info = RateService.get_crypto_kes_rate(currency)
-        live_rate = Decimal(str(live_info["final_rate"]))
-        slippage_pct = abs(live_rate - quote_rate) / quote_rate * 100
-        if slippage_pct > Decimal(str(app_settings.DEPOSIT_SLIPPAGE_TOLERANCE)):
+        # B20: prefer raw_rate when both sides have it; fall back to final_rate.
+        quote_raw = Decimal(str(quote.get("raw_rate") or quote["exchange_rate"]))
+        live_raw = Decimal(str(live_info.get("raw_rate") or live_info.get("final_rate", "0")))
+        if quote_raw <= 0:
+            return "Quote contains an invalid rate · please request a fresh quote."
+        slippage_pct = abs(live_raw - quote_raw) / quote_raw * Decimal("100")
+        tolerance = Decimal(str(app_settings.DEPOSIT_SLIPPAGE_TOLERANCE))
+        if slippage_pct > tolerance:
             return (
                 f"Rate moved {slippage_pct:.1f}% since quote was locked "
-                f"(max {app_settings.DEPOSIT_SLIPPAGE_TOLERANCE}%). Please request a new quote."
+                f"(max {tolerance}%). Please request a new quote."
             )
     except Exception as e:
-        logger.warning(f"Slippage check failed (allowing through): {e}")
+        logger.error(f"Slippage check failed · failing closed: {e}")
+        return "Rate verification unavailable · please request a fresh quote."
     return None
 
 
@@ -170,9 +194,10 @@ class PayBillView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Check daily transaction limit based on KYC tier
+        # B4: hold daily-limit lock past Transaction.create so concurrent
+        # callers can't race past the check on stale state.
         try:
-            check_daily_limit(user, Decimal(quote["kes_amount"]))
+            daily_lock = check_daily_limit(user, Decimal(quote["kes_amount"]))
         except DailyLimitExceededError as e:
             cache.delete(redis_key)
             return Response(
@@ -184,6 +209,7 @@ class PayBillView(APIView):
         try:
             PaymentCircuitBreaker.check_payment_allowed(Decimal(quote["kes_amount"]))
         except PaymentsPaused as e:
+            daily_lock.release()
             cache.delete(redis_key)
             return Response(
                 {"error": e.reason, "circuit_breaker": True},
@@ -193,6 +219,7 @@ class PayBillView(APIView):
         # Now consume the quote (validation passed)
         quote = RateService.consume_locked_quote(data["quote_id"], user_id=str(user.id))
         if not quote:
+            daily_lock.release()
             cache.delete(redis_key)
             return Response(
                 {"error": "Quote expired or was already used. Please request a new quote."},
@@ -202,6 +229,7 @@ class PayBillView(APIView):
         # Check rate slippage against live rate
         slippage_err = _check_rate_slippage(quote)
         if slippage_err:
+            daily_lock.release()
             cache.delete(redis_key)
             return Response({"error": slippage_err}, status=status.HTTP_409_CONFLICT)
 
@@ -224,6 +252,7 @@ class PayBillView(APIView):
                 ip_address=self._get_client_ip(request),
             )
         except IntegrityError:
+            daily_lock.release()
             cache.delete(redis_key)
             existing = Transaction.objects.filter(idempotency_key=idem_key).first()
             if existing:
@@ -232,11 +261,13 @@ class PayBillView(APIView):
                 {"error": "Duplicate payment detected"},
                 status=status.HTTP_409_CONFLICT,
             )
+        finally:
+            # B4: lock released now that the Transaction exists in the DB ·
+            # subsequent concurrent calls will see it in their spent-today sum.
+            daily_lock.release()
 
-        # Apply referral credit (reduces fee; idempotent per tx)
-        _apply_referral_credit(tx)
-
-        # Run the payment saga
+        # Run the payment saga. B6: referral credit is applied AFTER the
+        # saga succeeds so a failed payment never consumes credit.
         try:
             saga = PaymentSaga(tx)
             saga.execute()
@@ -246,6 +277,9 @@ class PayBillView(APIView):
                 {"error": "Payment failed. Your funds have been returned.", "transaction": TransactionSerializer(tx).data},
                 status=status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
+
+        # B6: only applied on successful saga execution.
+        _apply_referral_credit(tx)
 
         AuditLog.objects.create(
             user=user,
@@ -317,32 +351,32 @@ class PayTillView(APIView):
             cache.delete(redis_key)
             return Response({"error": "Quote expired or invalid"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Check daily transaction limit based on KYC tier
+        # B4: hold daily-limit lock past Transaction.create.
         try:
-            check_daily_limit(user, Decimal(quote["kes_amount"]))
+            daily_lock = check_daily_limit(user, Decimal(quote["kes_amount"]))
         except DailyLimitExceededError as e:
             cache.delete(redis_key)
             return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
 
-        # Circuit breaker — block payments if float is critically low
         try:
             PaymentCircuitBreaker.check_payment_allowed(Decimal(quote["kes_amount"]))
         except PaymentsPaused as e:
+            daily_lock.release()
             cache.delete(redis_key)
             return Response(
                 {"error": e.reason, "circuit_breaker": True},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
-        # Now consume the quote (validation passed)
         quote = RateService.consume_locked_quote(data["quote_id"], user_id=str(user.id))
         if not quote:
+            daily_lock.release()
             cache.delete(redis_key)
             return Response({"error": "Quote expired or was already used"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Check rate slippage against live rate
         slippage_err = _check_rate_slippage(quote)
         if slippage_err:
+            daily_lock.release()
             cache.delete(redis_key)
             return Response({"error": slippage_err}, status=status.HTTP_409_CONFLICT)
 
@@ -363,15 +397,16 @@ class PayTillView(APIView):
                 ip_address=self._get_client_ip(request),
             )
         except IntegrityError:
+            daily_lock.release()
             cache.delete(redis_key)
             existing = Transaction.objects.filter(idempotency_key=idem_key).first()
             if existing:
                 return Response(TransactionSerializer(existing).data)
             return Response({"error": "Duplicate payment"}, status=status.HTTP_409_CONFLICT)
+        finally:
+            daily_lock.release()
 
-        # Apply referral credit (reduces fee; idempotent per tx)
-        _apply_referral_credit(tx)
-
+        # B6: credit applied AFTER saga success.
         try:
             saga = PaymentSaga(tx)
             saga.execute()
@@ -380,6 +415,8 @@ class PayTillView(APIView):
                 {"error": "Payment failed. Funds returned.", "transaction": TransactionSerializer(tx).data},
                 status=status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
+
+        _apply_referral_credit(tx)
 
         return Response(TransactionSerializer(tx).data, status=status.HTTP_201_CREATED)
 
@@ -421,32 +458,32 @@ class SendMpesaView(APIView):
             cache.delete(redis_key)
             return Response({"error": "Quote expired or invalid"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Check daily transaction limit based on KYC tier
+        # B4: hold daily-limit lock past Transaction.create.
         try:
-            check_daily_limit(user, Decimal(quote["kes_amount"]))
+            daily_lock = check_daily_limit(user, Decimal(quote["kes_amount"]))
         except DailyLimitExceededError as e:
             cache.delete(redis_key)
             return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
 
-        # Circuit breaker — block payments if float is critically low
         try:
             PaymentCircuitBreaker.check_payment_allowed(Decimal(quote["kes_amount"]))
         except PaymentsPaused as e:
+            daily_lock.release()
             cache.delete(redis_key)
             return Response(
                 {"error": e.reason, "circuit_breaker": True},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
-        # Now consume the quote (validation passed)
         quote = RateService.consume_locked_quote(data["quote_id"], user_id=str(user.id))
         if not quote:
+            daily_lock.release()
             cache.delete(redis_key)
             return Response({"error": "Quote expired or was already used"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Check rate slippage against live rate
         slippage_err = _check_rate_slippage(quote)
         if slippage_err:
+            daily_lock.release()
             cache.delete(redis_key)
             return Response({"error": slippage_err}, status=status.HTTP_409_CONFLICT)
 
@@ -467,15 +504,16 @@ class SendMpesaView(APIView):
                 ip_address=self._get_client_ip(request),
             )
         except IntegrityError:
+            daily_lock.release()
             cache.delete(redis_key)
             existing = Transaction.objects.filter(idempotency_key=idem_key).first()
             if existing:
                 return Response(TransactionSerializer(existing).data)
             return Response({"error": "Duplicate payment"}, status=status.HTTP_409_CONFLICT)
+        finally:
+            daily_lock.release()
 
-        # Apply referral credit (reduces fee; idempotent per tx)
-        _apply_referral_credit(tx)
-
+        # B6: credit applied AFTER saga success.
         try:
             saga = PaymentSaga(tx)
             saga.execute()
@@ -484,6 +522,8 @@ class SendMpesaView(APIView):
                 {"error": "Payment failed. Funds returned.", "transaction": TransactionSerializer(tx).data},
                 status=status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
+
+        _apply_referral_credit(tx)
 
         AuditLog.objects.create(
             user=user,
@@ -541,16 +581,16 @@ class BuyCryptoView(APIView):
             cache.delete(redis_key)
             return Response({"error": "Quote expired or invalid"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Check daily limit
+        # B4: hold daily-limit lock past Transaction.create.
         try:
-            check_daily_limit(user, Decimal(quote["kes_amount"]))
+            daily_lock = check_daily_limit(user, Decimal(quote["kes_amount"]))
         except DailyLimitExceededError as e:
             cache.delete(redis_key)
             return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
 
-        # Now consume the quote (validation passed)
         quote = RateService.consume_locked_quote(data["quote_id"], user_id=str(user.id))
         if not quote:
+            daily_lock.release()
             cache.delete(redis_key)
             return Response({"error": "Quote expired or was already used"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -572,11 +612,14 @@ class BuyCryptoView(APIView):
                 ip_address=self._get_client_ip(request),
             )
         except IntegrityError:
+            daily_lock.release()
             cache.delete(redis_key)
             existing = Transaction.objects.filter(idempotency_key=idem_key).first()
             if existing:
                 return Response(TransactionSerializer(existing).data)
             return Response({"error": "Duplicate payment"}, status=status.HTTP_409_CONFLICT)
+        finally:
+            daily_lock.release()
 
         # Initiate M-Pesa STK Push (via Daraja or SasaPay)
         from apps.mpesa.provider import get_payment_client
@@ -773,9 +816,17 @@ class SwapView(APIView):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
+                # B13: idempotency key sourced from the client (UUIDv4 typical).
+                # Falls back to a server-generated UUID if the client didn't
+                # pass one, so a genuine client bug still produces a unique key.
+                import uuid as _uuid_swap
+                client_key = (ser.validated_data.get("idempotency_key") or "").strip()
+                if not client_key:
+                    client_key = str(_uuid_swap.uuid4())
+                swap_idem = f"swap-{user.id}-{client_key}"
                 # Create the transaction record (for idempotent ledger entries)
                 tx = Transaction.objects.create(
-                    idempotency_key=f"swap-{user.id}-{timezone.now().timestamp()}",
+                    idempotency_key=swap_idem,
                     user=user,
                     type=Transaction.Type.SWAP,
                     source_currency=from_currency,
@@ -902,9 +953,11 @@ class DepositQuoteView(APIView):
         kes_amount = data["kes_amount"]
         dest_currency = data["dest_currency"]
 
-        # Check daily limit
+        # Check daily limit. Quote generation alone does not commit a
+        # transaction, so we release the lock immediately after the check.
         try:
-            check_daily_limit(request.user, kes_amount)
+            _dq_lock = check_daily_limit(request.user, kes_amount)
+            _dq_lock.release()
         except DailyLimitExceededError as e:
             return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
 
@@ -1197,27 +1250,78 @@ class UnifiedActivityView(APIView):
         })
 
 
+_RECEIPT_SIGNER_SALT = "cpay-receipt-url"
+_RECEIPT_SIG_MAX_AGE_SEC = 60  # one-shot link valid for 60 seconds
+
+
+def _sign_receipt_url(user_id: str, transaction_id: str) -> str:
+    """B18: returns an HMAC-signed, timestamped, single-use path suffix for
+    this (user, tx) pair. The signature is validated by the view's
+    `initial()` hook so the JWT access token never has to ride in the URL."""
+    from django.core.signing import TimestampSigner
+    signer = TimestampSigner(salt=_RECEIPT_SIGNER_SALT)
+    return signer.sign(f"{user_id}:{transaction_id}")
+
+
+class TransactionReceiptSignView(APIView):
+    """B18: mint a short-lived signed URL for downloading a receipt.
+    Native + web clients POST here (authenticated), then open/share the
+    returned URL. The URL contains no bearer token."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, transaction_id):
+        try:
+            tx = Transaction.objects.get(id=transaction_id, user=request.user)
+        except Transaction.DoesNotExist:
+            return Response(
+                {"error": "Transaction not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        sig = _sign_receipt_url(str(request.user.id), str(tx.id))
+        return Response({
+            "url": f"/api/v1/payments/{tx.id}/receipt/?sig={sig}",
+            "expires_in_seconds": _RECEIPT_SIG_MAX_AGE_SEC,
+        })
+
+
 class TransactionReceiptView(APIView):
     """Download PDF receipt for a completed transaction.
 
-    Supports two auth methods:
-    1. Standard Authorization header (native apps)
-    2. ?token=<jwt> query parameter (web — bypasses IDM browser extension
-       which intercepts fetch/XHR and breaks CORS on file downloads)
+    Primary auth: Authorization header (native apps).
+    Alternative:  ?sig=<HMAC> (from TransactionReceiptSignView). The
+    signature encodes (user_id, tx_id) and expires in 60 seconds. We
+    no longer accept a bearer token via ?token= because the token ends up
+    in access logs, referrers, and browser history.
     """
 
     permission_classes = [IsAuthenticated]
 
     def get_authenticators(self):
-        """Allow JWT token in query parameter as fallback."""
         authenticators = super().get_authenticators()
         return authenticators
 
     def initial(self, request, *args, **kwargs):
-        """Inject Authorization header from query param if present."""
-        token = request.query_params.get("token")
-        if token and "HTTP_AUTHORIZATION" not in request.META:
-            request.META["HTTP_AUTHORIZATION"] = f"Bearer {token}"
+        """B18: validate a receipt signature from the query string. If valid,
+        set request.user to the owner encoded in the signature · this
+        bypasses the bearer-token requirement for this specific tx only."""
+        from django.core.signing import TimestampSigner, BadSignature, SignatureExpired
+        sig = request.query_params.get("sig")
+        if sig:
+            try:
+                signer = TimestampSigner(salt=_RECEIPT_SIGNER_SALT)
+                payload = signer.unsign(sig, max_age=_RECEIPT_SIG_MAX_AGE_SEC)
+                user_id, tx_id = payload.split(":", 1)
+                requested_tx = str(kwargs.get("transaction_id", ""))
+                if tx_id == requested_tx:
+                    from apps.accounts.models import User
+                    try:
+                        request.user = User.objects.get(pk=user_id)
+                    except User.DoesNotExist:
+                        pass
+            except (BadSignature, SignatureExpired, ValueError, Exception):
+                # Fall through to normal auth; unsigned requests still need a Bearer token.
+                pass
         super().initial(request, *args, **kwargs)
 
     def get(self, request, transaction_id):
@@ -1351,12 +1455,14 @@ class WithdrawView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Check daily transaction limit (convert crypto to KES estimate for limit check)
+        # Check daily transaction limit. B4: hold the lock through tx create
+        # on the happy path; release in every early-return / exception branch.
+        wd_daily_lock = None
         try:
             from apps.rates.services import RateService
             rate_info = RateService.get_crypto_kes_rate(data["currency"])
             kes_estimate = data["amount"] * Decimal(str(rate_info["final_rate"]))
-            check_daily_limit(user, kes_estimate)
+            wd_daily_lock = check_daily_limit(user, kes_estimate)
         except DailyLimitExceededError as e:
             cache.delete(redis_key)
             return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
@@ -1383,6 +1489,8 @@ class WithdrawView(APIView):
                 },
             )
         except IntegrityError:
+            if wd_daily_lock:
+                wd_daily_lock.release()
             cache.delete(redis_key)
             existing = Transaction.objects.filter(idempotency_key=idem_key).first()
             if existing:
@@ -1391,6 +1499,9 @@ class WithdrawView(APIView):
                 {"error": "Duplicate withdrawal detected"},
                 status=status.HTTP_409_CONFLICT,
             )
+        finally:
+            if wd_daily_lock:
+                wd_daily_lock.release()
 
         # Lock funds (amount + fee) in the wallet
         from apps.wallets.services import InsufficientBalanceError, WalletService

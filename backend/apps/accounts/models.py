@@ -77,6 +77,24 @@ class User(AbstractBaseUser, PermissionsMixin):
     totp_enabled = models.BooleanField(default=False)
     totp_backup_codes = models.JSONField(default=list, blank=True)
 
+    # User-facing preferences persisted server-side so every outbound
+    # communication (welcome email, OTP SMS, transaction receipt, push
+    # notification) speaks the user's chosen language. The frontend writes
+    # this via PATCH /auth/profile/.
+    class Language(models.TextChoices):
+        ENGLISH = "en", "English"
+        SWAHILI = "sw", "Kiswahili"
+    language = models.CharField(
+        max_length=8, choices=Language.choices, default=Language.ENGLISH
+    )
+    # Global notification preferences. Granular per-channel so users can
+    # opt out of marketing email without losing transactional SMS. The
+    # notification dispatcher consults these before sending.
+    notify_email_enabled = models.BooleanField(default=True)
+    notify_sms_enabled = models.BooleanField(default=True)
+    notify_push_enabled = models.BooleanField(default=True)
+    notify_marketing_enabled = models.BooleanField(default=False)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

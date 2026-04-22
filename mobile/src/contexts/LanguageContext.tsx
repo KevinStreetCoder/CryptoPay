@@ -15,7 +15,9 @@ const LanguageContext = createContext<LanguageContextValue | null>(null);
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const [locale, setLocaleState] = useState<string>(i18n.locale);
 
-  // Load persisted locale on mount
+  // Load persisted locale on mount · local storage is read first for
+  // offline / pre-auth rendering. Once the user bootstraps, we also pull
+  // `user.language` from /auth/profile/ and reconcile.
   useEffect(() => {
     (async () => {
       try {
@@ -27,6 +29,21 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
       } catch {
         // Use default locale
       }
+      // After any stored-locale load, try to pull the server-side preference.
+      try {
+        const { api } = await import("../api/client");
+        const { data } = await api.get<{ language?: string }>("/auth/profile/");
+        const serverLang = data?.language;
+        if (serverLang && (serverLang === "en" || serverLang === "sw") && serverLang !== i18n.locale) {
+          i18n.locale = serverLang;
+          setLocaleState(serverLang);
+          try {
+            await storage.setItemAsync(LOCALE_STORAGE_KEY, serverLang);
+          } catch {}
+        }
+      } catch {
+        // Not authenticated yet, offline, or network hiccup · ignore.
+      }
     })();
   }, []);
 
@@ -37,6 +54,16 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
       await storage.setItemAsync(LOCALE_STORAGE_KEY, newLocale);
     } catch {
       // Storage write failed silently
+    }
+    // Mirror the preference server-side so backend-originated messages
+    // (welcome SMS, OTP SMS, transaction notifications) speak the same
+    // language. Best-effort · we don't block the UI on this round-trip.
+    try {
+      const { api } = await import("../api/client");
+      await api.patch("/auth/profile/", { language: newLocale });
+    } catch {
+      // Not authenticated yet or offline · the setting will sync next time
+      // the user updates their profile. Local state is already correct.
     }
   }, []);
 

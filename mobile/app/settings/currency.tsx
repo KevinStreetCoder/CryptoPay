@@ -15,11 +15,10 @@ import { colors, getThemeColors, getThemeShadows } from "../../src/constants/the
 import { useThemeMode } from "../../src/stores/theme";
 import { useLocale } from "../../src/hooks/useLocale";
 import { useToast } from "../../src/components/Toast";
-import { storage } from "../../src/utils/storage";
+import { useDisplayCurrency, DisplayCurrencyCode } from "../../src/stores/displayCurrency";
 
 const isWeb = Platform.OS === "web";
 const useNative = Platform.OS !== "web";
-const STORAGE_KEY = "cryptopay_display_currency";
 
 interface CurrencyInfo {
   code: string;
@@ -218,26 +217,19 @@ export default function CurrencyScreen() {
   const ts = getThemeShadows(isDark);
   const { t } = useLocale();
   const toast = useToast();
-  const [selected, setSelected] = useState("KES");
-
-  // Load persisted preference
-  useEffect(() => {
-    storage.getItemAsync(STORAGE_KEY).then((val) => {
-      if (val && CURRENCIES.some((c) => c.code === val)) {
-        setSelected(val);
-      }
-    });
-  }, []);
+  const { code: selected, setCode } = useDisplayCurrency();
 
   const handleSelect = useCallback(async (code: string) => {
-    setSelected(code);
-    await storage.setItemAsync(STORAGE_KEY, code);
+    // Context persists to storage and notifies every subscriber across the
+    // app · dashboard, wallet cards, charts, and balance totals all re-render
+    // on the next tick with the new format.
+    await setCode(code as DisplayCurrencyCode);
     const curr = CURRENCIES.find((c) => c.code === code);
     toast.success(
       t("settings.defaultCurrency"),
       `${t("settings.currencyChanged")} ${curr?.name || code}`
     );
-  }, [t, toast]);
+  }, [t, toast, setCode]);
 
   const content = (
     <ScrollView

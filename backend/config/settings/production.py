@@ -183,6 +183,33 @@ def _assert_production_env():
             f"MPESA_CERT_PATH={MPESA_CERT_PATH!r} — set to the production pem path"
         )
 
+    # D6: wallet seed must come from KMS or an explicit env var in production.
+    # A SECRET_KEY-derived seed would make any SECRET_KEY leak a full wallet
+    # compromise. No seed source = refuse to serve.
+    kms_enabled = globals().get("KMS_ENABLED", False)
+    wallet_mnemonic = globals().get("WALLET_MNEMONIC", "")
+    wallet_seed = globals().get("WALLET_MASTER_SEED", "")
+    wallet_encrypted_seed = globals().get("WALLET_ENCRYPTED_SEED", "")
+    if not any([
+        kms_enabled and wallet_encrypted_seed,
+        bool(wallet_mnemonic),
+        bool(wallet_seed),
+    ]):
+        issues.append(
+            "No wallet seed source configured. Set KMS_ENABLED=True + "
+            "WALLET_ENCRYPTED_SEED, or WALLET_MNEMONIC, or WALLET_MASTER_SEED"
+        )
+
+    # D22: SECURE_PROXY_SSL_HEADER is trusted unconditionally in Django; we
+    # need at least one of a TrustedProxyMiddleware, firewall to CF ranges,
+    # or an origin TLS terminator. Flag when all three are absent in prod.
+    if not globals().get("CLOUDFLARE_ONLY_ORIGIN", False):
+        issues.append(
+            "CLOUDFLARE_ONLY_ORIGIN is not set to True. Either firewall the "
+            "origin to Cloudflare IP ranges or terminate TLS at origin; do "
+            "not trust X-Forwarded-Proto from arbitrary clients"
+        )
+
     for issue in issues:
         _prod_logger.error("production.env_check_failed", extra={"issue": issue})
 

@@ -30,19 +30,49 @@ class DailyLimitExceededError(Exception):
             )
 
 
-def check_daily_limit(user, amount_kes: Decimal) -> None:
+class DailyLimitLock:
+    """B4: explicit lock handle returned by check_daily_limit. Caller is
+    responsible for calling .release() only AFTER the Transaction row has
+    been committed · so concurrent callers see that row and can't both
+    pass the limit check on stale state. Safe to release multiple times."""
+
+    __slots__ = ("_key", "_released")
+
+    def __init__(self, key: str):
+        self._key = key
+        self._released = False
+
+    def release(self):
+        if self._released:
+            return
+        try:
+            cache.delete(self._key)
+        finally:
+            self._released = True
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.release()
+        return False
+
+
+def check_daily_limit(user, amount_kes: Decimal) -> DailyLimitLock:
     """
     Check whether a user can transact the given KES amount today,
     based on their KYC tier daily limit.
 
-    Uses a per-user Redis lock to prevent TOCTOU race conditions where
-    two concurrent payments both pass the limit check.
+    B4: the per-user Redis lock is held past this function's return · the
+    returned `DailyLimitLock` must be released by the caller only after
+    the corresponding Transaction has been persisted. This closes the
+    TOCTOU window between "sum spent_today" and "Transaction.objects.create".
 
     Raises DailyLimitExceededError if the limit would be exceeded.
     """
-    # Acquire a per-user lock to prevent concurrent limit checks
     lock_key = f"daily_limit_check:{user.id}"
-    if not cache.add(lock_key, "1", timeout=5):
+    # 30s: comfortably longer than any realistic Transaction.create path.
+    if not cache.add(lock_key, "1", timeout=30):
         raise DailyLimitExceededError(
             message="Please wait and try again",
         )
@@ -53,7 +83,6 @@ def check_daily_limit(user, amount_kes: Decimal) -> None:
 
         today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
-        # Sum all completed + processing outgoing transactions today (KES side)
         spent_today = (
             Transaction.objects.filter(
                 user=user,
@@ -72,6 +101,8 @@ def check_daily_limit(user, amount_kes: Decimal) -> None:
         total_spent = sum((a for a in spent_today if a), Decimal("0"))
 
         if total_spent + amount_kes > Decimal(str(limit)):
+            # Release before raising · caller can retry without waiting.
+            cache.delete(lock_key)
             raise DailyLimitExceededError(
                 limit=limit,
                 spent=total_spent,
@@ -82,5 +113,10 @@ def check_daily_limit(user, amount_kes: Decimal) -> None:
             "Daily limit check passed for user=%s tier=%d: spent=%s + requested=%s <= limit=%s",
             user.phone, user.kyc_tier, total_spent, amount_kes, limit,
         )
-    finally:
+    except DailyLimitExceededError:
+        raise
+    except Exception:
         cache.delete(lock_key)
+        raise
+
+    return DailyLimitLock(lock_key)

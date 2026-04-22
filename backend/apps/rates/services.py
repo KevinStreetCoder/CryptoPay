@@ -42,6 +42,10 @@ CRYPTOCOMPARE_SYMBOLS = {
 
 # Cache TTL for crypto rates (seconds)
 CRYPTO_RATE_CACHE_TTL = 60
+# B30: 24h % change cache kept longer than the rate itself so brief provider
+# hiccups don't wipe the dashboard display back to 0.00%. Refreshed on every
+# successful batch fetch.
+CHANGE_24H_CACHE_TTL = 900  # 15 minutes
 
 
 class RateService:
@@ -73,15 +77,21 @@ class RateService:
             for currency, coin_id in COINGECKO_IDS.items():
                 if coin_id in data and "usd" in data[coin_id]:
                     rate = Decimal(str(data[coin_id]["usd"]))
+                    if rate <= 0:
+                        logger.error(f"CoinGecko returned non-positive rate for {currency}: {rate}")
+                        continue  # B30: reject zero/negative rates
                     cache_key = f"rate:crypto:{currency}:usd"
                     cache.set(cache_key, str(rate), timeout=CRYPTO_RATE_CACHE_TTL)
                     ExchangeRate.objects.create(
                         pair=f"{currency}/USD", rate=rate, source="coingecko",
                     )
-                    # Cache 24h price change for frontend display
                     change_24h = data[coin_id].get("usd_24h_change")
                     if change_24h is not None:
-                        cache.set(f"rate:change24h:{currency}", str(round(change_24h, 2)), timeout=CRYPTO_RATE_CACHE_TTL)
+                        cache.set(
+                            f"rate:change24h:{currency}",
+                            str(round(change_24h, 2)),
+                            timeout=CHANGE_24H_CACHE_TTL,
+                        )
 
             fetched = True
             # Set debounce lock — don't call again for 55 seconds
@@ -92,11 +102,11 @@ class RateService:
         except Exception as e:
             logger.warning(f"CoinGecko batch fetch failed: {e}, trying CryptoCompare...")
 
-        # Fallback: CryptoCompare (single batch call)
+        # Fallback: CryptoCompare pricemultifull (carries CHANGEPCT24HOUR)
         if not fetched:
             try:
                 symbols = ",".join(CRYPTOCOMPARE_SYMBOLS.values())
-                url = "https://min-api.cryptocompare.com/data/pricemulti"
+                url = "https://min-api.cryptocompare.com/data/pricemultifull"
                 params = {"fsyms": symbols, "tsyms": "USD"}
                 headers = {}
                 cc_key = getattr(settings, "CRYPTOCOMPARE_API_KEY", "")
@@ -105,16 +115,27 @@ class RateService:
 
                 response = requests.get(url, params=params, headers=headers, timeout=10)
                 response.raise_for_status()
-                data = response.json()
+                data = response.json().get("RAW", {})
 
                 for currency, symbol in CRYPTOCOMPARE_SYMBOLS.items():
                     if symbol in data and "USD" in data[symbol]:
-                        rate = Decimal(str(data[symbol]["USD"]))
+                        entry = data[symbol]["USD"]
+                        rate = Decimal(str(entry.get("PRICE", 0)))
+                        if rate <= 0:
+                            logger.error(f"CryptoCompare returned non-positive rate for {currency}: {rate}")
+                            continue  # B30: reject zero/negative rates
                         cache_key = f"rate:crypto:{currency}:usd"
                         cache.set(cache_key, str(rate), timeout=CRYPTO_RATE_CACHE_TTL)
                         ExchangeRate.objects.create(
                             pair=f"{currency}/USD", rate=rate, source="cryptocompare",
                         )
+                        change_24h = entry.get("CHANGEPCT24HOUR")
+                        if change_24h is not None:
+                            cache.set(
+                                f"rate:change24h:{currency}",
+                                str(round(float(change_24h), 2)),
+                                timeout=CHANGE_24H_CACHE_TTL,
+                            )
 
                 cache.set("rate:batch:lock", "1", timeout=55)
                 cache.delete("rate:stale")  # Clear stale flag on success
@@ -122,7 +143,7 @@ class RateService:
 
             except Exception as e:
                 logger.error(f"CryptoCompare batch fetch also failed: {e}")
-                # Both providers failed — mark cached rates as stale so consumers
+                # Both providers failed · mark cached rates as stale so consumers
                 # know they are using potentially outdated prices.
                 cache.set("rate:stale", True, timeout=300)
 
@@ -266,14 +287,17 @@ class RateService:
 
     @staticmethod
     def get_locked_quote(quote_id: str, user_id: str = "") -> dict | None:
-        """Retrieve a locked quote. Returns None if expired or wrong user."""
+        """Retrieve a locked quote. Returns None if expired or wrong user.
+
+        B26: if the quote has a user_id, the CALLER MUST pass a matching
+        user_id. Empty caller user_id is treated as mismatch so we don't
+        silently hand a quote back to an anonymous path."""
         quote = cache.get(f"quote:{quote_id}")
         if quote is None:
             return None
 
-        # Verify quote belongs to requesting user (if user_id is set in quote)
         quote_user = quote.get("user_id", "")
-        if quote_user and user_id and quote_user != user_id:
+        if quote_user and quote_user != user_id:
             return None
 
         return quote
@@ -294,9 +318,11 @@ class RateService:
             cache.delete(claim_key)
             return None
 
-        # Verify quote belongs to requesting user
+        # B26: quote-to-user binding is MANDATORY. If the quote was locked
+        # with a user_id, the caller MUST supply a matching user_id. Empty
+        # caller user_id is treated as mismatch.
         quote_user = quote.get("user_id", "")
-        if quote_user and user_id and quote_user != user_id:
+        if quote_user and quote_user != user_id:
             cache.delete(claim_key)
             return None
 

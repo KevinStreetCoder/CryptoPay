@@ -203,7 +203,7 @@ export default function ConfirmPaymentScreen() {
   const toast = useToast();
   const { width } = useWindowDimensions();
   const isWeb = Platform.OS === "web";
-  const isDesktop = isWeb && width >= 768;
+  const isDesktop = isWeb && width >= 900;
 
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);

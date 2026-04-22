@@ -342,6 +342,9 @@ class MpesaClient:
 
     def transaction_status(self, transaction_id: str) -> dict:
         """Query the status of any M-Pesa transaction (fallback when callback times out)."""
+        # B28: per-transaction HMAC token in the result URL so late/spoofed
+        # callbacks at /api/v1/mpesa/callback/status/ can't flip state.
+        from .middleware import build_callback_url
         payload = {
             "Initiator": settings.MPESA_INITIATOR_NAME,
             "SecurityCredential": self._get_security_credential(),
@@ -349,8 +352,8 @@ class MpesaClient:
             "TransactionID": transaction_id,
             "PartyA": self.shortcode,
             "IdentifierType": "4",
-            "ResultURL": f"{self.callback_base}/api/v1/mpesa/callback/status/",
-            "QueueTimeOutURL": f"{self.callback_base}/api/v1/mpesa/callback/status/timeout/",
+            "ResultURL": build_callback_url("status", transaction_id),
+            "QueueTimeOutURL": build_callback_url("status/timeout", transaction_id),
             "Remarks": "Status query",
             "Occasion": "",
         }
@@ -375,6 +378,9 @@ class MpesaClient:
 
     def reversal(self, transaction_id: str, amount: int, remarks: str = "") -> dict:
         """Request reversal of a completed M-Pesa transaction."""
+        # B28: per-transaction HMAC token so forged reversal callbacks can't
+        # drive our saga into a compensation it didn't ask for.
+        from .middleware import build_callback_url
         payload = {
             "Initiator": settings.MPESA_INITIATOR_NAME,
             "SecurityCredential": self._get_security_credential(),
@@ -383,8 +389,8 @@ class MpesaClient:
             "Amount": amount,
             "ReceiverParty": self.shortcode,
             "RecieverIdentifierType": "4",
-            "ResultURL": f"{self.callback_base}/api/v1/mpesa/callback/reversal/",
-            "QueueTimeOutURL": f"{self.callback_base}/api/v1/mpesa/callback/reversal/timeout/",
+            "ResultURL": build_callback_url("reversal", transaction_id),
+            "QueueTimeOutURL": build_callback_url("reversal/timeout", transaction_id),
             "Remarks": remarks or "CryptoPay reversal",
             "Occasion": "",
         }
@@ -409,6 +415,11 @@ class MpesaClient:
 
     def account_balance(self) -> dict:
         """Check the M-Pesa float balance."""
+        # B11: per-query token on the balance callback URL so forged KES 50M
+        # balance replies can't trick the circuit breaker into CLOSED state.
+        from .middleware import build_callback_url
+        import uuid as _uuid
+        query_id = f"balance:{_uuid.uuid4()}"
         payload = {
             "Initiator": settings.MPESA_INITIATOR_NAME,
             "SecurityCredential": self._get_security_credential(),
@@ -416,8 +427,8 @@ class MpesaClient:
             "PartyA": self.shortcode,
             "IdentifierType": "4",
             "Remarks": "Balance check",
-            "QueueTimeOutURL": f"{self.callback_base}/api/v1/mpesa/callback/balance/timeout/",
-            "ResultURL": f"{self.callback_base}/api/v1/mpesa/callback/balance/",
+            "QueueTimeOutURL": build_callback_url("balance/timeout", query_id),
+            "ResultURL": build_callback_url("balance", query_id),
         }
 
         try:

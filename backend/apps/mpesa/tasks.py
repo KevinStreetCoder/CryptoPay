@@ -239,17 +239,23 @@ def process_c2b_deposit(trans_id: str, amount_str: str, phone: str, bill_ref: st
                               "Orphaned deposit — no matching user found")
         return
 
-    # Enforce min/max limits (validation may be bypassed when ResponseType="Completed")
+    # B25: enforce min/max limits. If the ResponseType="Completed" fast path
+    # let an out-of-range payment through, REFUSE to credit crypto · let ops
+    # initiate a Safaricom reversal via admin console rather than minting
+    # unbacked crypto. We still record an audit row and admin alert.
     min_kes = Decimal(str(getattr(settings, "DEPOSIT_MIN_KES", 100)))
     max_kes = Decimal(str(getattr(settings, "DEPOSIT_MAX_KES", 300_000)))
     if amount < min_kes or amount > max_kes:
-        logger.error(
+        logger.critical(
             f"C2B deposit {trans_id}: amount KES {amount} outside limits "
-            f"({min_kes}-{max_kes}). Flagged for manual review."
+            f"({min_kes}-{max_kes}). REJECTING crypto credit; admin alert dispatched."
         )
-        # Still process — money is already received. Flag for ops team.
-        _send_c2b_admin_alert(trans_id, amount, phone, bill_ref,
-                              f"Amount KES {amount} outside limits ({min_kes}-{max_kes})")
+        _send_c2b_admin_alert(
+            trans_id, amount, phone, bill_ref,
+            f"Amount KES {amount} outside limits ({min_kes}-{max_kes}) · manual reversal required",
+        )
+        # B25: do NOT fall through to crediting crypto.
+        return
 
     # Get current live rate (no pre-locked quote for C2B)
     # Use raw_rate (no spread) since we charge an explicit deposit fee

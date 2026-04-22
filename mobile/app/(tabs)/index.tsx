@@ -37,6 +37,7 @@ import { ratesApi, Rate, normalizeRate } from "../../src/api/rates";
 import { Transaction, getTxKesAmount } from "../../src/api/payments";
 import { colors, CURRENCIES, getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
+import { useDisplayCurrency } from "../../src/stores/displayCurrency";
 import {
   CryptoChart,
   SparklineChart,
@@ -248,6 +249,8 @@ function PortfolioChart({
   ts,
 }: PortfolioChartProps) {
   const { width: windowWidth } = useWindowDimensions();
+  // B-side display-currency context · same hook the dashboard + wallet use.
+  const { formatKes: _fmt } = useDisplayCurrency();
   const isWeb = Platform.OS === "web";
   const isDesktopChart = isWeb && windowWidth >= 900;
   const chartWidth = isDesktopChart ? Math.min(windowWidth * 0.25, 400) : windowWidth - 80;
@@ -436,7 +439,7 @@ function PortfolioChart({
             Deposits
           </Text>
           <Text style={{ color: tc.textSecondary, fontSize: 11, fontFamily: "DMSans_600SemiBold" }}>
-            KSh {totalDeposits.toLocaleString()}
+            {_fmt(totalDeposits, { digits: 0, compact: true })}
           </Text>
         </View>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
@@ -445,7 +448,7 @@ function PortfolioChart({
             Payments
           </Text>
           <Text style={{ color: tc.textSecondary, fontSize: 11, fontFamily: "DMSans_600SemiBold" }}>
-            KSh {totalPayments.toLocaleString()}
+            {_fmt(totalPayments, { digits: 0, compact: true })}
           </Text>
         </View>
       </View>
@@ -478,10 +481,10 @@ function PortfolioChart({
             </Text>
             <View style={{ flexDirection: "row", gap: 14 }}>
               <Text style={{ color: DEPOSIT_COLOR, fontSize: 12, fontFamily: "DMSans_600SemiBold" }}>
-                +KSh {depositPoints[activeIndex]?.toLocaleString() || "0"}
+                +{_fmt(depositPoints[activeIndex] || 0, { digits: 0, compact: true })}
               </Text>
               <Text style={{ color: PAYMENT_COLOR, fontSize: 12, fontFamily: "DMSans_600SemiBold" }}>
-                -KSh {paymentPoints[activeIndex]?.toLocaleString() || "0"}
+                -{_fmt(paymentPoints[activeIndex] || 0, { digits: 0, compact: true })}
               </Text>
             </View>
           </View>
@@ -632,6 +635,7 @@ interface TxCategory {
 }
 
 function TransactionSummary({ transactions, tc, ts }: { transactions: Transaction[]; tc: ReturnType<typeof getThemeColors>; ts: ReturnType<typeof getThemeShadows> }) {
+  const { formatKes: _fmt } = useDisplayCurrency();
   const categories: TxCategory[] = [
     {
       label: "Payments",
@@ -741,7 +745,7 @@ function TransactionSummary({ transactions, tc, ts }: { transactions: Transactio
               fontFamily: "DMSans_700Bold",
             }}
           >
-            KSh {cat.total.toLocaleString("en-KE", { minimumFractionDigits: 0 })}
+            {_fmt(cat.total, { digits: 0, compact: true })}
           </Text>
         </View>
       ))}
@@ -780,10 +784,7 @@ function TransactionSummary({ transactions, tc, ts }: { transactions: Transactio
             fontFamily: "DMSans_700Bold",
           }}
         >
-          KSh{" "}
-          {categories
-            .reduce((s, c) => s + c.total, 0)
-            .toLocaleString("en-KE", { minimumFractionDigits: 0 })}
+          {_fmt(categories.reduce((s, c) => s + c.total, 0), { digits: 0, compact: true })}
         </Text>
       </View>
     </View>
@@ -966,9 +967,7 @@ function CryptoPriceChartsSection({
                 }}
                 numberOfLines={1}
               >
-                KES {tr.rate >= 1000
-                  ? tr.rate.toLocaleString(undefined, { maximumFractionDigits: 2 })
-                  : tr.rate.toFixed(2)}
+                {formatKes(tr.rate, { digits: tr.rate >= 1000 ? 0 : 2, compact: tr.rate >= 100000 })}
               </Text>
 
               {/* 24h change */}
@@ -1133,9 +1132,7 @@ function MobileCryptoCharts({
                 style={{ color: tc.textPrimary, fontSize: 13, fontFamily: "DMSans_700Bold", marginBottom: 2 }}
                 numberOfLines={1}
               >
-                KES {tr.rate >= 1000
-                  ? tr.rate.toLocaleString(undefined, { maximumFractionDigits: 0 })
-                  : tr.rate.toFixed(2)}
+                {formatKes(tr.rate, { digits: tr.rate >= 1000 ? 0 : 2, compact: tr.rate >= 100000 })}
               </Text>
               <Text
                 style={{ color: changeColor, fontSize: 11, fontFamily: "DMSans_600SemiBold", marginBottom: 6 }}
@@ -1186,6 +1183,10 @@ function HomeScreenContent() {
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
   const ts = getThemeShadows(isDark);
+  // Display currency · switching to USD in settings makes every KES-based
+  // number below (rate cards, summary bars, activity points) re-render in
+  // USD using the live USD/KES rate.
+  const { code: displayCode, formatKes } = useDisplayCurrency();
   const isWeb = Platform.OS === "web";
   const isDesktop = isWeb && width >= 900;
   const isLargeDesktop = isWeb && width >= 1200;
@@ -2128,9 +2129,7 @@ function HomeScreenContent() {
                       }}
                       numberOfLines={1}
                     >
-                      KES {tr.rate >= 1000
-                        ? tr.rate.toLocaleString(undefined, { maximumFractionDigits: 0 })
-                        : tr.rate.toFixed(2)}
+                      {formatKes(tr.rate, { digits: tr.rate >= 1000 ? 0 : 2, compact: tr.rate >= 100000 })}
                     </Text>
                     <Text
                       style={{

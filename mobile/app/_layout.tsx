@@ -28,6 +28,7 @@ import { initTheme, useThemeMode } from "../src/stores/theme";
 import { getThemeColors } from "../src/constants/theme";
 import { initPrivacy } from "../src/utils/privacy";
 import { LanguageProvider } from "../src/contexts/LanguageContext";
+import { DisplayCurrencyProvider } from "../src/stores/displayCurrency";
 import { OnboardingModal, ONBOARDING_COMPLETED_KEY } from "./onboarding";
 import { AppTourProvider, triggerAppTour } from "../src/components/AppTour";
 
@@ -321,12 +322,14 @@ export default function RootLayout() {
       <GestureHandlerRootView style={{ flex: 1 }}>
         <QueryClientProvider client={queryClient}>
           <LanguageProvider>
-            <ToastProvider>
-              <AppTourProvider>
-                <RootNavigator />
-              </AppTourProvider>
-              {/* AppKit modal renders lazily inside deposit screen */}
-            </ToastProvider>
+            <DisplayCurrencyProvider>
+              <ToastProvider>
+                <AppTourProvider>
+                  <RootNavigator />
+                </AppTourProvider>
+                {/* AppKit modal renders lazily inside deposit screen */}
+              </ToastProvider>
+            </DisplayCurrencyProvider>
           </LanguageProvider>
         </QueryClientProvider>
       </GestureHandlerRootView>

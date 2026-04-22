@@ -70,7 +70,7 @@ export default function WithdrawScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { width } = useWindowDimensions();
-  const isDesktop = isWeb && width >= 768;
+  const isDesktop = isWeb && width >= 900;
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
   const ts = getThemeShadows(isDark);
@@ -617,34 +617,12 @@ export default function WithdrawScreen() {
               marginBottom: isDesktop ? 16 : 4,
             }}
           >
-            <Pressable
-              onPress={() => {
-                if (router.canGoBack()) router.back();
-                else router.replace("/(tabs)" as any);
-              }}
-              hitSlop={12}
-              style={({ pressed, hovered }: any) => ({
-                width: 42,
-                height: 42,
-                borderRadius: 14,
-                backgroundColor: isWeb && hovered ? tc.dark.elevated : tc.dark.card,
-                borderColor: isWeb && hovered ? tc.glass.borderStrong : tc.glass.border,
-                alignItems: "center",
-                justifyContent: "center",
-                borderWidth: 1,
-                opacity: pressed ? 0.85 : 1,
-                ...(isWeb ? { cursor: "pointer", transition: "all 0.15s ease" } as any : {}),
-              })}
-            >
-              <Ionicons name="arrow-back" size={20} color={tc.textPrimary} />
-            </Pressable>
-
             <Text
               style={{
                 color: tc.textPrimary,
                 fontSize: isDesktop ? 24 : 20,
                 fontFamily: "DMSans_700Bold",
-                marginLeft: 14,
+                marginLeft: 0,
                 flex: 1,
                 letterSpacing: -0.3,
               }}

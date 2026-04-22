@@ -4,6 +4,7 @@ import { Wallet } from "../api/wallets";
 import { CURRENCIES, CurrencyCode, colors, shadows, getThemeColors, getThemeShadows } from "../constants/theme";
 import { useThemeMode } from "../stores/theme";
 import { useBalanceVisibility } from "../stores/balance";
+import { useDisplayCurrency } from "../stores/displayCurrency";
 import { CryptoLogo } from "./CryptoLogo";
 
 const isWeb = Platform.OS === "web";
@@ -19,6 +20,7 @@ export function BalanceCard({ wallets }: BalanceCardProps) {
   const { balanceHidden: hidden, toggleBalance } = useBalanceVisibility();
   const { width: screenWidth } = useWindowDimensions();
   const isSmall = screenWidth < 380;
+  const { code: displayCode, symbol: displaySymbol, formatKes } = useDisplayCurrency();
 
   // Defensive: ensure wallets is always an array
   const safeWallets = Array.isArray(wallets) ? wallets : [];
@@ -39,17 +41,16 @@ export function BalanceCard({ wallets }: BalanceCardProps) {
 
   const kesBalance = kesDirectBalance + cryptoKesTotal;
 
+  const formattedBalance = formatKes(kesBalance, { digits: 2 });
+  const balanceA11yLabel = hidden
+    ? "Total balance hidden"
+    : `Total balance: ${formattedBalance}`;
+
   return (
     <View
       style={[styles.card, ts.md]}
       accessibilityRole="summary"
-      accessibilityLabel={
-        hidden
-          ? "Total balance hidden"
-          : `Total balance: ${kesBalance.toLocaleString("en-KE", {
-              minimumFractionDigits: 2,
-            })} Kenyan Shillings`
-      }
+      accessibilityLabel={balanceA11yLabel}
       testID="balance-card"
     >
       {/* Decorative circles */}
@@ -84,7 +85,7 @@ export function BalanceCard({ wallets }: BalanceCardProps) {
         style={[
           styles.balance,
           // Shrink the balance figure on narrow phones (iPhone SE / 320px) so
-          // KES totals like "KSh 1,234,567.89" don't clip or wrap mid-figure.
+          // totals like "KSh 1,234,567.89" don't clip or wrap mid-figure.
           isSmall && { fontSize: 26, letterSpacing: -0.5, marginBottom: 16 },
         ]}
         adjustsFontSizeToFit
@@ -93,10 +94,8 @@ export function BalanceCard({ wallets }: BalanceCardProps) {
         accessibilityElementsHidden={hidden}
       >
         {hidden
-          ? "KSh \u2022\u2022\u2022\u2022\u2022\u2022"
-          : `KSh ${kesBalance.toLocaleString("en-KE", {
-              minimumFractionDigits: 2,
-            })}`}
+          ? `${displaySymbol} \u2022\u2022\u2022\u2022\u2022\u2022`
+          : formattedBalance}
       </Text>
 
       {/* Crypto Balances Row */}

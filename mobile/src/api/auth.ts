@@ -214,4 +214,16 @@ export const authApi = {
   // Email PDF receipt to user
   emailReceipt: (transactionId: string) =>
     api.get(`/payments/${transactionId}/receipt/`, { params: { send_email: "true" } }),
+
+  /**
+   * C2: ask the backend to mint a short-lived HMAC-signed URL for the
+   * receipt. Returns `{ url, expires_in_seconds }` · the `url` is a path
+   * that already contains `?sig=<signature>` so it can be opened in a
+   * new tab without the access token ever touching the URL bar, browser
+   * history, or upstream access logs.
+   */
+  signReceipt: (transactionId: string) =>
+    api.post<{ url: string; expires_in_seconds: number }>(
+      `/payments/${transactionId}/receipt/sign/`,
+    ),
 };

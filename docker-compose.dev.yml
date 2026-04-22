@@ -1,4 +1,18 @@
 services:
+  # Dev-only: allow db / redis access from the developer's host tools
+  # (DBeaver, redis-cli, Datagrip). Still bound to loopback · but on
+  # 0.0.0.0 so WSL2 / Docker Desktop port-forwarding picks it up. Never
+  # merge this overlay into the production compose stack.
+  db:
+    ports:
+      - "127.0.0.1:5432:5432"
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cryptopay_dev_only_password}
+
+  redis:
+    ports:
+      - "127.0.0.1:6379:6379"
+
   web:
     command: python manage.py runserver 0.0.0.0:8000
     environment:

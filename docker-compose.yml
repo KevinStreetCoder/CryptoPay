@@ -2,16 +2,22 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: cryptopay
-      POSTGRES_USER: cryptopay
-      POSTGRES_PASSWORD: cryptopay
+      POSTGRES_DB: ${POSTGRES_DB:-cryptopay}
+      POSTGRES_USER: ${POSTGRES_USER:-cryptopay}
+      # D2: no default — docker compose will refuse to start if the operator
+      # hasn't set POSTGRES_PASSWORD in the environment / .env file.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    # D21: bind Postgres to loopback only · Docker bypasses ufw, so a raw
+    # "5432:5432" exposes the DB on every interface including the public IP.
+    # The dev compose overlay re-binds to 0.0.0.0 for local-machine access
+    # when the developer explicitly opts in.
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U cryptopay -d cryptopay"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cryptopay} -d ${POSTGRES_DB:-cryptopay}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -19,11 +25,22 @@ services:
 
   redis:
     image: redis:7-alpine
+    # D21: loopback-only binding · matches the Postgres posture.
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
+    # Require a password whenever one is provided. Omitting REDIS_PASSWORD
+    # still works in the dev overlay which adds `--requirepass ''`.
+    command: >
+      sh -c 'if [ -n "$$REDIS_PASSWORD" ]; then
+                exec redis-server --requirepass "$$REDIS_PASSWORD";
+             else
+                exec redis-server;
+             fi'
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli ${REDIS_PASSWORD:+-a $$REDIS_PASSWORD} ping"]
       interval: 10s
       timeout: 5s
       retries: 5

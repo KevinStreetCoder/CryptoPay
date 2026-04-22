@@ -2,6 +2,7 @@ import logging
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 
+from django.core.cache import cache
 from django.db.models import Avg
 from django.db.models.functions import TruncDay, TruncHour
 from django.utils import timezone
@@ -55,6 +56,15 @@ class QuoteView(APIView):
                 raise InvalidOperation
         except (InvalidOperation, TypeError):
             return Response({"error": "Invalid kes_amount"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # B14: refuse to mint a new locked quote when the rate feed is stale.
+        # Quotes locked at stale prices can drift outside DEPOSIT_SLIPPAGE_TOLERANCE
+        # by the time they're consumed.
+        if cache.get("rate:stale"):
+            return Response(
+                {"error": "Rate provider temporarily unavailable · try again in a moment."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
         try:
             user_id = str(request.user.id) if request.user.is_authenticated else ""

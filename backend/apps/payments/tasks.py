@@ -73,7 +73,15 @@ def check_pending_mpesa_payments():
                 from .saga import PaymentSaga
                 saga = PaymentSaga(tx)
                 saga.compensate_convert()
-                logger.info(f"Compensated stuck tx {tx.id} — crypto returned to user")
+                # B23: stamp the compensation timestamp in saga_data so that
+                # if a late SUCCESS callback arrives, complete() can detect
+                # the double-settlement window and page ops.
+                tx.refresh_from_db(fields=["saga_data"])
+                saga_data = tx.saga_data or {}
+                saga_data["compensated_at"] = timezone.now().isoformat()
+                tx.saga_data = saga_data
+                tx.save(update_fields=["saga_data", "updated_at"])
+                logger.info(f"Compensated stuck tx {tx.id} · crypto returned to user")
             except Exception as comp_err:
                 logger.critical(
                     f"Compensation failed for stuck tx {tx.id}: {comp_err}. "

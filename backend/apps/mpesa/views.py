@@ -113,6 +113,29 @@ class STKCallbackView(APIView):
                     return Response({"ResultCode": 0, "ResultDesc": "Accepted"}, status=status.HTTP_200_OK)
 
                 if result_code == 0:
+                    # B12: refuse to credit if Safaricom-reported Amount disagrees
+                    # with the transaction's expected source_amount. Allow ≤ 1 KES
+                    # rounding slop (Safaricom displays integer KES on M-Pesa side).
+                    try:
+                        from decimal import Decimal, InvalidOperation
+                        if amount is not None and tx.source_amount is not None:
+                            callback_amt = Decimal(str(amount))
+                            expected = Decimal(str(tx.source_amount))
+                            if abs(callback_amt - expected) > Decimal("1"):
+                                logger.critical(
+                                    f"STK amount mismatch · tx {tx.id}: expected {expected} "
+                                    f"got {callback_amt} · rejecting credit"
+                                )
+                                tx.status = Transaction.Status.FAILED
+                                tx.failure_reason = "amount_mismatch"
+                                tx.save(update_fields=["status", "failure_reason", "updated_at"])
+                                return Response(
+                                    {"ResultCode": 0, "ResultDesc": "Accepted"},
+                                    status=status.HTTP_200_OK,
+                                )
+                    except (InvalidOperation, TypeError, ValueError):
+                        logger.exception("STK amount parse failed")
+
                     # BUY flow: credit crypto + mark COMPLETED atomically
                     if tx.type == Transaction.Type.BUY and tx.dest_currency and tx.dest_amount:
                         try:
@@ -486,6 +509,15 @@ class BalanceCallbackView(APIView):
     authentication_classes = []
 
     def post(self, request, token=None):
+        # B11: verify per-transaction callback token when present.
+        if token is not None:
+            is_valid, _tx_id = verify_callback_token(token)
+            if not is_valid:
+                logger.warning(f"Balance callback rejected · bad token: {token[:16]}...")
+                return Response(
+                    {"ResultCode": 1, "ResultDesc": "Invalid token"},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
         logger.info(f"Balance callback received: {request.data}")
 
         MpesaCallback.objects.create(
@@ -551,6 +583,15 @@ class TimeoutCallbackView(APIView):
     authentication_classes = []
 
     def post(self, request, token=None):
+        # B11: verify per-transaction callback token when present.
+        if token is not None:
+            is_valid, _tx_id = verify_callback_token(token)
+            if not is_valid:
+                logger.warning(f"Timeout callback rejected · bad token: {token[:16]}...")
+                return Response(
+                    {"ResultCode": 1, "ResultDesc": "Invalid token"},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
         logger.warning(f"M-Pesa timeout callback: {request.data}")
 
         payload = request.data

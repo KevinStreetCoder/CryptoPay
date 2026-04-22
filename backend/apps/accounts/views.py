@@ -8,7 +8,9 @@ from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenRefreshView as _SimpleJWTTokenRefreshView
 
 from apps.wallets.services import WalletService
 
@@ -224,7 +226,7 @@ class RegisterView(APIView):
             except Exception as e:
                 logger.warning(f"Referral attribution failed for {user.phone} (code={referral_code}): {e}")
 
-        return Response(
+        resp = Response(
             {
                 "user": UserSerializer(user, context={"request": request}).data,
                 "tokens": {
@@ -234,6 +236,10 @@ class RegisterView(APIView):
             },
             status=status.HTTP_201_CREATED,
         )
+        # C1: HttpOnly cookies for web clients · same header contract as login.
+        if request.META.get("HTTP_X_CPAY_WEB") == "1":
+            _set_auth_cookies(resp, str(refresh.access_token), str(refresh))
+        return resp
 
     def _get_client_ip(self, request):
         xff = request.META.get("HTTP_X_FORWARDED_FOR")
@@ -270,6 +276,11 @@ class LoginView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        # A20: only set to True after an explicit OTP comparison below.
+        # The previous `bool(otp)` default let any non-empty string skip the
+        # device/IP-change challenge further down.
+        pin_otp_verified = False
+
         # OTP challenge required after 3 wrong PINs
         if user.otp_challenge_required:
             if not otp:
@@ -301,6 +312,7 @@ class LoginView(APIView):
             # OTP verified — clear the challenge flag and attempts
             cache.delete(f"otp:{phone}")
             cache.delete(otp_attempt_key)
+            pin_otp_verified = True  # A20: only now does "already verified" become True
 
         if not user.check_pin(pin):
             user.pin_attempts += 1
@@ -358,9 +370,11 @@ class LoginView(APIView):
         device_name = serializer.validated_data.get("device_name", "")
         platform = serializer.validated_data.get("platform", "")
 
-        # If user already provided OTP (from PIN challenge or security challenge),
-        # skip device detection — they already proved their identity via OTP
-        otp_already_verified = bool(otp)
+        # A20: only skip device / IP-change detection if an OTP comparison
+        # actually succeeded upstream. `bool(otp)` alone (any non-empty
+        # string submitted by a caller) must NEVER skip the secondary
+        # challenge · that was the bypass CVE.
+        otp_already_verified = pin_otp_verified
 
         security_challenge = False
         challenge_reasons = []
@@ -537,13 +551,20 @@ class LoginView(APIView):
             except Exception as e:
                 logger.error(f"New device security alert failed: {e}")
 
-        return Response({
+        response = Response({
             "user": UserSerializer(user, context={"request": request}).data,
             "tokens": {
                 "refresh": str(refresh),
                 "access": str(refresh.access_token),
             },
         })
+        # C1: when the caller is the web bundle (signalled via
+        # `X-Cpay-Web: 1`), also set HttpOnly cookies so the JS side can
+        # operate without ever reading the JWT strings. Native app clients
+        # omit the header and keep using the JSON token payload.
+        if request.META.get("HTTP_X_CPAY_WEB") == "1":
+            _set_auth_cookies(response, str(refresh.access_token), str(refresh))
+        return response
 
     def _send_otp_challenge(self, phone, user=None):
         """Auto-send an OTP when challenge is triggered (SMS + email)."""
@@ -651,6 +672,20 @@ class ProfileView(APIView):
                 user.email_verified = False
                 update_fields.extend(["email", "email_verified"])
 
+        # Preferences · language + notification channel opt-outs. Persisting
+        # server-side means every backend-originated message (email, SMS,
+        # push) honours the user's choice even when the client is offline.
+        for pref in (
+            "language",
+            "notify_email_enabled",
+            "notify_sms_enabled",
+            "notify_push_enabled",
+            "notify_marketing_enabled",
+        ):
+            if pref in serializer.validated_data:
+                setattr(user, pref, serializer.validated_data[pref])
+                update_fields.append(pref)
+
         if "avatar" in request.FILES:
             update_fields.append("avatar")
 
@@ -752,10 +787,69 @@ class GoogleLoginView(APIView):
 
         email = google_info["email"]
 
-        # Find or create user
+        # A3: before any auto-link, refuse to sign into an existing
+        # phone-registered account via Google alone. A phone + PIN user who
+        # set their email is effectively identified by phone+PIN as their
+        # credential pair; accepting Google-ID-alone bypasses that entirely
+        # (any attacker with email control could drain the wallet). The
+        # legitimate user MUST either (a) sign in with phone + PIN first and
+        # link Google from settings, or (b) go through phone-OTP proof here
+        # before we mint tokens.
         user = User.objects.filter(email__iexact=email).first()
         created = False
-        if not user:
+        if user:
+            has_real_phone_already = bool(
+                user.phone and not user.phone.startswith("+000")
+            )
+            has_pin_already = bool(getattr(user, "pin_hash", ""))
+            if has_real_phone_already and has_pin_already:
+                # A3: require the caller to prove control of the registered
+                # phone before we'll auto-link. `otp` is consumed here, not
+                # the PIN-challenge OTP path · so a different cache key is
+                # used in `_send_google_link_otp` below.
+                link_otp = (serializer.validated_data.get("otp") or "").strip()
+                from django.core.cache import cache as _cache
+                link_key = f"google_link_otp:{user.phone}"
+                if not link_otp:
+                    # Issue the OTP + reject this call · client must retry with `otp`.
+                    self._send_google_link_otp(user.phone, user)
+                    return Response(
+                        {
+                            "error": "phone_verification_required",
+                            "message": (
+                                "This email already belongs to a phone account. "
+                                "We sent an OTP to your registered phone · submit "
+                                "it with `otp` to confirm the link."
+                            ),
+                            "phone_masked": (
+                                (user.phone[:6] + "****" + user.phone[-2:])
+                                if len(user.phone) >= 8
+                                else user.phone
+                            ),
+                            "otp_required": True,
+                        },
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+                stored_otp = _cache.get(link_key)
+                if not stored_otp or stored_otp != link_otp:
+                    return Response(
+                        {
+                            "error": "invalid_otp",
+                            "message": "Incorrect or expired OTP · request a new one.",
+                            "otp_required": True,
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                # OTP good · consume it, link proceeds
+                _cache.delete(link_key)
+                AuditLog.objects.create(
+                    user=user,
+                    action="GOOGLE_LINK_CONFIRMED",
+                    entity_type="user",
+                    entity_id=str(user.id),
+                    ip_address=self._get_client_ip(request),
+                )
+        else:
             import uuid as _uuid
             # Generate a temporary placeholder phone (unique per user)
             temp_phone = f"+000{_uuid.uuid4().hex[:10]}"
@@ -811,7 +905,7 @@ class GoogleLoginView(APIView):
 
         if not has_real_phone:
             # New Google user — needs to complete profile (phone + PIN)
-            return Response(
+            resp = Response(
                 {
                     "user": UserSerializer(user, context={"request": request}).data,
                     "tokens": {
@@ -823,8 +917,11 @@ class GoogleLoginView(APIView):
                 },
                 status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
             )
+            if request.META.get("HTTP_X_CPAY_WEB") == "1":
+                _set_auth_cookies(resp, str(refresh.access_token), str(refresh))
+            return resp
 
-        return Response(
+        resp = Response(
             {
                 "user": UserSerializer(user, context={"request": request}).data,
                 "tokens": {
@@ -836,12 +933,42 @@ class GoogleLoginView(APIView):
             },
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
+        if request.META.get("HTTP_X_CPAY_WEB") == "1":
+            _set_auth_cookies(resp, str(refresh.access_token), str(refresh))
+        return resp
 
     def _get_client_ip(self, request):
         xff = request.META.get("HTTP_X_FORWARDED_FOR")
         if xff:
             return xff.split(",")[0].strip()
         return request.META.get("REMOTE_ADDR")
+
+    def _send_google_link_otp(self, phone: str, user):
+        """A3: issue an SMS OTP on a dedicated cache key so it can't be
+        replayed via the normal login OTP channel. 5-minute TTL, 6-digit."""
+        from django.core.cache import cache as _cache
+        import secrets as _secrets
+
+        otp = f"{_secrets.randbelow(900000) + 100000}"
+        _cache.set(f"google_link_otp:{phone}", otp, timeout=300)
+        try:
+            from apps.core.tasks import send_sms_task
+            send_sms_task.delay(
+                phone,
+                f"Cpay: confirm Google sign-in with code {otp}. "
+                "If you didn't request this, ignore.",
+            )
+        except Exception:
+            logger.exception("Failed to dispatch Google link OTP SMS")
+        try:
+            AuditLog.objects.create(
+                user=user,
+                action="GOOGLE_LINK_OTP_SENT",
+                entity_type="user",
+                entity_id=str(user.id),
+            )
+        except Exception:
+            pass
 
 
 class GoogleCompleteProfileView(APIView):
@@ -2896,3 +3023,176 @@ class PushChallengeDenyView(APIView):
             ip_address=request.META.get("REMOTE_ADDR", ""),
         )
         return Response({"status": c.status})
+
+
+# ---------------------------------------------------------------------------
+# A1 + A27: logout + hardened token refresh
+# ---------------------------------------------------------------------------
+
+
+class LogoutView(APIView):
+    """A1 + A27: explicitly revoke the caller's refresh token.
+
+    Accepts `{"refresh": "<token>"}` · puts it on the SimpleJWT blacklist
+    so `/auth/token/refresh/` can no longer mint new access tokens from it.
+    A missing or malformed body still returns 205 (idempotent · the client
+    always wants to treat "logged out" as reached) but the event is logged.
+    Also wipes the JWT cookies (see C1) for web clients.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        refresh_token = request.data.get("refresh", "") or request.COOKIES.get(
+            "cpay_refresh", ""
+        )
+        blacklisted = False
+        if refresh_token:
+            try:
+                RefreshToken(refresh_token).blacklist()
+                blacklisted = True
+            except TokenError:
+                # Already blacklisted, expired, or malformed · fine, still log out.
+                pass
+
+        try:
+            AuditLog.objects.create(
+                user=request.user,
+                action="LOGOUT",
+                details={"blacklisted": blacklisted},
+                ip_address=request.META.get("HTTP_CF_CONNECTING_IP")
+                or (request.META.get("HTTP_X_FORWARDED_FOR") or "").split(",")[0].strip()
+                or request.META.get("REMOTE_ADDR", ""),
+            )
+        except Exception:
+            pass
+
+        resp = Response(
+            {"detail": "Logged out", "blacklisted": blacklisted},
+            status=status.HTTP_205_RESET_CONTENT,
+        )
+        # C1: clear the HttpOnly cookies on web.
+        for cookie in ("cpay_access", "cpay_refresh", "csrftoken"):
+            resp.delete_cookie(
+                cookie,
+                path="/",
+                domain=getattr(settings, "AUTH_COOKIE_DOMAIN", None),
+                samesite="Strict",
+            )
+        return resp
+
+
+class HardenedTokenRefreshView(_SimpleJWTTokenRefreshView):
+    """A27: re-verify the user is still active on every refresh.
+
+    SimpleJWT's default TokenRefreshView validates the signature and
+    expiry but does NOT check whether the user has been suspended /
+    deactivated / deleted in the meantime. That meant a stolen refresh
+    token kept minting access tokens for up to 30 days after ops clicked
+    'Suspend'. We now decode the user_id from the refresh token and
+    abort if the backing User is not transactable.
+    """
+
+    def post(self, request, *args, **kwargs):
+        # Allow the web client to send the refresh in a cookie (see C1).
+        if "refresh" not in request.data and request.COOKIES.get("cpay_refresh"):
+            # Django's request.data is immutable for MultiValueDict · rebuild.
+            try:
+                request.data._mutable = True  # type: ignore[attr-defined]
+            except Exception:
+                pass
+            try:
+                request.data["refresh"] = request.COOKIES["cpay_refresh"]
+            except Exception:
+                # DRF parsers return a dict-like · coerce via QueryDict if needed.
+                from django.http import QueryDict
+                qd = QueryDict(mutable=True)
+                qd.update(request.data)
+                qd["refresh"] = request.COOKIES["cpay_refresh"]
+                request._full_data = qd  # type: ignore[attr-defined]
+
+        raw = request.data.get("refresh", "")
+        if raw:
+            try:
+                rt = RefreshToken(raw)
+                uid = rt.get("user_id")
+                if uid:
+                    try:
+                        u = User.objects.get(pk=uid)
+                        if not u.is_active or getattr(u, "is_suspended", False):
+                            return Response(
+                                {"detail": "Account not active"},
+                                status=status.HTTP_403_FORBIDDEN,
+                            )
+                    except User.DoesNotExist:
+                        return Response(
+                            {"detail": "User not found"},
+                            status=status.HTTP_401_UNAUTHORIZED,
+                        )
+            except TokenError:
+                # Defer to SimpleJWT's native handler · it returns 401.
+                pass
+
+        response = super().post(request, *args, **kwargs)
+
+        # C1: when a new access token was minted, optionally refresh the
+        # web HttpOnly cookies. We only set cookies when the request is
+        # tagged as coming from the web client to avoid polluting native
+        # app responses.
+        if (
+            response.status_code == 200
+            and request.META.get("HTTP_X_CPAY_WEB") == "1"
+            and isinstance(response.data, dict)
+        ):
+            _set_auth_cookies(
+                response,
+                access=response.data.get("access", ""),
+                refresh=response.data.get("refresh", ""),
+            )
+        return response
+
+
+def _set_auth_cookies(response, access: str, refresh: str):
+    """C1: write JWTs to HttpOnly/Secure cookies so they're invisible to JS.
+
+    Callable from LoginView, RegisterView, HardenedTokenRefreshView. We also
+    set a sibling CSRF cookie via Django's csrf middleware so the web client
+    can submit `X-CSRFToken` on mutations (pairs with SameSite=Strict).
+    """
+    from datetime import timedelta
+
+    domain = getattr(settings, "AUTH_COOKIE_DOMAIN", None)
+    secure = not settings.DEBUG  # never downgrade cookies to http in prod
+    access_ttl = int(
+        getattr(settings, "SIMPLE_JWT", {})
+        .get("ACCESS_TOKEN_LIFETIME", timedelta(minutes=15))
+        .total_seconds()
+    )
+    refresh_ttl = int(
+        getattr(settings, "SIMPLE_JWT", {})
+        .get("REFRESH_TOKEN_LIFETIME", timedelta(days=30))
+        .total_seconds()
+    )
+    if access:
+        response.set_cookie(
+            "cpay_access",
+            access,
+            max_age=access_ttl,
+            httponly=True,
+            secure=secure,
+            samesite="Strict",
+            domain=domain,
+            path="/",
+        )
+    if refresh:
+        response.set_cookie(
+            "cpay_refresh",
+            refresh,
+            max_age=refresh_ttl,
+            httponly=True,
+            secure=secure,
+            samesite="Strict",
+            domain=domain,
+            path="/api/v1/auth/",  # only sent to auth endpoints
+        )
+    return response

@@ -21,6 +21,8 @@ urlpatterns = [
     path("activity/", views.UnifiedActivityView.as_view(), name="activity"),
     path("transactions/export/", views.TransactionExportView.as_view(), name="transaction-export"),
     path("<uuid:transaction_id>/receipt/", views.TransactionReceiptView.as_view(), name="transaction-receipt"),
+    # B18: authenticated endpoint that returns a signed one-shot URL for the receipt.
+    path("<uuid:transaction_id>/receipt/sign/", views.TransactionReceiptSignView.as_view(), name="transaction-receipt-sign"),
     path("circuit-breaker/", views.CircuitBreakerStatusView.as_view(), name="circuit-breaker"),
     # Saved Paybills
     path("saved-paybills/", views.SavedPaybillListCreateView.as_view(), name="saved-paybills"),

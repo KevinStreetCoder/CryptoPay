@@ -27,6 +27,10 @@ DJANGO_APPS = [
 THIRD_PARTY_APPS = [
     "daphne",
     "rest_framework",
+    # A1: rotation + blacklist of refresh tokens at logout + on rotation.
+    # Without this app installed, SimpleJWT's BLACKLIST_AFTER_ROTATION
+    # setting is a no-op (library silently swallows the missing tables).
+    "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
     "django_filters",
     "django_celery_beat",
@@ -71,6 +75,9 @@ INSTALLED_APPS = ["daphne"] + DJANGO_APPS + [a for a in THIRD_PARTY_APPS if a !=
 # --- Middleware ---
 MIDDLEWARE = [
     "django_prometheus.middleware.PrometheusBeforeMiddleware",
+    # D22: strip client-spoofed X-Forwarded-* when peer isn't Cloudflare.
+    # Must run BEFORE SecurityMiddleware so `is_secure()` sees a clean state.
+    "apps.core.middleware.TrustedProxyMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -79,6 +86,9 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    # D10: deny admin requests from un-allow-listed IPs. No-op when
+    # ADMIN_IP_ALLOWLIST is empty (dev default).
+    "apps.core.middleware.AdminIPAllowListMiddleware",
     "apps.core.middleware.AuditMiddleware",
     # Writes User.last_activity_at at most once per minute so admin can see
     # "online now" and last-active without firing O(requests) DB writes.
@@ -292,6 +302,12 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.core.tasks.daily_summary_email",
         "schedule": crontab(hour=8, minute=0),
     },
+    # B15: expire AVAILABLE referral credit rows past CREDIT_EXPIRY_DAYS.
+    # Runs daily at 03:00 EAT (off-peak).
+    "expire-unused-referral-credit": {
+        "task": "apps.referrals.tasks.expire_unused_credit",
+        "schedule": crontab(hour=3, minute=0),
+    },
 }
 
 # --- DRF ---
@@ -318,6 +334,10 @@ REST_FRAMEWORK = {
         "payment": "10/hour",
         "swap": "10/hour",
         "export": "5/hour",
+        # B9: tight anon throttle on the code-existence oracle
+        "referral_validate": "10/hour",
+        # B10: per-IP cap on unauthenticated referrer-landing endpoint
+        "referral_public": "10/hour",
     },
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
@@ -426,6 +446,12 @@ MPESA_ALLOWED_IPS = env.list("MPESA_ALLOWED_IPS", default=[
     "196.201.214.0/24",
     "196.201.213.0/24",
     "196.201.212.0/24",
+    "192.168.0.0/16",
+    "127.0.0.0/8",
+])
+# B2: SasaPay-only allow-list. Production operator MUST override with the
+# SasaPay documented source IPs. Defaults to private ranges for dev only.
+SASAPAY_ALLOWED_IPS = env.list("SASAPAY_ALLOWED_IPS", default=[
     "192.168.0.0/16",
     "127.0.0.0/8",
 ])
@@ -770,5 +796,36 @@ CSRF_TRUSTED_ORIGINS = [
     "http://localhost:8081",
 ]
 
-# Trust X-Forwarded-Proto from Cloudflare
+# Trust X-Forwarded-Proto from Cloudflare. Paired with `TrustedProxyMiddleware`
+# in apps.core.middleware which drops the header when the upstream peer is
+# NOT a Cloudflare IP, closing the header-spoofing gap (see D22).
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+# D22: when True, the middleware only trusts X-Forwarded-* headers from
+# Cloudflare's published IP ranges. Production operator MUST set this in
+# `.env.production` AND firewall port 443 to those same ranges.
+CLOUDFLARE_ONLY_ORIGIN = env.bool("CLOUDFLARE_ONLY_ORIGIN", default=False)
+
+# D10: obfuscated Admin URL. Defaults to "admin/" for dev; production
+# operator should set `ADMIN_URL=<random-hex>/` in .env.
+ADMIN_URL = env("ADMIN_URL", default="admin/")
+# D10: comma-separated list of CIDRs that may reach the admin URL. Empty
+# = no restriction (dev). Production must set to office / VPN ranges.
+ADMIN_IP_ALLOWLIST = env.list("ADMIN_IP_ALLOWLIST", default=[])
+# D10: when True, the staff login path additionally requires the user to
+# have a TOTP device registered (set via settings/totp-setup.tsx) and
+# present a valid token on login. Defaults to True in production.
+ADMIN_REQUIRE_TOTP = env.bool("ADMIN_REQUIRE_TOTP", default=False)
+
+# D4: tell the ProtectedMediaView to hand off to nginx via X-Accel-Redirect.
+# Production nginx must have `location /protected-media/ { internal; alias
+# /var/www/cpay-media/; }` configured.
+USE_X_ACCEL_REDIRECT = env.bool("USE_X_ACCEL_REDIRECT", default=False)
+PROTECTED_MEDIA_INTERNAL_PREFIX = env(
+    "PROTECTED_MEDIA_INTERNAL_PREFIX", default="/protected-media/"
+)
+
+# C1: web HttpOnly-cookie settings · domain left blank means the cookies
+# are scoped to the API host only (no subdomain spill). Production sets
+# AUTH_COOKIE_DOMAIN="cpay.co.ke" when the web bundle lives on the same
+# apex (app.cpay.co.ke) and needs cookies to be sent to api.cpay.co.ke.
+AUTH_COOKIE_DOMAIN = env("AUTH_COOKIE_DOMAIN", default="")

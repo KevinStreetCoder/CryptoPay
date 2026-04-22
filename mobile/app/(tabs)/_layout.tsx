@@ -1,5 +1,5 @@
 import { Tabs } from "expo-router";
-import { View, Text, Platform, useWindowDimensions, Animated } from "react-native";
+import { View, Platform, useWindowDimensions, Animated } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRef, useEffect } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -10,7 +10,7 @@ import { usePendingDeposits } from "../../src/components/DepositTracker";
 const isWeb = Platform.OS === "web";
 const useNative = Platform.OS !== "web";
 
-/** Pulsing indicator dot for pending deposits */
+/** Pulsing indicator dot for pending deposits · rendered over the wallet icon. */
 function PendingBadge() {
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
@@ -37,11 +37,11 @@ function PendingBadge() {
     <Animated.View
       style={{
         position: "absolute",
-        top: 2,
-        right: 8,
-        width: 8,
-        height: 8,
-        borderRadius: 4,
+        top: -2,
+        right: -2,
+        width: 9,
+        height: 9,
+        borderRadius: 4.5,
         backgroundColor: "#F59E0B",
         opacity: pulseAnim,
         zIndex: 10,
@@ -50,85 +50,49 @@ function PendingBadge() {
   );
 }
 
-function TabIcon({
+/** Standalone icon wrapper · React Navigation calls this once per item and
+ * handles the focused / unfocused cross-fade at the tab-item level, so we
+ * do NOT stack an icon + label inside it (doing so used to cause the whole
+ * stack to render twice on web, doubling the effective tab-bar height and
+ * clipping the label). Labels are rendered via the separate `tabBarLabel`
+ * prop below, which is the idiomatic RN-Navigation pattern. */
+function TabIconOnly({
   name,
-  label,
   color,
   focused,
   showBadge,
+  size = 24,
 }: {
   name: keyof typeof Ionicons.glyphMap;
-  label: string;
   color: string;
   focused: boolean;
   showBadge?: boolean;
+  size?: number;
 }) {
-  const scaleAnim = useRef(new Animated.Value(focused ? 1 : 0.95)).current;
-  const bgOpacity = useRef(new Animated.Value(focused ? 1 : 0)).current;
+  const scaleAnim = useRef(new Animated.Value(focused ? 1.05 : 1)).current;
 
   useEffect(() => {
-    Animated.parallel([
-      Animated.spring(scaleAnim, {
-        toValue: focused ? 1 : 0.95,
-        tension: 300,
-        friction: 15,
-        useNativeDriver: useNative,
-      }),
-      Animated.timing(bgOpacity, {
-        toValue: focused ? 1 : 0,
-        duration: 200,
-        useNativeDriver: useNative,
-      }),
-    ]).start();
+    Animated.spring(scaleAnim, {
+      toValue: focused ? 1.05 : 1,
+      tension: 300,
+      friction: 15,
+      useNativeDriver: useNative,
+    }).start();
   }, [focused]);
 
   return (
     <Animated.View
       style={{
-        alignItems: "center",
-        justifyContent: "center",
         transform: [{ scale: scaleAnim }],
         position: "relative",
-        paddingHorizontal: 14,
-        paddingVertical: 6,
-        minWidth: 60,
-        minHeight: 44,
-        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
+        width: size + 8,
+        height: size + 4,
       }}
     >
-      {/* Pulsing badge for pending deposits */}
       {showBadge && <PendingBadge />}
-      {/* Full pill background covering icon + label */}
-      {focused && (
-        <Animated.View
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            borderRadius: 16,
-            backgroundColor: color + "18",
-            opacity: bgOpacity,
-          }}
-        />
-      )}
-      <Ionicons name={name} size={22} color={color} />
-      <Text
-        numberOfLines={1}
-        ellipsizeMode="clip"
-        style={{
-          color,
-          fontSize: 11,
-          fontFamily: focused ? "DMSans_600SemiBold" : "DMSans_500Medium",
-          marginTop: 2,
-          letterSpacing: 0.3,
-          textAlign: "center",
-          minWidth: 40,
-        }}
-      >
-        {label}
-      </Text>
+      <Ionicons name={name} size={size} color={color} />
     </Animated.View>
   );
 }
@@ -145,11 +109,23 @@ export default function TabLayout() {
   const tc = getThemeColors(isDark);
   const { hasPending: hasPendingDeposits } = usePendingDeposits();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
 
-  // On Android, insets.bottom is 0 for 3-button nav and small for gesture nav.
-  // We only need minimal padding · never add extra space above the system nav buttons.
-  const bottomPadding = isWeb ? 20 : Platform.OS === "android" ? insets.bottom : insets.bottom;
-  const tabBarHeight = (isWeb ? 76 : Platform.OS === "android" ? 56 : 88) + bottomPadding;
+  // Responsive sizing · phones (< 600), small tablets (< 900), and web phone
+  // viewports all need enough vertical room for icon + label without clipping.
+  const isSmallPhone = width < 380;
+  // iOS renders its own ~34 px home-indicator bar; Android gesture-nav has a
+  // similar inset via useSafeAreaInsets. 3-button Android has insets.bottom = 0.
+  const safeBottom = isWeb
+    ? 14
+    : Platform.OS === "ios"
+      ? Math.max(insets.bottom, 10)
+      : Math.max(insets.bottom, 8);
+  // Content area above the safe bottom · icon (24) + gap (4) + label (~14)
+  // + top/bottom breathing (10). 62 px content fits 24 + 4 + 14 = 42 of text
+  // + 20 padding comfortably on every device.
+  const contentHeight = isSmallPhone ? 58 : 64;
+  const tabBarHeight = contentHeight + safeBottom;
 
   return (
     <Tabs
@@ -166,13 +142,11 @@ export default function TabLayout() {
                 : "rgba(0, 0, 0, 0.06)",
               borderTopWidth: 1,
               height: tabBarHeight,
-              paddingBottom: bottomPadding,
-              paddingTop: Platform.OS === "android" ? 4 : 6,
-              paddingHorizontal: isWeb ? 40 : 0,
-              position: Platform.OS === "android" ? "absolute" as const : "relative" as const,
-              bottom: Platform.OS === "android" ? 0 : undefined,
-              left: Platform.OS === "android" ? 0 : undefined,
-              right: Platform.OS === "android" ? 0 : undefined,
+              paddingBottom: safeBottom,
+              paddingTop: 8,
+              // Give web phone viewports a comfortable side gutter; native
+              // phones hug the edges so touch targets stay large.
+              paddingHorizontal: isWeb ? 24 : 0,
               ...(isWeb
                 ? {
                     boxShadow: isDark
@@ -185,20 +159,32 @@ export default function TabLayout() {
                 : {
                     shadowColor: "#000",
                     shadowOffset: { width: 0, height: -3 },
-                    shadowOpacity: 0.25,
+                    shadowOpacity: 0.2,
                     shadowRadius: 10,
-                    elevation: 16,
+                    elevation: 12,
                   }) as any,
             },
         tabBarActiveTintColor: colors.primary[400],
-        tabBarInactiveTintColor: isDark ? "#556B82" : "#94A3B8",
-        tabBarShowLabel: false,
+        tabBarInactiveTintColor: isDark ? "#7A8FA5" : "#94A3B8",
+        tabBarShowLabel: true,
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontFamily: "DMSans_600SemiBold",
+          letterSpacing: 0.2,
+          marginTop: 2,
+          marginBottom: 0,
+          // Crucial: `includeFontPadding: false` removes the baseline padding
+          // Android adds around text, so descender letters (g, y, p) aren't
+          // clipped by the tab-bar bottom edge.
+          includeFontPadding: false,
+        },
         tabBarItemStyle: {
           flex: 1,
           paddingVertical: 0,
+          paddingTop: 2,
+          paddingBottom: 2,
           justifyContent: "center" as const,
           alignItems: "center" as const,
-          height: "100%" as any,
         },
       }}
     >
@@ -207,9 +193,8 @@ export default function TabLayout() {
         options={{
           title: "Home",
           tabBarIcon: ({ color, focused }) => (
-            <TabIcon
+            <TabIconOnly
               name={focused ? "home" : "home-outline"}
-              label="Home"
               color={color}
               focused={focused}
             />
@@ -221,9 +206,8 @@ export default function TabLayout() {
         options={{
           title: "Pay",
           tabBarIcon: ({ color, focused }) => (
-            <TabIcon
+            <TabIconOnly
               name={focused ? "send" : "send-outline"}
-              label="Pay"
               color={color}
               focused={focused}
             />
@@ -235,9 +219,8 @@ export default function TabLayout() {
         options={{
           title: "Wallet",
           tabBarIcon: ({ color, focused }) => (
-            <TabIcon
+            <TabIconOnly
               name={focused ? "wallet" : "wallet-outline"}
-              label="Wallet"
               color={color}
               focused={focused}
               showBadge={hasPendingDeposits}
@@ -248,11 +231,10 @@ export default function TabLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          title: "Profile",
+          title: "Me",
           tabBarIcon: ({ color, focused }) => (
-            <TabIcon
+            <TabIconOnly
               name={focused ? "person" : "person-outline"}
-              label="Me"
               color={color}
               focused={focused}
             />
