@@ -551,6 +551,16 @@ HOT_WALLET_ETH = env("HOT_WALLET_ETH", default="")
 HOT_WALLET_BTC = env("HOT_WALLET_BTC", default="")
 HOT_WALLET_SOL = env("HOT_WALLET_SOL", default="")
 
+# ─── Cold-storage receive addresses (NO private key on the server) ──────────
+# Generate these via hardware wallet / air-gapped signer. Server only sends
+# TO these addresses when hot exceeds threshold. Cold→hot replenishment is
+# admin-only (manual air-gapped broadcast, then log via admin endpoint).
+COLD_WALLET_TRON = env("COLD_WALLET_TRON", default="")
+COLD_WALLET_ETH = env("COLD_WALLET_ETH", default="")
+COLD_WALLET_POLYGON = env("COLD_WALLET_POLYGON", default="")
+COLD_WALLET_BTC = env("COLD_WALLET_BTC", default="")
+COLD_WALLET_SOL = env("COLD_WALLET_SOL", default="")
+
 # --- Withdrawal Configuration ---
 MINIMUM_WITHDRAWAL_AMOUNTS = {
     "USDT": "2.00",

@@ -298,6 +298,15 @@ def check_custody_thresholds(self):
                     )
                     actions_taken.append(f"{currency}:hot→warm:{amount}")
 
+                elif direction == "hot_to_cold":
+                    service.initiate_hot_to_cold_transfer(
+                        currency=currency,
+                        amount=amount,
+                        initiated_by="system",
+                        reason=reason,
+                    )
+                    actions_taken.append(f"{currency}:hot→cold:{amount}")
+
                 elif direction == "warm_to_hot":
                     service.initiate_warm_to_hot_transfer(
                         currency=currency,

@@ -10,7 +10,7 @@ from rest_framework.views import APIView
 from apps.blockchain.models import BlockchainDeposit
 from apps.blockchain.services import generate_deposit_address, get_next_address_index
 
-from .models import RebalanceOrder, Wallet
+from .models import CustodyTransfer, RebalanceOrder, Wallet
 from .serializers import (
     BlockchainDepositSerializer,
     CancelOrderSerializer,
@@ -353,6 +353,13 @@ class CustodyRebalanceView(APIView):
                         initiated_by=initiated_by,
                         reason=f"Manual rebalance by {initiated_by}: {rebalance['reason']}",
                     )
+                elif direction == "hot_to_cold":
+                    transfer = service.initiate_hot_to_cold_transfer(
+                        currency=curr,
+                        amount=amount,
+                        initiated_by=initiated_by,
+                        reason=f"Manual rebalance by {initiated_by}: {rebalance['reason']}",
+                    )
                 elif direction == "cold_to_warm":
                     results[curr] = {
                         "status": "requires_manual_cold_release",
@@ -376,3 +383,76 @@ class CustodyRebalanceView(APIView):
                 results[curr] = {"status": "error", "message": str(e)}
 
         return Response(results)
+
+
+class CustodyConfirmColdTransferView(APIView):
+    """
+    POST /wallets/custody/transfers/<uuid:transfer_id>/confirm/
+
+    Admin-only. Confirms a pending cold-storage transfer after it has been
+    signed and broadcast from the offline device. The admin pastes the final
+    on-chain tx hash; we credit the destination tier on our books.
+
+    Used for both:
+      - warm→cold (when no COLD_WALLET_<CHAIN> env is configured and the
+        transfer was queued as pending for offline signing)
+      - cold→warm / cold→hot (cold wallets are always offline; confirmation
+        is manual after the HSM operator broadcasts the tx)
+
+    Body:
+        { "tx_hash": "0x…", "admin_notes": "optional free text" }
+    """
+
+    permission_classes = [IsAdminUser]
+
+    def post(self, request, transfer_id):
+        tx_hash = (request.data.get("tx_hash") or "").strip()
+        admin_notes = (request.data.get("admin_notes") or "").strip()
+
+        if not tx_hash:
+            return Response(
+                {"error": "tx_hash is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        # Basic shape check — each chain's hash length varies but ≥16 chars
+        # is a reasonable "not obviously garbage" floor. Per-chain validation
+        # happens downstream in reconciliation.
+        if len(tx_hash) < 16:
+            return Response(
+                {"error": "tx_hash looks malformed (expected ≥16 chars)"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from .custody import CustodyService
+
+        service = CustodyService()
+        try:
+            transfer = service.confirm_cold_transfer(
+                transfer_id=str(transfer_id),
+                tx_hash=tx_hash,
+                admin_notes=f"confirmed by {request.user}: {admin_notes}" if admin_notes else f"confirmed by {request.user}",
+            )
+        except CustodyTransfer.DoesNotExist:
+            return Response(
+                {"error": "Transfer not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except ValueError as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except Exception as e:
+            logger.error(
+                f"Failed to confirm cold transfer {transfer_id}: {e}",
+                exc_info=True,
+            )
+            return Response(
+                {"error": "Confirmation failed — see server logs"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        return Response({
+            "status": "confirmed",
+            "transfer": CustodyTransferSerializer(transfer).data,
+        })

@@ -37,4 +37,9 @@ urlpatterns = [
     # Custody tier endpoints
     path("custody/report/", views.CustodyReportView.as_view(), name="custody-report"),
     path("custody/rebalance/", views.CustodyRebalanceView.as_view(), name="custody-rebalance"),
+    path(
+        "custody/transfers/<uuid:transfer_id>/confirm/",
+        views.CustodyConfirmColdTransferView.as_view(),
+        name="custody-confirm-cold-transfer",
+    ),
 ]

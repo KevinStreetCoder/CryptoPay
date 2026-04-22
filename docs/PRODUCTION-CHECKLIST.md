@@ -32,6 +32,22 @@
 | P6 | **C1 · drop JSON tokens from login body** | Login/register responses still carry `{tokens: {access, refresh}}` in JSON for backwards compat with older Expo builds. After ~2 weeks of the cookie cycle being live (enough time for all user devices to update), drop the JSON copy. | 2 weeks post-deploy |
 | P7 | **Credentials rotation from the handoff archive** | The 2026-04-20 `Cpay-handoff-resources/` archive contained Safaricom Consumer Key/Secret, TronGrid key, Alchemy key, Google OAuth client secret, `MPESA_INITIATOR_PASSWORD`. Archive is gitignored now, but rotate each at the provider before going public-beta. | Kevin |
 | P8 | **SMS + email i18n coverage** | `apps/core/i18n.py` has the catalog; `send_welcome_sms` + `send_transaction_notifications` use it. Remaining: `send_otp_to_email`, `send_security_alert`, `send_pin_change_alert`, `send_failed_transaction_alert_task`. Mechanical migration. | Follow-up sprint |
+| P9 | **COLD_WALLET env vars + seeding** | Generate cold-storage receive addresses on air-gapped device (TRON, ETH, Polygon, BTC, SOL). Set `COLD_WALLET_TRON/ETH/POLYGON/BTC/SOL` in `.env.production`. Deploy. Run `docker compose exec web python manage.py init_custody_tiers`. Once set, `check_custody_thresholds` beat task begins auto-sweeping excess hot balance direct to cold (skips warm) every 15 min. | Kevin |
+| P10 | **APK build: CMake/NDK failure** | Local WSL EAS build fails at `react-native-worklets:buildCMakeRelWithDebInfo[x86_64]` with `java.io.FileNotFoundException`. The 2026-04-18 APK (`/var/www/cpay-downloads/cryptopay.apk`) still serves. Fix options: (a) pin worklets to a known-good version in `mobile/package.json`, (b) use `eas build --platform android --profile production` on Expo's hosted infra instead of local WSL. | Follow-up sprint |
+| P11 | **Rotate SECRET_KEY-encrypted KMS fixtures** | 15 `apps/blockchain/test_kms.py` tests fail with `KMSDecryptionError: Failed to decrypt local data key: SECRET_KEY may have changed since encryption`. The fixtures were encrypted with a prior SECRET_KEY. Regenerate via `python manage.py generate_kms_fixtures` (or delete & re-fixture). Not blocking beta — these are unit tests of the KMS cache layer, not production code paths. | Follow-up sprint |
+
+### Runtime bugs fixed in the same deploy cycle
+
+| Bug | Symptom | Fix | Commit |
+|---|---|---|---|
+| Bottom-tab labels clipped on mobile viewport | "Home / Pay / Wallet / Me" letters cut off at baseline | Removed custom icon bounding box; switched to idiomatic `tabBarIcon`/`tabBarLabel` split; `justifyContent: flex-start`; bumped content height 64→70 | `d46b6dc` |
+| `ReferenceError: formatKes is not defined` on dashboard | Red ErrorBoundary "Something went wrong" after login/hard-refresh | `CryptoPriceChartsSection` + `MobileCryptoCharts` now destructure `useDisplayCurrency()` in their own scope instead of relying on `HomeScreenContent`'s closure | `4e9194f` |
+
+### Live deploy coordinates (end of 2026-04-22 pass)
+
+- **Backend HEAD:** `baf3bd4` → container rebuilt, `accounts.0015_user_language_notify_prefs` + 11 × `token_blacklist.*` migrations applied, `cryptopay_web` / `cryptopay_celery` reporting healthy.
+- **Web bundle:** `entry-e1ff873a3e36e0f86368bafb60832be8.js` (4.2 MB) served from `/var/www/cpay/` via nginx + Cloudflare.
+- **APK:** build in flight in WSL from `scripts/_build-apk-wsl.sh` at 2026-04-22 19:59:13 UTC · output will land at `/var/www/cpay-downloads/cryptopay.apk` · old 2026-04-18 build still serving until swap.
 
 ---
 
@@ -74,8 +90,8 @@ Items needed before the app can go live with real users and money.
 |---|------|--------|---------|
 | 13 | **VASP Registration** | ⚠️ Comment period | Draft regulations published. Public comment deadline **April 10, 2026** |
 | 14 | **Business Registration** | ⚠️ Pending | Submitted on eCitizen, awaiting approval |
-| 15 | **Privacy Policy** | ❌ Draft needed | Required for app stores and VASP compliance |
-| 16 | **Terms of Service** | ❌ Draft needed | Required for app stores |
+| 15 | **Privacy Policy** | ✅ Live | `mobile/app/privacy.tsx` ships with the app; hosted at `https://cpay.co.ke/privacy` for store reviews |
+| 16 | **Terms of Service** | ✅ Live | `mobile/app/terms.tsx` ships with the app; hosted at `https://cpay.co.ke/terms` |
 | 17 | **Excise Duty Compliance** | ✅ Implemented | 10% excise on platform fees per VASP Act |
 
 ### Security (Penetration Tested 2026-03-21)
@@ -108,7 +124,7 @@ Items needed before the app can go live with real users and money.
 ### Security
 | # | Item | Status | Details |
 |---|------|--------|---------|
-| 23 | **Hot/Warm/Cold Wallets** | ❌ Not implemented | Currently all funds in hot wallet. Need tiered security for production amounts |
+| 23 | **Hot/Warm/Cold Wallets** | ⚠️ Real sweep wired 2026-04-22 | `apps/wallets/custody.py` + `check_custody_thresholds` beat task broadcast on-chain from HOT to COLD when hot balance exceeds `hot_max_threshold`; COLD is receive-only (no key on server). Admin confirms cold→hot releases via `POST /wallets/custody/transfers/<id>/confirm/` after air-gapped broadcast. **To activate in prod**: (1) set `COLD_WALLET_TRON/ETH/POLYGON/BTC/SOL` env vars to pre-generated cold-storage receive addresses, (2) `docker compose exec web python manage.py init_custody_tiers`, (3) verify in `/wallets/custody/report/`. Covered by 16 regression tests in `apps/wallets/test_custody_tiering.py`. |
 | 24 | **Rate Limiting Tuning** | ✅ Configured | Nginx + Django throttling. May need tuning based on real traffic |
 | 25 | **Penetration Testing** | ❌ Recommended | Hire security auditor before handling real funds |
 | 26 | **M-Pesa IP Whitelist** | ✅ Implemented | Safaricom IP ranges configured in middleware |
