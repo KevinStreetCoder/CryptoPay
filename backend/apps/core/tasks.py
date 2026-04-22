@@ -472,10 +472,17 @@ def daily_summary_email(self):
     date_str = now.strftime("%Y-%m-%d")
 
     # --- New users ---
+    # Our User model inherits AbstractBaseUser (NOT AbstractUser), so there is
+    # no `date_joined` field — use the `created_at` column that the model
+    # defines via auto_now_add=True. The previous code used `date_joined`
+    # which raised FieldError on every run and produced "N/A" in the email.
     try:
         from apps.accounts.models import User
-        new_users_count = User.objects.filter(date_joined__gte=yesterday).count()
-    except Exception:
+        new_users_count = User.objects.filter(created_at__gte=yesterday).count()
+    except Exception as e:
+        # Log loudly so a future model rename can't silently break the email
+        # back to "N/A" without us noticing.
+        logger.error(f"Daily summary: new-users count query failed: {e}", exc_info=True)
         new_users_count = "N/A"
 
     # --- Transaction stats ---
