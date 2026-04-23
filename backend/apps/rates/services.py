@@ -253,9 +253,13 @@ class RateService:
         final_rate = Decimal(rate_info["final_rate"])
         flat_fee = Decimal(str(rate_info["flat_fee_kes"]))
 
-        # Calculate platform fee (spread revenue + flat fee)
-        spread_revenue = (kes_amount * Decimal(str(settings.PLATFORM_SPREAD_PERCENT)) / Decimal("100"))
-        platform_fee = spread_revenue + flat_fee
+        # Calculate platform fee (spread revenue + flat fee).
+        # Both components are real revenue the user pays, and excise duty
+        # is levied on the TOTAL (spread + flat) per VASP Act 2025.
+        spread_revenue = (
+            kes_amount * Decimal(str(settings.PLATFORM_SPREAD_PERCENT)) / Decimal("100")
+        ).quantize(Decimal("0.01"))
+        platform_fee = (spread_revenue + flat_fee).quantize(Decimal("0.01"))
 
         # 10% excise duty on platform fees (VASP Act 2025, remitted to KRA)
         excise_rate = Decimal(str(settings.EXCISE_DUTY_PERCENT)) / Decimal("100")
@@ -273,7 +277,18 @@ class RateService:
             "kes_amount": str(kes_amount),
             "crypto_amount": str(crypto_amount),
             "exchange_rate": str(final_rate),
-            "fee_kes": str(flat_fee),
+            # `fee_kes` is the **total** platform fee the user pays
+            # (spread revenue baked into rate + flat fee). This is what
+            # Transaction.fee_amount must record so KRA reconciliation
+            # on the 10 % excise duty matches what we remit. Previously
+            # `fee_kes` returned only the flat component, under-reporting
+            # the true fee by (PLATFORM_SPREAD_PERCENT × kes_amount) — a
+            # KRA audit trail risk.
+            "fee_kes": str(platform_fee),
+            # Explicit breakdown for receipts / admin dashboards.
+            "flat_fee_kes": str(flat_fee),
+            "spread_revenue_kes": str(spread_revenue),
+            "platform_fee_kes": str(platform_fee),
             "excise_duty_kes": str(excise_duty),
             "total_kes": str(total_kes),
             "user_id": user_id,  # Bind quote to requesting user

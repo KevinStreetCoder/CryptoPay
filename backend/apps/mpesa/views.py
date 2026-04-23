@@ -386,10 +386,22 @@ class C2BValidationView(APIView):
         if getattr(user, "is_suspended", False):
             return Response({"ResultCode": "C2B00014", "ResultDesc": "Account suspended"})
 
-        # Check daily limit
+        # Check daily limit.
+        #
+        # `check_daily_limit` returns a DailyLimitLock that holds a per-user
+        # 30 s Redis lock. In the outbound payment path the caller is meant
+        # to keep the lock until the Transaction is committed (that's the
+        # B4 TOCTOU fix). But in C2B *validation* we do NOT create a
+        # Transaction here — the confirmation callback does — so the lock
+        # must be released immediately. Previously the return value was
+        # dropped, which meant every user who tried to pay a Paybill
+        # triggered a 30 s self-lockout on their own account. Use the
+        # context-manager form so the lock is always released, including
+        # on exceptions.
         try:
             from apps.payments.services import check_daily_limit, DailyLimitExceededError
-            check_daily_limit(user, kes_amount)
+            with check_daily_limit(user, kes_amount):
+                pass
         except DailyLimitExceededError:
             return Response({"ResultCode": "C2B00013", "ResultDesc": "Daily transaction limit exceeded"})
         except Exception:

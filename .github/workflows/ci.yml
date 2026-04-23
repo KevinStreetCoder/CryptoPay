@@ -12,11 +12,65 @@ concurrency:
 
 jobs:
   # ──────────────────────────────────────────────
+  # Secret scanner — runs first, fails fast
+  # ──────────────────────────────────────────────
+  # Cheap gate so a leaked token / keystore / private key never gets as
+  # far as the backend or frontend job. Patterns are narrow (false
+  # positives would block every PR) but cover the credential shapes we
+  # actually handle: EAS Android keystore manifest, private-key PEM,
+  # Expo / GitHub / AWS tokens, and accidentally-committed `.env` files.
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history so we can diff against base
+
+      - name: Grep for leaked credentials
+        shell: bash
+        run: |
+          set -e
+          PATHS="backend mobile scripts docs .github"
+
+          PATTERNS=(
+            'keystoreBase64":"[A-Za-z0-9+/=]{100,}"'
+            'keystorePassword":"[A-Za-z0-9]+"'
+            'keyPassword":"[A-Za-z0-9]+"'
+            'BEGIN (RSA|EC|OPENSSH|PRIVATE) KEY'
+            'AKIA[0-9A-Z]{16}'
+            'exph_[A-Za-z0-9]{30,}'
+            'ghp_[A-Za-z0-9]{36}'
+          )
+
+          FOUND=0
+          for p in "${PATTERNS[@]}"; do
+            if grep -RnaE \
+                 --include='*.py' --include='*.ts' --include='*.tsx' \
+                 --include='*.js'  --include='*.json' \
+                 --include='*.sh' --include='*.md' --include='*.yml' \
+                 --exclude-dir='node_modules' --exclude-dir='dist' \
+                 "$p" $PATHS 2>/dev/null; then
+              echo "::error ::Pattern matched: $p"
+              FOUND=1
+            fi
+          done
+
+          # Dev/prod .env files must never land in git. `.env.example` is fine.
+          if git ls-files | grep -E '(^|/)\.env$' | grep -v '\.env\.example$'; then
+            echo "::error ::A committed .env file was detected."
+            FOUND=1
+          fi
+
+          exit $FOUND
+
+  # ──────────────────────────────────────────────
   # Backend: Django 5 + DRF
   # ──────────────────────────────────────────────
   backend:
     name: Backend CI
     runs-on: ubuntu-latest
+    needs: secret-scan
 
     services:
       postgres:
@@ -94,6 +148,7 @@ jobs:
   frontend:
     name: Frontend CI
     runs-on: ubuntu-latest
+    needs: secret-scan
 
     defaults:
       run:
@@ -143,3 +198,18 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           tags: cryptopay-backend:${{ github.sha }}
+
+  # ──────────────────────────────────────────────
+  # Deploy gate · single green-light job
+  # ──────────────────────────────────────────────
+  # The VPS deploy runbook (ops/deploy.sh) polls this job's conclusion
+  # via the GitHub API before pulling to prod. If any required job
+  # above failed, `deploy-gate` is skipped → deploy refuses. This is
+  # the "don't push bad code to production" contract.
+  deploy-gate:
+    name: Deploy gate
+    runs-on: ubuntu-latest
+    needs: [secret-scan, backend, frontend]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - run: echo "All required checks green — commit ${{ github.sha }} is safe to deploy."

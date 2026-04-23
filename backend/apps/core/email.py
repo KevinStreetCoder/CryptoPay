@@ -19,6 +19,53 @@ def _mask_phone(phone):
 
 
 # ---------------------------------------------------------------------------
+# User preference gating
+# ---------------------------------------------------------------------------
+# Centralised so every outbound message respects the same contract. Keep the
+# channel classification here so we don't accidentally silence a security
+# alert by flipping `notify_email_enabled=False` — users cannot opt out of
+# being told their account was accessed (regulatory + user-safety).
+
+# Emails that are safety-critical and IGNORE the notify_email_enabled gate:
+_SECURITY_EMAIL_TYPES = frozenset({
+    "otp",                    # must reach the user to let them log in
+    "pin_change",             # user needs to know their PIN changed
+    "pin_reset",              # ditto
+    "security_alert",         # new-device / suspicious-login
+    "account_suspended",      # regulatory notification
+    "kyc_status",             # document approved / rejected
+})
+
+
+def _email_allowed(user, kind: str = "transactional") -> bool:
+    """
+    Decide whether we should send an outbound email to this user.
+
+    - `kind="security"` (or any value in `_SECURITY_EMAIL_TYPES`) always
+      returns True when the user has an email address. These are
+      safety/compliance notifications, not marketing.
+    - `kind="transactional"` (default) respects `user.notify_email_enabled`.
+    - `kind="marketing"` also respects `user.notify_marketing_enabled` on
+      top of `notify_email_enabled`.
+
+    Always returns False if the user has no email address.
+    """
+    if not getattr(user, "email", ""):
+        return False
+    if kind in _SECURITY_EMAIL_TYPES or kind == "security":
+        return True
+    if kind == "marketing":
+        if not getattr(user, "notify_marketing_enabled", False):
+            return False
+    return bool(getattr(user, "notify_email_enabled", True))
+
+
+def _user_locale(user) -> str:
+    """Return the user's preferred language code, defaulting to 'en'."""
+    return getattr(user, "language", "") or "en"
+
+
+# ---------------------------------------------------------------------------
 # Reusable SMS helper (Unimatrix primary, eSMS secondary, AT tertiary)
 # ---------------------------------------------------------------------------
 
@@ -203,30 +250,39 @@ def send_otp_to_email(email, otp_code, phone=""):
 
 
 def send_otp_email(user, otp_code):
-    """Send OTP verification email directly.
+    """Send OTP verification email. OTPs are security-critical so the
+    per-user `notify_email_enabled` preference is intentionally IGNORED —
+    a user who opted out of email still needs to receive their login
+    code. Uses `user.language` for the subject if set.
 
     Args:
         user: User model instance (must have email, full_name, phone).
         otp_code: str, the 6-digit OTP code.
     """
-    if not user.email:
-        logger.warning(f"Cannot send OTP email: user {user.phone} has no email.")
+    if not _email_allowed(user, kind="otp"):  # gate only on "has email"
         return
 
     try:
+        locale = _user_locale(user)
         html = render_to_string("email/otp.html", {
             "full_name": user.full_name or user.phone,
             "otp_code": otp_code,
+            "locale": locale,
         })
+        subject = (
+            f"Cpay · Msimbo wako wa uthibitisho ni {otp_code}"
+            if locale == "sw"
+            else f"Cpay — Your verification code is {otp_code}"
+        )
         send_mail(
-            f"Cpay — Your verification code is {otp_code}",
+            subject,
             "",
             settings.DEFAULT_FROM_EMAIL,
             [user.email],
             html_message=html,
             fail_silently=True,
         )
-        logger.info(f"OTP email sent to {user.email}")
+        logger.info(f"OTP email sent to {user.email} ({locale})")
     except Exception as e:
         logger.error(f"Failed to send OTP email to {user.email}: {e}")
 
@@ -234,27 +290,42 @@ def send_otp_email(user, otp_code):
 def send_welcome_email(user):
     """Send welcome email to a newly registered user.
 
+    Respects `user.notify_email_enabled` — welcome is transactional, not
+    security-critical, so a user who opted out of email during signup
+    never sees this. Template is rendered in `user.language`.
+
     Args:
         user: User model instance (must have email, full_name, phone).
     """
-    if not user.email:
-        logger.warning(f"Cannot send welcome email: user {user.phone} has no email.")
+    if not _email_allowed(user, kind="transactional"):
         return
 
     try:
-        html = render_to_string("email/welcome.html", {
-            "full_name": user.full_name or "there",
-            "phone": user.phone,
-        })
+        locale = _user_locale(user)
+        # Prefer a locale-specific template if we have one; fall back to the
+        # canonical English template otherwise. This keeps existing deploys
+        # (which may not yet ship sw.html) working unchanged.
+        template_name = f"email/welcome.{locale}.html"
+        try:
+            html = render_to_string(template_name, {
+                "full_name": user.full_name or "there",
+                "phone": user.phone,
+            })
+        except Exception:
+            html = render_to_string("email/welcome.html", {
+                "full_name": user.full_name or "there",
+                "phone": user.phone,
+            })
+        subject = "Karibu Cpay!" if locale == "sw" else "Welcome to CPay!"
         send_mail(
-            "Welcome to CPay!",
+            subject,
             f"Welcome to CPay, {user.full_name}!",
             settings.DEFAULT_FROM_EMAIL,
             [user.email],
             html_message=html,
             fail_silently=True,
         )
-        logger.info(f"Welcome email sent to {user.email}")
+        logger.info(f"Welcome email sent to {user.email} ({locale})")
     except Exception as e:
         logger.error(f"Failed to send welcome email to {user.email}: {e}")
 
@@ -262,12 +333,16 @@ def send_welcome_email(user):
 def send_transaction_receipt(user, transaction):
     """Send transaction receipt email directly.
 
+    Transactional · respects `user.notify_email_enabled`. For the async,
+    retry-backed version prefer `send_transaction_receipt_task` in
+    `apps.core.tasks` — this sync path is only used for same-request
+    delivery during tests.
+
     Args:
         user: User model instance.
         transaction: Transaction model instance.
     """
-    if not user.email:
-        logger.warning(f"Cannot send receipt: user {user.phone} has no email.")
+    if not _email_allowed(user, kind="transactional"):
         return
 
     ref = str(transaction.id)[:8].upper()
@@ -331,32 +406,45 @@ def send_transaction_receipt(user, transaction):
 def send_kyc_status_email(user, document_type, status, rejection_reason=None):
     """Send KYC document status update email directly.
 
+    KYC status updates are safety-critical (regulatory — the user must be
+    told whether their identity verification was accepted) so the per-user
+    `notify_email_enabled` gate is intentionally ignored. Subject uses
+    `user.language` when set.
+
     Args:
         user: User model instance.
         document_type: str, e.g. 'national_id', 'passport', 'selfie'.
         status: str, e.g. 'approved', 'rejected'.
         rejection_reason: Optional str with reason for rejection.
     """
-    if not user.email:
-        logger.warning(f"Cannot send KYC status email: user {user.phone} has no email.")
+    if not _email_allowed(user, kind="kyc_status"):
         return
 
     try:
+        locale = _user_locale(user)
         html = render_to_string("email/kyc_status.html", {
             "full_name": user.full_name or user.phone,
             "document_type": document_type.replace("_", " ").title(),
             "status": status,
             "rejection_reason": rejection_reason,
+            "locale": locale,
         })
+        if locale == "sw":
+            sw_status = {"approved": "Imeidhinishwa", "rejected": "Imekataliwa"}.get(
+                status, status.title()
+            )
+            subject = f"Cpay · Hali ya KYC — {sw_status}"
+        else:
+            subject = f"CPay KYC Update — {status.title()}"
         send_mail(
-            f"CPay KYC Update — {status.title()}",
+            subject,
             "",
             settings.DEFAULT_FROM_EMAIL,
             [user.email],
             html_message=html,
             fail_silently=True,
         )
-        logger.info(f"KYC status email sent to {user.email} — {document_type}: {status}")
+        logger.info(f"KYC status email sent to {user.email} — {document_type}: {status} ({locale})")
     except Exception as e:
         logger.error(f"Failed to send KYC status email to {user.email}: {e}")
 
@@ -485,7 +573,11 @@ def send_transaction_notifications(user, transaction):
 
 
 def send_security_alert(user, event_type, ip_address, device_info):
-    """Send security alert email directly.
+    """Send security alert email.
+
+    Security alerts IGNORE `notify_email_enabled` — users cannot opt out of
+    being told their account was accessed. Subject is localised via
+    `user.language`.
 
     Args:
         user: User model instance.
@@ -494,8 +586,7 @@ def send_security_alert(user, event_type, ip_address, device_info):
         ip_address: str, IP address of the event origin.
         device_info: str, human-readable device description.
     """
-    if not user.email:
-        logger.warning(f"Cannot send security alert: user {user.phone} has no email.")
+    if not _email_allowed(user, kind="security_alert"):
         return
 
     from django.utils import timezone
@@ -618,12 +709,15 @@ def send_pin_reset_alert(user, ip_address=""):
 def send_deposit_confirmed_notification(user, deposit):
     """Send email + push notification when a blockchain deposit is confirmed.
 
+    Respects `notify_email_enabled` (transactional, not security-critical).
+    Push separately respects `notify_push_enabled`.
+
     Args:
         user: User model instance.
         deposit: BlockchainDeposit model instance with amount, currency, tx_hash.
     """
-    # Email notification (direct)
-    if user.email:
+    # Email notification — gated on transactional-email preference.
+    if _email_allowed(user, kind="transactional"):
         try:
             context = {
                 "full_name": user.full_name or user.phone,

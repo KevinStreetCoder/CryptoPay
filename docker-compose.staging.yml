@@ -1,0 +1,62 @@
+# Staging compose overlay — mirrors prod as closely as possible so the
+# "deploy here first, then prod" policy catches bad builds before they
+# reach paying users. Used by `scripts/deploy-staging.sh`.
+#
+# Differences from prod (intentional):
+#   - Listens on localhost:8800 instead of behind nginx (so the smoke
+#     script can curl directly without routing through Cloudflare).
+#   - Uses a sandboxed .env.staging file that maps:
+#         DATABASE_NAME       → cryptopay_staging
+#         DEPOSIT_WALLET_*    → staging receive addresses
+#         SASAPAY_BASE_URL    → SasaPay SANDBOX endpoint
+#         MPESA_BASE_URL      → Safaricom SANDBOX endpoint
+#         BLOCKCYPHER_API_TOKEN → the *inactive* backup token (so a
+#                                 stray test request never burns prod
+#                                 rate-limit budget)
+#   - WALLET_MNEMONIC points at a throwaway HD seed — never the prod
+#     one; any staging wallet compromised must not leak prod funds.
+#
+# Usage:
+#   1. Populate deploy/.env.staging on the VPS (sibling of .env.production).
+#   2. `docker compose -f docker-compose.yml -f docker-compose.staging.yml up -d`
+#   3. `bash scripts/smoke-staging.sh` — fails CI if any smoke check red.
+#   4. Only then `bash scripts/deploy-production.sh`.
+
+services:
+  web:
+    env_file:
+      - .env.staging
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings.production
+      - STAGING=true
+    ports:
+      # Host-bind on localhost:8800 so the smoke script (runs on the
+      # VPS, not via nginx) can hit it directly. nginx does NOT route
+      # any public hostname to this port.
+      - "127.0.0.1:8800:8000"
+    # Use the same image the prod stack uses; only env differs.
+    # `build: backend` is inherited from docker-compose.yml.
+
+  celery:
+    env_file:
+      - .env.staging
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings.production
+      - STAGING=true
+
+  celery-beat:
+    env_file:
+      - .env.staging
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings.production
+      - STAGING=true
+
+  db:
+    environment:
+      - POSTGRES_DB=cryptopay_staging
+    volumes:
+      # Isolated volume so staging data doesn't touch the prod volume.
+      - staging_db_data:/var/lib/postgresql/data
+
+volumes:
+  staging_db_data:
