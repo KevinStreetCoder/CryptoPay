@@ -51,6 +51,32 @@
 | Daily summary email stamped "N/A" for new users | Queried `User.date_joined`, field doesn't exist on our `AbstractBaseUser` subclass (uses `created_at`); `except Exception` silently swallowed the `FieldError` | Switched to `created_at`, widened email to Users + Logins + Activity + Transactions sections, dropped the `[Django]` subject prefix via `EMAIL_SUBJECT_PREFIX=""`, swapped section header colour from `#0f172a` (near-black on navy bg) to brand emerald | 2026-04-22 |
 | Splash/auth flows lacked motion | "Signing in…" / "Creating your account…" were static text | Wired `<Spinner variant="arc">` (design-pixel-exact — 14 % thickness, 28 % arc, emerald-translucent track) alongside each CTA label | 2026-04-23 |
 
+### Audit cycle 2 · 2026-04-23 · 5 findings closed + CI/staging
+
+| Finding | Fix | Regression tests |
+|---|---|---|
+| **A1** · Welcome / OTP / security / KYC emails bypassed `notify_email_enabled` + `user.language` | `core/email.py` gained `_email_allowed(user, kind)` with an explicit allow-list of security-critical kinds (`otp`, `pin_change`, `pin_reset`, `security_alert`, `kyc_status`) that always send even when the user has opted out. Transactional senders (welcome, receipt, deposit-confirmed) now gate on `notify_email_enabled`. Subjects localise via `user.language`; template lookup tries `f"email/welcome.{locale}.html"` then falls back to en. | 8 tests in `apps/core/test_email_gating.py` |
+| **A2** · Quote `fee_kes` under-reported the real platform fee by `PLATFORM_SPREAD_PERCENT × kes_amount` — KRA excise reconciliation risk | `rates/services.py`: `fee_kes` now equals the TOTAL platform fee (spread + flat); new explicit fields `flat_fee_kes`, `spread_revenue_kes`, `platform_fee_kes` surface the breakdown for receipts + admin dashboards. | — |
+| **A3** · DepositQuoteView promises a fee the saga never takes | **False positive.** Verified `apps/mpesa/tasks.py:279` applies `DEPOSIT_FEE_PERCENTAGE` on C2B. No change. | — |
+| **A4** · No clawback when a qualifying deposit was reversed — abuse vector (deposit 500 → trigger 50 bonus → reverse via M-Pesa support) | `referrals/signals.py` listens for `Transaction.status == REVERSED` on the referral's `qualifying_transaction` and enqueues `claw_back_reward`. Falls back to in-process execution if the Celery broker is unreachable so the clawback can't be silently lost. | 4 tests in `apps/referrals/test_clawback.py` |
+| **A5** · `C2BValidationView` leaked the 30 s per-user daily-limit Redis lock — every Paybill user self-locked for 30 s | Switched to context-manager form `with check_daily_limit(user, kes_amount):` so the lock releases on scope exit (the actual Transaction is created by the separate confirmation callback). | 2 tests in `apps/mpesa/test_c2b_lock_release.py` |
+
+### Testing pipeline + staging (new · 2026-04-23)
+
+The "don't push bad code to production" contract:
+
+| Piece | Location | What it enforces |
+|---|---|---|
+| **Secret scanner (CI)** | `.github/workflows/ci.yml` job `secret-scan` | Fails PR / push if the diff contains an Android keystore manifest blob, a private-key PEM, an AWS/Expo/GitHub token, or a committed `.env` file. Runs first; backend + frontend jobs `needs: secret-scan`. |
+| **Deploy gate (CI)** | Same file, job `deploy-gate` | Single green-light job that depends on every other job. Only fires on `push` to `main`. The VPS deploy script checks this conclusion via the GitHub API before pulling. |
+| **Staging overlay** | `docker-compose.staging.yml` | Same image as prod, isolated DB (`cryptopay_staging`), listens on `127.0.0.1:8800` so the smoke script can curl directly. Uses `.env.staging` with sandbox payment endpoints and the **backup** BlockCypher token so stray requests never burn prod rate-limit budget. |
+| **Staging smoke** | `scripts/smoke-staging.sh` | 6 fail-fast checks: health endpoint, migrations applied, `/apk/` 302, admin metrics gated, rates API returns a real KES number, and any `@pytest.mark.staging_smoke` tests. Exit 1 aborts the prod deploy. |
+| **Production runbook** | `scripts/deploy-production.sh` | Refuses to deploy unless (a) GitHub `deploy-gate` is `conclusion=success` for the target SHA AND (b) `smoke-staging.sh` exits 0. Then migrates, rebuilds, restarts, and post-deploy pings `cpay.co.ke/health/`. |
+
+### Decision doc · balance-lock feature
+
+`docs/research/BALANCE-LOCK.md` — 2,400-word viability assessment. **Verdict: red-light the hedge; green-light a stop-loss order instead.** Five independent disqualifying dimensions (actuarial upside-down, no hedge instrument, Kenyan regulatory exposure, custody/concentration risk, user problem already solved by swap-to-USDT / swap-to-KES / stop-loss). Recommended build order: stop-loss order (2-3 engineer-weeks, zero capital risk), then educational USDT "Stable" badge, revisit hedge only if (a) VASP derivative scope crystallises favourably, (b) liquid KES-denominated options venue emerges, (c) stop-loss usage data shows real unmet demand.
+
 ### New capabilities shipped this cycle
 
 | Capability | What it does | Files touched |
