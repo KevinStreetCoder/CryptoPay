@@ -44,6 +44,21 @@
 |---|---|---|---|
 | Bottom-tab labels clipped on mobile viewport | "Home / Pay / Wallet / Me" letters cut off at baseline | Removed custom icon bounding box; switched to idiomatic `tabBarIcon`/`tabBarLabel` split; `justifyContent: flex-start`; bumped content height 64→70 | `d46b6dc` |
 | `ReferenceError: formatKes is not defined` on dashboard | Red ErrorBoundary "Something went wrong" after login/hard-refresh | `CryptoPriceChartsSection` + `MobileCryptoCharts` now destructure `useDisplayCurrency()` in their own scope instead of relying on `HomeScreenContent`'s closure | `4e9194f` |
+| APK splash wordmark clipped to "Cpa" + dead strip under bottom tabs | Android clipped the `y` descender because `letterSpacing: -0.4` + missing `includeFontPadding`; tab-bar `Math.max(insets.bottom, 8)` floor added a phantom 8 px strip on 3-button nav | Swapped splash wordmark to `<Wordmark/>` component (proper DM Sans metrics); dropped the Android padding floor so tab-bar height honours real `insets.bottom` exactly | 2026-04-23 |
+| KMS local-fallback encrypt/decrypt round-trip failed | Every `LocalKMSManagerTest` raised `KMSDecryptionError: Failed to decrypt local data key` | Root-caused to `encrypt_seed` double-base64-encoding an already-base64 Fernet token; `decrypt_seed` only unwraps one layer. Removed the extra `base64.b64encode` pass | 2026-04-23 |
+| Referral history rows rendered as "·" + 0 KES | Backend serializer emitted `referee_display` / `reward_kes`; mobile destructured `referee_masked_name` / `referee_masked_phone` / `status_display` / `reward_amount_kes` | Expanded `ReferralHistoryItemSerializer` to emit both the new canonical names and the legacy aliases; pinned the contract in the docstring | 2026-04-23 |
+| `can_invite_more` monthly cap never triggered | `rewarded_at__month__gte=1` is trivially true on every month — cap was moot | Replaced with a real "start of current calendar month" bound in EAT | 2026-04-23 |
+| Daily summary email stamped "N/A" for new users | Queried `User.date_joined`, field doesn't exist on our `AbstractBaseUser` subclass (uses `created_at`); `except Exception` silently swallowed the `FieldError` | Switched to `created_at`, widened email to Users + Logins + Activity + Transactions sections, dropped the `[Django]` subject prefix via `EMAIL_SUBJECT_PREFIX=""`, swapped section header colour from `#0f172a` (near-black on navy bg) to brand emerald | 2026-04-22 |
+| Splash/auth flows lacked motion | "Signing in…" / "Creating your account…" were static text | Wired `<Spinner variant="arc">` (design-pixel-exact — 14 % thickness, 28 % arc, emerald-translucent track) alongside each CTA label | 2026-04-23 |
+
+### New capabilities shipped this cycle
+
+| Capability | What it does | Files touched |
+|---|---|---|
+| APK download counter | Short URL `/apk/` increments a Redis counter then 302s to the nginx-served binary; admin dashboard renders the running total in the user-list header | `backend/apps/core/views.py` (`ApkDownloadView`, `ApkDownloadMetricsView`), `config/urls.py`, `mobile/app/landing.tsx`, `mobile/app/settings/admin-users.tsx` |
+| Platform fingerprint per user | Heartbeat middleware parses User-Agent + `X-Cpay-Web` sentinel; persists `apk` / `ios` / `web_mobile` / `web_desktop` on `User.last_platform`. Admin user list renders a tiny Ionicons glyph per row so ops can see at a glance how each user connects | `apps/accounts/models.py` (+migration `0016_user_last_platform`), `apps/core/middleware.py`, `apps/accounts/views.py`, `mobile/app/settings/admin-users.tsx` |
+| Hot → Cold custody on-chain sweep | Already shipped 2026-04-22 (see Security row 23); COLD_WALLET_<CHAIN> env vars declared, `init_custody_tiers` mgmt command seeds SystemWallet rows, `check_custody_thresholds` beat task now broadcasts on-chain when excess hot balance is swept | `apps/wallets/custody.py`, `apps/wallets/tasks.py`, `apps/wallets/views.py` |
+| BlockCypher token rotation slot | `BLOCKCYPHER_API_TOKEN_BACKUP` env slot declared so an emergency rotation is a one-line env swap + restart, not a code change | `backend/config/settings/base.py`, `backend/.env.example` |
 
 ### Live deploy coordinates (end of 2026-04-22 pass)
 

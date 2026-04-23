@@ -27,15 +27,20 @@ const isWeb = Platform.OS === "web";
 export function SpinnerArc({
   size = 24,
   color = colors.primary[500],
-  trackColor = "rgba(255,255,255,0.12)",
+  // Track defaults to emerald-at-15% so the loader reads as a single-colour
+  // ring (design handoff: `rgba(16,185,129,0.15)`). Override with a neutral
+  // if placed on a non-ink surface that needs a stronger contrast track.
+  trackColor = "rgba(16,185,129,0.15)",
   strokeWidth,
 }: SpinnerArcProps) {
-  const sw = strokeWidth ?? Math.max(2, size / 10);
+  // Thickness 14 % of diameter + 28 % visible arc · pixel-exact to the
+  // design file's `SpinnerArc` export (logos.jsx). Previous values (10 %
+  // thickness / 25 % arc) made the spinner look thinner than the other two
+  // variants in the spinner system.
+  const sw = strokeWidth ?? size * 0.14;
   const r = (size - sw) / 2;
   const circumference = 2 * Math.PI * r;
-  // 25% visible arc · a pleasant fraction that reads as "progress," not
-  // a full ring (which would look like a finished circle).
-  const visible = circumference * 0.25;
+  const visible = circumference * 0.28;
   const gap = circumference - visible;
 
   const rot = useRef(new Animated.Value(0)).current;

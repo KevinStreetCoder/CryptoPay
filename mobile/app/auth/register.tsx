@@ -1166,18 +1166,27 @@ export default function RegisterScreen() {
               </View>
 
               {loading && (
-                <Text
+                <View
                   style={{
-                    color: tc.primary[300],
-                    fontSize: 14,
-                    fontFamily: "DMSans_500Medium",
-                    textAlign: "center",
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 10,
                     marginTop: 16,
                   }}
-                  maxFontSizeMultiplier={1.3}
                 >
-                  Creating your account...
-                </Text>
+                  <Spinner variant="arc" size={18} color={tc.primary[300]} />
+                  <Text
+                    style={{
+                      color: tc.primary[300],
+                      fontSize: 14,
+                      fontFamily: "DMSans_500Medium",
+                    }}
+                    maxFontSizeMultiplier={1.3}
+                  >
+                    Creating your account...
+                  </Text>
+                </View>
               )}
 
               <View

@@ -86,10 +86,17 @@ class MyReferralView(APIView):
         ).count()
 
         # Can this user invite more? Gated by monthly + lifetime cap.
+        # Bug fix 2026-04-23: the prior filter used
+        # `rewarded_at__month__gte=1` which is trivially true (every
+        # month is ≥1), so the monthly cap never triggered. Replace
+        # with a real "start of current calendar month" bound in the
+        # server's configured timezone (Africa/Nairobi).
+        now = timezone.now()
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         now_month_count = Referral.objects.filter(
             referrer=request.user,
             status=Referral.Status.REWARDED,
-            rewarded_at__month__gte=1,  # crude proxy; kept simple
+            rewarded_at__gte=month_start,
         ).count()
         lifetime_rewarded = Referral.objects.filter(
             referrer=request.user, status=Referral.Status.REWARDED

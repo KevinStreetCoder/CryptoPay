@@ -128,13 +128,20 @@ export default function TabLayout() {
   const isSmallPhone = width < 380;
   // iOS renders its own ~34 px home-indicator bar; Android gesture-nav has a
   // similar inset via useSafeAreaInsets. 3-button Android has insets.bottom = 0.
-  // Web viewports (no system nav) still get a small pad so the last baseline
-  // doesn't sit flush against the viewport edge.
+  //
+  // Bug fix 2026-04-23: on Android 3-button nav the previous `Math.max(insets.bottom, 8)`
+  // floor forced a phantom 8 px empty strip below the icons/labels because
+  // the tab bar's height always grew by `safeBottom` but the icons only draw
+  // in the `contentHeight` region. Users saw a dead dark band between the
+  // last label baseline and the system nav. Dropping the Android floor to 0
+  // lets 3-button phones paint right to the edge; gesture-nav phones still
+  // respect `insets.bottom` correctly. Web keeps its 12 px gutter so the
+  // label isn't flush with the viewport.
   const safeBottom = isWeb
     ? 12
     : Platform.OS === "ios"
       ? Math.max(insets.bottom, 10)
-      : Math.max(insets.bottom, 8);
+      : insets.bottom; // Android: honour real inset exactly, no floor
   const contentHeight = isSmallPhone ? 64 : 70;
   const tabBarHeight = contentHeight + safeBottom;
 

@@ -7,11 +7,17 @@ import time
 
 from django.core.cache import cache
 from django.db import connection
-from rest_framework.permissions import AllowAny
+from django.http import HttpResponseRedirect
+from django.views.decorators.cache import never_cache
+from rest_framework.permissions import AllowAny, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 logger = logging.getLogger(__name__)
+
+# Redis counter key for APK download tallies. Incremented once per request
+# to the short-URL redirect view below; read by the admin metrics endpoint.
+APK_DOWNLOAD_COUNTER_KEY = "metrics:apk_downloads_total"
 
 
 class HealthCheckView(APIView):
@@ -95,3 +101,62 @@ class HealthCheckView(APIView):
         except Exception as e:
             logger.error(f"Celery health check failed: {e}")
             return {"status": "unhealthy", "error": str(e)}
+
+
+# ────────────────────────────────────────────────────────────────
+# APK download tracking
+# ────────────────────────────────────────────────────────────────
+
+class ApkDownloadView(APIView):
+    """
+    GET /apk  →  302 to /download/cryptopay.apk, after incrementing a
+    Redis counter. The actual file is served by nginx (fast path, no
+    Django in the data path). We only participate in the redirect so
+    we can count, without bloating nginx with a custom Lua module.
+
+    Counter key: `metrics:apk_downloads_total` (integer).
+    Read via the admin metrics endpoint below.
+
+    We intentionally do NOT require auth here — anonymous downloads
+    are the norm for public APK distribution before Play Store gating.
+    """
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def get(self, request):
+        try:
+            # `cache.incr` raises if the key hasn't been set yet.
+            cache.incr(APK_DOWNLOAD_COUNTER_KEY)
+        except ValueError:
+            # First-ever hit. Seed to 1.
+            cache.set(APK_DOWNLOAD_COUNTER_KEY, 1)
+        except Exception as e:  # noqa: BLE001
+            # Never let a telemetry failure block the download itself.
+            logger.warning(f"APK download counter incr failed: {e}")
+
+        # 302 (temporary) so caching proxies don't memoise the redirect
+        # destination past a URL rotation.
+        resp = HttpResponseRedirect("/download/cryptopay.apk")
+        resp["Cache-Control"] = "no-store"
+        return resp
+
+
+class ApkDownloadMetricsView(APIView):
+    """
+    GET /api/v1/admin/metrics/apk-downloads/  →  { "total": N }
+
+    Admin-only. Reads the Redis counter maintained by ApkDownloadView.
+    Cheap enough that the admin dashboard can refresh it every tile
+    refresh without pressure on the cache.
+    """
+
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        total = cache.get(APK_DOWNLOAD_COUNTER_KEY, 0)
+        try:
+            total = int(total)
+        except (TypeError, ValueError):
+            total = 0
+        return Response({"total": total})

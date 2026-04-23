@@ -64,6 +64,10 @@ export function SpinnerCoinC({ size = 56, color = colors.primary[500] }: Spinner
   const barRx = s * 0.015;
 
   const rot = useRef(new Animated.Value(0)).current;
+  // Pulse is the Coin-C slot bar contracting horizontally (scaleX) · design
+  // file `cpayPulse` keyframe: 1 → 0.6 → 1 with matching opacity 1 → 0.6 → 1.
+  // Previously animated a uniform scale(1.15) which made the bar GROW rather
+  // than breathe inward, contradicting the design intent.
   const pulse = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -82,7 +86,7 @@ export function SpinnerCoinC({ size = 56, color = colors.primary[500] }: Spinner
     const pulseLoop = Animated.loop(
       Animated.sequence([
         Animated.timing(pulse, {
-          toValue: 1.15,
+          toValue: 0.6,
           duration: 700,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,

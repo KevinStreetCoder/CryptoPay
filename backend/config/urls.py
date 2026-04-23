@@ -9,7 +9,11 @@ from rest_framework.response import Response
 
 from apps.core.admin_views import admin_stats_dashboard, admin_sms_health
 from apps.core.media_views import ProtectedMediaView, public_media_forbidden
-from apps.core.views import HealthCheckView
+from apps.core.views import (
+    ApkDownloadMetricsView,
+    ApkDownloadView,
+    HealthCheckView,
+)
 
 
 @api_view(["GET"])
@@ -30,6 +34,15 @@ urlpatterns = [
     path("", api_root, name="api-root"),
     path("", include("django_prometheus.urls")),
     path("health/", HealthCheckView.as_view(), name="health-check"),
+    # Short-URL APK download (counts hits, 302s to the nginx-served file).
+    # Landing page links to /apk/ instead of /download/cryptopay.apk so the
+    # counter ticks. The actual binary is still served by nginx.
+    path("apk/", ApkDownloadView.as_view(), name="apk-download-tracker"),
+    path(
+        "api/v1/admin/metrics/apk-downloads/",
+        ApkDownloadMetricsView.as_view(),
+        name="admin-apk-metrics",
+    ),
     # Stats dashboards stay under the obfuscated prefix too.
     path(f"{_admin_prefix}stats/", admin_stats_dashboard, name="admin-stats"),
     path(f"{_admin_prefix}health/sms/", admin_sms_health, name="admin-sms-health"),

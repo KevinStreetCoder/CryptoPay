@@ -168,7 +168,43 @@ class ActivityHeartbeatMiddleware:
             return xff.split(",")[0].strip()
         return request.META.get("REMOTE_ADDR", "") or None
 
-    def _touch(self, user, ip):
+    @staticmethod
+    def _detect_platform(request) -> str:
+        """
+        Classify the client into one of: apk / ios / web_mobile / web_desktop.
+
+        Signals (priority order):
+          1. `X-Cpay-Web: 1` header → Expo web bundle (browser).
+          2. User-Agent contains "Expo" or the package id "ke.co.cryptopay"
+             → native build (Android APK or iOS).
+          3. Fallback: a mobile UA substring decides mobile vs desktop web.
+
+        Returns an empty string if nothing matches so we don't overwrite a
+        previously-set platform with a guess.
+        """
+        ua = (request.META.get("HTTP_USER_AGENT") or "").lower()
+        is_web_client = request.META.get("HTTP_X_CPAY_WEB") == "1"
+
+        # --- Native builds -----------------------------------------------
+        if not is_web_client and ("expo" in ua or "ke.co.cryptopay" in ua):
+            # iOS native builds include "CFNetwork" + "Darwin"; Android
+            # builds are "okhttp" + "Android".
+            if "android" in ua or "okhttp" in ua:
+                return "apk"
+            if "iphone" in ua or "darwin" in ua or "cfnetwork" in ua:
+                return "ios"
+            return "apk"  # conservative default for an unknown Expo build
+
+        # --- Web bundle (same Expo code, rendered in a browser) ----------
+        if is_web_client or "mozilla" in ua or "chrome" in ua or "safari" in ua:
+            mobile_hints = ("iphone", "ipod", "android", "mobile", "blackberry")
+            if any(h in ua for h in mobile_hints):
+                return "web_mobile"
+            return "web_desktop"
+
+        return ""
+
+    def _touch(self, user, ip, platform):
         """Write the heartbeat if the debounce window has elapsed."""
         lock_key = self.CACHE_KEY_FMT.format(user_id=user.id)
         # cache.add is atomic — only one request per minute wins the lock.
@@ -176,10 +212,13 @@ class ActivityHeartbeatMiddleware:
             return
         try:
             # update_fields = targeted write, no signals, no side-effects.
-            type(user).objects.filter(pk=user.pk).update(
-                last_activity_at=timezone.now(),
-                last_activity_ip=ip,
-            )
+            fields = {
+                "last_activity_at": timezone.now(),
+                "last_activity_ip": ip,
+            }
+            if platform:
+                fields["last_platform"] = platform
+            type(user).objects.filter(pk=user.pk).update(**fields)
         except Exception as e:  # noqa: BLE001 — never fail a request for a heartbeat
             logger.debug("user.heartbeat.failed", extra={"user_id": str(user.pk), "error": str(e)})
 
@@ -190,7 +229,11 @@ class ActivityHeartbeatMiddleware:
         user = getattr(request, "user", None)
         try:
             if user is not None and user.is_authenticated:
-                self._touch(user, self._client_ip(request))
+                self._touch(
+                    user,
+                    self._client_ip(request),
+                    self._detect_platform(request),
+                )
         except Exception:
             # Anonymous users, AnonymousUser.is_authenticated == False,
             # Django's getattr chain occasionally raises under custom

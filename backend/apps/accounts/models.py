@@ -71,6 +71,17 @@ class User(AbstractBaseUser, PermissionsMixin):
     # the user roamed between networks mid-session. Used by admin to show
     # current region.
     last_activity_ip = models.GenericIPAddressField(null=True, blank=True)
+    # Platform fingerprint of the last authenticated request. One of:
+    #   "apk"        — native Android APK build (expo-native User-Agent)
+    #   "ios"        — native iOS TestFlight / App Store build
+    #   "web_mobile" — PWA / mobile browser on the Expo web bundle
+    #   "web_desktop"— desktop browser
+    # Written by ActivityHeartbeatMiddleware from the User-Agent + the
+    # `X-Cpay-Web` sentinel the Expo web client sends. Admin user list
+    # renders a small icon next to each user.
+    last_platform = models.CharField(
+        max_length=16, blank=True, default="", db_index=True,
+    )
 
     # TOTP (authenticator app) — encrypted secret key
     totp_secret = models.CharField(max_length=255, blank=True, default="")

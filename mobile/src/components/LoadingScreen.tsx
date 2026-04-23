@@ -1,8 +1,9 @@
 import { useEffect, useRef } from "react";
-import { Text, Animated, Easing, Platform } from "react-native";
+import { Text, Animated, Easing, Platform, View } from "react-native";
 import { getThemeColors, colors } from "../constants/theme";
 import { useThemeMode } from "../stores/theme";
 import { SpinnerCoinC } from "./brand/SpinnerCoinC";
+import { Wordmark } from "./brand/Wordmark";
 
 const useNative = Platform.OS !== "web";
 
@@ -12,6 +13,12 @@ const useNative = Platform.OS !== "web";
  * Wise / Revolut / Cash App handle cold-load: the logo and wordmark are stable,
  * only the progress bar moves. This feels instant at ~200ms instead of the old
  * screen's perceived 4-6s due to six parallel loops.
+ *
+ * Historical bug (APK 2026-04-22): the wordmark was a bare <Text> with
+ * `letterSpacing: -0.4` and no includeFontPadding, which Android rendered
+ * as "Cpa" because the y-descender got clipped by the tight text box.
+ * Fixed by switching to the <Wordmark/> component (Coin-C image + proper
+ * DM Sans text with lineHeight that accommodates descenders).
  */
 export function LoadingScreen({ status }: { status?: string }) {
   const { isDark } = useThemeMode();
@@ -44,18 +51,11 @@ export function LoadingScreen({ status }: { status?: string }) {
           on-brand, respects reduced-motion. */}
       <SpinnerCoinC size={72} />
 
-      {/* Wordmark · matches the design brief (C in emerald, rest in text). */}
-      <Text
-        style={{
-          color: tc.textPrimary,
-          fontSize: 22,
-          fontFamily: "DMSans_700Bold",
-          letterSpacing: -0.4,
-          marginTop: 22,
-        }}
-      >
-        <Text style={{ color: colors.primary[500] }}>C</Text>pay
-      </Text>
+      {/* Wordmark · canonical brand component (Coin-C mark + "Cpay"). Uses
+          the design-file lineHeight so Android can't clip the y-descender. */}
+      <View style={{ marginTop: 24, paddingBottom: 4 /* descender headroom */ }}>
+        <Wordmark size={32} dark={isDark} />
+      </View>
 
       {/* Status · only renders if caller provided one. No generic filler. */}
       {status ? (
@@ -66,6 +66,11 @@ export function LoadingScreen({ status }: { status?: string }) {
             fontFamily: "DMSans_400Regular",
             marginTop: 16,
             opacity: 0.7,
+            // Android: `includeFontPadding: false` trims the default top/
+            // bottom padding; we add explicit `paddingBottom` so descenders
+            // in a status like "Verifying..." stay visible.
+            includeFontPadding: false,
+            paddingBottom: 2,
           }}
         >
           {status}

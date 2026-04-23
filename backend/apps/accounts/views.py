@@ -2506,6 +2506,9 @@ class AdminUserListView(APIView):
                 "last_activity_ip": u.last_activity_ip,
                 "last_login_ip": u.last_login_ip,
                 "last_login_country": u.last_login_country or None,
+                # Platform fingerprint ("apk" / "ios" / "web_mobile" /
+                # "web_desktop" / ""). Admin list renders an icon per row.
+                "last_platform": u.last_platform or "",
             })
 
         # Aggregate: total online right now (useful header stat).

@@ -918,7 +918,11 @@ export default function LandingPage() {
               </Text>
             </Pressable>
             <View style={{ flexDirection: "row", gap: 12, marginTop: 14, justifyContent: isDesktop ? "flex-start" : "center" }}>
-              <Pressable onPress={() => { const u = `https://cpay.co.ke/download/cryptopay.apk?v=${Date.now()}`; if (isWeb) { window.location.href = u; } else Linking.openURL(u); }}
+              <Pressable onPress={() => { /* /apk/ is a short URL on the Django
+                 app that increments a Redis counter then 302s to the nginx-
+                 served APK. Gives us a download tally in the admin dashboard
+                 without proxying the 110 MB binary through Django. */
+                 const u = `https://cpay.co.ke/apk/?v=${Date.now()}`; if (isWeb) { window.location.href = u; } else Linking.openURL(u); }}
                 style={({ hovered }: any) => ({ flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: hovered ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.03)", borderWidth: 1, borderColor: "rgba(255,255,255,0.1)", borderRadius: 12, paddingVertical: 8, paddingHorizontal: 14, ...(isWeb ? { cursor: "pointer", transition: "all 0.2s ease" } as any : {}) })}>
                 <Image source={STORE_ICONS.googlePlay} style={{ width: 20, height: 20 }} resizeMode="contain" />
                 <View><Text style={{ color: tc.textMuted, fontSize: 8, fontFamily: "DMSans_400Regular" }}>DOWNLOAD</Text><Text style={{ color: tc.textPrimary, fontSize: 12, fontFamily: "DMSans_600SemiBold" }}>Android APK</Text></View>

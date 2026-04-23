@@ -743,18 +743,28 @@ export default function LoginScreen() {
               </View>
 
               {loading && (
-                <Text
+                <View
                   style={{
-                    color: tc.primary[300],
-                    fontSize: 14,
-                    fontFamily: "DMSans_500Medium",
-                    textAlign: "center",
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 10,
                     marginTop: 20,
                   }}
-                  maxFontSizeMultiplier={1.3}
                 >
-                  Signing in...
-                </Text>
+                  {/* Branded Arc spinner · design default for auth flows */}
+                  <Spinner variant="arc" size={18} color={tc.primary[300]} />
+                  <Text
+                    style={{
+                      color: tc.primary[300],
+                      fontSize: 14,
+                      fontFamily: "DMSans_500Medium",
+                    }}
+                    maxFontSizeMultiplier={1.3}
+                  >
+                    Signing in...
+                  </Text>
+                </View>
               )}
 
               {/* Forgot PIN */}

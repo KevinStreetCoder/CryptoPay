@@ -47,6 +47,21 @@ interface AdminUser {
   last_activity_ip?: string | null;
   last_login_ip?: string | null;
   last_login_country?: string | null;
+  // Platform fingerprint: "apk" / "ios" / "web_mobile" / "web_desktop" / "".
+  last_platform?: string;
+}
+
+/** Map a backend platform fingerprint to a small Ionicons glyph + label.
+ * Kept as a pure helper so the row render stays lean and the icon mapping
+ * is easy to tweak without touching layout. */
+function platformIcon(platform?: string): { name: keyof typeof Ionicons.glyphMap; label: string } | null {
+  switch (platform) {
+    case "apk":         return { name: "logo-android",     label: "Android app" };
+    case "ios":         return { name: "logo-apple",       label: "iOS app"     };
+    case "web_mobile":  return { name: "phone-portrait-outline", label: "Mobile web" };
+    case "web_desktop": return { name: "desktop-outline",  label: "Desktop web" };
+    default: return null;
+  }
 }
 
 interface PresenceSummary {
@@ -84,6 +99,7 @@ export default function AdminUsersScreen() {
   const [distribution, setDistribution] = useState<KycDistribution[]>([]);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [presence, setPresence] = useState<PresenceSummary | null>(null);
+  const [apkDownloads, setApkDownloads] = useState<number | null>(null);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
@@ -115,6 +131,14 @@ export default function AdminUsersScreen() {
       setUsers(data.users || []);
       setTotal(data.total || 0);
       setPresence(data.presence || null);
+
+      // Fire the APK-downloads tile fetch in parallel — never block the
+      // user list on a telemetry read. A failure (Redis cold / route not
+      // deployed yet on an older backend) simply leaves the tile hidden.
+      api
+        .get("/admin/metrics/apk-downloads/")
+        .then((r) => setApkDownloads(Number(r.data?.total ?? 0)))
+        .catch(() => setApkDownloads(null));
     } catch (err) {
       const appError = normalizeError(err);
       toast.error(appError.title, appError.message);
@@ -277,6 +301,20 @@ export default function AdminUsersScreen() {
                 active today
               </Text>
             </View>
+            {apkDownloads !== null ? (
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+                accessibilityLabel="APK downloads total"
+              >
+                <Ionicons name="logo-android" size={12} color={colors.primary[400]} />
+                <Text style={{ color: tc.textPrimary, fontSize: 14, fontFamily: "DMSans_700Bold" }}>
+                  {apkDownloads.toLocaleString("en-KE")}
+                </Text>
+                <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_500Medium", letterSpacing: 0.5 }}>
+                  APK downloads
+                </Text>
+              </View>
+            ) : null}
             <Text
               style={{
                 color: tc.textMuted,
@@ -584,7 +622,7 @@ export default function AdminUsersScreen() {
                         </View>
                       </View>
 
-                      {/* Row 1b: presence meta · "Online · KE" / "Active 2h ago" */}
+                      {/* Row 1b: presence meta · "Online · KE · Android app" */}
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 }}>
                         <Text style={{ color: u.is_online ? colors.success : tc.textMuted, fontSize: 11, fontFamily: "DMSans_500Medium", letterSpacing: 0.2 }}>
                           {u.is_online ? "ONLINE NOW" : `Active ${timeAgo(u.last_activity_at)}`}
@@ -594,6 +632,20 @@ export default function AdminUsersScreen() {
                             · {u.last_login_country}
                           </Text>
                         ) : null}
+                        {/* Platform glyph · apk / ios / web-mobile / web-desktop. */}
+                        {(() => {
+                          const p = platformIcon(u.last_platform);
+                          if (!p) return null;
+                          return (
+                            <View
+                              style={{ flexDirection: "row", alignItems: "center", gap: 3 }}
+                              accessibilityLabel={p.label}
+                            >
+                              <Text style={{ color: tc.textMuted, fontSize: 11 }}>·</Text>
+                              <Ionicons name={p.name} size={12} color={tc.textMuted} />
+                            </View>
+                          );
+                        })()}
                       </View>
 
                       {/* Row 2: Phone + Tier */}
