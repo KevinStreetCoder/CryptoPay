@@ -431,20 +431,30 @@ class C2BConfirmationView(APIView):
         phone = request.data.get("MSISDN", "")
         bill_ref = request.data.get("BillRefNumber", "").strip()
 
-        # Idempotency: check if we already processed this TransID
-        if MpesaCallback.objects.filter(mpesa_receipt=trans_id).exists():
+        # Idempotency via atomic get_or_create + DB unique constraint.
+        # Prior code did `filter().exists()` followed by `create()` —
+        # two concurrent C2B POSTs with the same TransID could both pass
+        # the existence check and both create a MpesaCallback row,
+        # double-dispatching the Celery task. The partial-unique
+        # constraint on `mpesa_receipt` (for non-empty values) plus the
+        # atomic `get_or_create` closes the race at the DB layer.
+        # Audit cycle-2 HIGH 3 + MED 8.
+        if not trans_id:
+            return Response({"ResultCode": 0, "ResultDesc": "Missing TransID"})
+
+        callback, created = MpesaCallback.objects.get_or_create(
+            mpesa_receipt=trans_id,
+            defaults={
+                "result_code": 0,
+                "result_desc": "C2B confirmation",
+                "phone": phone,
+                "amount": amount,
+                "raw_payload": request.data,
+            },
+        )
+        if not created:
             logger.info(f"C2B confirmation already processed: {trans_id}")
             return Response({"ResultCode": 0, "ResultDesc": "Already processed"})
-
-        # Save raw callback immediately
-        MpesaCallback.objects.create(
-            result_code=0,
-            result_desc="C2B confirmation",
-            mpesa_receipt=trans_id,
-            phone=phone,
-            amount=amount,
-            raw_payload=request.data,
-        )
 
         # Process deposit asynchronously via Celery
         from .tasks import process_c2b_deposit

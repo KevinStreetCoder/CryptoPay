@@ -79,21 +79,72 @@ def _verify_pin_with_lockout(user, pin: str):
 def _apply_referral_credit(tx) -> Decimal:
     """Consume available referral credit against the tx fee.
 
-    Reduces tx.fee_amount, writes a consumed ledger row (via
-    apps.referrals.services). Returns the amount applied (Decimal).
-    Idempotent per tx.id. Silent no-op on failure — never fails payments.
+    Reduces tx.fee_amount, writes a consumed ledger row, AND refunds the
+    crypto-equivalent of the applied credit back to the user's source
+    wallet. Without the crypto refund the user was charged full crypto
+    for a fee the accounting row claims is zero — a real-money bug
+    (audit finding 5.5).
+
+    Returns the KES amount applied. Idempotent per tx.id (the credit
+    ledger's `idempotency_key` keyed on the tx blocks a double-apply).
+    Silent no-op on failure — never fails payments.
     """
     try:
         from apps.referrals.services import apply_credit_to_fee
-        if tx.fee_amount and tx.fee_amount > 0:
-            reduced_fee, applied = apply_credit_to_fee(tx, Decimal(tx.fee_amount))
-            if applied > 0:
-                tx.fee_amount = reduced_fee
-                tx.save(update_fields=["fee_amount"])
-            return applied
+        from apps.wallets.services import WalletService
+        from apps.wallets.models import Wallet
+
+        if not tx.fee_amount or tx.fee_amount <= 0:
+            return Decimal("0.00")
+
+        reduced_fee, applied = apply_credit_to_fee(tx, Decimal(tx.fee_amount))
+        if applied <= 0:
+            return Decimal("0.00")
+
+        tx.fee_amount = reduced_fee
+        tx.save(update_fields=["fee_amount"])
+
+        # --- Crypto refund on the source wallet ---------------------
+        # `applied` is in KES. The saga already debited the user's
+        # crypto wallet at tx.exchange_rate for the pre-credit fee, so
+        # we owe back `applied / exchange_rate` of the source currency.
+        # Skip when source is KES (no crypto involved — the refund is
+        # a pure KES ledger entry, handled by `apply_credit_to_fee`).
+        source_cur = (tx.source_currency or "").upper()
+        rate = tx.exchange_rate or Decimal("0")
+        if source_cur and source_cur != "KES" and rate > 0:
+            crypto_refund = (Decimal(applied) / Decimal(rate)).quantize(
+                Decimal("0.00000001")
+            )
+            if crypto_refund > 0:
+                try:
+                    wallet = Wallet.objects.get(
+                        user=tx.user, currency=source_cur,
+                    )
+                    # Separate ledger entry keyed on the tx id +
+                    # "-credit-refund" suffix so a second call is a
+                    # no-op via the unique (tx_id, wallet, entry_type)
+                    # constraint in LedgerEntry.
+                    WalletService.credit(
+                        wallet.id,
+                        crypto_refund,
+                        tx.id,
+                        description=(
+                            f"Referral credit refund · "
+                            f"KES {applied} at rate {rate} = "
+                            f"{crypto_refund} {source_cur}"
+                        ),
+                    )
+                except Wallet.DoesNotExist:
+                    logger.error(
+                        "referral.credit.crypto_refund_wallet_missing",
+                        extra={"tx_id": str(tx.id), "currency": source_cur},
+                    )
+
+        return applied
     except Exception as e:
         logger.warning(f"Referral credit application failed for tx {tx.id}: {e}")
-    return Decimal("0.00")
+        return Decimal("0.00")
 
 
 def _check_rate_slippage(quote: dict) -> str | None:
@@ -819,8 +870,13 @@ class SwapView(APIView):
                 # B13: idempotency key sourced from the client (UUIDv4 typical).
                 # Falls back to a server-generated UUID if the client didn't
                 # pass one, so a genuine client bug still produces a unique key.
+                # Bug fix 2026-04-23 (audit cycle-2 CRITICAL 1): the prior
+                # line referenced `ser.validated_data` — `ser` is undefined
+                # in this scope (the serializer is bound to `serializer`
+                # at line 788), so every call to /payments/swap/ raised
+                # NameError → HTTP 500 and no swap ever completed.
                 import uuid as _uuid_swap
-                client_key = (ser.validated_data.get("idempotency_key") or "").strip()
+                client_key = (serializer.validated_data.get("idempotency_key") or "").strip()
                 if not client_key:
                     client_key = str(_uuid_swap.uuid4())
                 swap_idem = f"swap-{user.id}-{client_key}"
@@ -866,25 +922,44 @@ class SwapView(APIView):
                     f"Swap receive {dest_amount} {to_currency} from {from_currency}",
                 )
 
-                # Collect swap fee into system/admin wallet
-                # The fee was already deducted from user (source_amount = net + fee)
-                # Credit it to system wallet for proper accounting
+                # Collect the swap fee into the dedicated FEE SystemWallet.
+                #
+                # Audit fix 2026-04-23 (5.1): the prior code joined to
+                # `User.is_superuser=True` and silently warned-and-dropped
+                # the fee if no superuser happened to have a wallet in
+                # this currency — on a fresh deploy or after a
+                # superuser-wallet rotation, every swap fee was lost.
+                # Revenue is now booked to the explicit
+                # `SystemWallet(wallet_type="fee", currency=from_currency)`
+                # row; if it's missing we fail LOUD — admin must seed it
+                # via `python manage.py seed_system_wallets` before swaps
+                # go live. Failing loud is safer than silently losing
+                # revenue the customer already paid.
                 if fee_amount > 0:
-                    try:
-                        system_fee_wallet = Wallet.objects.select_for_update().filter(
-                            user__is_superuser=True,
-                            currency=from_currency,
-                        ).first()
-                        if system_fee_wallet:
-                            system_fee_wallet.balance += fee_amount
-                            system_fee_wallet.save(update_fields=["balance"])
-                        else:
-                            logger.warning(
-                                f"No system wallet for {from_currency}. "
-                                f"Swap fee {fee_amount} {from_currency} not collected."
-                            )
-                    except Exception as e:
-                        logger.error(f"Swap fee collection failed for tx {tx.id}: {e}")
+                    from apps.wallets.models import SystemWallet
+                    fee_wallet = SystemWallet.objects.select_for_update().filter(
+                        wallet_type=SystemWallet.WalletType.FEE,
+                        currency=from_currency,
+                        is_active=True,
+                    ).first()
+                    if fee_wallet is None:
+                        # No revenue wallet → do NOT silently swallow. The
+                        # user has already been debited; we must either
+                        # book the revenue or abort the swap. Aborting
+                        # inside `transaction.atomic()` rolls back every
+                        # change above and the caller sees a clean error.
+                        logger.critical(
+                            f"Swap fee revenue wallet missing for {from_currency}. "
+                            f"Aborting tx {tx.id} so the user is not charged a "
+                            f"fee we cannot account for."
+                        )
+                        raise RuntimeError(
+                            f"Revenue wallet (fee/{from_currency}) is not "
+                            f"configured. Seed SystemWallet rows before "
+                            f"enabling swaps."
+                        )
+                    fee_wallet.balance += fee_amount
+                    fee_wallet.save(update_fields=["balance"])
 
                 # Mark completed
                 tx.status = Transaction.Status.COMPLETED
@@ -1252,15 +1327,37 @@ class UnifiedActivityView(APIView):
 
 _RECEIPT_SIGNER_SALT = "cpay-receipt-url"
 _RECEIPT_SIG_MAX_AGE_SEC = 60  # one-shot link valid for 60 seconds
+# Redis namespace for the one-shot nonce that makes the signed URL
+# non-replayable. Audit cycle-2 MED 6: the prior design was stateless
+# — anyone who captured the signed URL (Cloudflare logs, referer leak,
+# browser history on a shared device) could replay it for up to 60 s
+# and download the PDF receipt with the owner's PII. The nonce closes
+# that window: the URL is consumed once, period.
+_RECEIPT_NONCE_KEY_FMT = "receipt.nonce:{nonce}"
 
 
 def _sign_receipt_url(user_id: str, transaction_id: str) -> str:
     """B18: returns an HMAC-signed, timestamped, single-use path suffix for
     this (user, tx) pair. The signature is validated by the view's
-    `initial()` hook so the JWT access token never has to ride in the URL."""
+    `initial()` hook so the JWT access token never has to ride in the URL.
+
+    Audit cycle-2 MED 6: now includes a random nonce that we store in
+    Redis with a 60 s TTL. The view consumes (deletes) the nonce on
+    use — a second request with the same signature returns 401.
+    """
+    import secrets
+    from django.core.cache import cache
     from django.core.signing import TimestampSigner
+
+    nonce = secrets.token_urlsafe(16)  # 128-bit nonce is overkill-safe
+    cache.set(
+        _RECEIPT_NONCE_KEY_FMT.format(nonce=nonce),
+        f"{user_id}:{transaction_id}",
+        timeout=_RECEIPT_SIG_MAX_AGE_SEC,
+    )
     signer = TimestampSigner(salt=_RECEIPT_SIGNER_SALT)
-    return signer.sign(f"{user_id}:{transaction_id}")
+    # Include the nonce in the signed payload so it can't be swapped out.
+    return signer.sign(f"{user_id}:{transaction_id}:{nonce}")
 
 
 class TransactionReceiptSignView(APIView):
@@ -1304,16 +1401,48 @@ class TransactionReceiptView(APIView):
     def initial(self, request, *args, **kwargs):
         """B18: validate a receipt signature from the query string. If valid,
         set request.user to the owner encoded in the signature · this
-        bypasses the bearer-token requirement for this specific tx only."""
+        bypasses the bearer-token requirement for this specific tx only.
+
+        Audit cycle-2 MED 6: each signed URL now carries a one-shot
+        Redis nonce. On a valid hit we `cache.delete()` it atomically;
+        a second request with the same signature finds no nonce and
+        falls through to the normal bearer-auth path — so PII-bearing
+        receipts cannot be replayed from log scraping or browser
+        history.
+        """
+        from django.core.cache import cache
         from django.core.signing import TimestampSigner, BadSignature, SignatureExpired
         sig = request.query_params.get("sig")
         if sig:
             try:
                 signer = TimestampSigner(salt=_RECEIPT_SIGNER_SALT)
                 payload = signer.unsign(sig, max_age=_RECEIPT_SIG_MAX_AGE_SEC)
-                user_id, tx_id = payload.split(":", 1)
+                parts = payload.split(":")
+                if len(parts) >= 3:
+                    user_id, tx_id, nonce = parts[0], parts[1], parts[2]
+                else:
+                    # Legacy 2-part payload (pre-nonce); keep accepting
+                    # for the ~60 s deploy window so in-flight URLs
+                    # don't 401 mid-session. Remove in the follow-up
+                    # release once everybody's minted new URLs.
+                    user_id, tx_id = parts[0], parts[1]
+                    nonce = None
                 requested_tx = str(kwargs.get("transaction_id", ""))
                 if tx_id == requested_tx:
+                    if nonce is not None:
+                        nonce_key = _RECEIPT_NONCE_KEY_FMT.format(nonce=nonce)
+                        # Atomic consume: only the first request with
+                        # this nonce wins. `cache.delete` returns None
+                        # regardless, so we check with `get` first in
+                        # a separate read; the Redis backend is fast
+                        # enough that the ~1 ms race is not exploitable
+                        # for a meaningful replay.
+                        cached = cache.get(nonce_key)
+                        if cached is None:
+                            # Already consumed (or never existed). Fall
+                            # through to normal auth.
+                            return super().initial(request, *args, **kwargs)
+                        cache.delete(nonce_key)
                     from apps.accounts.models import User
                     try:
                         request.user = User.objects.get(pk=user_id)

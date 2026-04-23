@@ -105,24 +105,25 @@ class RequestOTPView(APIView):
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
-        # Tell the client which channels succeeded
+        # Tell the client which channels succeeded.
+        #
+        # Audit cycle-2 MED 7: the response shape previously varied —
+        # phone-that-exists-with-email-fallback sent an extra masked
+        # email + `email_fallback: true` field; phone-that-doesn't-exist
+        # got a plain message. That lets an attacker enumerate which
+        # phones have an email on file. Kenyan Data Protection Act
+        # flag. The response is now constant-shape: `{message, channels}`
+        # and nothing else, regardless of which delivery path succeeded.
         channels = []
         if sms_sent:
             channels.append("sms")
         if email_sent:
             channels.append("email")
 
-        response_data = {
+        return Response({
             "message": "OTP sent successfully",
             "channels": channels,
-        }
-        # If email was used (user may not know), hint at it
-        if email_sent and not sms_sent and email:
-            masked_email = email[0] + "***" + email[email.index("@"):]
-            response_data["message"] = f"Verification code sent to {masked_email}"
-            response_data["email_fallback"] = True
-
-        return Response(response_data)
+        })
 
 
 class RegisterView(APIView):

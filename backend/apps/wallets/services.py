@@ -86,8 +86,29 @@ class WalletService:
 
     @staticmethod
     @db_transaction.atomic
-    def lock_funds(wallet_id, amount: Decimal) -> None:
-        """Lock funds for a pending transaction (deducted from available but still in balance)."""
+    def lock_funds(wallet_id, amount: Decimal, transaction_id=None) -> None:
+        """
+        Lock funds for a pending transaction.
+
+        When `transaction_id` is passed, the lock is idempotent via a
+        Redis flag `wallet.lock:{tx}:{wallet}` held for 1 h — a second
+        call with the same (tx, wallet) pair is a no-op. This closes
+        the audit cycle-2 HIGH 2 finding where a saga retry could
+        double-lock (and leave the user permanently "insufficient
+        balance" until ops unlocked manually).
+
+        Callers without a transaction_id (legacy sites) keep the
+        non-idempotent behaviour; a future sweep should pass one.
+        """
+        from django.core.cache import cache
+
+        if transaction_id is not None:
+            lock_key = f"wallet.lock:{transaction_id}:{wallet_id}"
+            # cache.add is atomic SET NX; False means the lock has
+            # already been applied for this (tx, wallet) pair.
+            if not cache.add(lock_key, "1", timeout=3600):
+                return
+
         wallet = Wallet.objects.select_for_update().get(id=wallet_id)
 
         if wallet.available_balance < amount:
@@ -100,8 +121,25 @@ class WalletService:
 
     @staticmethod
     @db_transaction.atomic
-    def unlock_funds(wallet_id, amount: Decimal) -> None:
-        """Unlock previously locked funds (e.g., on saga compensation)."""
+    def unlock_funds(wallet_id, amount: Decimal, transaction_id=None) -> None:
+        """
+        Unlock previously locked funds (e.g., on saga compensation).
+
+        When `transaction_id` is passed, uses a matching Redis flag
+        `wallet.unlock:{tx}:{wallet}` to guard against a retried
+        compensator double-unlocking (the `max(0, …)` below already
+        floors to zero but would quietly suppress a real bug).
+        """
+        from django.core.cache import cache
+
+        if transaction_id is not None:
+            unlock_key = f"wallet.unlock:{transaction_id}:{wallet_id}"
+            if not cache.add(unlock_key, "1", timeout=3600):
+                return
+            # Release the matching lock flag so a future explicit
+            # relock for the same tx (e.g. saga re-run) works.
+            cache.delete(f"wallet.lock:{transaction_id}:{wallet_id}")
+
         wallet = Wallet.objects.select_for_update().get(id=wallet_id)
         wallet.locked_balance = max(Decimal("0"), wallet.locked_balance - amount)
         wallet.save(update_fields=["locked_balance"])

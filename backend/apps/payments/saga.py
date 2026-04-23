@@ -83,7 +83,12 @@ class PaymentSaga:
 
         with db_transaction.atomic():
             try:
-                WalletService.lock_funds(wallet.id, self.tx.source_amount)
+                # Pass the tx id so a saga retry after partial failure
+                # re-running step_lock_crypto is a no-op instead of
+                # double-locking (audit cycle-2 HIGH 2).
+                WalletService.lock_funds(
+                    wallet.id, self.tx.source_amount, transaction_id=self.tx.id,
+                )
             except InsufficientBalanceError:
                 raise SagaError("Insufficient crypto balance")
 
@@ -96,7 +101,7 @@ class PaymentSaga:
         wallet_id = self.tx.saga_data.get("locked_wallet_id")
         amount = Decimal(self.tx.saga_data.get("locked_amount", "0"))
         if wallet_id and amount > 0:
-            WalletService.unlock_funds(wallet_id, amount)
+            WalletService.unlock_funds(wallet_id, amount, transaction_id=self.tx.id)
             logger.info(f"Compensated: unlocked {amount} for tx {self.tx.id}")
 
     def step_convert(self):
@@ -108,7 +113,7 @@ class PaymentSaga:
 
         with db_transaction.atomic():
             # Unlock the funds first
-            WalletService.unlock_funds(wallet_id, amount)
+            WalletService.unlock_funds(wallet_id, amount, transaction_id=self.tx.id)
             # Debit the crypto from the user
             WalletService.debit(
                 wallet_id,

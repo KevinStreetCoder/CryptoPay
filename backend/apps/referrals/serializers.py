@@ -31,6 +31,12 @@ def _mask_name(name: str) -> str:
 
 
 class MyReferralSerializer(serializers.Serializer):
+    # Declared to match `MyReferralView`'s actual response shape —
+    # previously the view injected `bonus_per_referral_kes` and
+    # `referee_bonus_kes` without declaring them, so drf-spectacular's
+    # OpenAPI spec lied about the contract (audit cycle-2 MED 5).
+    bonus_per_referral_kes = serializers.CharField(required=False)
+    referee_bonus_kes = serializers.CharField(required=False)
     code = serializers.CharField()
     share_url = serializers.CharField()
     share_message_en = serializers.CharField()
@@ -93,12 +99,18 @@ class ReferralHistoryItemSerializer(serializers.ModelSerializer):
         return self.get_referee_masked_name(obj) or self.get_referee_masked_phone(obj)
 
     # ── Status ──────────────────────────────────────────────────────
+    # Must cover every value in `Referral.Status` — the test
+    # `test_all_referral_statuses_have_a_display_label` enforces
+    # exhaustiveness so a future status addition can't drift silently
+    # into a raw-title fallback. Previously only 5 of the 6 real
+    # values were mapped (audit cycle-2 HIGH 4).
     _STATUS_LABELS = {
         "pending": "Joined · hasn't paid a bill yet",
+        "signed_up": "Signed up · waiting for first bill payment",
         "qualified": "Paid their first bill · reward processing",
         "rewarded": "Reward paid",
-        "rejected": "Rejected (flagged as suspicious)",
-        "expired": "Expired (60-day attribution window passed)",
+        "clawed_back": "Reward clawed back (reversed or flagged)",
+        "rejected_fraud": "Rejected (flagged as suspicious)",
     }
 
     def get_status_display(self, obj) -> str:
