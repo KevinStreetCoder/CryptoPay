@@ -107,7 +107,12 @@ cpay-dist.tar.gz
 Temp delete/
 Temp_delete/
 cryptopay_full_playbook.md
-docs/research/
+docs/research/*
+# Exception: the balance-lock feature decision doc is reviewed content
+# (no raw secrets / no PII / small markdown), check it in. Must use
+# `/*` on the parent so the un-ignore below actually fires — git can't
+# reinstate files whose parent directory is ignored outright.
+!docs/research/BALANCE-LOCK.md
 docs/architecture/*.docx
 docs/*.pdf
 CryptoPay_Receipt_*.pdf
