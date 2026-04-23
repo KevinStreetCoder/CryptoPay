@@ -104,6 +104,35 @@ class DailySummaryEmailTest(TestCase):
                 self.assertIn("New Users", alternative)
                 self.assertNotIn(">N/A<", alternative)
 
+    def test_email_header_has_full_logo_lockup(self):
+        """
+        Regression: the email header must use the hosted Coin-C PNG
+        (not just wordmark text). Gmail and similar clients strip
+        inline SVG, so the image is the only treatment that makes the
+        brand mark visible across all recipients. The user reported on
+        2026-04-22 that their screenshot showed only the "Cpay" text
+        with no mark icon beside it.
+        """
+        User.objects.create_user(phone="+254711001100", pin="123456")
+        from apps.core.tasks import daily_summary_email
+
+        daily_summary_email.apply()
+        message = mail.outbox[0]
+
+        html = ""
+        for alt, mime in getattr(message, "alternatives", []):
+            if "html" in mime.lower():
+                html = alt
+                break
+
+        # Hosted PNG lockup must be in the header (Gmail-safe)
+        self.assertIn("https://cpay.co.ke/brand/logo-email-mark.png", html)
+        self.assertIn('alt="Cpay"', html)
+        # Wordmark text still there as text fallback
+        self.assertIn(">C</span>pay", html)
+        # Tagline
+        self.assertIn("Crypto to M-Pesa, Instantly", html)
+
     def test_section_headers_render_with_visible_color(self):
         """
         Every section label (Users/Logins/Activity/Transactions/Wallet Balances)

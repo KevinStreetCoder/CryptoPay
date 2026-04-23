@@ -221,7 +221,15 @@
       <div class="head">
         <div class="brand">
           <div class="brand-row">
-            <svg class="coin-c" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="30" height="30" style="display:block;">
+            <!--
+              Full brand lockup · Coin-C mark + "Cpay" wordmark.
+              Bumped to 40px (from 30px) to match the landing-page
+              EmailHeader proportions · the smaller size read as an
+              anonymous generic receipt, which isn't what branding
+              is for. WeasyPrint renders inline SVG natively so no
+              raster fallback needed here (unlike in email).
+            -->
+            <svg class="coin-c" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="40" height="40" style="display:block;">
               <circle cx="100" cy="100" r="72" fill="none" stroke="#10B981" stroke-width="22" stroke-linecap="round" stroke-dasharray="380 500" transform="rotate(-135 100 100)"/>
               <rect x="100" y="92" width="46" height="16" rx="3" fill="#10B981"/>
             </svg>

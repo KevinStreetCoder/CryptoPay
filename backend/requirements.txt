@@ -52,6 +52,10 @@ qrcode==8.0
 
 # PDF Generation
 weasyprint==68.1
+# SVG → PNG rendering (for email brand assets · renders Coin-C lockup to
+# PNG at deploy time so Gmail & co., which strip inline SVG, still see the
+# logo via an <img src="https://cpay.co.ke/brand/…"> hosted asset).
+cairosvg==2.7.1
 
 # Monitoring
 django-prometheus==2.3.1

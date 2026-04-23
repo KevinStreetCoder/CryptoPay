@@ -1,0 +1,18 @@
+# docker-compose.test.yml
+# Dev override that DROPS host-port bindings for db + redis so Docker can
+# start them even when the host machine already has native postgres/redis
+# services on 5432 / 6379. Container-to-container traffic still works via
+# the cryptopay_default network.
+#
+# Usage::
+#
+#   docker compose -f docker-compose.yml -f docker-compose.test.yml up -d
+#
+# This file is gitignored from VPS deploy — prod always uses the base
+# compose + docker-compose.prod.yml (which sets its own binding policy).
+
+services:
+  db:
+    ports: !reset []
+  redis:
+    ports: !reset []

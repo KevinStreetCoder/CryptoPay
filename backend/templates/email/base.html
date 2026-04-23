@@ -208,20 +208,45 @@
     <tr>
       <td align="center" style="padding: 20px 10px;">
         <table class="email-container" role="presentation" cellpadding="0" cellspacing="0" width="600" style="border-radius: 12px; overflow: hidden;">
-          <!-- Header — EmailHeader port (brand left, coin dots right) -->
+          <!--
+            Header — full brand lockup.
+            Uses an <img> pointing at a hosted PNG (rendered by
+            `manage.py render_brand_assets` and deployed under
+            /var/www/cpay-static/brand/ on the VPS). This is the only
+            treatment that survives Gmail, which strips inline SVG. The
+            inner cells use a table layout so Outlook + Gmail both align
+            the mark correctly.
+          -->
           <tr>
             <td class="header">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td class="header-brand" align="left" style="vertical-align:middle;">
-                    <span class="header-logo" style="display:inline-block;vertical-align:middle;">
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="40" height="40" style="display:block;">
-                        <circle cx="100" cy="100" r="72" fill="none" stroke="#10B981" stroke-width="22" stroke-linecap="round" stroke-dasharray="380 500" transform="rotate(-135 100 100)"/>
-                        <rect x="100" y="92" width="46" height="16" rx="3" fill="#10B981"/>
-                      </svg>
-                    </span>
-                    <h1><span>C</span>pay</h1>
-                    <p class="tagline">Crypto to M-Pesa, Instantly</p>
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td style="vertical-align:middle;padding-right:14px;">
+                          <!--[if !mso]><!-->
+                          <img src="https://cpay.co.ke/brand/logo-email-mark.png"
+                               width="48" height="48"
+                               alt="Cpay"
+                               style="display:block;border:0;outline:none;text-decoration:none;width:48px;height:48px;"/>
+                          <!--<![endif]-->
+                          <!--[if mso]>
+                          <!-- Outlook fallback: render the mark as inline SVG
+                               so desktop Outlook (which ignores <img src>
+                               until images are shown) still sees the logo. -->
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="48" height="48" style="display:block;">
+                            <circle cx="100" cy="100" r="72" fill="none" stroke="#10B981" stroke-width="22" stroke-linecap="round" stroke-dasharray="380 500" transform="rotate(-135 100 100)"/>
+                            <rect x="100" y="92" width="46" height="16" rx="3" fill="#10B981"/>
+                          </svg>
+                          <![endif]-->
+                        </td>
+                        <td style="vertical-align:middle;">
+                          <h1 style="margin:0;font-family:'DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:30px;font-weight:700;color:#f1f5f9;letter-spacing:-0.5px;line-height:1;"><span style="color:#10B981;">C</span>pay</h1>
+                          <p class="tagline" style="margin:6px 0 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:12px;color:#94a3b8;letter-spacing:0.3px;">Crypto to M-Pesa, Instantly</p>
+                        </td>
+                      </tr>
+                    </table>
                   </td>
                   <td class="header-coin-dots" align="right" style="vertical-align:middle;" width="80">
                     <span class="d" style="opacity:1"></span>

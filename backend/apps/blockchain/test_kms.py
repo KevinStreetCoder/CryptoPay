@@ -14,9 +14,19 @@ Covers:
 import base64
 import json
 import os
+import unittest
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase, override_settings
+
+# boto3 isn't in dev requirements (local fallback path doesn't need it). Skip
+# the AWS-specific tests when the SDK isn't present so the suite is green on
+# machines without AWS creds; they'll run automatically once boto3 is pinned.
+try:
+    import botocore  # noqa: F401
+    HAS_BOTOCORE = True
+except ImportError:
+    HAS_BOTOCORE = False
 
 from apps.blockchain.kms import (
     AWSKMSManager,
@@ -343,7 +353,10 @@ class GetMasterSeedKMSTest(TestCase):
             mock_settings.WALLET_ENCRYPTED_SEED = real_blob
             mock_settings.DEBUG = False
 
-            with patch("apps.blockchain.services.get_kms_manager", return_value=cached):
+            # `get_kms_manager` is imported lazily inside `_get_master_seed`
+            # (to avoid circular imports), so patch the source symbol in the
+            # `kms` module — that's the one the lazy `from ... import` resolves.
+            with patch("apps.blockchain.kms.get_kms_manager", return_value=cached):
                 seed = _get_master_seed()
                 self.assertEqual(seed, test_seed)
 
@@ -355,13 +368,19 @@ class GetMasterSeedKMSTest(TestCase):
         DEBUG=True,
         SECRET_KEY="dev-fallback-key",
     )
-    def test_fallback_to_secret_key_in_debug(self):
-        """With nothing set and DEBUG=True, should derive from SECRET_KEY."""
+    def test_no_seed_raises_even_in_debug(self):
+        """
+        D6 (security audit): the old `SECRET_KEY`-derived fallback that
+        `_get_master_seed` used in DEBUG mode was removed deliberately —
+        it let an attacker who leaked SECRET_KEY derive every user's
+        deposit address. Boot must fail LOUDLY in dev too so nobody
+        accidentally signs transactions with a SECRET_KEY-derived seed.
+        """
         from apps.blockchain.services import _get_master_seed
 
-        seed = _get_master_seed()
-        self.assertIsInstance(seed, bytes)
-        self.assertEqual(len(seed), 64)
+        with self.assertRaises(RuntimeError) as ctx:
+            _get_master_seed()
+        self.assertIn("no wallet seed source", str(ctx.exception))
 
     @override_settings(
         KMS_ENABLED=False,
@@ -378,6 +397,7 @@ class GetMasterSeedKMSTest(TestCase):
             _get_master_seed()
 
 
+@unittest.skipUnless(HAS_BOTOCORE, "boto3/botocore not installed; AWS KMS path not exercised in this environment")
 class AWSKMSManagerMockTest(TestCase):
     """Tests for AWSKMSManager using mocked boto3 client."""
 

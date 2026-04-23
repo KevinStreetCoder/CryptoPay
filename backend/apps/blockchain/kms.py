@@ -235,8 +235,14 @@ class AWSKMSManager(BaseKMSManager):
                 "encrypted_key": response["CiphertextBlob"],
             }
         except Exception as e:
-            if hasattr(e, "response"):
-                self._handle_aws_error(e)
+            # Network-level failures (ConnectTimeout, ReadTimeout,
+            # EndpointConnectionError, …) don't carry a `.response` attr
+            # because the HTTP cycle never reached the service, so the
+            # old `hasattr(e, "response")` guard quietly swallowed them
+            # into the generic KMSError instead of KMSNetworkError. Let
+            # `_handle_aws_error` classify by TYPE too — it already has
+            # the type-based branches for network errors.
+            self._handle_aws_error(e)
             raise KMSError(f"Failed to generate data key: {e}") from e
 
     def encrypt_seed(self, plaintext_seed: bytes) -> str:
@@ -397,11 +403,15 @@ class LocalKMSManager(BaseKMSManager):
             aesgcm = AESGCM(bytes(plaintext_dek))
             encrypted_seed = aesgcm.encrypt(iv, plaintext_seed, None)
 
-            # Step 3: Package as envelope blob
+            # Step 3: Package as envelope blob.
+            # `encrypted_dek` is already a Fernet token (URL-safe base64 bytes
+            # returned by fernet.encrypt). Storing the raw token as a string
+            # is correct — an extra base64 pass would make decrypt_seed fail
+            # because Fernet.decrypt cannot parse a double-encoded token.
             envelope = {
                 "v": _ENVELOPE_VERSION,
                 "provider": "local-fernet",
-                "encrypted_dek": base64.b64encode(encrypted_dek).decode("ascii"),
+                "encrypted_dek": encrypted_dek.decode("ascii"),
                 "iv": base64.b64encode(iv).decode("ascii"),
                 "encrypted_seed": base64.b64encode(encrypted_seed).decode("ascii"),
             }
