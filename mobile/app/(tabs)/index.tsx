@@ -9,6 +9,7 @@ import {
   Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
@@ -1188,6 +1189,12 @@ function HomeScreenContent() {
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
   const ts = getThemeShadows(isDark);
+  // React Navigation v7 bottom tabs are absolute-positioned; without
+  // this padding, the last crypto card / chart / tx row gets hidden
+  // under the tab bar. `useBottomTabBarHeight()` returns the exact
+  // height (including Android system-nav inset) so we can't over- or
+  // under-pad regardless of device.
+  const bottomTabBarHeight = useBottomTabBarHeight();
   // Display currency · switching to USD in settings makes every KES-based
   // number below (rate cards, summary bars, activity points) re-render in
   // USD using the live USD/KES rate.
@@ -1318,13 +1325,20 @@ function HomeScreenContent() {
           }
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{
-            // 24 px is enough breathing room above the tab bar's top
-            // edge on every Android phone. The previous `100` (intended
-            // to avoid content hiding behind the tab bar) was pure dead
-            // space — React Navigation gives the screen area *above*
-            // the bar, not overlapping it, so no extra padding is
-            // needed to "clear" the tabs.
-            paddingBottom: 24,
+            // React Navigation v7 renders the bottom tab bar as an
+            // ABSOLUTELY-POSITIONED overlay (not a sibling of the
+            // screen area), so scroll content flows UNDER the tab bar
+            // and the last 70-90 px is hidden behind it unless we
+            // reserve exactly the tab-bar's real height as padding.
+            //
+            // `useBottomTabBarHeight()` returns that exact number
+            // (content height + safe-area inset) so we don't have to
+            // hand-calculate. The extra +16 is a visual gutter between
+            // the last card and the top edge of the bar.
+            //
+            // Earlier attempts: `100` (too much → visible dead strip),
+            // `24` (too little → content hidden under the tabs).
+            paddingBottom: bottomTabBarHeight + 16,
           }}
           keyboardShouldPersistTaps="handled"
         >

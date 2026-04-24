@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { View, Text, Pressable, ScrollView, Platform, useWindowDimensions, Image, Alert, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -268,6 +269,7 @@ export default function PayScreen() {
   const { t } = useLocale();
   const toast = useToast();
   const queryClient = useQueryClient();
+  const bottomTabBarHeight = useBottomTabBarHeight();
 
   const isDesktop = isWeb && width >= 900;
   const isLargeDesktop = isWeb && width >= 1200;
@@ -335,8 +337,7 @@ export default function PayScreen() {
     <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 24 /* visual gutter only; tab
-                                   bar sits BELOW this scroll area */ }}
+        contentContainerStyle={{ paddingBottom: bottomTabBarHeight + 16 }}
       >
         {/* ── Header ─────────────────────────────────────────────────── */}
         <View

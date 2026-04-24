@@ -10,6 +10,7 @@ from rest_framework.response import Response
 from apps.core.admin_views import admin_stats_dashboard, admin_sms_health
 from apps.core.media_views import ProtectedMediaView, public_media_forbidden
 from apps.core.views import (
+    ApkDownloadHitView,
     ApkDownloadMetricsView,
     ApkDownloadView,
     HealthCheckView,
@@ -38,6 +39,10 @@ urlpatterns = [
     # Landing page links to /apk/ instead of /download/cryptopay.apk so the
     # counter ticks. The actual binary is still served by nginx.
     path("apk/", ApkDownloadView.as_view(), name="apk-download-tracker"),
+    # Side-effect-only counter tick · nginx mirrors direct hits on
+    # /download/cryptopay.apk here so the counter can't be bypassed by
+    # cache-busted URLs or anyone using the direct path.
+    path("apk/hit/", ApkDownloadHitView.as_view(), name="apk-download-hit"),
     path(
         "api/v1/admin/metrics/apk-downloads/",
         ApkDownloadMetricsView.as_view(),

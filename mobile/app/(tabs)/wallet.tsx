@@ -11,6 +11,7 @@ import {
   Animated,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter, useNavigation } from "expo-router";
@@ -150,6 +151,7 @@ export default function WalletScreen() {
   const router = useRouter();
   const { t } = useLocale();
   const { width } = useWindowDimensions();
+  const bottomTabBarHeight = useBottomTabBarHeight();
   const isWeb = Platform.OS === "web";
   const isDesktop = isWeb && width >= 900;
   const isLargeDesktop = isWeb && width >= 1200;
@@ -1524,6 +1526,7 @@ export default function WalletScreen() {
             />
           }
           showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: bottomTabBarHeight + 16 }}
         >
           <View style={contentStyle}>
             {/* Top spacing */}
@@ -2065,6 +2068,7 @@ export default function WalletScreen() {
           />
         }
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: bottomTabBarHeight + 16 }}
       >
         {/* Portfolio Value Card */}
         <View

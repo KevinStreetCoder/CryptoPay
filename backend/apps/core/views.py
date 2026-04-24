@@ -142,6 +142,43 @@ class ApkDownloadView(APIView):
         return resp
 
 
+class ApkDownloadHitView(APIView):
+    """
+    POST (or GET) /apk/hit/  →  204 No Content
+
+    Side-effect-only endpoint nginx's `mirror` directive targets when
+    someone hits `/download/cryptopay.apk` directly. Previously those
+    direct hits bypassed Django and never ticked the counter — the
+    admin dashboard stayed at 0 while real downloads happened.
+
+    nginx mirrors the sub-request to this URL; the 200 MB file is
+    still served from disk by nginx's `alias` location (no Django in
+    the data path). `mirror_request_body off` means we never see the
+    response body size — we only count the fact that a download
+    started.
+    """
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def get(self, request):
+        return self._tick()
+
+    def post(self, request):
+        return self._tick()
+
+    @staticmethod
+    def _tick():
+        from django.http import HttpResponse
+        try:
+            cache.incr(APK_DOWNLOAD_COUNTER_KEY)
+        except ValueError:
+            cache.set(APK_DOWNLOAD_COUNTER_KEY, 1)
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"APK download counter incr failed: {e}")
+        return HttpResponse(status=204)
+
+
 class ApkDownloadMetricsView(APIView):
     """
     GET /api/v1/admin/metrics/apk-downloads/  →  { "total": N }

@@ -157,6 +157,12 @@ export function useAuth() {
     const { data } = await authApi.login({ phone, pin, otp, challenge_id });
     await storage.setItemAsync("access_token", data.tokens.access);
     await storage.setItemAsync("refresh_token", data.tokens.refresh);
+    // Stamp `app_last_active` NOW so `useAppLock`'s cold-start check
+    // doesn't immediately re-lock the session — otherwise the user
+    // completes the login PIN, sees "Signing in...", then is dropped
+    // straight back onto AppLockScreen for a second PIN prompt. The
+    // same stamp is refreshed on every bg→fg transition after this.
+    await storage.setItemAsync("app_last_active", String(Date.now()));
     resetSessionExpired(); // Allow API requests again after re-login
     _user = data.user;
     notify();
@@ -191,6 +197,9 @@ export function useAuth() {
       });
       await storage.setItemAsync("access_token", data.tokens.access);
       await storage.setItemAsync("refresh_token", data.tokens.refresh);
+      // See matching note in `login()` — stamp `app_last_active` so
+      // useAppLock doesn't immediately re-lock a freshly-registered user.
+      await storage.setItemAsync("app_last_active", String(Date.now()));
       resetSessionExpired();
       // Clear the one-time referral cookie now that it's been used.
       try {
@@ -243,6 +252,9 @@ export function useAuth() {
     try { await storage.deleteItemAsync("pending_referral_code"); } catch {}
     await storage.setItemAsync("access_token", responseData.tokens.access);
     await storage.setItemAsync("refresh_token", responseData.tokens.refresh);
+    // See `login()` — prevent the cold-start AppLock from firing
+    // immediately after Google-profile completion.
+    await storage.setItemAsync("app_last_active", String(Date.now()));
     resetSessionExpired();
     _user = responseData.user;
     notify();

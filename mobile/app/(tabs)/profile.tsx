@@ -11,6 +11,7 @@ import {
   Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useState, useEffect } from "react";
@@ -343,6 +344,7 @@ export default function ProfileScreen() {
   const tc = getThemeColors(isDark);
   const ts = getThemeShadows(isDark);
   const { formatPhone, phoneVisible, toggle: togglePhoneVisibility } = usePhonePrivacy();
+  const bottomTabBarHeight = useBottomTabBarHeight();
 
   const isDesktop = isWeb && width >= 900;
   const isLargeDesktop = isWeb && width >= 1200;
@@ -1342,7 +1344,9 @@ export default function ProfileScreen() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
-          paddingBottom: 24,  // visual gutter only; tabs sit below this area
+          // RN v7 tab bar is absolute-positioned, so padding must equal
+          // the real tab-bar height or content hides behind it.
+          paddingBottom: bottomTabBarHeight + 16,
           ...(isDesktop
             ? { paddingHorizontal: 24 }
             : {}),
