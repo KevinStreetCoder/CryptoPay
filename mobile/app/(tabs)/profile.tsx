@@ -1342,7 +1342,7 @@ export default function ProfileScreen() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
-          paddingBottom: Platform.OS === "android" ? 100 : 48,
+          paddingBottom: 24,  // visual gutter only; tabs sit below this area
           ...(isDesktop
             ? { paddingHorizontal: 24 }
             : {}),

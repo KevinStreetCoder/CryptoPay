@@ -146,9 +146,13 @@ export default function TabLayout() {
   //       system nav on devices with non-zero `insets.bottom`.
   //
   // The correct fix is: honour the real inset exactly (no floor, no
-  // override). Web has no system nav so we add a 12px gutter for
-  // viewport breathing room.
-  const safeBottom = isWeb ? 12 : insets.bottom;
+  // override) — with a tiny 6 px *minimum* on native so the last label
+  // keeps a visible gutter above the Android system nav / iOS home
+  // indicator even when the OS reports `insets.bottom = 0` (standard
+  // 3-button Android). Min-only, not additive: if the device reports
+  // a real 20-34 px gesture inset, that's what we use (not 26-40 px).
+  // Web has no system nav so we add 12 px for viewport breathing room.
+  const safeBottom = isWeb ? 12 : Math.max(insets.bottom, 6);
   const contentHeight = isSmallPhone ? 64 : 70;
   const tabBarHeight = contentHeight + safeBottom;
   const tabBarPaddingBottom = safeBottom;

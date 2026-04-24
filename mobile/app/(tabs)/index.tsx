@@ -1318,7 +1318,13 @@ function HomeScreenContent() {
           }
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{
-            paddingBottom: Platform.OS === "android" ? 100 : 40,
+            // 24 px is enough breathing room above the tab bar's top
+            // edge on every Android phone. The previous `100` (intended
+            // to avoid content hiding behind the tab bar) was pure dead
+            // space — React Navigation gives the screen area *above*
+            // the bar, not overlapping it, so no extra padding is
+            // needed to "clear" the tabs.
+            paddingBottom: 24,
           }}
           keyboardShouldPersistTaps="handled"
         >
