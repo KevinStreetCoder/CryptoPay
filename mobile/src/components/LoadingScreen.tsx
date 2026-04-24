@@ -1,11 +1,18 @@
 import { useEffect, useRef } from "react";
-import { Text, Animated, Easing, Platform, View } from "react-native";
+import { Text, Animated, Easing, Image, Platform, View } from "react-native";
 import { getThemeColors, colors } from "../constants/theme";
 import { useThemeMode } from "../stores/theme";
 import { SpinnerCoinC } from "./brand/SpinnerCoinC";
-import { Wordmark } from "./brand/Wordmark";
 
 const useNative = Platform.OS !== "web";
+// Raster brand mark — same as Wordmark uses. We embed it directly in the
+// splash rather than going through <Wordmark> because the splash renders
+// BEFORE DM Sans finishes loading, and Wordmark's Text uses DM Sans metrics
+// (negative letterSpacing + lineHeight≈fontSize) that clip the "y" of "Cpay"
+// to "Cpa" on the Android system fallback font. By hand-rolling the text
+// with font-safe metrics below we keep the brand lockup readable regardless
+// of which font is active at paint time.
+const LOGO_MARK = require("../../assets/brand-mark.png");
 
 /**
  * Clean, modern loading screen. One animation (indeterminate progress bar) and
@@ -51,10 +58,41 @@ export function LoadingScreen({ status }: { status?: string }) {
           on-brand, respects reduced-motion. */}
       <SpinnerCoinC size={72} />
 
-      {/* Wordmark · canonical brand component (Coin-C mark + "Cpay"). Uses
-          the design-file lineHeight so Android can't clip the y-descender. */}
-      <View style={{ marginTop: 24, paddingBottom: 4 /* descender headroom */ }}>
-        <Wordmark size={32} dark={isDark} />
+      {/* Brand lockup · Coin-C mark + "Cpay" with the C in emerald.
+          Hand-rolled instead of the Wordmark component because this screen
+          paints BEFORE DM Sans finishes loading — Wordmark's tight metrics
+          (negative letterSpacing, lineHeight ≈ fontSize) let Android clip
+          the "y" descender when rendered in the system fallback font. We
+          use a generous lineHeight (1.4×), explicit bottom padding, and
+          includeFontPadding=true on Android so descenders always survive. */}
+      <View
+        style={{
+          marginTop: 24,
+          flexDirection: "row",
+          alignItems: "center",
+          paddingBottom: 8,
+        }}
+      >
+        <Image
+          source={LOGO_MARK}
+          style={{ width: 32, height: 32, marginRight: 10 }}
+          resizeMode="contain"
+          accessibilityLabel="Cpay"
+        />
+        <Text
+          allowFontScaling={false}
+          style={{
+            fontSize: 28,
+            lineHeight: 40,          // 1.4× — plenty of room for descenders
+            fontFamily: "DMSans_700Bold",
+            color: isDark ? "#FFFFFF" : "#0B1220",
+            includeFontPadding: true, // Android: keep default padding so "y" isn't clipped
+            paddingBottom: 4,
+          }}
+        >
+          <Text style={{ color: colors.primary[500] }}>C</Text>
+          <Text>pay</Text>
+        </Text>
       </View>
 
       {/* Status · only renders if caller provided one. No generic filler. */}

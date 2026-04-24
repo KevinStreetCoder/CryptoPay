@@ -48,9 +48,26 @@ def _email_allowed(user, kind: str = "transactional") -> bool:
     - `kind="marketing"` also respects `user.notify_marketing_enabled` on
       top of `notify_email_enabled`.
 
-    Always returns False if the user has no email address.
+    Returns False if the user has no email address.
+
+    Audit cycle-2 LOW 9: when a security-critical kind is requested but
+    the user has no email on file, we raise a WARNING-level log so ops
+    can see that a PIN-change / KYC-status / OTP / security-alert did
+    NOT reach its intended channel. SMS is the fallback and typically
+    fires separately, but an undelivered security email shouldn't be
+    invisible.
     """
-    if not getattr(user, "email", ""):
+    email = getattr(user, "email", "")
+    if not email:
+        if kind in _SECURITY_EMAIL_TYPES or kind == "security":
+            logger.warning(
+                "email.security_undeliverable",
+                extra={
+                    "user_id": str(getattr(user, "id", "")),
+                    "kind": kind,
+                    "reason": "no_email_on_file",
+                },
+            )
         return False
     if kind in _SECURITY_EMAIL_TYPES or kind == "security":
         return True

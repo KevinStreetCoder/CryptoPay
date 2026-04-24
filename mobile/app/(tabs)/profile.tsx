@@ -577,7 +577,7 @@ export default function ProfileScreen() {
         isSuperuser={user?.is_superuser}
         kycTier={user?.kyc_tier}
         size={size}
-        borderRadius={Math.round(size * 0.32)}
+        borderRadius={size / 2}
         borderWidth={3}
       />
       {/* Camera badge */}

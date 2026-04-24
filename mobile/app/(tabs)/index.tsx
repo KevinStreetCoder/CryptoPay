@@ -1345,7 +1345,7 @@ function HomeScreenContent() {
                 isSuperuser={user?.is_superuser}
                 kycTier={user?.kyc_tier}
                 size={46}
-                borderRadius={15}
+                borderRadius={23}
               />
               <View>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
@@ -2047,7 +2047,7 @@ function HomeScreenContent() {
               isSuperuser={user?.is_superuser}
               kycTier={user?.kyc_tier}
               size={44}
-              borderRadius={14}
+              borderRadius={22}
             />
           </Pressable>
           </View>

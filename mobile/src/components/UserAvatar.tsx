@@ -45,7 +45,12 @@ export function UserAvatar({
   const id = userId || phone || "u";
   const bgHex = pickColorHex(id, admin);
   const borderHex = admin ? ADMIN_GOLD : kycTier >= 1 ? "10B981" : bgHex;
-  const r = borderRadius ?? Math.round(size * 0.32);
+  // Default to a perfect circle (diameter / 2). Callers can still pass an
+  // explicit `borderRadius` for non-circular contexts, but every screen
+  // that renders a user's face now renders it round. Previous default was
+  // a squircle (`size * 0.32`) which read as "app icon" rather than
+  // "profile picture" — the user asked for a real circle everywhere.
+  const r = borderRadius ?? size / 2;
   const [imgFailed, setImgFailed] = useState(false);
 
   // avatarUrl is now a data:image/jpeg;base64,... URI from the backend

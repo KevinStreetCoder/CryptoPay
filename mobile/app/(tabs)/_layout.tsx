@@ -110,7 +110,9 @@ export default function TabLayout() {
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
   const { hasPending: hasPendingDeposits } = usePendingDeposits();
-  const insets = useSafeAreaInsets();
+  // `useSafeAreaInsets` intentionally NOT called here — React Navigation
+  // reads it itself when rendering the bottom tab bar, and stacking our
+  // own padding on top of that produced the "phantom dark strip" bug.
   const { width } = useWindowDimensions();
 
   // Vertical budget (critical · the previous value clipped labels):
@@ -126,24 +128,24 @@ export default function TabLayout() {
   // renders with comfortable ascender/descender clearance even when the
   // browser's font metric rounding pushes the line box up to ~16 px.
   const isSmallPhone = width < 380;
-  // iOS renders its own ~34 px home-indicator bar; Android gesture-nav has a
-  // similar inset via useSafeAreaInsets. 3-button Android has insets.bottom = 0.
+  // Root cause of the "phantom strip under the tabs" regression:
+  // React Navigation's BottomTabBar automatically adds
+  // `paddingBottom: useSafeAreaInsets().bottom` to its default style
+  // AND we were also adding our own `paddingBottom: safeBottom` on top
+  // of the style we supply — giving us *double* the inset on every
+  // Android phone where `insets.bottom > 0`. The user saw that as a
+  // dead dark band between the last label baseline and the system nav.
   //
-  // Bug fix 2026-04-23: on Android 3-button nav the previous `Math.max(insets.bottom, 8)`
-  // floor forced a phantom 8 px empty strip below the icons/labels because
-  // the tab bar's height always grew by `safeBottom` but the icons only draw
-  // in the `contentHeight` region. Users saw a dead dark band between the
-  // last label baseline and the system nav. Dropping the Android floor to 0
-  // lets 3-button phones paint right to the edge; gesture-nav phones still
-  // respect `insets.bottom` correctly. Web keeps its 12 px gutter so the
-  // label isn't flush with the viewport.
-  const safeBottom = isWeb
-    ? 12
-    : Platform.OS === "ios"
-      ? Math.max(insets.bottom, 10)
-      : insets.bottom; // Android: honour real inset exactly, no floor
+  // Fix: we supply `paddingBottom: 0` on native and let React Navigation
+  // own the safe-area handling. On web there is no system nav, so we
+  // pad manually so the label isn't flush with the viewport edge.
+  //
+  // We also shrink the height to `contentHeight` only — no `+ safeBottom`.
+  // RN's auto-inset pushes the icons up by `insets.bottom` visually.
+  const webGutter = isWeb ? 12 : 0;
   const contentHeight = isSmallPhone ? 64 : 70;
-  const tabBarHeight = contentHeight + safeBottom;
+  const tabBarHeight = contentHeight + webGutter;
+  const tabBarPaddingBottom = webGutter;
 
   return (
     <Tabs
@@ -160,7 +162,7 @@ export default function TabLayout() {
                 : "rgba(0, 0, 0, 0.06)",
               borderTopWidth: 1,
               height: tabBarHeight,
-              paddingBottom: safeBottom,
+              paddingBottom: tabBarPaddingBottom,
               paddingTop: 8,
               // Give web phone viewports a comfortable side gutter; native
               // phones hug the edges so touch targets stay large.

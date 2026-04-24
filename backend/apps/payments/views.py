@@ -58,7 +58,13 @@ def _verify_pin_with_lockout(user, pin: str):
 
     if not user.check_pin(pin):
         user.pin_attempts += 1
-        lockout_thresholds = {5: 60, 10: 300, 15: 3600}
+        # Lockout thresholds lowered so the first lockout fires at the
+        # same attempt count as the OTP challenge (3). Previously the
+        # attacker had 2 "free" guesses between `otp_challenge_required
+        # = True` at attempt 3 and the 60-second lockout at attempt 5;
+        # the OTP only affects the NEXT login, not the current session,
+        # so those 2 extra guesses were real (audit cycle-2 LOW 11).
+        lockout_thresholds = {3: 60, 6: 300, 10: 3600}
         lockout_seconds = lockout_thresholds.get(user.pin_attempts)
         if lockout_seconds:
             from datetime import timedelta

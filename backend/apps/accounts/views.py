@@ -1842,31 +1842,31 @@ class TOTPVerifyView(APIView):
         elif not phone.startswith("+"):
             phone = "+254" + phone
 
+        # Audit cycle-2 LOW 10: previously three different preconditions
+        # (phone unknown / TOTP not enabled / account deactivated) returned
+        # three distinguishable responses, letting an attacker enumerate
+        # which phones exist + which have 2FA set up. Collapse every
+        # precondition into the same generic 401 as "wrong code" so the
+        # verification endpoint leaks nothing.
+        generic_invalid = Response(
+            {"error": "Invalid authenticator code"},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
         try:
             user = User.objects.get(phone=phone)
         except User.DoesNotExist:
-            return Response(
-                {"error": "Invalid credentials"},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
+            return generic_invalid
 
         if not user.totp_enabled or not user.totp_secret_decrypted:
-            return Response(
-                {"error": "TOTP is not enabled for this account."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return generic_invalid
 
-        if not user.is_active:
-            return Response(
-                {"error": "Account deactivated"},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        if user.is_suspended:
-            return Response(
-                {"error": "Account suspended. Contact support."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        if not user.is_active or user.is_suspended:
+            # Still generic 401 here — the active-account status is
+            # separately exposed on the /profile/ endpoint for users
+            # who are already authenticated, which is the only place
+            # that information belongs.
+            return generic_invalid
 
         # Rate limit TOTP verification attempts
         rate_key = f"totp_verify_rate:{user.id}"

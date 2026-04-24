@@ -395,7 +395,7 @@ function ProfileCard({
         isSuperuser={user?.is_superuser}
         kycTier={user?.kyc_tier}
         size={isDesktop ? 64 : 56}
-        borderRadius={isDesktop ? 20 : 18}
+        borderRadius={isDesktop ? 32 : 28}
       />
 
       {/* Info */}
