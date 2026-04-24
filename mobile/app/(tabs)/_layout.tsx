@@ -163,10 +163,11 @@ export default function TabLayout() {
               backgroundColor: isDark
                 ? "rgba(12, 26, 46, 0.97)"
                 : "rgba(255, 255, 255, 0.97)",
-              borderTopColor: isDark
-                ? "rgba(255, 255, 255, 0.06)"
-                : "rgba(0, 0, 0, 0.06)",
-              borderTopWidth: 1,
+              // `borderTopWidth: 0` removes the 1 px hairline above the
+              // tabs that read as a dead "divider strip" on the APK.
+              // The existing drop-shadow (Android elevation + iOS
+              // shadow*) already separates the bar from the content.
+              borderTopWidth: 0,
               height: tabBarHeight,
               paddingBottom: tabBarPaddingBottom,
               paddingTop: 8,
