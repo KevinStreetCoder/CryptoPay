@@ -1592,9 +1592,15 @@ function HomeScreenContent() {
             </View>
           ) : null}
 
-          {/* Crypto Price Charts (mobile) */}
+          {/* Crypto Price Charts (mobile) · tour step 8 (rate lock preview).
+              The live ticker here is the surface the tour uses to explain
+              the 90-second quote-lock mechanic — users see that rates
+              update live and the tour tooltip explains we freeze it at
+              checkout. */}
           {tickerRates.length > 0 ? (
-            <MobileCryptoCharts tickerRates={tickerRates} tc={tc} ts={ts} />
+            <TourStep nameKey="tour.step8Title" textKey="tour.step8Text" order={8}>
+              <MobileCryptoCharts tickerRates={tickerRates} tc={tc} ts={ts} />
+            </TourStep>
           ) : ratesLoading ? (
             <View style={{ paddingHorizontal: 16, marginBottom: 24 }}>
               <Skeleton width={110} height={11} style={{ marginBottom: 14, marginLeft: 4 }} />
@@ -1763,7 +1769,8 @@ function HomeScreenContent() {
 
           </TourStep>
 
-          {/* Recent Transactions */}
+          {/* Recent Transactions · tour step 9 (every payment searchable). */}
+          <TourStep nameKey="tour.step9Title" textKey="tour.step9Text" order={9}>
           <View style={{ paddingHorizontal: 16 }}>
             <SectionHeader
               title={t("home.recentActivity")}
@@ -1877,6 +1884,7 @@ function HomeScreenContent() {
               )}
             </View>
           </View>
+          </TourStep>
         </ScrollView>
         <TourAutoStart />
       </SafeAreaView>

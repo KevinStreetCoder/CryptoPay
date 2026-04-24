@@ -16,6 +16,7 @@
  *   3. RATE LOCK · Your rate is locked for 90 seconds.
  */
 import { View, Text, Pressable, Platform, useWindowDimensions } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { OnboardingIcon1, OnboardingIcon2, OnboardingIcon3 } from "./PolishAssets";
 
 type Step = 1 | 2 | 3;
@@ -56,6 +57,7 @@ export interface OnboardingSlideProps {
 
 export function OnboardingSlide({ step, onContinue, onSkip }: OnboardingSlideProps) {
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const isWeb = Platform.OS === "web";
   const slide = SLIDES[step];
   const Icon = step === 1 ? OnboardingIcon1 : step === 2 ? OnboardingIcon2 : OnboardingIcon3;
@@ -66,8 +68,12 @@ export function OnboardingSlide({ step, onContinue, onSkip }: OnboardingSlidePro
       style={{
         flex: 1,
         backgroundColor: INK_BG,
-        paddingTop: 56,
-        paddingBottom: 36,
+        // Honour the system safe-area so the Get-Started button + step
+        // dots clear the Android gesture bar / 3-button nav. Previous
+        // hard-coded `36` clipped behind the system nav on gesture-nav
+        // devices where `insets.bottom` is ~24-34 px.
+        paddingTop: 56 + (isWeb ? 0 : insets.top),
+        paddingBottom: 36 + (isWeb ? 0 : insets.bottom),
         paddingHorizontal: 28,
         position: "relative",
         overflow: "hidden",
