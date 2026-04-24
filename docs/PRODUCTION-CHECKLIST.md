@@ -73,6 +73,29 @@ The "don't push bad code to production" contract:
 | **Staging smoke** | `scripts/smoke-staging.sh` | 6 fail-fast checks: health endpoint, migrations applied, `/apk/` 302, admin metrics gated, rates API returns a real KES number, and any `@pytest.mark.staging_smoke` tests. Exit 1 aborts the prod deploy. |
 | **Production runbook** | `scripts/deploy-production.sh` | Refuses to deploy unless (a) GitHub `deploy-gate` is `conclusion=success` for the target SHA AND (b) `smoke-staging.sh` exits 0. Then migrates, rebuilds, restarts, and post-deploy pings `cpay.co.ke/health/`. |
 
+### Where to read the APK-download counter
+
+The counter lives in Redis under the key `metrics:apk_downloads_total`, incremented once per hit on `https://cpay.co.ke/apk/` (the Django view that 302-redirects to the nginx-served binary). Admins see the running total in two places:
+
+1. **Admin user-list header** — `Settings → Admin · Users` screen. The presence bar at the top of the list shows `<count> APK downloads` next to the Android logo glyph, refreshed on every list fetch.
+2. **HTTP endpoint** — `GET /api/v1/admin/metrics/apk-downloads/` (admin-only, returns `{"total": N}`). Useful for a Grafana tile or the daily summary email if we want to graph trend.
+
+### Audit cycle-2 LOW findings · closed 2026-04-24
+
+| # | Fix |
+|---|---|
+| **LOW 9** · security-critical email undeliverable | `core/email._email_allowed()` now emits a `WARNING` log when an OTP / PIN-change / KYC-status / security-alert is requested for a user with no email on file. Silent `return False` previously hid cases where safety mail didn't reach the user. |
+| **LOW 10** · TOTP endpoint leaked which phones had 2FA enabled | `TOTPVerifyView` collapsed three distinguishable responses (401 unknown phone, 400 "TOTP not enabled", 403 deactivated) into one generic `401 Invalid authenticator code` for every precondition. |
+| **LOW 11** · PIN-lockout vs. OTP-challenge gap | `_verify_pin_with_lockout` thresholds lowered from 5 / 10 / 15 to **3 / 6 / 10** so the first lockout fires at the same attempt count as the OTP challenge. Attacker no longer gets 2 "free" guesses per cycle. |
+
+### Visible-UX fixes shipped in the same cycle
+
+| Symptom | Root cause | Fix |
+|---|---|---|
+| Splash showed "Cpa" (y-descender clipped) even after the earlier Wordmark swap | DM Sans loads asynchronously at cold-start; before it lands, Wordmark's tight metrics (negative letterSpacing + lineHeight ≈ fontSize) let the Android fallback font clip the `y` | `LoadingScreen` now hand-rolls the brand lockup with font-safe metrics — Image mark + Text with `lineHeight: 40` (1.4 ×), `paddingBottom: 4`, `includeFontPadding: true`, `allowFontScaling: false` |
+| Dark strip between tab bar and system-nav buttons | React Navigation's BottomTabBar auto-adds `paddingBottom: useSafeAreaInsets().bottom`; our code also added `paddingBottom: safeBottom`, stacking the inset twice | Dropped our padding (set 0 on native, kept web's 12 px gutter). Height uses `contentHeight` only. React Navigation owns the safe-area handling |
+| Profile avatar rendered as a squircle | `UserAvatar` defaulted `borderRadius = size * 0.32` (an app-icon shape); profile + home-header + settings-header call-sites explicitly overrode with small radii | Default changed to `size / 2` (true circle). Four explicit call-sites updated to match |
+
 ### Decision doc · balance-lock feature
 
 `docs/research/BALANCE-LOCK.md` — 2,400-word viability assessment. **Verdict: red-light the hedge; green-light a stop-loss order instead.** Five independent disqualifying dimensions (actuarial upside-down, no hedge instrument, Kenyan regulatory exposure, custody/concentration risk, user problem already solved by swap-to-USDT / swap-to-KES / stop-loss). Recommended build order: stop-loss order (2-3 engineer-weeks, zero capital risk), then educational USDT "Stable" badge, revisit hedge only if (a) VASP derivative scope crystallises favourably, (b) liquid KES-denominated options venue emerges, (c) stop-loss usage data shows real unmet demand.
