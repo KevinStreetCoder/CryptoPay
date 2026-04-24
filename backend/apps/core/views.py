@@ -129,8 +129,13 @@ class ApkDownloadView(APIView):
             # `cache.incr` raises if the key hasn't been set yet.
             cache.incr(APK_DOWNLOAD_COUNTER_KEY)
         except ValueError:
-            # First-ever hit. Seed to 1.
-            cache.set(APK_DOWNLOAD_COUNTER_KEY, 1)
+            # First-ever hit. Seed to 1 with NO expiry · Django's default
+            # cache timeout (300 s) would silently reset the counter to 0
+            # every 5 minutes of inactivity, which is the exact symptom
+            # the admin dashboard hit before this fix ("0 downloads"
+            # despite a live prod build). `timeout=None` → persist until
+            # explicitly deleted or Redis is flushed.
+            cache.set(APK_DOWNLOAD_COUNTER_KEY, 1, timeout=None)
         except Exception as e:  # noqa: BLE001
             # Never let a telemetry failure block the download itself.
             logger.warning(f"APK download counter incr failed: {e}")
@@ -173,7 +178,9 @@ class ApkDownloadHitView(APIView):
         try:
             cache.incr(APK_DOWNLOAD_COUNTER_KEY)
         except ValueError:
-            cache.set(APK_DOWNLOAD_COUNTER_KEY, 1)
+            # `timeout=None` → persist; without it the counter silently
+            # resets every 5 min (Django default).
+            cache.set(APK_DOWNLOAD_COUNTER_KEY, 1, timeout=None)
         except Exception as e:  # noqa: BLE001
             logger.warning(f"APK download counter incr failed: {e}")
         return HttpResponse(status=204)

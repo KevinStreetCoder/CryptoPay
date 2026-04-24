@@ -1313,7 +1313,12 @@ function HomeScreenContent() {
   /* ─── MOBILE LAYOUT (unchanged) ─── */
   if (!isDesktop) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
+      // `edges` excludes the bottom safe-area — otherwise
+      // SafeAreaView applies `paddingBottom: insets.bottom` (~48 px on
+      // Samsung 3-button nav), which reserved a dead strip ABOVE the
+      // absolute tab bar. The ScrollView's own `paddingBottom:
+      // bottomTabBarHeight + 16` already accounts for the bar + inset.
+      <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }} edges={["top", "left", "right"]}>
         <ScrollView
           refreshControl={
             <RefreshControl

@@ -101,7 +101,25 @@ export function useAppLock(_biometricEnabled: boolean, isAuthenticated: boolean)
       const lastActive = await getLastActive();
       const elapsed = (Date.now() - lastActive) / 1000;
 
-      // Lock if: no last active (fresh open), or elapsed > timeout
+      // Fresh-session grace window · the login / register / google-
+      // complete-profile flows stamp `app_last_active = Date.now()` on
+      // success. Without this window, the cold-start check reads that
+      // stamp, computes `elapsed ≈ 0`, and with the default `timeout=0`
+      // ("Immediately") still evaluates `elapsed >= timeout` as true,
+      // showing AppLockScreen over the just-authenticated session ·
+      // producing a SECOND PIN prompt right after login.
+      //
+      // 5 s is generous enough to cover login round-trip + state
+      // propagation, short enough that a real cold start long after
+      // a real session still locks as expected.
+      const FRESH_SESSION_WINDOW_SEC = 5;
+      if (lastActive > 0 && elapsed < FRESH_SESSION_WINDOW_SEC) {
+        setInitialCheckDone(true);
+        return;
+      }
+
+      // Lock if: no last active (fresh install / wiped storage), or
+      // elapsed > timeout.
       if (lastActive === 0 || elapsed >= timeout) {
         setLocked(true);
       }

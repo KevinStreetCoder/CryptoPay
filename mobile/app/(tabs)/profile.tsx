@@ -1340,7 +1340,8 @@ export default function ProfileScreen() {
   );
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
+    // edges excludes bottom · prevents dead strip above tab bar.
+    <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }} edges={["top", "left", "right"]}>
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{

@@ -393,10 +393,19 @@ export function AppTourProvider({ children }: { children: React.ReactNode }) {
       stepNumberComponent={() => null}
       overlay="view"
       animated
-      backdropColor="rgba(2, 6, 18, 0.8)"
+      // Opaque dim so we never see the underlying Modal's white
+      // default background · react-native-copilot renders inside a
+      // Modal whose root View has no bg, so on Android the backdrop
+      // with low opacity let the native white Modal BG bleed through
+      // above the tooltip (the "white frame" seen on-device).
+      backdropColor="rgba(2, 6, 18, 0.96)"
       arrowColor="rgba(16, 185, 129, 0.25)"
       verticalOffset={0}
       margin={8}
+      // Extend the backdrop under the Android status bar so the
+      // full screen dims uniformly (without this the status-bar
+      // strip stays bright, producing a visible border at the top).
+      androidStatusBarVisible={false}
     >
       {children}
     </CopilotProvider>
