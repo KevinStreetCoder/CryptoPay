@@ -30,18 +30,28 @@ def generate_receipt_pdf(transaction):
     """
     os.makedirs(RECEIPTS_DIR, exist_ok=True)
 
-    # Transaction type labels
+    # Transaction type labels · exhaustive over Transaction.Type.choices.
+    # Any value not explicitly mapped falls through to the raw enum; the
+    # test at `apps/payments/test_audit_cycle2.py` enforces exhaustiveness.
     type_labels = {
-        "PAYBILL_PAYMENT": "Paybill Payment",
-        "TILL_PAYMENT": "Till Payment",
-        "SEND_MPESA": "M-Pesa Transfer",
-        "BUY": "Crypto Purchase",
-        "DEPOSIT": "Crypto Deposit",
-        "WITHDRAWAL": "Withdrawal",
-        "INTERNAL_TRANSFER": "Internal Transfer",
+        "PAYBILL_PAYMENT":  "Paybill Payment",
+        "TILL_PAYMENT":     "Till Payment",
+        "SEND_MPESA":       "M-Pesa Transfer",
+        "BUY":              "Crypto Purchase",
+        "SELL":             "Crypto Sale",
+        "DEPOSIT":          "Crypto Deposit",
+        "WITHDRAWAL":       "Withdrawal",
+        "KES_DEPOSIT":      "KES Deposit",
+        "KES_DEPOSIT_C2B":  "M-Pesa → Crypto",
+        "SWAP":             "Crypto Swap",
+        "INTERNAL_TRANSFER":"Internal Transfer",
+        "FEE":              "Platform Fee",
     }
 
-    # Recipient header + sub (matches design: "KPLC Prepaid" + "Paybill 888880 · Acc 0711••••••")
+    # Recipient header + sub. Matches design: "KPLC Prepaid" + "Paybill 888880 · Acc 0711••••••"
+    # For non-M-Pesa transaction types (swap / buy / sell / deposit /
+    # withdrawal) we derive a crypto-flow header so the receipt isn't
+    # blank — previously only M-Pesa tx types got any "Paid To" content.
     recipient = ""
     recipient_sub = ""
     if transaction.mpesa_paybill:
@@ -59,6 +69,33 @@ def generate_receipt_pdf(transaction):
         phone = str(transaction.mpesa_phone)
         masked_phone = f"{phone[:6]}{'•' * max(0, len(phone) - 6)}" if len(phone) > 6 else phone
         recipient_sub = masked_phone
+    elif transaction.type == "SWAP":
+        # "Swap · USDT → USDC" / "Swap · BTC → ETH"
+        src = (transaction.source_currency or "").upper()
+        dst = (transaction.dest_currency or "").upper()
+        if src and dst:
+            recipient = "Crypto Swap"
+            recipient_sub = f"{src} → {dst}"
+    elif transaction.type in ("BUY", "KES_DEPOSIT_C2B"):
+        dst = (transaction.dest_currency or "").upper()
+        if dst:
+            recipient = "Crypto Purchase"
+            recipient_sub = f"KES → {dst}"
+    elif transaction.type == "SELL":
+        src = (transaction.source_currency or "").upper()
+        if src:
+            recipient = "Crypto Sale"
+            recipient_sub = f"{src} → KES"
+    elif transaction.type == "DEPOSIT":
+        src = (transaction.source_currency or "").upper()
+        if src:
+            recipient = "On-chain Deposit"
+            recipient_sub = f"{src} credit"
+    elif transaction.type == "WITHDRAWAL":
+        src = (transaction.source_currency or "").upper()
+        if src:
+            recipient = "On-chain Withdrawal"
+            recipient_sub = f"{src} debit"
 
     def fmt_fiat(val):
         """Format fiat amount: 1,000.00"""
