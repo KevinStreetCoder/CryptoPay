@@ -105,6 +105,13 @@ jobs:
       DJANGO_SETTINGS_MODULE: config.settings.base
       DEBUG: "true"
       ALLOWED_HOSTS: localhost,127.0.0.1
+      # Test-only deterministic crypto inputs · 64 zero hex bytes are
+      # obviously non-production (the prefix and shape make this clear)
+      # but pass the format/length validators so wallet derivation and
+      # M-Pesa callback HMAC token minting work without env file. These
+      # MUST never appear in real production env files.
+      WALLET_MASTER_SEED: "0000000000000000000000000000000000000000000000000000000000000000"
+      MPESA_CALLBACK_HMAC_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
 
     defaults:
       run:
