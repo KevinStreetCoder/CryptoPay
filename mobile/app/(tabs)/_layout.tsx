@@ -64,7 +64,7 @@ function TabIconOnly({
   color,
   focused,
   showBadge,
-  size = 24,
+  size = 22,
 }: {
   name: keyof typeof Ionicons.glyphMap;
   color: string;
@@ -113,18 +113,20 @@ export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
 
-  // Vertical budget (critical · the previous value clipped labels):
+  // Vertical budget (tightened 2026-04-25 · user feedback that the
+  // previous 70 px content height read as bulky / non-modern):
   //
-  //   icon (24)  +  gap (4)  +  label line-box (16)  =  44 px content
-  //   + paddingTop (8)                                =  8 px top
-  //   + paddingBottom (8)                             =  8 px bottom
+  //   icon (22)  +  gap (3)  +  label line-box (14)  =  39 px content
+  //   + paddingTop (6)                                =  6 px top
+  //   + paddingBottom (6)                             =  6 px bottom
   //   + safeBottom (system nav inset)                 =  variable
   //   --------------------------------------------------
-  //   total                                           ≈ 60 px + safeBottom
+  //   total                                           ≈ 51 px + safeBottom
   //
-  // We size at 70 px content (vs. 44 px strict minimum) so the 11-pt label
-  // renders with comfortable ascender/descender clearance even when the
-  // browser's font metric rounding pushes the line box up to ~16 px.
+  // 56 px content (52 on small phones) gives a 5-7 px safety margin above
+  // the strict minimum, which keeps the 11-pt label readable on Android's
+  // metric rounding without the previous "fat" feel. iOS is forgiving at
+  // any value >= 49.
   const isSmallPhone = width < 380;
   // Safe-area handling on bottom tabs · 2026-04-24 iteration.
   //
@@ -152,8 +154,8 @@ export default function TabLayout() {
   // 3-button Android). Min-only, not additive: if the device reports
   // a real 20-34 px gesture inset, that's what we use (not 26-40 px).
   // Web has no system nav so we add 12 px for viewport breathing room.
-  const safeBottom = isWeb ? 12 : Math.max(insets.bottom, 6);
-  const contentHeight = isSmallPhone ? 64 : 70;
+  const safeBottom = isWeb ? 8 : Math.max(insets.bottom, 4);
+  const contentHeight = isSmallPhone ? 52 : 56;
   const tabBarHeight = contentHeight + safeBottom;
   const tabBarPaddingBottom = safeBottom;
 
@@ -199,23 +201,18 @@ export default function TabLayout() {
         tabBarInactiveTintColor: isDark ? "#7A8FA5" : "#94A3B8",
         tabBarShowLabel: true,
         tabBarLabelStyle: {
-          fontSize: 11,
-          lineHeight: 14,
+          fontSize: 10.5,
+          lineHeight: 13,
           fontFamily: "DMSans_600SemiBold",
-          letterSpacing: 0.2,
-          // Explicit gap between icon and label. Matches the 4 px designers
-          // expect below the 24 px icon.
-          marginTop: 4,
+          letterSpacing: 0.15,
+          // Tightened gap to match the 56 px content height (was 70 px,
+          // user reported the bar felt bulky). 3 px below a 22 px icon
+          // is the iOS Human Interface default.
+          marginTop: 3,
           marginBottom: 0,
-          paddingBottom: 2,
-          // `includeFontPadding: false` removes Android's default baseline
-          // padding so descenders (g, y, p) don't clip.
+          paddingBottom: 1,
           includeFontPadding: false,
         },
-        // Icon sits at the top of the cell; the label flows naturally
-        // below it with the 4 px gap set above. This removes the vertical
-        // centering that was pushing the label past the tab-bar bottom
-        // edge on web viewports.
         tabBarIconStyle: {
           marginTop: 0,
           marginBottom: 0,

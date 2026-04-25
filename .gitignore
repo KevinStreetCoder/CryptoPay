@@ -125,3 +125,7 @@ cpay-kms-prod.json
 *-kms-prod.json
 *-kms-*.json
 gcp-key*.json
+
+# audit / planning artefacts kept out of public history
+tmp/
+docs/PRODUCTION-READINESS-*.md

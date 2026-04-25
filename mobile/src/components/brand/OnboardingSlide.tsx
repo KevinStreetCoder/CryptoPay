@@ -14,10 +14,16 @@
  *   1. WELCOME · Pay any Paybill or Till with crypto.
  *   2. HOW IT WORKS · Any crypto, into Kenyan Shillings.
  *   3. RATE LOCK · Your rate is locked for 90 seconds.
+ *
+ * Copy lives in i18n (`onboarding.*` keys) so the language toggle on the
+ * splash flips it via the LanguageContext re-render. Skip button sits
+ * top-right per the design (matches the user-reported expectation that
+ * "skip is on top"). Last slide drops the skip and exposes "Get started".
  */
 import { View, Text, Pressable, Platform, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { OnboardingIcon1, OnboardingIcon2, OnboardingIcon3 } from "./PolishAssets";
+import { useLocale } from "../../hooks/useLocale";
 
 type Step = 1 | 2 | 3;
 
@@ -28,26 +34,14 @@ const BORDER_STRONG = "rgba(255,255,255,0.14)";
 const TEXT = "#E8EEF7";
 const MUTED = "#8396AD";
 
-const SLIDES = {
-  1: {
-    glow: "#10B981",
-    tag: "WELCOME",
-    title: "Pay any Paybill or Till with crypto.",
-    sub: "Your USDT, BTC, ETH or SOL settles to KES in seconds. No exchange, no waiting.",
-  },
-  2: {
-    glow: "#627EEA",
-    tag: "HOW IT WORKS",
-    title: "Any crypto, into Kenyan Shillings.",
-    sub: "We convert at live market rate through licensed partners. You see the final KES before paying.",
-  },
-  3: {
-    glow: "#F59E0B",
-    tag: "RATE LOCK",
-    title: "Your rate is locked for 90 seconds.",
-    sub: "No surprises at settlement. If the quote expires, we refresh before you confirm.",
-  },
-} as const;
+// Per-slide glow colour drives the radial backdrop, the card shadow,
+// the tag, the active pagination pill, and the CTA. Matches the design
+// hex values so the visuals stay 1:1 with the handoff renders.
+const SLIDE_GLOWS: Record<Step, string> = {
+  1: "#10B981", // emerald
+  2: "#627EEA", // ETH blue
+  3: "#F59E0B", // amber
+};
 
 export interface OnboardingSlideProps {
   step: Step;
@@ -59,19 +53,22 @@ export function OnboardingSlide({ step, onContinue, onSkip }: OnboardingSlidePro
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const isWeb = Platform.OS === "web";
-  const slide = SLIDES[step];
+  const { t } = useLocale();
+  const glow = SLIDE_GLOWS[step];
+  const tag = t(`onboarding.slide${step}Tag` as any);
+  const title = t(`onboarding.slide${step}Title` as any);
+  const sub = t(`onboarding.slide${step}Sub` as any);
   const Icon = step === 1 ? OnboardingIcon1 : step === 2 ? OnboardingIcon2 : OnboardingIcon3;
   const isLast = step === 3;
+  // The design constrains the slide to 360 px on web; on mobile we let
+  // the SafeArea fill the screen so the layout matches a phone bezel.
+  const innerWidth = isWeb && width >= 768 ? 360 : width;
 
   return (
     <View
       style={{
         flex: 1,
         backgroundColor: INK_BG,
-        // Honour the system safe-area so the Get-Started button + step
-        // dots clear the Android gesture bar / 3-button nav. Previous
-        // hard-coded `36` clipped behind the system nav on gesture-nav
-        // devices where `insets.bottom` is ~24-34 px.
         paddingTop: 56 + (isWeb ? 0 : insets.top),
         paddingBottom: 36 + (isWeb ? 0 : insets.bottom),
         paddingHorizontal: 28,
@@ -80,12 +77,13 @@ export function OnboardingSlide({ step, onContinue, onSkip }: OnboardingSlidePro
         ...((isWeb
           ? {
               // Radial glow tint behind the glass card · per-slide colour.
-              background: `radial-gradient(ellipse at 50% 0%, ${slide.glow}22 0%, ${INK_BG} 55%)`,
+              background: `radial-gradient(ellipse at 50% 0%, ${glow}22 0%, ${INK_BG} 55%)`,
             }
           : {}) as any),
       }}
     >
-      {/* Skip · hidden on last slide since the CTA is the only action */}
+      {/* Skip · top right per design. Hidden on the last slide so the
+          single CTA ("Get started") is the only action.  */}
       {!isLast && onSkip ? (
         <Pressable
           onPress={onSkip}
@@ -96,17 +94,25 @@ export function OnboardingSlide({ step, onContinue, onSkip }: OnboardingSlidePro
             paddingVertical: 6,
             paddingHorizontal: 8,
             opacity: hovered ? 0.7 : 1,
+            zIndex: 5,
           })}
           accessibilityRole="button"
-          accessibilityLabel="Skip onboarding"
+          accessibilityLabel={t("onboarding.skip" as any)}
         >
-          <Text style={{ color: MUTED, fontSize: 12, fontFamily: "DMSans_500Medium", letterSpacing: 0.3 }}>
-            Skip
+          <Text
+            style={{
+              color: MUTED,
+              fontSize: 12,
+              fontFamily: "DMSans_500Medium",
+              letterSpacing: 0.3,
+            }}
+          >
+            {t("onboarding.skip" as any)}
           </Text>
         </Pressable>
       ) : null}
 
-      {/* Glass card with icon */}
+      {/* Glass card with icon + inner ring */}
       <View
         style={{
           alignSelf: "center",
@@ -119,14 +125,16 @@ export function OnboardingSlide({ step, onContinue, onSkip }: OnboardingSlidePro
           borderColor: BORDER,
           alignItems: "center",
           justifyContent: "center",
+          position: "relative",
+          overflow: "hidden",
           ...((isWeb
             ? {
                 backdropFilter: "blur(20px)",
                 WebkitBackdropFilter: "blur(20px)",
-                boxShadow: `0 20px 60px ${slide.glow}33, inset 0 1px 0 ${BORDER_STRONG}`,
+                boxShadow: `0 20px 60px ${glow}33, inset 0 1px 0 ${BORDER_STRONG}`,
               }
             : {
-                shadowColor: slide.glow,
+                shadowColor: glow,
                 shadowOpacity: 0.2,
                 shadowRadius: 20,
                 shadowOffset: { width: 0, height: 12 },
@@ -134,7 +142,32 @@ export function OnboardingSlide({ step, onContinue, onSkip }: OnboardingSlidePro
               }) as any),
         }}
       >
-        <Icon size={170} />
+        {/* Inner glow ring · matches the design's radial-gradient overlay
+            (line 694-697 of polish-assets.jsx). On native we approximate
+            with a solid-tinted absolute layer at low opacity since RN
+            doesn't ship a radial-gradient primitive without an extra dep. */}
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            top: 20,
+            left: 20,
+            right: 20,
+            bottom: 20,
+            borderRadius: 20,
+            ...((isWeb
+              ? {
+                  background: `radial-gradient(circle at 50% 40%, ${glow}26 0%, transparent 70%)`,
+                }
+              : {
+                  backgroundColor: glow + "12",
+                  opacity: 0.7,
+                }) as any),
+          }}
+        />
+        <View style={{ zIndex: 1 }}>
+          <Icon size={170} />
+        </View>
       </View>
 
       {/* Tag */}
@@ -143,12 +176,12 @@ export function OnboardingSlide({ step, onContinue, onSkip }: OnboardingSlidePro
           marginTop: 34,
           fontSize: 11,
           fontFamily: "DMSans_700Bold",
-          color: slide.glow,
+          color: glow,
           letterSpacing: 2.5,
           textAlign: "center",
         }}
       >
-        {slide.tag}
+        {tag}
       </Text>
 
       {/* Title */}
@@ -161,9 +194,11 @@ export function OnboardingSlide({ step, onContinue, onSkip }: OnboardingSlidePro
           letterSpacing: -0.6,
           textAlign: "center",
           lineHeight: 32,
+          maxWidth: innerWidth - 56,
+          alignSelf: "center",
         }}
       >
-        {slide.title}
+        {title}
       </Text>
 
       {/* Sub */}
@@ -179,7 +214,7 @@ export function OnboardingSlide({ step, onContinue, onSkip }: OnboardingSlidePro
           alignSelf: "center",
         }}
       >
-        {slide.sub}
+        {sub}
       </Text>
 
       {/* Pagination pills */}
@@ -199,8 +234,13 @@ export function OnboardingSlide({ step, onContinue, onSkip }: OnboardingSlidePro
               width: n === step ? 28 : 8,
               height: 8,
               borderRadius: 4,
-              backgroundColor: n === step ? slide.glow : "rgba(255,255,255,0.15)",
-              ...((isWeb ? { transition: "all 300ms ease", boxShadow: n === step ? `0 0 12px ${slide.glow}66` : "none" } : {}) as any),
+              backgroundColor: n === step ? glow : "rgba(255,255,255,0.15)",
+              ...((isWeb
+                ? {
+                    transition: "all 300ms ease",
+                    boxShadow: n === step ? `0 0 12px ${glow}66` : "none",
+                  }
+                : {}) as any),
             }}
           />
         ))}
@@ -212,13 +252,13 @@ export function OnboardingSlide({ step, onContinue, onSkip }: OnboardingSlidePro
         style={({ hovered, pressed }: any) => ({
           paddingVertical: 16,
           borderRadius: 14,
-          backgroundColor: slide.glow,
+          backgroundColor: glow,
           opacity: pressed ? 0.85 : 1,
           alignItems: "center",
           justifyContent: "center",
           ...((isWeb
             ? {
-                boxShadow: `0 8px 24px ${slide.glow}55, inset 0 1px 0 rgba(255,255,255,0.2)`,
+                boxShadow: `0 8px 24px ${glow}55, inset 0 1px 0 rgba(255,255,255,0.2)`,
                 transform: hovered ? "translateY(-1px)" : "none",
                 transition: "all 0.2s ease",
                 cursor: "pointer",
@@ -226,10 +266,19 @@ export function OnboardingSlide({ step, onContinue, onSkip }: OnboardingSlidePro
             : {}) as any),
         })}
         accessibilityRole="button"
-        accessibilityLabel={isLast ? "Get started" : "Continue"}
+        accessibilityLabel={
+          isLast ? t("onboarding.getStarted" as any) : t("onboarding.continue" as any)
+        }
       >
-        <Text style={{ color: "#fff", fontSize: 15, fontFamily: "DMSans_700Bold", letterSpacing: 0.3 }}>
-          {isLast ? "Get started" : "Continue"}
+        <Text
+          style={{
+            color: "#fff",
+            fontSize: 15,
+            fontFamily: "DMSans_700Bold",
+            letterSpacing: 0.3,
+          }}
+        >
+          {isLast ? t("onboarding.getStarted" as any) : t("onboarding.continue" as any)}
         </Text>
       </Pressable>
     </View>

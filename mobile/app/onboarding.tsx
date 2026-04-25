@@ -38,7 +38,10 @@ export function OnboardingModal({
   const isDesktop = Platform.OS === "web" && width >= 768;
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const { locale, setLocale, t } = useLocale();
+  // `t` not consumed here · the slide component pulls i18n directly so
+  // toggling locale via `setLocale` re-renders the slide through the
+  // LanguageContext.
+  const { locale, setLocale } = useLocale();
 
   useEffect(() => {
     if (visible) {

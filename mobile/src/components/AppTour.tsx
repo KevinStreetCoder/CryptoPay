@@ -83,13 +83,16 @@ function GlassTooltip() {
           : {}),
       }}
     >
-      {/* Header: Icon + Step badge */}
+      {/* Header: Icon + Step badge + Skip (top-right per design + user
+          feedback that "skip is on top"). Three columns: icon left, step
+          badge centred, Skip button hard-right.  */}
       <View
         style={{
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "space-between",
           marginBottom: 14,
+          gap: 8,
         }}
       >
         <View
@@ -130,6 +133,29 @@ function GlassTooltip() {
               .replace("{total}", String(totalStepsNumber))}
           </Text>
         </View>
+        <Pressable
+          onPress={() => stop()}
+          style={({ pressed, hovered }: any) => ({
+            paddingVertical: 6,
+            paddingHorizontal: 10,
+            borderRadius: 8,
+            opacity: pressed ? 0.6 : hovered ? 0.9 : 0.8,
+            ...(isWeb ? ({ cursor: "pointer" } as any) : {}),
+          })}
+          accessibilityRole="button"
+          accessibilityLabel={t("tour.skipTour")}
+        >
+          <Text
+            style={{
+              color: "rgba(255,255,255,0.55)",
+              fontSize: 12,
+              fontFamily: "DMSans_500Medium",
+              letterSpacing: 0.3,
+            }}
+          >
+            {t("tour.skipTour")}
+          </Text>
+        </Pressable>
       </View>
 
       {/* Title */}
@@ -186,34 +212,15 @@ function GlassTooltip() {
         ))}
       </View>
 
-      {/* Navigation buttons */}
+      {/* Navigation buttons · Skip moved to the header so this row is
+          right-aligned (Back + Next/Got it).  */}
       <View
         style={{
           flexDirection: "row",
-          justifyContent: "space-between",
+          justifyContent: "flex-end",
           alignItems: "center",
         }}
       >
-        <Pressable
-          onPress={() => stop()}
-          style={({ pressed }) => ({
-            paddingVertical: 10,
-            paddingHorizontal: 14,
-            borderRadius: 12,
-            opacity: pressed ? 0.6 : 0.8,
-          })}
-        >
-          <Text
-            style={{
-              color: "rgba(255,255,255,0.4)",
-              fontSize: 13,
-              fontFamily: "DMSans_500Medium",
-            }}
-          >
-            {t("tour.skipTour")}
-          </Text>
-        </Pressable>
-
         <View style={{ flexDirection: "row", gap: 8 }}>
           {!isFirstStep && (
             <Pressable

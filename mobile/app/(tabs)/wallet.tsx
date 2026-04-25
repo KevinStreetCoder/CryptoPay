@@ -1526,7 +1526,7 @@ export default function WalletScreen() {
             />
           }
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: bottomTabBarHeight + 6 }}
+          contentContainerStyle={{ paddingBottom: bottomTabBarHeight }}
         >
           <View style={contentStyle}>
             {/* Top spacing */}
@@ -2069,7 +2069,7 @@ export default function WalletScreen() {
           />
         }
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: bottomTabBarHeight + 6 }}
+        contentContainerStyle={{ paddingBottom: bottomTabBarHeight }}
       >
         {/* Portfolio Value Card */}
         <View
