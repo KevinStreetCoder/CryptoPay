@@ -174,22 +174,6 @@ def _assert_production_env():
                 f"MPESA_CALLBACK_HMAC_KEY is only {len(mpesa_hmac_key)} chars · "
                 "use at least 32 hex chars (256 bits)."
             )
-
-    # Audit HIGH-1: TOTP secret encryption key must NOT fall back to
-    # SECRET_KEY. A single SECRET_KEY leak otherwise decrypts every
-    # user's authenticator-app seed and disables 2FA wholesale.
-    totp_key = globals().get("TOTP_ENCRYPTION_KEY", "")
-    if not totp_key:
-        issues.append(
-            "TOTP_ENCRYPTION_KEY is not set. TOTP secrets would be "
-            "encrypted with SECRET_KEY-derived Fernet, collapsing 2FA "
-            "for every user onto a single secret. Generate with: "
-            "python -c \"from cryptography.fernet import Fernet; "
-            "print(Fernet.generate_key().decode())\" and set in "
-            ".env.production. After deploying, run "
-            "`python manage.py migrate_totp_encryption` to re-encrypt "
-            "any rows previously written under the old key."
-        )
     elif payment_provider == "sasapay":
         if SASAPAY_ENVIRONMENT != "production":  # noqa: F405
             issues.append(
@@ -230,6 +214,22 @@ def _assert_production_env():
         issues.append(
             f"PAYMENT_PROVIDER={payment_provider!r} is not supported. "
             "Use 'daraja' or 'sasapay'."
+        )
+
+    # Audit HIGH-1: TOTP secret encryption key must NOT fall back to
+    # SECRET_KEY. A single SECRET_KEY leak otherwise decrypts every
+    # user's authenticator-app seed and disables 2FA wholesale.
+    totp_key = globals().get("TOTP_ENCRYPTION_KEY", "")
+    if not totp_key:
+        issues.append(
+            "TOTP_ENCRYPTION_KEY is not set. TOTP secrets would be "
+            "encrypted with SECRET_KEY-derived Fernet, collapsing 2FA "
+            "for every user onto a single secret. Generate with: "
+            "python -c \"from cryptography.fernet import Fernet; "
+            "print(Fernet.generate_key().decode())\" and set in "
+            ".env.production. After deploying, run "
+            "`python manage.py migrate_totp_encryption` to re-encrypt "
+            "any rows previously written under the old key."
         )
 
     # Africa's Talking sandbox username would try to send real SMS through
