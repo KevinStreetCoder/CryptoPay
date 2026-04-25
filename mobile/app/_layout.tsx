@@ -180,7 +180,13 @@ function RootNavigator() {
       return;
     }
 
-    const isLanding = segments[0] === "landing" || (!segments[0] && !user); // Root = landing for unauth
+    // Root-without-user is "landing-like" ONLY on web · the APK should
+    // never be allowed to linger at the marketing landing page. On
+    // native, falling onto `/` with no user triggers the redirect block
+    // below and sends the user straight to /auth/login.
+    const isLanding =
+      segments[0] === "landing" ||
+      (!segments[0] && !user && Platform.OS === "web");
     const isPitch = segments[0] === "pitch";
     const isPrivacy = segments[0] === "privacy";
     const isTerms = segments[0] === "terms";

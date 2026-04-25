@@ -106,44 +106,73 @@ export function useAuth() {
   }, []);
 
   const bootstrap = useCallback(async () => {
+    // Helper: only treat a token-refresh / profile failure as a real
+    // session-expiry when the server actually said so (401/403). Any
+    // other failure (network, 5xx, timeout, ECONNRESET) means we can't
+    // tell yet · keep the tokens, leave the user null, and let the
+    // next launch retry. Mirrors the same status-aware logic in
+    // client.ts response interceptor (commit 3057a0b).
+    const isAuthFailure = (err: any) => {
+      const s = err?.response?.status;
+      return s === 401 || s === 403;
+    };
+
     try {
       const token = await storage.getItemAsync("access_token");
-      if (token) {
-        // Always load the user profile · lock screen handles auth gating
-        _biometricEnabled = await isBiometricEnabled();
+      if (!token) {
+        // No prior session · nothing to bootstrap.
+        return;
+      }
+      _biometricEnabled = await isBiometricEnabled();
+
+      try {
+        const { data } = await authApi.getProfile();
+        _user = data;
+        notify();
+        return;
+      } catch (profileErr: any) {
+        // Profile fetch failed. Try a refresh BEFORE giving up.
+        // Three branches:
+        //   a) refresh succeeds        · re-fetch profile, mark authed
+        //   b) refresh 401/403         · session truly dead, clear tokens
+        //   c) refresh network/5xx     · keep tokens, leave user null,
+        //                                next launch retries cleanly
+        const refreshToken = await storage.getItemAsync("refresh_token");
+        if (!refreshToken) {
+          // No refresh token, profile failed · session is dead.
+          if (isAuthFailure(profileErr)) {
+            await storage.deleteItemAsync("access_token");
+          }
+          // Otherwise (network) keep the access_token; next launch retries.
+          _user = null;
+          notify();
+          return;
+        }
 
         try {
+          const { refreshAccessToken } = require("../api/client");
+          await refreshAccessToken();
           const { data } = await authApi.getProfile();
           _user = data;
           notify();
-        } catch (profileErr: any) {
-          // Profile fetch failed · try refreshing the token before giving up
-          const refreshToken = await storage.getItemAsync("refresh_token");
-          if (refreshToken) {
-            try {
-              const { refreshAccessToken } = require("../api/client");
-              await refreshAccessToken();
-              // Retry profile fetch with new token
-              const { data } = await authApi.getProfile();
-              _user = data;
-              notify();
-            } catch {
-              // Refresh also failed · clear everything
-              await storage.deleteItemAsync("access_token");
-              await storage.deleteItemAsync("refresh_token");
-              _user = null;
-              notify();
-            }
-          } else {
+          return;
+        } catch (refreshErr: any) {
+          if (isAuthFailure(refreshErr)) {
+            // Server rejected the refresh token · session truly dead.
             await storage.deleteItemAsync("access_token");
-            _user = null;
-            notify();
+            await storage.deleteItemAsync("refresh_token");
           }
+          // Network / 5xx: keep tokens, leave _user null. The next
+          // launch will retry getProfile; if it works then, the user
+          // is back without having to re-login.
+          _user = null;
+          notify();
         }
       }
     } catch {
-      await storage.deleteItemAsync("access_token");
-      await storage.deleteItemAsync("refresh_token");
+      // Storage read itself blew up · don't nuke tokens (the storage
+      // might just be transiently unavailable). Leave _user null, the
+      // app will route to login this run; next launch retries.
       _user = null;
       notify();
     } finally {
