@@ -119,3 +119,9 @@ CryptoPay_Receipt_*.pdf
 *.tar.gz
 docs/mpesa*.txt
 
+
+# KMS service-account credentials · NEVER commit
+cpay-kms-prod.json
+*-kms-prod.json
+*-kms-*.json
+gcp-key*.json

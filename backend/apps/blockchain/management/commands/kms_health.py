@@ -47,21 +47,41 @@ class Command(BaseCommand):
         check_blob_env = options["check_blob"]
 
         kms_enabled = getattr(settings, "KMS_ENABLED", False)
-        kms_key_id = getattr(settings, "KMS_KEY_ID", "")
-        kms_region = getattr(settings, "KMS_REGION", "")
+        provider = (getattr(settings, "KMS_PROVIDER", "aws") or "aws").lower()
+        kms_key_id = getattr(settings, "KMS_KEY_ID", "")          # AWS
+        kms_region = getattr(settings, "KMS_REGION", "")          # AWS
+        kms_key_resource = getattr(settings, "KMS_KEY_RESOURCE", "")  # GCP
 
         if verbose:
             self.stdout.write(self.style.MIGRATE_HEADING("KMS configuration"))
             self.stdout.write(f"  KMS_ENABLED:   {kms_enabled}")
-            self.stdout.write(f"  KMS_KEY_ID:    {kms_key_id or '<not set>'}")
-            self.stdout.write(f"  KMS_REGION:    {kms_region or '<not set>'}")
+            self.stdout.write(f"  KMS_PROVIDER:  {provider}")
+            if provider == "aws":
+                self.stdout.write(f"  KMS_KEY_ID:    {kms_key_id or '<not set>'}")
+                self.stdout.write(f"  KMS_REGION:    {kms_region or '<not set>'}")
+            elif provider == "gcp":
+                self.stdout.write(
+                    f"  KMS_KEY_RESOURCE: {kms_key_resource or '<not set>'}"
+                )
             self.stdout.write("")
 
-        if kms_enabled and not kms_key_id:
-            self.stderr.write(self.style.ERROR(
-                "KMS_ENABLED=True but KMS_KEY_ID is empty."
-            ))
-            sys.exit(1)
+        if kms_enabled:
+            if provider == "aws" and not kms_key_id:
+                self.stderr.write(self.style.ERROR(
+                    "KMS_ENABLED=True with KMS_PROVIDER=aws but KMS_KEY_ID is empty."
+                ))
+                sys.exit(1)
+            if provider == "gcp" and not kms_key_resource:
+                self.stderr.write(self.style.ERROR(
+                    "KMS_ENABLED=True with KMS_PROVIDER=gcp but "
+                    "KMS_KEY_RESOURCE is empty."
+                ))
+                sys.exit(1)
+            if provider not in ("aws", "gcp"):
+                self.stderr.write(self.style.ERROR(
+                    f"Unknown KMS_PROVIDER={provider!r}. Use 'aws' or 'gcp'."
+                ))
+                sys.exit(1)
 
         # Build a manager and exercise it with a small random sample.
         from apps.blockchain.kms import (
