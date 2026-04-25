@@ -65,8 +65,10 @@ channels==4.2.0
 channels-redis==4.2.1
 daphne==4.1.2
 
-# AWS KMS
+# Cloud KMS providers · KMS_PROVIDER selects which one is used at runtime.
+# Both are pinned so dev environments can swap without a re-install.
 boto3==1.35.0
+google-cloud-kms==2.24.2
 
 # Production
 gunicorn==23.0.0

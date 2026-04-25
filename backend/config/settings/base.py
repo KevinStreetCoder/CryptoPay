@@ -539,13 +539,29 @@ WALLET_MNEMONIC = env("WALLET_MNEMONIC", default="")
 WALLET_MASTER_SEED = env("WALLET_MASTER_SEED", default="")
 
 # --- KMS Envelope Encryption ---
-# When KMS_ENABLED=True, the app decrypts WALLET_ENCRYPTED_SEED at runtime
-# instead of reading plaintext WALLET_MASTER_SEED / WALLET_MNEMONIC.
+# When KMS_ENABLED=True, the app decrypts WALLET_ENCRYPTED_SEED + every
+# *_HOT_WALLET_ENCRYPTED at runtime instead of reading the plaintext
+# WALLET_MASTER_SEED / WALLET_MNEMONIC / *_HOT_WALLET_PRIVATE_KEY.
 # Encrypt with: python manage.py encrypt_wallet_seed
+#               python manage.py encrypt_hot_wallet_key --chain <name>
+#
+# KMS_PROVIDER selects the cloud KMS implementation:
+#   "aws" · AWSKMSManager (boto3, requires AWS_ACCESS_KEY_ID/SECRET or IAM role)
+#   "gcp" · GCPKMSManager (google-cloud-kms, requires
+#                          GOOGLE_APPLICATION_CREDENTIALS or workload identity)
 KMS_ENABLED = env.bool("KMS_ENABLED", default=False)
+KMS_PROVIDER = env("KMS_PROVIDER", default="aws").lower()
+KMS_SEED_CACHE_TTL = env.int("KMS_SEED_CACHE_TTL", default=300)
+
+# AWS KMS settings (used when KMS_PROVIDER=aws)
 KMS_KEY_ID = env("KMS_KEY_ID", default="")           # AWS KMS key ARN or alias
 KMS_REGION = env("KMS_REGION", default="af-south-1")  # AWS region (Cape Town)
-KMS_SEED_CACHE_TTL = env.int("KMS_SEED_CACHE_TTL", default=300)  # Cache TTL in seconds
+
+# GCP KMS settings (used when KMS_PROVIDER=gcp)
+# Format: projects/<project>/locations/<loc>/keyRings/<ring>/cryptoKeys/<key>
+# Closest GCP region to Kenya: africa-south1 (Johannesburg).
+KMS_KEY_RESOURCE = env("KMS_KEY_RESOURCE", default="")
+
 WALLET_ENCRYPTED_SEED = env("WALLET_ENCRYPTED_SEED", default="")  # Encrypted blob from encrypt_wallet_seed
 
 # Platform hot wallet addresses (destination for on-chain sweeps).

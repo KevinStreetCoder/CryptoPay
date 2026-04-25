@@ -336,6 +336,213 @@ class AWSKMSManager(BaseKMSManager):
             _zero_bytes(plaintext_dek)
 
 
+class GCPKMSManager(BaseKMSManager):
+    """
+    Production KMS manager using Google Cloud KMS envelope encryption.
+
+    GCP KMS doesn't have a native `GenerateDataKey` operation like AWS KMS,
+    so we generate the data encryption key (DEK) locally with os.urandom and
+    call `encrypt(plaintext_dek)` to produce the encrypted DEK. The seed
+    itself is AES-256-GCM encrypted locally using the plaintext DEK · same
+    envelope contract as the AWS path so the on-disk blob format is
+    identical except for the `provider` discriminator.
+
+    Resource path format:
+        projects/{project}/locations/{location}/keyRings/{ring}/cryptoKeys/{key}
+
+    Authentication: the official client picks credentials up via the
+    standard Google ADC chain (GOOGLE_APPLICATION_CREDENTIALS env var, or
+    workload identity on GKE / Cloud Run / GCE). Cpay's VPS deploys use
+    a service account JSON file mounted at runtime.
+    """
+
+    def __init__(self, key_resource: str):
+        if not key_resource:
+            raise KMSError("KMS_KEY_RESOURCE is required for GCP KMS mode.")
+        # Sanity check the resource format. A typo here surfaces at boot
+        # rather than after a 30-second hang at the first encrypt call.
+        if not key_resource.startswith("projects/"):
+            raise KMSError(
+                f"KMS_KEY_RESOURCE must start with 'projects/...', got "
+                f"{key_resource!r}. Format: "
+                "projects/<project>/locations/<loc>/keyRings/<ring>/cryptoKeys/<key>"
+            )
+        self._key_resource = key_resource
+        self._client = None
+
+    def _get_client(self):
+        """Lazily initialise the GCP KMS client."""
+        if self._client is None:
+            try:
+                from google.cloud import kms  # type: ignore[import-untyped]
+                from google.api_core import client_options  # type: ignore[import-untyped]
+            except ImportError as e:
+                raise KMSError(
+                    "google-cloud-kms is required for GCP KMS. "
+                    "Install with: pip install google-cloud-kms"
+                ) from e
+
+            try:
+                # 30 s connection budget · KMS calls are typically <100 ms
+                # but slow networks (Kenyan 4G under load) need headroom.
+                self._client = kms.KeyManagementServiceClient(
+                    client_options=client_options.ClientOptions(
+                        api_endpoint=f"cloudkms.googleapis.com:443"
+                    ),
+                )
+            except Exception as e:
+                raise KMSCredentialError(
+                    f"Failed to initialise GCP KMS client: {e}. "
+                    "Check GOOGLE_APPLICATION_CREDENTIALS or workload identity."
+                ) from e
+        return self._client
+
+    def _handle_gcp_error(self, error):
+        """Translate google-api-core exceptions into KMS-typed errors."""
+        try:
+            from google.api_core import exceptions as gax_exc  # type: ignore[import-untyped]
+        except ImportError:
+            raise KMSError(f"GCP error (google-api-core not available): {error}")
+
+        if isinstance(error, gax_exc.NotFound):
+            raise KMSKeyNotFoundError(
+                f"GCP KMS key not found: {self._key_resource}. "
+                "Verify the resource path and the service account permissions."
+            ) from error
+        if isinstance(error, gax_exc.PermissionDenied):
+            raise KMSCredentialError(
+                f"Permission denied for GCP KMS key {self._key_resource}: {error}. "
+                "Grant the service account roles/cloudkms.cryptoKeyEncrypterDecrypter."
+            ) from error
+        if isinstance(error, (gax_exc.Unauthenticated,)):
+            raise KMSCredentialError(
+                "GCP credentials missing or invalid. "
+                "Set GOOGLE_APPLICATION_CREDENTIALS to a service account JSON, "
+                "or run on a workload-identity-enabled platform."
+            ) from error
+        if isinstance(error, gax_exc.ResourceExhausted):
+            raise KMSRateLimitError(
+                "GCP KMS quota exceeded. Retry after backoff or request a quota bump."
+            ) from error
+        if isinstance(error, (gax_exc.DeadlineExceeded, gax_exc.ServiceUnavailable)):
+            raise KMSNetworkError(
+                f"Network/timeout error reaching GCP KMS: {error}"
+            ) from error
+        if isinstance(error, gax_exc.InvalidArgument):
+            raise KMSDecryptionError(
+                f"GCP KMS rejected the request: {error}. "
+                "Ciphertext may be malformed or encrypted with a different key."
+            ) from error
+
+        raise KMSError(f"Unexpected GCP KMS error: {error}") from error
+
+    def rotate_data_key(self) -> dict:
+        """
+        Generate a fresh 256-bit data encryption key locally, then ask
+        GCP KMS to encrypt it. GCP KMS doesn't have an AWS-style
+        GenerateDataKey, so we synthesise one.
+        """
+        client = self._get_client()
+        plaintext_key = os.urandom(32)
+        try:
+            response = client.encrypt(
+                request={
+                    "name": self._key_resource,
+                    "plaintext": plaintext_key,
+                }
+            )
+            return {
+                "plaintext_key": plaintext_key,
+                "encrypted_key": response.ciphertext,
+            }
+        except Exception as e:
+            self._handle_gcp_error(e)
+            raise KMSError(f"Failed to encrypt data key: {e}") from e
+
+    def encrypt_seed(self, plaintext_seed: bytes) -> str:
+        """Envelope-encrypt a seed using GCP KMS."""
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+        if not plaintext_seed:
+            raise ValueError("Cannot encrypt empty seed.")
+
+        dek = self.rotate_data_key()
+        plaintext_dek = bytearray(dek["plaintext_key"])
+        encrypted_dek = dek["encrypted_key"]
+
+        try:
+            iv = os.urandom(12)
+            aesgcm = AESGCM(bytes(plaintext_dek))
+            encrypted_seed = aesgcm.encrypt(iv, plaintext_seed, None)
+
+            envelope = {
+                "v": _ENVELOPE_VERSION,
+                "provider": "gcp-kms",
+                "key_resource": self._key_resource,
+                "encrypted_dek": base64.b64encode(encrypted_dek).decode("ascii"),
+                "iv": base64.b64encode(iv).decode("ascii"),
+                "encrypted_seed": base64.b64encode(encrypted_seed).decode("ascii"),
+            }
+
+            blob_json = json.dumps(envelope, separators=(",", ":"))
+            return base64.b64encode(blob_json.encode("utf-8")).decode("ascii")
+        finally:
+            _zero_bytes(plaintext_dek)
+
+    def decrypt_seed(self, ciphertext: str) -> bytes:
+        """Decrypt an envelope-encrypted seed using GCP KMS."""
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+        if not ciphertext:
+            raise ValueError("Cannot decrypt empty ciphertext.")
+
+        try:
+            blob_json = base64.b64decode(ciphertext)
+            envelope = json.loads(blob_json)
+        except (ValueError, json.JSONDecodeError) as e:
+            raise KMSDecryptionError(f"Invalid envelope blob format: {e}") from e
+
+        version = envelope.get("v")
+        if version != _ENVELOPE_VERSION:
+            raise KMSDecryptionError(
+                f"Unsupported envelope version: {version} (expected {_ENVELOPE_VERSION})"
+            )
+
+        try:
+            encrypted_dek = base64.b64decode(envelope["encrypted_dek"])
+            iv = base64.b64decode(envelope["iv"])
+            encrypted_seed = base64.b64decode(envelope["encrypted_seed"])
+        except (KeyError, ValueError) as e:
+            raise KMSDecryptionError(
+                f"Malformed envelope blob — missing or invalid fields: {e}"
+            ) from e
+
+        client = self._get_client()
+        try:
+            response = client.decrypt(
+                request={
+                    "name": self._key_resource,
+                    "ciphertext": encrypted_dek,
+                }
+            )
+            plaintext_dek = bytearray(response.plaintext)
+        except Exception as e:
+            self._handle_gcp_error(e)
+            raise KMSError(f"Failed to decrypt data key: {e}") from e
+
+        try:
+            aesgcm = AESGCM(bytes(plaintext_dek))
+            seed = aesgcm.decrypt(iv, encrypted_seed, None)
+            return bytes(seed)
+        except Exception as e:
+            raise KMSDecryptionError(
+                f"Failed to decrypt seed with data key: {e}. "
+                "The blob may be corrupted."
+            ) from e
+        finally:
+            _zero_bytes(plaintext_dek)
+
+
 class LocalKMSManager(BaseKMSManager):
     """
     Local fallback KMS manager for development environments without AWS.
@@ -551,13 +758,18 @@ def get_kms_manager() -> CachedSeedManager:
     Get the singleton CachedSeedManager, configured from Django settings.
 
     Settings:
-      - KMS_ENABLED (bool): Use KMS encryption. Default False.
-      - KMS_KEY_ID (str): AWS KMS key ARN or alias. Required when KMS_ENABLED=True.
-      - KMS_REGION (str): AWS region. Default "af-south-1" (Cape Town).
-      - KMS_SEED_CACHE_TTL (int): Seed cache TTL in seconds. Default 300.
+      - KMS_ENABLED (bool):  Turn KMS on. Default False (LocalKMS fallback).
+      - KMS_PROVIDER (str):  "aws" | "gcp". Default "aws". Selects the
+                             cloud KMS implementation when KMS_ENABLED=True.
+      - KMS_KEY_ID (str):    AWS KMS key ARN or alias. Required for AWS.
+      - KMS_REGION (str):    AWS region. Default "af-south-1" (Cape Town).
+      - KMS_KEY_RESOURCE     GCP KMS resource path:
+        (str):                 projects/<p>/locations/<l>/keyRings/<r>/cryptoKeys/<k>
+                             Required for GCP.
+      - KMS_SEED_CACHE_TTL:  Seed cache TTL in seconds. Default 300.
 
     Returns:
-        CachedSeedManager wrapping either AWSKMSManager or LocalKMSManager.
+        CachedSeedManager wrapping the configured BaseKMSManager.
     """
     global _cached_manager
 
@@ -568,20 +780,44 @@ def get_kms_manager() -> CachedSeedManager:
     cache_ttl = getattr(settings, "KMS_SEED_CACHE_TTL", 300)
 
     if kms_enabled:
-        key_id = getattr(settings, "KMS_KEY_ID", "")
-        region = getattr(settings, "KMS_REGION", "af-south-1")
+        provider = (getattr(settings, "KMS_PROVIDER", "aws") or "aws").lower()
 
-        if not key_id:
-            raise KMSError(
-                "KMS_ENABLED=True but KMS_KEY_ID is not set. "
-                "Provide the AWS KMS key ARN or alias."
+        if provider == "aws":
+            key_id = getattr(settings, "KMS_KEY_ID", "")
+            region = getattr(settings, "KMS_REGION", "af-south-1")
+            if not key_id:
+                raise KMSError(
+                    "KMS_ENABLED=True with KMS_PROVIDER=aws but KMS_KEY_ID "
+                    "is not set. Provide the AWS KMS key ARN or alias."
+                )
+            manager = AWSKMSManager(key_id=key_id, region=region)
+            logger.info(
+                "KMS envelope encryption enabled (provider=aws, region=%s, "
+                "key=%s...)", region, key_id[:20],
             )
 
-        manager = AWSKMSManager(key_id=key_id, region=region)
-        logger.info(
-            "KMS envelope encryption enabled (region=%s, key=%s...)",
-            region, key_id[:20],
-        )
+        elif provider == "gcp":
+            key_resource = getattr(settings, "KMS_KEY_RESOURCE", "")
+            if not key_resource:
+                raise KMSError(
+                    "KMS_ENABLED=True with KMS_PROVIDER=gcp but "
+                    "KMS_KEY_RESOURCE is not set. Provide the full resource "
+                    "path: projects/<p>/locations/<l>/keyRings/<r>/cryptoKeys/<k>"
+                )
+            manager = GCPKMSManager(key_resource=key_resource)
+            # Log a redacted resource string · the project ID is
+            # not strictly secret but treating it that way gives us
+            # a defence-in-depth posture if logs land in a wide audience.
+            redacted = "/".join(key_resource.split("/")[:6]) + "/.../<key>"
+            logger.info(
+                "KMS envelope encryption enabled (provider=gcp, key=%s)",
+                redacted,
+            )
+
+        else:
+            raise KMSError(
+                f"Unknown KMS_PROVIDER={provider!r}. Supported: 'aws', 'gcp'."
+            )
     else:
         secret_key = getattr(settings, "SECRET_KEY", "")
         manager = LocalKMSManager(secret_key=secret_key)

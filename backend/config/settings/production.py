@@ -215,37 +215,74 @@ def _assert_production_env():
             "key (see docs/KMS-SETUP.md)."
         )
 
-    # When KMS is enabled, the AWS-side configuration must be complete or
+    # When KMS is enabled, the cloud-side configuration must be complete or
     # the first encrypt/decrypt call will crash with a CredentialError. Catch
     # this at boot rather than at the first signing attempt.
     if kms_enabled:
-        kms_key_id = globals().get("KMS_KEY_ID", "")
-        if not kms_key_id:
-            issues.append(
-                "KMS_ENABLED=True but KMS_KEY_ID is not set. Provide the AWS "
-                "KMS key ARN or alias (e.g. alias/cpay-prod or "
-                "arn:aws:kms:af-south-1:<account>:key/<uuid>)."
-            )
+        kms_provider = (globals().get("KMS_PROVIDER", "aws") or "aws").lower()
 
-        # boto3 picks credentials up from AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY
-        # OR from an attached IAM role. We only flag when BOTH are missing
-        # AND we're not on EC2/ECS/EKS where IAM-role discovery would succeed
-        # (we can't easily detect that here, so we warn rather than fail).
-        has_access_key = bool(os.environ.get("AWS_ACCESS_KEY_ID"))
-        has_iam_role = bool(os.environ.get("AWS_ROLE_ARN")) or os.path.exists(
-            "/var/run/secrets/eks.amazonaws.com/serviceaccount/token"
-        )
-        if not (has_access_key or has_iam_role):
-            _prod_logger.warning(
-                "production.kms_credential_check",
-                extra={
-                    "issue": (
-                        "KMS_ENABLED=True but neither AWS_ACCESS_KEY_ID nor "
-                        "an IAM role token was detected in the environment. "
-                        "boto3 will try the default credential chain at first "
-                        "use; failures will surface as KMSCredentialError."
-                    )
-                },
+        if kms_provider == "aws":
+            kms_key_id = globals().get("KMS_KEY_ID", "")
+            if not kms_key_id:
+                issues.append(
+                    "KMS_PROVIDER=aws but KMS_KEY_ID is not set. Provide "
+                    "the AWS KMS key ARN or alias (e.g. alias/cpay-prod or "
+                    "arn:aws:kms:af-south-1:<account>:key/<uuid>)."
+                )
+            has_access_key = bool(os.environ.get("AWS_ACCESS_KEY_ID"))
+            has_iam_role = bool(os.environ.get("AWS_ROLE_ARN")) or os.path.exists(
+                "/var/run/secrets/eks.amazonaws.com/serviceaccount/token"
+            )
+            if not (has_access_key or has_iam_role):
+                _prod_logger.warning(
+                    "production.kms_credential_check",
+                    extra={
+                        "issue": (
+                            "KMS_PROVIDER=aws but neither AWS_ACCESS_KEY_ID "
+                            "nor an IAM role token was detected. boto3 will "
+                            "try the default credential chain at first use; "
+                            "failures will surface as KMSCredentialError."
+                        )
+                    },
+                )
+
+        elif kms_provider == "gcp":
+            kms_key_resource = globals().get("KMS_KEY_RESOURCE", "")
+            if not kms_key_resource:
+                issues.append(
+                    "KMS_PROVIDER=gcp but KMS_KEY_RESOURCE is not set. "
+                    "Format: projects/<project>/locations/<loc>/keyRings/"
+                    "<ring>/cryptoKeys/<key>"
+                )
+            elif not kms_key_resource.startswith("projects/"):
+                issues.append(
+                    f"KMS_KEY_RESOURCE={kms_key_resource!r} is malformed. "
+                    "Must start with 'projects/...'."
+                )
+            has_app_creds = bool(os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"))
+            # GCE / Cloud Run / GKE expose a metadata server reachable at
+            # 169.254.169.254 · we don't probe it here (boot-time network
+            # call is too fragile) but we trust the operator if they've
+            # set the credentials env explicitly.
+            if not has_app_creds:
+                _prod_logger.warning(
+                    "production.kms_credential_check",
+                    extra={
+                        "issue": (
+                            "KMS_PROVIDER=gcp but GOOGLE_APPLICATION_CREDENTIALS "
+                            "is unset. The library will fall back to ADC "
+                            "auto-discovery; failures surface as "
+                            "KMSCredentialError. On a plain VPS, set "
+                            "GOOGLE_APPLICATION_CREDENTIALS to a service "
+                            "account JSON path."
+                        )
+                    },
+                )
+
+        else:
+            issues.append(
+                f"KMS_PROVIDER={kms_provider!r} is not supported. "
+                "Use 'aws' or 'gcp'."
             )
 
     # D22: SECURE_PROXY_SSL_HEADER is trusted unconditionally in Django; we
