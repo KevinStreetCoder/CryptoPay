@@ -32,6 +32,9 @@ google-auth==2.37.0
 requests==2.32.3
 httpx==0.28.1
 
+# DNS (email MX validation · Layer 2 of the disposable-email defence)
+dnspython==2.6.1
+
 # Crypto & Blockchain
 tronpy==0.5.0
 web3==7.6.0

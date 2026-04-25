@@ -4,7 +4,7 @@ import secrets
 from django.conf import settings
 from django.core.cache import cache
 from django.utils import timezone
-from rest_framework import status
+from rest_framework import serializers, status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -164,11 +164,31 @@ class RegisterView(APIView):
         # Create user
         user = User.objects.create_user(phone=phone, pin=pin, full_name=full_name)
 
-        # Set email if provided (mark as verified since OTP was sent to it)
+        # Set email if provided. C4 audit fix · the previous code marked
+        # the email as `email_verified=True` immediately. The OTP went to
+        # the PHONE, not the email, so an attacker registering with
+        # `attacker@victim.com` would have that address marked verified
+        # without the real owner ever proving ownership. This defeated
+        # the entire Layer-3 verification gate that
+        # AdminVerifyUserView (tier >=2) depends on. The email must be
+        # verified through the email-verification flow before
+        # `email_verified` can flip to True.
         if email:
+            from django.db import IntegrityError
             user.email = email
-            user.email_verified = True
-            user.save(update_fields=["email", "email_verified"])
+            user.email_verified = False
+            try:
+                user.save(update_fields=["email", "email_verified", "normalised_email"])
+            except IntegrityError:
+                # A concurrent registration claimed the same normalised
+                # email between RegisterSerializer.validate_email and
+                # this save. Roll back the user we just created so the
+                # phone number stays available for retry.
+                user.delete()
+                return Response(
+                    {"email": ["This email is already in use"]},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
         cache.delete(f"otp:{phone}")
 
         # Create default wallets
@@ -1432,6 +1452,26 @@ class SendEmailVerificationView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Layer 1 + Layer 2: catch disposable / unreachable domains before
+        # we mint a token and dispatch the verification email. The rate-
+        # limiting below is per-user, so without this gate a single user
+        # could burn through 3 disposable addresses per hour.
+        from .email_validation import validate_email_address
+        try:
+            validate_email_address(email)
+        except serializers.ValidationError as exc:
+            # DRF wraps the message · pull the first one for a friendly
+            # response.
+            detail = exc.detail
+            if isinstance(detail, list) and detail:
+                msg = str(detail[0])
+            else:
+                msg = str(detail)
+            return Response(
+                {"error": msg},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         # Rate limit: max 3 verification emails per user per hour
         rate_key = f"email_verify_rate:{request.user.id}"
         attempts = cache.get(rate_key, 0)
@@ -2592,6 +2632,23 @@ class AdminVerifyUserView(APIView):
             return Response(
                 {"detail": "Invalid tier. Must be 0-3."},
                 status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Layer 3 of the email-abuse defence: tier 2+ unlocks higher
+        # transaction limits and is the gate for the recovery-email-as-
+        # password-reset channel. Refuse the upgrade if the target's
+        # primary email isn't verified · the operator should ask them to
+        # confirm before promoting.
+        if new_tier >= 2 and not target_user.email_verified:
+            return Response(
+                {
+                    "detail": (
+                        "Cannot upgrade to tier 2+ without a verified email. "
+                        "Ask the user to verify their email first."
+                    ),
+                    "error_code": "email_verification_required",
+                },
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         old_tier = target_user.kyc_tier

@@ -103,6 +103,14 @@ class User(AbstractBaseUser, PermissionsMixin):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     phone = models.CharField(max_length=15, unique=True, db_index=True)
     email = models.EmailField(blank=True, null=True, unique=True)
+    # Canonicalised form of `email` (gmail dot/plus stripped, lowercased).
+    # Carries a partial unique constraint via the Meta below so the same
+    # human can't open a second account by aliasing their gmail. Empty
+    # string means "no email on this row" and is excluded from the unique
+    # check. Populated by `User.save()`; backfilled by migration 0018.
+    normalised_email = models.CharField(
+        max_length=254, blank=True, default="", db_index=True,
+    )
     full_name = models.CharField(max_length=50, blank=True, default="")
     avatar = models.ImageField(upload_to="avatars/%Y/%m/", blank=True, null=True)
     pin_hash = models.CharField(max_length=255, blank=True)
@@ -192,9 +200,58 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     class Meta:
         db_table = "users"
+        constraints = [
+            # Partial uniqueness · only enforced for non-empty values so
+            # the bulk of phone-only users don't all collide on "".
+            models.UniqueConstraint(
+                fields=["normalised_email"],
+                condition=~models.Q(normalised_email=""),
+                name="user_normalised_email_unique",
+            ),
+        ]
 
     def __str__(self):
         return self.phone
+
+    def save(self, *args, **kwargs):
+        """Keep `normalised_email` in lockstep with `email` on every write.
+
+        Audit C3 fix · the override only re-derives `normalised_email`
+        when the caller is touching `email` (full save, or a partial
+        save whose `update_fields` mentions `email`). If the caller
+        already set `normalised_email` directly and excluded `email`
+        from `update_fields`, the in-memory value is preserved · no
+        silent overwrite.
+        """
+        from .email_validation import normalise_email
+
+        update_fields = kwargs.get("update_fields")
+        # Decide whether email is in scope for this write:
+        #   - update_fields is None ............. full save, recompute
+        #   - "email" in update_fields .......... partial save touches email
+        #   - "normalised_email" in update_fields  caller explicitly opted in
+        #                                          to a manual sync, leave it
+        #   - otherwise ......................... partial save NOT touching
+        #                                          email, do not touch
+        #                                          normalised_email
+        email_in_scope = (
+            update_fields is None
+            or "email" in update_fields
+        )
+        manual_normalised_write = (
+            update_fields is not None
+            and "normalised_email" in update_fields
+            and "email" not in update_fields
+        )
+
+        if email_in_scope and not manual_normalised_write:
+            new_normalised = normalise_email(self.email or "")
+            if new_normalised != self.normalised_email:
+                self.normalised_email = new_normalised
+                if update_fields is not None:
+                    # Cast to list so frozensets / tuples work.
+                    kwargs["update_fields"] = list(update_fields) + ["normalised_email"]
+        return super().save(*args, **kwargs)
 
     def set_pin(self, raw_pin: str):
         self.pin_hash = bcrypt.hashpw(

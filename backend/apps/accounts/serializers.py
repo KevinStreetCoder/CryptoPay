@@ -2,6 +2,7 @@ import re
 
 from rest_framework import serializers
 
+from .email_validation import is_disposable, normalise_email, validate_email_address
 from .models import User
 
 # Name validation: letters, spaces, hyphens, apostrophes, periods — supports
@@ -71,6 +72,21 @@ class RegisterSerializer(serializers.Serializer):
     def validate_pin(self, value):
         if not value.isdigit():
             raise serializers.ValidationError("PIN must be 6 digits")
+        return value
+
+    def validate_email(self, value):
+        # Email is optional at signup. If present, it has to pass the
+        # disposable / MX gates and not collide with an existing user
+        # (raw or via gmail-alias trickery).
+        if not value:
+            return value
+        # Raises ValidationError on disposable/MX miss · caller surface.
+        validate_email_address(value)
+        if User.objects.filter(email__iexact=value).exists():
+            raise serializers.ValidationError("This email is already in use")
+        normalised = normalise_email(value)
+        if normalised and User.objects.filter(normalised_email=normalised).exists():
+            raise serializers.ValidationError("This email is already in use")
         return value
 
 
@@ -307,8 +323,14 @@ class ProfileUpdateSerializer(serializers.Serializer):
     def validate_email(self, value):
         if not value:
             return value
+        # Layer 1 + Layer 2: blocklist + MX gating. The user is editing
+        # their own profile so we still want to refuse disposables.
+        validate_email_address(value)
         user = self.context.get("user")
         if User.objects.filter(email__iexact=value).exclude(id=user.id).exists():
+            raise serializers.ValidationError("Email already in use")
+        normalised = normalise_email(value)
+        if normalised and User.objects.filter(normalised_email=normalised).exclude(id=user.id).exists():
             raise serializers.ValidationError("Email already in use")
         return value
 
@@ -332,6 +354,15 @@ class RecoveryEmailSerializer(serializers.Serializer):
     """Set recovery email and/or phone."""
     recovery_email = serializers.EmailField(required=False)
     recovery_phone = serializers.CharField(max_length=15, required=False, default="")
+
+    def validate_recovery_email(self, value):
+        if not value:
+            return value
+        # Same blocklist + MX gate as primary signup. Recovery email is
+        # used for higher-value flows (PIN reset, suspicious-login alerts)
+        # so disposables here are an even worse abuse vector than at signup.
+        validate_email_address(value)
+        return value
 
 
 class ForgotPINSerializer(serializers.Serializer):

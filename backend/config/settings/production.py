@@ -49,6 +49,10 @@ DATABASES["default"]["OPTIONS"] = {  # noqa: F405
 }
 
 # --- Sentry ---
+# Audit H7 · explicit opt-in for MX-record validation on signup. Production
+# enables it; dev/CI defaults remain off (controlled in `email_validation.py`).
+EMAIL_VALIDATION_REQUIRE_MX = True
+
 SENTRY_DSN = env("SENTRY_DSN", default="")  # noqa: F405
 if SENTRY_DSN:
     import sentry_sdk
