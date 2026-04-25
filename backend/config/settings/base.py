@@ -412,6 +412,21 @@ MPESA_INITIATOR_PASSWORD = env("MPESA_INITIATOR_PASSWORD", default="")
 MPESA_B2C_SHORTCODE = env("MPESA_B2C_SHORTCODE", default="")
 MPESA_CALLBACK_BASE_URL = env("MPESA_CALLBACK_BASE_URL", default="https://localhost")
 MPESA_CERT_PATH = env("MPESA_CERT_PATH", default=str(BASE_DIR / "certs" / "sandbox.pem"))
+# Audit HIGH-2 fix · dedicated key for the per-tx callback HMAC URL token.
+# The Daraja product itself doesn't sign callbacks, so we sign the URL
+# we register with Safaricom: /api/v1/mpesa/callback/stk/<token>/. A
+# leak of SECRET_KEY would let an attacker forge tokens and complete
+# any pending payment without the M-Pesa side ever moving funds. Generate
+# with: python -c "import secrets; print(secrets.token_hex(32))"
+MPESA_CALLBACK_HMAC_KEY = env("MPESA_CALLBACK_HMAC_KEY", default="")
+
+# Audit HIGH-1 fix · dedicated key for at-rest encryption of TOTP secrets.
+# Previously derived from SECRET_KEY (single point of failure); now an
+# independent rotatable key. Either Fernet shape (44 chars ending in '=',
+# generate with `Fernet.generate_key()`) or any high-entropy string
+# (we SHA-256 + b64-wrap to derive a Fernet key). Generate with:
+#   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+TOTP_ENCRYPTION_KEY = env("TOTP_ENCRYPTION_KEY", default="")
 
 # --- SasaPay (alternative payment provider — CBK-licensed PSP) ---
 # Set PAYMENT_PROVIDER=sasapay to use SasaPay instead of Daraja
@@ -421,6 +436,17 @@ SASAPAY_CLIENT_ID = env("SASAPAY_CLIENT_ID", default="")
 SASAPAY_CLIENT_SECRET = env("SASAPAY_CLIENT_SECRET", default="")
 SASAPAY_MERCHANT_CODE = env("SASAPAY_MERCHANT_CODE", default="")
 SASAPAY_CALLBACK_URL = env("SASAPAY_CALLBACK_URL", default="https://cpay.co.ke/api/v1/sasapay/callback/")
+# SasaPay webhook signing secret · used to verify the HMAC on incoming
+# callbacks. Without this, the only authentication is the IP allow-list,
+# which is fragile and known-leaky. The production guard refuses to
+# boot when PAYMENT_PROVIDER=sasapay AND SASAPAY_WEBHOOK_SECRET is empty.
+# Configure on the SasaPay merchant dashboard; see docs/SASAPAY-WEBHOOK.md
+SASAPAY_WEBHOOK_SECRET = env("SASAPAY_WEBHOOK_SECRET", default="")
+# Per-tx HMAC secret for the URL-token fallback (the same pattern Daraja
+# callbacks use). Lets us verify callbacks even if SasaPay drops their
+# signature header. Generated on initiate(), embedded in the callback
+# URL, consumed once-only via Redis SETNX.
+SASAPAY_CALLBACK_HMAC_KEY = env("SASAPAY_CALLBACK_HMAC_KEY", default="")
 
 # --- CoinGecko ---
 COINGECKO_API_KEY = env("COINGECKO_API_KEY", default="")
@@ -450,7 +476,10 @@ MPESA_ALLOWED_IPS = env.list("MPESA_ALLOWED_IPS", default=[
     "127.0.0.0/8",
 ])
 # B2: SasaPay-only allow-list. Production operator MUST override with the
-# SasaPay documented source IPs. Defaults to private ranges for dev only.
+# SasaPay documented source IPs · the production guard refuses to boot
+# when this list contains any private CIDR (192.168.x, 10.x, 172.16-31.x,
+# 127.x). Default kept as private ranges for dev convenience; production
+# .env.production must set the real SasaPay source IPs.
 SASAPAY_ALLOWED_IPS = env.list("SASAPAY_ALLOWED_IPS", default=[
     "192.168.0.0/16",
     "127.0.0.0/8",

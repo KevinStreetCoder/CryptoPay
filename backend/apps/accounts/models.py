@@ -12,10 +12,86 @@ from django.db import models
 from .managers import UserManager
 
 
-def _get_fernet():
-    """Return a Fernet instance keyed from Django's SECRET_KEY."""
+def _fernet_from_legacy_key() -> Fernet:
+    """Derive a Fernet instance from SECRET_KEY · LEGACY ONLY.
+
+    Used exclusively to decrypt rows written before HIGH-1 was fixed. Do
+    not call this for fresh encryptions. Once
+    `manage.py migrate_totp_encryption` has rotated every existing row,
+    this function is dead code that we keep around as a safety net.
+    """
     key = hashlib.sha256(settings.SECRET_KEY.encode()).digest()
     return Fernet(base64.urlsafe_b64encode(key))
+
+
+def _fernet_from_primary_key() -> Fernet:
+    """Build a Fernet instance from the dedicated TOTP_ENCRYPTION_KEY.
+
+    Audit HIGH-1 fix · TOTP secrets used to be encrypted under a Fernet
+    key derived from SECRET_KEY. Reusing SECRET_KEY for at-rest
+    encryption means a single secret leak (Sentry capture, log line,
+    repo blob) decrypts every user's TOTP seed and bypasses 2FA on the
+    entire user base. The dedicated `TOTP_ENCRYPTION_KEY` env var has a
+    separate rotation lifecycle and is never used as a Django framework
+    key.
+
+    Format: either a Fernet-shape key (base64-urlsafe, 44 chars, ends
+    with '=') OR any high-entropy string we'll SHA-256 + b64-wrap to
+    derive a Fernet key from. Hex generated with
+    `python -c "import secrets; print(secrets.token_hex(32))"` works.
+    """
+    primary = getattr(settings, "TOTP_ENCRYPTION_KEY", "")
+    if not primary:
+        if settings.DEBUG:
+            # Dev fallback so existing test fixtures work without
+            # operators having to set the env. Production refuses.
+            return _fernet_from_legacy_key()
+        raise RuntimeError(
+            "TOTP_ENCRYPTION_KEY is not set. Refusing to fall back to "
+            "SECRET_KEY-derived encryption in production. Generate with: "
+            "  python -c \"from cryptography.fernet import Fernet; "
+            "print(Fernet.generate_key().decode())\" "
+            "and set TOTP_ENCRYPTION_KEY in .env.production."
+        )
+
+    # Already a Fernet key shape · use directly.
+    if len(primary) == 44 and primary.endswith("="):
+        return Fernet(primary.encode())
+    # Otherwise, derive deterministically.
+    derived = hashlib.sha256(primary.encode()).digest()
+    return Fernet(base64.urlsafe_b64encode(derived))
+
+
+def _get_fernet():
+    """Backwards-compat alias · returns the primary Fernet."""
+    return _fernet_from_primary_key()
+
+
+def _decrypt_totp_token(token: str) -> str | None:
+    """Decrypt a TOTP secret. Tries the primary key first; falls back
+    to the SECRET_KEY-derived legacy key for rows that haven't been
+    migrated yet. Returns the original token unchanged if both fail
+    (which means the row contains legacy plaintext)."""
+    if not token:
+        return None
+    if not token.startswith("gAAAAA"):
+        # Legacy plaintext (pre-encryption era) · pass through.
+        return token
+
+    try:
+        return _fernet_from_primary_key().decrypt(token.encode()).decode()
+    except InvalidToken:
+        pass
+    except Exception:
+        pass
+
+    # Legacy fallback · row encrypted with the SECRET_KEY-derived key.
+    # Will be migrated to the primary key by
+    # `manage.py migrate_totp_encryption`.
+    try:
+        return _fernet_from_legacy_key().decrypt(token.encode()).decode()
+    except (InvalidToken, Exception):
+        return token  # last-ditch · row is corrupted
 
 
 class User(AbstractBaseUser, PermissionsMixin):
@@ -136,21 +212,17 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     @property
     def totp_secret_decrypted(self):
-        """Return the decrypted TOTP secret, handling legacy plaintext values."""
-        if not self.totp_secret:
-            return None
-        # Fernet tokens always start with 'gAAAAA'
-        if self.totp_secret.startswith("gAAAAA"):
-            try:
-                return _get_fernet().decrypt(self.totp_secret.encode()).decode()
-            except (InvalidToken, Exception):
-                return self.totp_secret  # Fallback if decryption fails
-        return self.totp_secret  # Legacy plaintext — not yet encrypted
+        """Return the decrypted TOTP secret. Handles legacy plaintext rows
+        and rows still encrypted under the pre-HIGH-1 SECRET_KEY-derived
+        Fernet · `_decrypt_totp_token` walks both candidate keys."""
+        return _decrypt_totp_token(self.totp_secret)
 
     def set_totp_secret(self, value):
-        """Encrypt and store the TOTP secret."""
+        """Encrypt and store the TOTP secret under the primary key."""
         if value:
-            self.totp_secret = _get_fernet().encrypt(value.encode()).decode()
+            self.totp_secret = _fernet_from_primary_key().encrypt(
+                value.encode()
+            ).decode()
         else:
             self.totp_secret = ""
 
@@ -230,13 +302,24 @@ class PushToken(models.Model):
 
 
 class EmailVerificationToken(models.Model):
-    """Token for email verification with 6-digit OTP code."""
+    """Token for email verification with an 8-char alphanumeric OTP code.
+
+    Audit HIGH-4 fix · 6-digit numeric was 10^6 = 1M space, brute-
+    forceable from a residential proxy farm in <30 min within the
+    10-min token TTL when the per-IP rate limit could be sidestepped
+    by IP rotation. 8-char uppercase-alphanumeric is 36^8 = 2.8×10^12,
+    which is mathematically infeasible to brute-force in any window.
+
+    Existing rows with 6-char codes keep working · the verify view
+    accepts both lengths during the migration window. Old rows expire
+    naturally after 10 minutes.
+    """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="email_tokens")
     email = models.EmailField()
     token = models.CharField(max_length=64, unique=True, db_index=True)
-    otp_code = models.CharField(max_length=6, db_index=True, default="")
+    otp_code = models.CharField(max_length=8, db_index=True, default="")
     is_used = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField()
@@ -246,6 +329,14 @@ class EmailVerificationToken(models.Model):
 
     def __str__(self):
         return f"Email verification for {self.email}"
+
+    # Avoid letters that look like digits at email font sizes (0/O, 1/I/L).
+    # 32 unambiguous chars · 32^8 = 1.1×10^12 still infeasible to guess.
+    _OTP_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+
+    @classmethod
+    def _generate_otp(cls) -> str:
+        return "".join(secrets.choice(cls._OTP_ALPHABET) for _ in range(8))
 
     @classmethod
     def create_for_user(cls, user, email):
@@ -257,7 +348,7 @@ class EmailVerificationToken(models.Model):
         cls.objects.filter(user=user, email=email, is_used=False).update(is_used=True)
 
         token = secrets.token_urlsafe(48)
-        otp_code = f"{secrets.randbelow(900000) + 100000}"
+        otp_code = cls._generate_otp()
         return cls.objects.create(
             user=user,
             email=email,

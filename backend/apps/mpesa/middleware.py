@@ -131,12 +131,43 @@ class MpesaIPWhitelistMiddleware:
 _CALLBACK_TOKEN_TTL = 7200  # 2 hours — M-Pesa callbacks typically arrive within minutes
 
 
+def _callback_hmac_key() -> bytes:
+    """Return the HMAC key for callback token signing.
+
+    Audit HIGH-2 fix · the dedicated `MPESA_CALLBACK_HMAC_KEY` env var
+    is the canonical key. Fall back to `SECRET_KEY` ONLY when the
+    dedicated key is missing AND we're not in production · the
+    production-settings guard refuses configs that hit the fallback.
+
+    Why a dedicated key: SECRET_KEY is the encryption root for Django
+    sessions, signed cookies, and CSRF tokens. Reusing it for the
+    callback HMAC means a single SECRET_KEY leak (Sentry trace, log
+    line, repo blob) lets an attacker forge valid callback tokens for
+    every pending payment, marking them COMPLETED on the ledger while
+    the M-Pesa side never settles.
+    """
+    dedicated = getattr(settings, "MPESA_CALLBACK_HMAC_KEY", "")
+    if dedicated:
+        return dedicated.encode("utf-8")
+    if not settings.DEBUG:
+        # Belt-and-braces · production guard already refuses to boot
+        # without this key, but if a stray `from .middleware import …`
+        # tries to mint a token before the guard runs, refuse loudly.
+        raise RuntimeError(
+            "MPESA_CALLBACK_HMAC_KEY is not set. Refusing to fall back "
+            "to SECRET_KEY in production. Generate one with "
+            "`python -c \"import secrets; print(secrets.token_hex(32))\"` "
+            "and set MPESA_CALLBACK_HMAC_KEY in .env.production."
+        )
+    return getattr(settings, "SECRET_KEY", "").encode("utf-8")
+
+
 def generate_callback_token(transaction_id: str, callback_type: str = "stk") -> str:
     """
     Generate an HMAC-based callback token for a transaction.
 
     The token is:
-      HMAC-SHA256(SECRET_KEY, f"{transaction_id}:{callback_type}:{timestamp}")
+      HMAC-SHA256(MPESA_CALLBACK_HMAC_KEY, f"{transaction_id}:{callback_type}:{timestamp}")
       truncated to 32 hex chars for URL-friendliness.
 
     The token is stored in Redis with a 2-hour TTL. When the callback arrives,
@@ -150,7 +181,7 @@ def generate_callback_token(transaction_id: str, callback_type: str = "stk") -> 
     Returns:
         32-char hex token for embedding in the callback URL
     """
-    secret = getattr(settings, "SECRET_KEY", "").encode()
+    secret = _callback_hmac_key()
     timestamp = str(int(time.time()))
     message = f"{transaction_id}:{callback_type}:{timestamp}".encode()
 

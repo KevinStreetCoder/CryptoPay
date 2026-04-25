@@ -37,7 +37,12 @@ urlpatterns = [
     path("callback/balance/<str:token>/", views.BalanceCallbackView.as_view(), name="balance-callback-token"),
     path("callback/balance/timeout/<str:token>/", views.TimeoutCallbackView.as_view(), name="balance-timeout-token"),
 
-    # SasaPay callbacks (alternative payment provider)
-    path("sasapay/callback/", sasapay_views.sasapay_callback, name="sasapay-callback"),
-    path("sasapay/ipn/", sasapay_views.sasapay_ipn, name="sasapay-ipn"),
+    # ── SasaPay callbacks · DISABLED ──
+    # Daraja is the primary rail (April 2026 application submitted).
+    # See config/urls.py for the rationale; uncomment alongside the
+    # top-level routes there when re-enabling SasaPay as a fallback.
+    #
+    # path("sasapay/callback/", sasapay_views.sasapay_callback, name="sasapay-callback"),
+    # path("sasapay/callback/<str:token>/", sasapay_views.sasapay_callback, name="sasapay-callback-token"),
+    # path("sasapay/ipn/", sasapay_views.sasapay_ipn, name="sasapay-ipn"),
 ]

@@ -224,28 +224,24 @@ class KYCUploadSerializer(serializers.Serializer):
         ("kra_pin", "KRA PIN"),
         ("proof_of_address", "Proof of Address"),
     ])
-    # Accept either a direct file upload or a pre-signed URL
-    file = serializers.FileField(required=False)
-    file_url = serializers.URLField(max_length=500, required=False)
+    # Audit MEDIUM-1: only direct multipart uploads are accepted. The
+    # previous `file_url` field let any user submit an arbitrary URL
+    # that the admin review UI would surface as a clickable link · a
+    # phishing channel into the admin console (and an SSRF channel if
+    # any backend ever fetched the URL). The URL is now generated
+    # server-side from the saved file path; the user has no input.
+    file = serializers.FileField(required=True)
 
     def validate_file(self, value):
-        if value:
-            max_size = 10 * 1024 * 1024  # 10 MB
-            if value.size > max_size:
-                raise serializers.ValidationError("File must be under 10MB")
-            allowed = ("image/jpeg", "image/png", "image/webp", "application/pdf")
-            if value.content_type not in allowed:
-                raise serializers.ValidationError(
-                    "Allowed formats: JPEG, PNG, WebP, PDF"
-                )
-        return value
-
-    def validate(self, data):
-        if not data.get("file") and not data.get("file_url"):
+        max_size = 10 * 1024 * 1024  # 10 MB
+        if value.size > max_size:
+            raise serializers.ValidationError("File must be under 10MB")
+        allowed = ("image/jpeg", "image/png", "image/webp", "application/pdf")
+        if value.content_type not in allowed:
             raise serializers.ValidationError(
-                "Either 'file' or 'file_url' is required."
+                "Allowed formats: JPEG, PNG, WebP, PDF"
             )
-        return data
+        return value
 
 
 class PushTokenSerializer(serializers.Serializer):

@@ -147,17 +147,89 @@ _prod_logger = _prod_logging.getLogger("apps.core.production_checks")
 def _assert_production_env():
     issues = []
 
-    # Payment rail — if either provider's environment is still sandbox, stop
-    # the app from processing real payments. The audit flagged this as the
-    # top beta blocker: a missing env var would silently route every M-Pesa
-    # payment to sandbox.
-    if MPESA_ENVIRONMENT != "production":  # noqa: F405
+    # Payment rail — if the active provider's environment is still sandbox,
+    # stop the app from processing real payments. The audit flagged this as
+    # the top beta blocker: a missing env var would silently route every
+    # M-Pesa payment to sandbox.
+    payment_provider = (globals().get("PAYMENT_PROVIDER", "daraja") or "daraja").lower()
+    if payment_provider == "daraja":
+        if MPESA_ENVIRONMENT != "production":  # noqa: F405
+            issues.append(
+                f"MPESA_ENVIRONMENT={MPESA_ENVIRONMENT!r} in production — set to 'production' in .env.production"
+            )
+        # Audit HIGH-2: callback HMAC must NOT fall back to SECRET_KEY.
+        # See apps/mpesa/middleware.py::_callback_hmac_key for the full
+        # rationale.
+        mpesa_hmac_key = globals().get("MPESA_CALLBACK_HMAC_KEY", "")
+        if not mpesa_hmac_key:
+            issues.append(
+                "MPESA_CALLBACK_HMAC_KEY is not set. The Daraja callback "
+                "URL would be HMAC-signed with SECRET_KEY, which collapses "
+                "every pending payment's integrity onto a single key. "
+                "Generate with: python -c \"import secrets; "
+                "print(secrets.token_hex(32))\" and set in .env.production."
+            )
+        elif len(mpesa_hmac_key) < 32:
+            issues.append(
+                f"MPESA_CALLBACK_HMAC_KEY is only {len(mpesa_hmac_key)} chars · "
+                "use at least 32 hex chars (256 bits)."
+            )
+
+    # Audit HIGH-1: TOTP secret encryption key must NOT fall back to
+    # SECRET_KEY. A single SECRET_KEY leak otherwise decrypts every
+    # user's authenticator-app seed and disables 2FA wholesale.
+    totp_key = globals().get("TOTP_ENCRYPTION_KEY", "")
+    if not totp_key:
         issues.append(
-            f"MPESA_ENVIRONMENT={MPESA_ENVIRONMENT!r} in production — set to 'production' in .env.production"
+            "TOTP_ENCRYPTION_KEY is not set. TOTP secrets would be "
+            "encrypted with SECRET_KEY-derived Fernet, collapsing 2FA "
+            "for every user onto a single secret. Generate with: "
+            "python -c \"from cryptography.fernet import Fernet; "
+            "print(Fernet.generate_key().decode())\" and set in "
+            ".env.production. After deploying, run "
+            "`python manage.py migrate_totp_encryption` to re-encrypt "
+            "any rows previously written under the old key."
         )
-    if SASAPAY_ENVIRONMENT != "production":  # noqa: F405
+    elif payment_provider == "sasapay":
+        if SASAPAY_ENVIRONMENT != "production":  # noqa: F405
+            issues.append(
+                f"SASAPAY_ENVIRONMENT={SASAPAY_ENVIRONMENT!r} in production — set to 'production' in .env.production"
+            )
+        # Audit CRITICAL-1: SasaPay callbacks are unauthenticated unless
+        # SASAPAY_WEBHOOK_SECRET (header HMAC) or SASAPAY_CALLBACK_HMAC_KEY
+        # (per-tx URL token) is set. With neither, the IP allow-list is
+        # the only barrier · a known-leaky control. Refuse the configuration.
+        webhook_secret = globals().get("SASAPAY_WEBHOOK_SECRET", "")
+        url_hmac_key = globals().get("SASAPAY_CALLBACK_HMAC_KEY", "")
+        if not (webhook_secret or url_hmac_key):
+            issues.append(
+                "PAYMENT_PROVIDER=sasapay but neither SASAPAY_WEBHOOK_SECRET "
+                "nor SASAPAY_CALLBACK_HMAC_KEY is set. Callbacks would be "
+                "unauthenticated (IP allow-list only). Set at least one."
+            )
+        # Audit CRITICAL-1: SASAPAY_ALLOWED_IPS must not contain private
+        # CIDRs in production · those let any same-VPC container forge
+        # callbacks. Default base.py value is private-only for dev; prod
+        # operator must override.
+        sasapay_ips = globals().get("SASAPAY_ALLOWED_IPS", []) or []
+        bad_cidrs = [
+            ip for ip in sasapay_ips
+            if ip.startswith(("10.", "127.", "172.16.", "172.17.", "172.18.",
+                              "172.19.", "172.20.", "172.21.", "172.22.",
+                              "172.23.", "172.24.", "172.25.", "172.26.",
+                              "172.27.", "172.28.", "172.29.", "172.30.",
+                              "172.31.", "192.168.", "169.254."))
+        ]
+        if bad_cidrs:
+            issues.append(
+                f"SASAPAY_ALLOWED_IPS contains private CIDRs in production: "
+                f"{bad_cidrs}. Override with the SasaPay-documented public "
+                "source IPs only."
+            )
+    elif payment_provider:
         issues.append(
-            f"SASAPAY_ENVIRONMENT={SASAPAY_ENVIRONMENT!r} in production — set to 'production' in .env.production"
+            f"PAYMENT_PROVIDER={payment_provider!r} is not supported. "
+            "Use 'daraja' or 'sasapay'."
         )
 
     # Africa's Talking sandbox username would try to send real SMS through

@@ -155,8 +155,14 @@ export function useAuth() {
     // challenge_id is set when the user approved the sign-in via push on
     // another trusted device · backend consumes it as proof and skips OTP.
     const { data } = await authApi.login({ phone, pin, otp, challenge_id });
-    await storage.setItemAsync("access_token", data.tokens.access);
-    await storage.setItemAsync("refresh_token", data.tokens.refresh);
+    // Audit MEDIUM-9: when running on web, the backend strips `tokens`
+    // from the response and sets HttpOnly cookies instead, so `data.tokens`
+    // is undefined. Native callers always get the JSON tokens. Guard the
+    // storage writes either way · cookies are the auth on web.
+    if (data.tokens) {
+      await storage.setItemAsync("access_token", data.tokens.access);
+      await storage.setItemAsync("refresh_token", data.tokens.refresh);
+    }
     // Stamp `app_last_active` NOW so `useAppLock`'s cold-start check
     // doesn't immediately re-lock the session — otherwise the user
     // completes the login PIN, sees "Signing in...", then is dropped
@@ -195,8 +201,11 @@ export function useAuth() {
         email,
         referral_code: code || undefined,
       });
-      await storage.setItemAsync("access_token", data.tokens.access);
-      await storage.setItemAsync("refresh_token", data.tokens.refresh);
+      // MEDIUM-9: web bypasses JSON tokens, native always gets them.
+      if (data.tokens) {
+        await storage.setItemAsync("access_token", data.tokens.access);
+        await storage.setItemAsync("refresh_token", data.tokens.refresh);
+      }
       // See matching note in `login()` — stamp `app_last_active` so
       // useAppLock doesn't immediately re-lock a freshly-registered user.
       await storage.setItemAsync("app_last_active", String(Date.now()));
@@ -219,8 +228,11 @@ export function useAuth() {
       // Store email for the complete-profile step
       await storage.setItemAsync("google_pending_email", data.user?.email || "");
     } else {
-      await storage.setItemAsync("access_token", data.tokens.access);
-      await storage.setItemAsync("refresh_token", data.tokens.refresh);
+      // MEDIUM-9: web bypasses JSON tokens, native always gets them.
+      if (data.tokens) {
+        await storage.setItemAsync("access_token", data.tokens.access);
+        await storage.setItemAsync("refresh_token", data.tokens.refresh);
+      }
       // Set the "needs local unlock" flag BEFORE exposing the user. The
       // route guard in _layout.tsx sees this and forces /auth/google-
       // unlock. Cleared on successful PIN/biometric. Uses the atomic
@@ -250,8 +262,11 @@ export function useAuth() {
     const { data: responseData } = await authApi.googleCompleteProfile({ ...data, email: email || "", referral_code });
     await storage.deleteItemAsync("google_pending_email");
     try { await storage.deleteItemAsync("pending_referral_code"); } catch {}
-    await storage.setItemAsync("access_token", responseData.tokens.access);
-    await storage.setItemAsync("refresh_token", responseData.tokens.refresh);
+    // MEDIUM-9: web bypasses JSON tokens, native always gets them.
+    if (responseData.tokens) {
+      await storage.setItemAsync("access_token", responseData.tokens.access);
+      await storage.setItemAsync("refresh_token", responseData.tokens.refresh);
+    }
     // See `login()` — prevent the cold-start AppLock from firing
     // immediately after Google-profile completion.
     await storage.setItemAsync("app_last_active", String(Date.now()));

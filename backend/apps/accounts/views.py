@@ -240,6 +240,8 @@ class RegisterView(APIView):
         # C1: HttpOnly cookies for web clients · same header contract as login.
         if request.META.get("HTTP_X_CPAY_WEB") == "1":
             _set_auth_cookies(resp, str(refresh.access_token), str(refresh))
+            # MEDIUM-9: web client gets cookies, NOT JSON tokens.
+            _strip_tokens_for_web(resp, request)
         return resp
 
     def _get_client_ip(self, request):
@@ -565,6 +567,8 @@ class LoginView(APIView):
         # omit the header and keep using the JSON token payload.
         if request.META.get("HTTP_X_CPAY_WEB") == "1":
             _set_auth_cookies(response, str(refresh.access_token), str(refresh))
+            # MEDIUM-9: web client gets cookies, NOT JSON tokens.
+            _strip_tokens_for_web(response, request)
         return response
 
     def _send_otp_challenge(self, phone, user=None):
@@ -920,6 +924,7 @@ class GoogleLoginView(APIView):
             )
             if request.META.get("HTTP_X_CPAY_WEB") == "1":
                 _set_auth_cookies(resp, str(refresh.access_token), str(refresh))
+                _strip_tokens_for_web(resp, request)
             return resp
 
         resp = Response(
@@ -936,6 +941,7 @@ class GoogleLoginView(APIView):
         )
         if request.META.get("HTTP_X_CPAY_WEB") == "1":
             _set_auth_cookies(resp, str(refresh.access_token), str(refresh))
+            _strip_tokens_for_web(resp, request)
         return resp
 
     def _get_client_ip(self, request):
@@ -1314,20 +1320,20 @@ class KYCDocumentListView(APIView):
 
         doc_type = serializer.validated_data["document_type"]
 
-        # Handle direct file upload: save to media storage and generate URL
-        uploaded_file = serializer.validated_data.get("file")
-        if uploaded_file:
-            import os
-            from django.core.files.storage import default_storage
+        # Audit MEDIUM-1: file_url field removed · only multipart uploads
+        # are accepted. The URL stored on the model is computed
+        # server-side from the saved storage path so the user has no
+        # opportunity to inject a URL that an admin reviewer might
+        # click. Storage path is also constrained to `kyc_docs/` (audit
+        # MEDIUM-2) so the ProtectedMediaView allow-list matches.
+        import os
+        from django.core.files.storage import default_storage
 
-            ext = os.path.splitext(uploaded_file.name)[1] or ".jpg"
-            path = f"kyc/{request.user.id}/{doc_type}_{request.user.id}{ext}"
-            saved_path = default_storage.save(path, uploaded_file)
-            file_url = request.build_absolute_uri(
-                default_storage.url(saved_path)
-            )
-        else:
-            file_url = serializer.validated_data["file_url"]
+        uploaded_file = serializer.validated_data["file"]
+        ext = os.path.splitext(uploaded_file.name)[1] or ".jpg"
+        path = f"kyc_docs/{request.user.id}/{doc_type}_{request.user.id}{ext}"
+        saved_path = default_storage.save(path, uploaded_file)
+        file_url = request.build_absolute_uri(default_storage.url(saved_path))
 
         # Check if a document of this type already exists and is pending/approved
         existing = KYCDocument.objects.filter(
@@ -1493,14 +1499,32 @@ class ConfirmEmailVerificationView(APIView):
         serializer = EmailVerifySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        token = serializer.validated_data["token"]
+        submitted = serializer.validated_data["token"].strip()
 
-        # Brute force protection: max 5 failed attempts per IP per 15 minutes
-        xff = request.META.get("HTTP_X_FORWARDED_FOR")
-        client_ip = xff.split(",")[0].strip() if xff else request.META.get("REMOTE_ADDR", "")
-        attempt_key = f"email_verify_attempts:{client_ip}"
-        attempts = cache.get(attempt_key, 0)
-        if attempts >= 5:
+        # Audit HIGH-4: dual-scoped brute-force protection.
+        # 1. Per-IP cap (5 wrong / 15 min) · catches a noisy single client.
+        # 2. Per-submission-fingerprint cap (5 wrong attempts on the same
+        #    submitted code · regardless of source IP) · kills the
+        #    IP-rotation attack on a specific OTP. We hash the submission
+        #    so the rate-limit key doesn't echo the secret into Redis.
+        #
+        # Use the trusted-proxy-aware client IP (set by D22 middleware)
+        # rather than parsing X-Forwarded-For directly, which is spoofable
+        # when the request didn't come through Cloudflare.
+        client_ip = (
+            getattr(request, "real_client_ip", None)
+            or request.META.get("REMOTE_ADDR", "")
+        )
+
+        import hashlib as _hashlib  # local import keeps top-of-file clean
+        sub_fp = _hashlib.sha256(submitted.encode("utf-8")).hexdigest()[:24]
+        ip_key = f"email_verify_attempts:ip:{client_ip}"
+        sub_key = f"email_verify_attempts:sub:{sub_fp}"
+
+        ip_attempts = cache.get(ip_key, 0)
+        sub_attempts = cache.get(sub_key, 0)
+
+        if ip_attempts >= 5 or sub_attempts >= 5:
             return Response(
                 {"error": "Too many attempts. Please wait and try again."},
                 status=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -1508,17 +1532,29 @@ class ConfirmEmailVerificationView(APIView):
 
         # Try full token first
         token_obj = EmailVerificationToken.objects.filter(
-            token=token, is_used=False
+            token=submitted, is_used=False
         ).first()
 
         if not token_obj:
-            # Try matching by 6-digit OTP code
+            # Match by OTP code · accepts both legacy 6-digit and current
+            # 8-char alphanumeric formats during the migration window.
+            # `iexact` because the alphabet is uppercase but users may
+            # type lowercase; the unambiguous-letter alphabet means there
+            # are no ambiguities introduced by case-folding.
             token_obj = EmailVerificationToken.objects.filter(
-                otp_code=token.strip(), is_used=False
+                otp_code__iexact=submitted, is_used=False
             ).order_by("-created_at").first()
 
         if not token_obj:
-            cache.set(attempt_key, attempts + 1, timeout=900)  # 15-min window
+            cache.set(ip_key, ip_attempts + 1, timeout=900)  # 15-min window
+            cache.set(sub_key, sub_attempts + 1, timeout=900)
+            # Five strikes against the same submitted value ALSO invalidates
+            # any active token that happens to match it · removes the
+            # narrow window where the same OTP is being targeted.
+            if sub_attempts + 1 >= 5:
+                EmailVerificationToken.objects.filter(
+                    otp_code__iexact=submitted, is_used=False
+                ).update(is_used=True)
             return Response(
                 {"error": "Invalid or expired verification code"},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -3153,7 +3189,44 @@ class HardenedTokenRefreshView(_SimpleJWTTokenRefreshView):
                 access=response.data.get("access", ""),
                 refresh=response.data.get("refresh", ""),
             )
+            # MEDIUM-9: web token refresh = cookies only, drop JSON body.
+            # Strip both `access` and `refresh` directly · the SimpleJWT
+            # response uses those keys at the top level instead of nested
+            # under `tokens`, so _strip_tokens_for_web won't catch them.
+            if isinstance(response.data, dict):
+                response.data.pop("access", None)
+                response.data.pop("refresh", None)
+                if hasattr(response, "_is_rendered") and response._is_rendered:
+                    response._is_rendered = False
+                    response.render()
         return response
+
+
+def _strip_tokens_for_web(response, request):
+    """Audit MEDIUM-9: when the web client (`X-Cpay-Web: 1` header) is
+    talking to us, the response cookie contract is the only authenticator
+    we want it to see. Returning the JWT JSON in the body too would
+    re-expose it to localStorage / window.tokens / any XSS sink, defeating
+    the HttpOnly cookie protection.
+
+    Strip `tokens` from the response payload when the header is set. The
+    SPA's auth client falls through to the cookie path automatically.
+    Native callers (no `X-Cpay-Web` header) keep getting the JSON tokens
+    so their existing flow is unchanged.
+    """
+    if request.META.get("HTTP_X_CPAY_WEB") != "1":
+        return
+    if not isinstance(getattr(response, "data", None), dict):
+        return
+    if "tokens" in response.data:
+        # Wholesale removal · the SPA reads `data.user`, never `data.tokens`.
+        response.data.pop("tokens", None)
+        # Re-render so the change reaches the wire (DRF freezes the body
+        # after the first render call internally · in practice, since
+        # this runs before middleware finalisation, the change holds).
+        if hasattr(response, "_is_rendered") and response._is_rendered:
+            response._is_rendered = False
+            response.render()
 
 
 def _set_auth_cookies(response, access: str, refresh: str):
