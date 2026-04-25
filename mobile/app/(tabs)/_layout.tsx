@@ -72,30 +72,75 @@ function TabIconOnly({
   showBadge?: boolean;
   size?: number;
 }) {
-  const scaleAnim = useRef(new Animated.Value(focused ? 1.05 : 1)).current;
+  // Modern tab indicator · the active tab gets an emerald pill behind
+  // the icon (Material You / iOS 16 / Revolut pattern). Inactive tabs
+  // stay flat. Pill scales in/out on focus change.
+  const scaleAnim = useRef(new Animated.Value(focused ? 1 : 0)).current;
+  const iconScaleAnim = useRef(new Animated.Value(focused ? 1.05 : 1)).current;
 
   useEffect(() => {
-    Animated.spring(scaleAnim, {
-      toValue: focused ? 1.05 : 1,
-      tension: 300,
-      friction: 15,
-      useNativeDriver: useNative,
-    }).start();
+    Animated.parallel([
+      Animated.spring(scaleAnim, {
+        toValue: focused ? 1 : 0,
+        tension: 220,
+        friction: 14,
+        useNativeDriver: useNative,
+      }),
+      Animated.spring(iconScaleAnim, {
+        toValue: focused ? 1.06 : 1,
+        tension: 300,
+        friction: 15,
+        useNativeDriver: useNative,
+      }),
+    ]).start();
   }, [focused]);
 
   return (
-    <Animated.View
+    <View
       style={{
-        transform: [{ scale: scaleAnim }],
+        alignItems: "center",
+        justifyContent: "center",
         position: "relative",
-        // No explicit width/height · let the icon define its own box.
-        // Including the badge requires `overflow: visible` which is the
-        // default on View.
       }}
     >
-      {showBadge && <PendingBadge />}
-      <Ionicons name={name} size={size} color={color} />
-    </Animated.View>
+      {/* Active pill · animated emerald rounded-rect behind the icon. */}
+      <Animated.View
+        pointerEvents="none"
+        style={{
+          position: "absolute",
+          top: -4,
+          width: 56,
+          height: 30,
+          borderRadius: 15,
+          backgroundColor: "rgba(16, 185, 129, 0.16)",
+          borderWidth: 1,
+          borderColor: "rgba(16, 185, 129, 0.30)",
+          opacity: scaleAnim,
+          transform: [
+            {
+              scale: scaleAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0.7, 1],
+              }),
+            },
+          ],
+          ...(isWeb
+            ? ({
+                boxShadow: "0 0 14px rgba(16, 185, 129, 0.20)",
+              } as any)
+            : {}),
+        }}
+      />
+      <Animated.View
+        style={{
+          transform: [{ scale: iconScaleAnim }],
+          position: "relative",
+        }}
+      >
+        {showBadge && <PendingBadge />}
+        <Ionicons name={name} size={size} color={color} />
+      </Animated.View>
+    </View>
   );
 }
 
@@ -154,7 +199,12 @@ export default function TabLayout() {
   // 3-button Android). Min-only, not additive: if the device reports
   // a real 20-34 px gesture inset, that's what we use (not 26-40 px).
   // Web has no system nav so we add 12 px for viewport breathing room.
-  const safeBottom = isWeb ? 8 : Math.max(insets.bottom, 4);
+  // safeBottom floor bumped from 4 to 8 · user reported tab labels were
+  // touching the system nav on devices that report `insets.bottom = 0`
+  // (most 3-button Android setups when the nav bar is non-overlay).
+  // 8 px gives the label row a guaranteed gutter without making the
+  // tab bar look fat on devices with a real gesture-nav inset.
+  const safeBottom = isWeb ? 10 : Math.max(insets.bottom, 8);
   const contentHeight = isSmallPhone ? 52 : 56;
   const tabBarHeight = contentHeight + safeBottom;
   const tabBarPaddingBottom = safeBottom;
@@ -167,34 +217,38 @@ export default function TabLayout() {
           ? { display: "none" }
           : {
               backgroundColor: isDark
-                ? "rgba(12, 26, 46, 0.97)"
-                : "rgba(255, 255, 255, 0.97)",
-              // `borderTopWidth: 0` removes the 1 px hairline above the
-              // tabs that read as a dead "divider strip" on the APK.
-              // The existing drop-shadow (Android elevation + iOS
-              // shadow*) already separates the bar from the content.
+                ? "rgba(10, 18, 40, 0.94)"
+                : "rgba(255, 255, 255, 0.94)",
               borderTopWidth: 0,
               height: tabBarHeight,
               paddingBottom: tabBarPaddingBottom,
-              paddingTop: 8,
+              paddingTop: 6,
+              // Modern tab-bar treatment · rounded top corners + lift
+              // shadow above the bar so the absolute overlay reads as a
+              // floating panel rather than a solid rail at the bottom of
+              // the screen. Inspired by iOS 16 floating-tabbar +
+              // Material You bottom-nav patterns. The 18 px radius is
+              // the brand value for "soft modern surface" used in cards.
+              borderTopLeftRadius: 18,
+              borderTopRightRadius: 18,
               // Give web phone viewports a comfortable side gutter; native
               // phones hug the edges so touch targets stay large.
               paddingHorizontal: isWeb ? 24 : 0,
               ...(isWeb
                 ? {
                     boxShadow: isDark
-                      ? "0 -4px 20px rgba(0,0,0,0.35)"
-                      : "0 -2px 12px rgba(0,0,0,0.08)",
+                      ? "0 -8px 32px rgba(0, 0, 0, 0.40), 0 -1px 0 rgba(255, 255, 255, 0.05)"
+                      : "0 -8px 32px rgba(15, 23, 42, 0.10), 0 -1px 0 rgba(15, 23, 42, 0.04)",
                     width: "100%",
-                    backdropFilter: "blur(20px)",
-                    WebkitBackdropFilter: "blur(20px)",
+                    backdropFilter: "blur(24px)",
+                    WebkitBackdropFilter: "blur(24px)",
                   }
                 : {
                     shadowColor: "#000",
-                    shadowOffset: { width: 0, height: -3 },
-                    shadowOpacity: 0.2,
-                    shadowRadius: 10,
-                    elevation: 12,
+                    shadowOffset: { width: 0, height: -4 },
+                    shadowOpacity: 0.22,
+                    shadowRadius: 14,
+                    elevation: 16,
                   }) as any,
             },
         tabBarActiveTintColor: colors.primary[400],

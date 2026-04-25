@@ -2400,7 +2400,11 @@ export default function WalletScreen() {
           )}
         </View>
 
-        <View style={{ height: Platform.OS === "android" ? 100 : 48 }} />
+        {/* Bottom-spacer removed · contentContainerStyle.paddingBottom
+            (= bottomTabBarHeight) already reserves the exact space the
+            absolute tab bar overlays. The 100 px legacy spacer was
+            stacking on top of that, leaving ~200 px of empty dark
+            space below the last transaction. */}
       </ScrollView>
 
       {/* Mobile Deposit Modal */}
