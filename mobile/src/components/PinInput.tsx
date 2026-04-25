@@ -88,7 +88,14 @@ export function PinInput({ length = 6, onComplete, error, testID }: PinInputProp
                   ? "#10B981"
                   : isFilled
                   ? "rgba(16, 185, 129, 0.4)"
-                  : "rgba(255, 255, 255, 0.08)",
+                  // Empty-box border was hardcoded to white-08 (visible
+                  // only on dark BG · invisible against light theme's
+                  // #FFFFFF box on #F5F7FA page). Use the theme-aware
+                  // glass border so the boxes outline cleanly in both
+                  // modes.
+                  : isDark
+                    ? "rgba(255, 255, 255, 0.10)"
+                    : "rgba(15, 23, 42, 0.14)",
                 backgroundColor: showError
                   ? "rgba(239, 68, 68, 0.06)"
                   : isFilled

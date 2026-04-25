@@ -388,7 +388,10 @@ export default function LoginScreen() {
             accessibilityRole="header"
           >
             <View style={{ marginBottom: 12 }}>
-              <Wordmark size={36} dark />
+              {/* `dark={isDark}` so the "pay" half of the wordmark uses
+                  brand ink on light theme (was always white →
+                  invisible on the light page bg). */}
+              <Wordmark size={36} dark={isDark} />
             </View>
             <Text
               style={{

@@ -338,7 +338,7 @@ export default function PayScreen() {
     <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }} edges={["top", "left", "right"]}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: bottomTabBarHeight + 16 }}
+        contentContainerStyle={{ paddingBottom: bottomTabBarHeight + 6 }}
       >
         {/* ── Header ─────────────────────────────────────────────────── */}
         <View

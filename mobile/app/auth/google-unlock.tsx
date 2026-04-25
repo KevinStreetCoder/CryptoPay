@@ -163,7 +163,9 @@ export default function GoogleUnlockScreen() {
 
   // ── Pieces ─────────────────────────────────────────────────────────
 
-  const brandMark = <Wordmark size={26} dark />;
+  // `dark` follows the active theme · was hardcoded `dark` so the
+  // wordmark "pay" rendered white-on-light and disappeared.
+  const brandMark = <Wordmark size={26} dark={isDark} />;
 
   const narrativePanel = (
     <View style={{ flex: 1, paddingRight: isWide ? 32 : 0 }}>

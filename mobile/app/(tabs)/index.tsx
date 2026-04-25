@@ -1343,7 +1343,7 @@ function HomeScreenContent() {
             //
             // Earlier attempts: `100` (too much → visible dead strip),
             // `24` (too little → content hidden under the tabs).
-            paddingBottom: bottomTabBarHeight + 16,
+            paddingBottom: bottomTabBarHeight + 6,
           }}
           keyboardShouldPersistTaps="handled"
         >

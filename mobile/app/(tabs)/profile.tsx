@@ -1347,7 +1347,7 @@ export default function ProfileScreen() {
         contentContainerStyle={{
           // RN v7 tab bar is absolute-positioned, so padding must equal
           // the real tab-bar height or content hides behind it.
-          paddingBottom: bottomTabBarHeight + 16,
+          paddingBottom: bottomTabBarHeight + 6,
           ...(isDesktop
             ? { paddingHorizontal: 24 }
             : {}),

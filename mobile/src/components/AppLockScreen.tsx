@@ -5,6 +5,7 @@ import { colors, getThemeColors } from "../constants/theme";
 import { useThemeMode } from "../stores/theme";
 import { useBiometricAuth } from "../hooks/useBiometricAuth";
 import { PinInput } from "./PinInput";
+import { Spinner } from "./brand/Spinner";
 import { authApi } from "../api/auth";
 
 const isWeb = Platform.OS === "web";
@@ -257,7 +258,33 @@ export function AppLockScreen({ onUnlock, userPhone, onForgotPin }: AppLockScree
             loading={pinLoading}
           />
 
-          {pinError && (
+          {/* Verifying spinner · matches the sign-in flow visual so
+              users never see a frozen frame between "6th digit
+              entered" and "unlock" / "wrong PIN" feedback. */}
+          {pinLoading && (
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 10,
+                marginTop: 16,
+              }}
+            >
+              <Spinner variant="arc" size={18} color={colors.primary[400]} />
+              <Text
+                style={{
+                  color: colors.primary[400],
+                  fontSize: 13,
+                  fontFamily: "DMSans_500Medium",
+                }}
+              >
+                Verifying...
+              </Text>
+            </View>
+          )}
+
+          {pinError && !pinLoading && (
             <Text
               style={{
                 color: colors.error,
