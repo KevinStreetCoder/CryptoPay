@@ -12,7 +12,7 @@ interface PinInputProps {
   testID?: string;
 }
 
-export function PinInput({ length = 6, onComplete, error, testID }: PinInputProps) {
+export function PinInput({ length = 6, onComplete, error, loading, testID }: PinInputProps) {
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
   const [pin, setPin] = useState("");
@@ -39,14 +39,24 @@ export function PinInput({ length = 6, onComplete, error, testID }: PinInputProp
     }
   }, []);
 
-  // Reset PIN when error changes to true so user can retry
+  // Reset PIN when error fires so the user can retry without
+  // backspacing six dots. Also: when `loading` was true and goes
+  // back to false WITHOUT error (i.e. the parent finished its API
+  // call cleanly), still reset · this catches an edge case where
+  // the parent dispatched a successful unlock but the screen
+  // didn't unmount before AppState briefly toggled, leaving stale
+  // dots that confuse the next attempt.
+  const prevLoading = useRef(loading);
   useEffect(() => {
     if (error) {
       setPin("");
-      // Re-focus the hidden input after clearing
       setTimeout(() => inputRef.current?.focus(), 100);
+    } else if (prevLoading.current && !loading) {
+      // Loading just finished without error · reset for a clean slate.
+      setPin("");
     }
-  }, [error]);
+    prevLoading.current = loading;
+  }, [error, loading]);
 
   const handleChange = (text: string) => {
     const cleaned = text.replace(/[^0-9]/g, "").slice(0, length);

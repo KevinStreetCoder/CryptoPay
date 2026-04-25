@@ -59,11 +59,36 @@ export function AppLockScreen({ onUnlock, userPhone, onForgotPin }: AppLockScree
     setPinError(false);
 
     try {
-      // Verify PIN via dedicated endpoint (no device/OTP checks)
+      // Verify PIN via dedicated endpoint (no device/OTP checks).
+      // The axios response interceptor in `client.ts` already handles
+      // token refresh transparently when a 401 carries no `error`
+      // string body. A 401 with `{verified: false}` (wrong PIN) is
+      // re-thrown without refresh and lands in the catch below.
       await authApi.verifyPin(pin);
+      // Critical · clear loading + error BEFORE onUnlock so that if
+      // anything causes AppLockScreen to re-render (e.g. a parent
+      // state flush race) the user never sees a stale "Incorrect
+      // PIN" / spinner frame.
+      setPinLoading(false);
+      setPinError(false);
       onUnlock();
-    } catch {
-      setPinError(true);
+    } catch (err: any) {
+      // Distinguish "wrong PIN" (status 401 + verified:false) from
+      // a token-refresh failure that bubbled up. Both arrive here as
+      // a thrown error, but only the first should put the user back
+      // into the retry state · a refresh failure means the parent
+      // forceLogout has already fired and AppLockScreen is about to
+      // unmount, so we deliberately don't flag pinError there.
+      const status = err?.response?.status;
+      const body = err?.response?.data;
+      const isWrongPin =
+        status === 401 &&
+        (body?.verified === false || body?.error === "Incorrect PIN");
+      const isRateLimited = status === 429;
+
+      if (isWrongPin || isRateLimited) {
+        setPinError(true);
+      }
       setPinLoading(false);
     }
   }, [userPhone, onUnlock]);

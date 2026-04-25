@@ -136,6 +136,19 @@ export function useAppLock(_biometricEnabled: boolean, isAuthenticated: boolean)
     const lastActive = await getLastActive();
     const elapsed = (Date.now() - lastActive) / 1000;
 
+    // Fresh-session grace · matches cold-start path. After unlock() we
+    // stamp `lastActive = Date.now()`, so a transient bg→fg flicker
+    // (biometric prompt closing, system sheet dismissed, screenshot
+    // overlay) would otherwise compute `elapsed ≈ 0` and, with the
+    // default `timeout=0` ("Immediately"), evaluate `0 >= 0 → lock`,
+    // dropping the user back onto AppLockScreen the moment they get
+    // through it. 3 s is short enough that a real bg→fg gap still
+    // re-locks as expected.
+    const FRESH_SESSION_WINDOW_SEC = 3;
+    if (lastActive > 0 && elapsed < FRESH_SESSION_WINDOW_SEC) {
+      return;
+    }
+
     // Debounce only when user picked a non-zero timeout. For "Immediately"
     // (timeout=0) we honor the choice and lock on any bg→fg transition.
     // The 5s floor exists to avoid locking on transient inactive states
@@ -149,8 +162,12 @@ export function useAppLock(_biometricEnabled: boolean, isAuthenticated: boolean)
   }, [isAuthenticated]);
 
   const unlock = useCallback(() => {
-    setLocked(false);
+    // Stamp lastActive FIRST so the fresh-session grace window
+    // (above) sees a recent value before any AppState change can
+    // race the unlock. setLocked(false) afterwards triggers the
+    // re-render that unmounts AppLockScreen.
     setLastActive();
+    setLocked(false);
   }, []);
 
   // Monitor background→foreground transitions
