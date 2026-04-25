@@ -1,6 +1,197 @@
-# Cpay — Development Progress
+# Cpay · Development Progress
 
-**Last updated:** 2026-04-20
+**Last updated:** 2026-04-25
+
+## 2026-04-25 session · audit cluster + KMS live + email defence + Pochi + Send-to-Bank + UI tightening
+
+A long sweep that closed the open audit findings, provisioned production
+KMS, added two M-Pesa rails (Pochi, Send-to-Bank), shipped a layered
+email-abuse defence, tightened the tab bar and rebuilt the onboarding
+flow to match the handoff design. 11 atomic commits across the day,
+end-state on `origin/main` is `b1f6d03`.
+
+### Security audit cluster · all CRITICAL + HIGH closed
+
+- **CRITICAL-1 SasaPay callback HMAC** · code shipped, URL routes
+  commented out (Daraja is the active rail post-application). When
+  re-enabled, callbacks will require either an `X-SasaPay-Signature`
+  header HMAC or our own per-tx URL token; per-callback Redis SETNX
+  dedup; amount-tamper rejection.
+- **HIGH-1 TOTP encryption off SECRET_KEY** · new `TOTP_ENCRYPTION_KEY`
+  env var; reads walk both candidates (primary first, SECRET_KEY-derived
+  legacy second); `migrate_totp_encryption [--apply]` re-encrypts every
+  existing row.
+- **HIGH-2 Daraja callback HMAC dedicated key** · new
+  `MPESA_CALLBACK_HMAC_KEY` env var; production refuses to boot when
+  empty or under 32 chars.
+- **HIGH-3 KMS required in production · GCP KMS provisioned and live** ·
+  project `cpay-490223`, key ring `cpay-prod` in `africa-south1`,
+  symmetric `cpay-prod-wallet` with 90-day rotation, service account
+  `cpay-kms-prod` with least-privilege role, JSON credential at
+  `/etc/cpay/cpay-kms-prod.json` (uid 100, mode 400, bind-mounted into
+  web + celery containers as `/run/secrets/gcp-kms.json`). Wallet seed
+  encrypted; plaintext `WALLET_MNEMONIC` and `WALLET_MASTER_SEED`
+  removed from `.env.production`. `kms_health --check-blob
+  WALLET_ENCRYPTED_SEED` confirms end-to-end decrypt.
+- **HIGH-4 email OTP brute-force** · `otp_code` bumped from 6 to 8
+  characters (migration 0017), unambiguous-alphanumeric alphabet
+  (32^8 = 1.1×10^12 search space, infeasible). Verify view dual-scoped:
+  per-IP AND per-submission-fingerprint rate limit.
+- **MEDIUM-1 KYC `file_url` removed** · multipart-only uploads now;
+  storage URL computed server-side. Closes admin-phishing channel.
+- **MEDIUM-9 web JWT cookie-only** · `_strip_tokens_for_web()` removes
+  the JSON tokens block from every auth-issuing response when the
+  request carries `X-Cpay-Web: 1`. Mobile `auth.ts` defends every
+  `data.tokens.{access,refresh}` access behind `if (data.tokens)`.
+- **D22 Cloudflare-only origin firewall** · UFW now allows ports
+  80/443 only from Cloudflare's published CIDRs (15 IPv4 + 5 IPv6
+  ranges = 40 cloudflare-only rules). `setup-cloudflare-firewall.sh`
+  is idempotent and re-runnable when CF publishes new ranges. Direct
+  `https://173.249.4.109` from non-CF source: refused. Origin-via-CF:
+  HTTP 200 OK.
+
+### Email-abuse defence (new)
+
+Five-layer plan from `docs/research/SIGNUP-EMAIL-ABUSE.md`. Layers
+1, 2, 4 plus the verification gate landed end-to-end:
+
+- **Layer 1** · 166-domain disposable blocklist seeded at
+  `apps/accounts/disposable_domains.txt`. Refresh quarterly via the
+  open-source `disposable-email-domains` repo.
+- **Layer 2** · MX validation via `dnspython==2.6.1`, 3-second
+  lookup with `lru_cache(maxsize=10000)`. Audit-fix · resolves
+  dnspython availability ONCE at module load and refuses to boot in
+  production when the dep is missing (was previously a silent log).
+  Audit-fix · `EMAIL_VALIDATION_REQUIRE_MX` is now explicit opt-in
+  (default off; `production.py` sets `True`).
+- **Layer 3** · `AdminVerifyUserView` refuses tier 2+ promotion when
+  `email_verified=False`. Audit-fix · `RegisterView` no longer
+  auto-flips `email_verified=True` at signup (the OTP went to the
+  phone, not the email · attacker registering with a victim's email
+  used to have it marked verified without proof of ownership).
+- **Layer 4** · Gmail dot+plus normalisation. New
+  `User.normalised_email` column with a partial unique constraint
+  (migration 0018). `save()` override re-derives normalised on every
+  email-touching write while respecting manual sync via
+  `update_fields=["normalised_email"]`.
+
+19 tests in `apps/accounts/test_email_validation.py`, all green.
+
+### M-Pesa rails expansion (new)
+
+- **Pochi la Biashara labelling** · NOT a separate Daraja API. The
+  existing Send Money to phone flow already pays Pochi recipients;
+  this commit adds a `context` field on `SendMpesaSerializer`
+  (`personal | pochi`), tags `Transaction.saga_data.recipient_kind`,
+  and surfaces the label via `TransactionSerializer`. Mobile UI gets
+  a "Pay a small business" tile with the storefront icon. 4 tests.
+- **Send to Bank** · curated registry of 15 Kenyan bank paybills
+  (Equity 247247, KCB 522522, Co-op 400200, NCBA 888888, Standard
+  Chartered 329329, I&M 542542, DTB 516600, Family 222111, ABSA
+  303030, Stanbic 600100, HFC 100400, Sidian 111999, Gulf Africa
+  985050, BOA 972900, Ecobank 700201) at `apps/payments/banks.py`
+  with module-level integrity check that every paybill is 6 digits.
+  `SendToBankView` wraps the existing Pay Bill saga with `bank_slug
+  → paybill` substitution; no fork of the saga. `BankListView`
+  rebuilt as `APIView` with module-level cache + `UserRateThrottle`
+  (was a misused `ListAPIView` with overridden `get()` per audit
+  C5/H4 fix). Mobile screen at `mobile/app/payment/send-to-bank.tsx`
+  with responsive bank picker grid, letter-initial logo fallback,
+  email-verify warning above KES 50,000. 15 tests.
+
+### UI + onboarding (new)
+
+- **Tab bar tightened** · 70px → 56px content (52px on small
+  phones), icon 24 → 22, label 11 → 10.5 / line-height 13.
+  `paddingBottom` on the four tab pages dropped from
+  `bottomTabBarHeight + 6` to `bottomTabBarHeight` (no buffer).
+  Eliminates the dead strip between the last scrollable item and
+  the tab top that the user reported as bulky/non-modern.
+- **Onboarding rewrite** · 3-slide deck matching the handoff's
+  `polish-assets.jsx::OnboardingSlide`. 240×240 glass card with
+  backdrop-blur(20), inner emerald ring, animated dot pagination
+  (active 28×8, inactive 8×8). All copy via i18n
+  (`onboarding.*` namespace, EN + SW). Skip top-right (hidden on
+  slide 3).
+- **AppTour skip-on-top** · skip moved from the bottom navigation
+  row to the header right per user feedback. Bottom row is now
+  Back + Next/Got it only.
+
+### Code-quality audit fixes
+
+A separate audit pass on the working-tree diff caught four CRITICAL
+and several HIGH issues before deploy. All closed in the cluster
+commits above:
+
+- **C1** · `confirm.tsx` adds the `bank` branch to recipient label /
+  value / icon / colour triage. Bank-typed payments used to fall
+  through to the till copy with an undefined `recipientValue`.
+- **C3** · `User.save()` no longer silently overwrites a manual
+  `normalised_email` write. The override now respects `update_fields`
+  precisely.
+- **C4** · `RegisterView` no longer auto-sets `email_verified=True`
+  at signup; verification flow now actually verifies.
+- **C5/H4** · `BankListView` rewritten as `APIView` with module-level
+  cache + `UserRateThrottle`. Was a misused `ListAPIView`.
+- **H5** · `dnspython` hard-fails at import in production. Was a
+  silent disable.
+- **H7** · `EMAIL_VALIDATION_REQUIRE_MX` is explicit opt-in.
+
+### Mobile fixes
+
+- Bootstrap network tolerance · `auth.ts::bootstrap()` now
+  distinguishes 401/403 (real session expiry) from network/5xx
+  (transient blip). On a flaky 4G connection, Cpay no longer kicks
+  the user back to the login screen during the post-resume
+  `getProfile()` cascade.
+- APK landing-page guard · the auth gate's `isLanding` flag was
+  treating `(no segment + no user)` as the landing page on ALL
+  platforms. Native APK falling onto `/` with no user used to
+  render the marketing landing screen briefly. Now `isLanding` is
+  web-only for the no-segment case; native always falls through to
+  `/auth/login`.
+
+### Deployment status
+
+- **Backend** · live on `cpay.co.ke`. Health: DB 13ms, Redis 2ms,
+  Celery worker live. KMS healthy.
+- **APK** · live at `https://cpay.co.ke/download/cryptopay.apk`,
+  Last-Modified `Sat, 25 Apr 2026 18:20:35 GMT`, 114,394,872 bytes
+  (`cpay-20260425-205354.apk`). Contains every fix from this session.
+- **Migrations applied** · `0017_otp_code_8chars` (HIGH-4),
+  `0018_user_normalised_email` (Layer 4 unique constraint).
+- **Test suite** · 76 of 76 green (38 cluster + 38 regression).
+- **Production guard** · only one warning remaining:
+  `MPESA_ENVIRONMENT=sandbox` (waiting on Safaricom Daraja
+  credentials post-application).
+
+### Operator follow-ups (not code)
+
+1. **Rotate** Safaricom Consumer Key/Secret, M-Pesa initiator
+   password, Google OAuth secret, TronGrid, Alchemy keys (D1) ·
+   the handoff archive is on disk and may have been emailed/shared.
+2. **Switch** `MPESA_ENVIRONMENT=sandbox` → `production` once
+   Safaricom approves the Daraja application.
+3. **Set** `REQUIRE_PROD_ENV_STRICT=True` once everything stable
+   (current state already passes the guards · this just makes them
+   fatal instead of warnings).
+4. **Lock down** the n8n editor on port 5678 (separate app, not
+   Cpay) via SSH tunnel rather than public access.
+
+### What still needs follow-up engineering
+
+- 9-step in-app tour binding · 6 of 9 steps fire on mobile, 5 of 9
+  on desktop. Step 7 has no `TourStep` wrapper because the Wallet
+  tab is bottom-tab nav and `react-native-copilot` can't anchor on
+  it without a custom patch. Counter shows "X / Y" honestly; full
+  9-anchor wiring is a separate piece of work (each binding needs
+  design + copy review).
+- 15 bank logos for `mobile/src/constants/banks.ts` · currently
+  letter-initial fallback; logos go to Cloudflare R2 when ready.
+- Stable Lock feature · greenlit in `docs/research/STABLE-LOCK.md`,
+  ~3-5 days to ship.
+
+---
 
 ## 2026-04-20 session · brand + referrals + APK + security scrub
 
