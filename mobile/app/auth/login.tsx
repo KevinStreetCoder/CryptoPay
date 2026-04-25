@@ -741,6 +741,7 @@ export default function LoginScreen() {
                 <PinInput
                   onComplete={handlePinComplete}
                   error={pinError}
+                  loading={loading}
                   testID="login-pin-input"
                 />
               </View>

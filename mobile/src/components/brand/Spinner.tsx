@@ -16,6 +16,8 @@
  *
  * Never mix two spinners on one screen. Never exceed 1.2s cycle.
  */
+import type { ReactElement } from "react";
+import { View, type StyleProp, type ViewStyle } from "react-native";
 import { SpinnerArc, SpinnerArcProps } from "./SpinnerArc";
 import { SpinnerDots, SpinnerDotsProps } from "./SpinnerDots";
 import { SpinnerCoinC, SpinnerCoinCProps } from "./SpinnerCoinC";
@@ -26,16 +28,22 @@ export interface SpinnerProps {
   variant?: SpinnerVariant;
   size?: number;
   color?: string;
+  /** Outer-View style · forwarded as a wrapper around the variant so
+   * call-sites can apply `marginLeft`, `marginVertical`, etc. without
+   * having to wrap every Spinner usage in their own `<View>`. */
+  style?: StyleProp<ViewStyle>;
 }
 
-export function Spinner({ variant = "arc", size, color }: SpinnerProps) {
+export function Spinner({ variant = "arc", size, color, style }: SpinnerProps) {
+  let inner: ReactElement;
   if (variant === "dots") {
-    return <SpinnerDots size={size} color={color} />;
+    inner = <SpinnerDots size={size} color={color} />;
+  } else if (variant === "coinc") {
+    inner = <SpinnerCoinC size={size} color={color} />;
+  } else {
+    inner = <SpinnerArc size={size} color={color} />;
   }
-  if (variant === "coinc") {
-    return <SpinnerCoinC size={size} color={color} />;
-  }
-  return <SpinnerArc size={size} color={color} />;
+  return style ? <View style={style}>{inner}</View> : inner;
 }
 
 export { SpinnerArc, SpinnerDots, SpinnerCoinC };

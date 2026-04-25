@@ -248,6 +248,7 @@ export default function ChangePinScreen() {
               <PinInput
                 onComplete={activeStep.onComplete}
                 error={pinError}
+                loading={loading}
                 testID="change-pin-input"
               />
             </View>

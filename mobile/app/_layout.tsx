@@ -57,7 +57,11 @@ const queryClient = new QueryClient({
 
 function RootNavigator() {
   const { user, loading, bootstrap, logout } = useAuth();
-  const segments = useSegments();
+  // expo-router types `useSegments()` as a 1-tuple in some SDK builds,
+  // which makes `segments[1]` blow up at compile time even though it
+  // works fine at runtime (the URL `/auth/google-unlock` produces a
+  // 2-segment array). Cast to `string[]` so we can index past 0.
+  const segments = useSegments() as unknown as string[];
   const router = useRouter();
   const [appReady, setAppReady] = useState(false);
   const [initStatus, setInitStatus] = useState("Starting...");

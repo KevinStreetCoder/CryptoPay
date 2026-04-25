@@ -3,6 +3,8 @@ import { View, Text, TextInput, Pressable, Platform, useWindowDimensions, Keyboa
 import { Ionicons } from "@expo/vector-icons";
 import { colors, getThemeColors } from "../constants/theme";
 import { useThemeMode } from "../stores/theme";
+import { BrandedSpinner } from "./BrandedSpinner";
+import { useLocale } from "../hooks/useLocale";
 
 const isWeb = Platform.OS === "web";
 
@@ -37,6 +39,7 @@ export function OTPInput({
 }: OTPInputProps) {
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
+  const { t } = useLocale();
   const { width: screenWidth } = useWindowDimensions();
 
   const isMobile = screenWidth < 768;
@@ -186,8 +189,22 @@ export function OTPInput({
         </Text>
       ) : null}
 
-      {/* OTP Cells */}
-      <View style={{ flexDirection: "row", gap: cellGap, marginBottom: 16, alignSelf: "center", paddingHorizontal: 4 }}>
+      {/* OTP Cells · cells dim and lock during verification so the user
+          gets a clear "request in flight" signal in addition to the
+          spinner banner below. The previous version only set
+          `editable={!loading}` which was an a11y-only signal — the
+          cells looked identical to the idle state and several beta
+          users tried to retype on a stuck request. */}
+      <View
+        style={{
+          flexDirection: "row",
+          gap: cellGap,
+          marginBottom: 16,
+          alignSelf: "center",
+          paddingHorizontal: 4,
+          opacity: loading ? 0.55 : 1,
+        }}
+      >
         {Array.from({ length }).map((_, index) => {
           const isFocused = focusedIndex === index;
           const isFilled = !!code[index];
@@ -234,7 +251,7 @@ export function OTPInput({
                   ? {
                       outlineStyle: "none",
                       caretColor: "transparent",
-                      transition: "border-color 0.15s ease, background-color 0.15s ease",
+                      transition: "border-color 0.15s ease, background-color 0.15s ease, opacity 0.2s ease",
                     } as any
                   : {}),
               }}
@@ -264,10 +281,23 @@ export function OTPInput({
       ) : null}
 
       {loading && (
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 16 }}>
-          <Ionicons name="hourglass-outline" size={16} color={colors.primary[400]} />
-          <Text style={{ color: tc.textSecondary, fontSize: 13, fontFamily: "DMSans_500Medium" }}>
-            Verifying...
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 10,
+            marginBottom: 16,
+            paddingVertical: 8,
+            paddingHorizontal: 14,
+            borderRadius: 999,
+            backgroundColor: colors.primary[400] + "12",
+            borderWidth: 1,
+            borderColor: colors.primary[400] + "26",
+          }}
+        >
+          <BrandedSpinner size="small" color={colors.primary[400]} />
+          <Text style={{ color: tc.textPrimary, fontSize: 13, fontFamily: "DMSans_600SemiBold" }}>
+            {t("auth.verifying")}
           </Text>
         </View>
       )}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -18,7 +18,7 @@ import { CryptoSelector } from "../../src/components/CryptoSelector";
 import { useToast } from "../../src/components/Toast";
 import { useWallets } from "../../src/hooks/useWallets";
 import { ratesApi, Quote } from "../../src/api/rates";
-import { paymentsApi, Bank } from "../../src/api/payments";
+import { paymentsApi, Bank, BankCategory } from "../../src/api/payments";
 import { normalizeError } from "../../src/utils/apiErrors";
 import { cacheQuote } from "../../src/utils/rateCache";
 import { colors, getThemeColors, getThemeShadows, CurrencyCode } from "../../src/constants/theme";
@@ -28,61 +28,174 @@ import { PaymentStepper } from "../../src/components/PaymentStepper";
 import { GlassCard } from "../../src/components/GlassCard";
 import { useLocale } from "../../src/hooks/useLocale";
 import { NetworkBadge, currencyToChain } from "../../src/components/brand/NetworkBadge";
+import {
+  getFavouriteBanks,
+  getFrequentBanks,
+  toggleFavourite,
+} from "../../src/utils/bankPrefs";
 
 const CRYPTO_OPTIONS: CurrencyCode[] = ["USDT", "USDC", "BTC", "ETH", "SOL"];
 
 /**
- * Bank tile logo with letter-initial fallback. The logo URLs in the
- * backend registry point at static assets that may not be deployed yet
- * (placeholder paths under cpay.co.ke/static/banks/). When the image
- * load fails, render the bank's first letter on the tile background ·
- * cleaner than a broken-image glyph and matches our "no emoji as
- * fallback" convention.
+ * Display order for the section labels. Anything backend sends that
+ * isn't in this tuple still renders, in the order the API returned.
+ */
+const CATEGORY_ORDER: readonly BankCategory[] = [
+  "tier1",
+  "midtier",
+  "regional",
+  "sharia",
+] as const;
+
+/**
+ * Bank tile logo · 2026-04-25 redesign. NO letter-initial fallback ·
+ * the user explicitly asked us to drop banks whose logo doesn't load
+ * rather than rendering a placeholder character. The component reports
+ * load success/failure to its parent via `onResolve`, and the parent
+ * filters the bank list so failed tiles never paint.
  */
 function BankTileLogo({
   url,
   name,
   bg,
-  textColor,
+  size = 36,
+  onResolve,
 }: {
   url: string;
   name: string;
   bg: string;
-  textColor: string;
+  size?: number;
+  onResolve?: (slug: string, ok: boolean) => void;
 }) {
-  const [failed, setFailed] = useState(false);
   return (
     <View
       style={{
-        width: 40,
-        height: 40,
+        width: size,
+        height: size,
         borderRadius: 10,
         backgroundColor: bg,
         alignItems: "center",
         justifyContent: "center",
-        marginBottom: 8,
         overflow: "hidden",
       }}
     >
-      {failed ? (
-        <Text
-          style={{
-            color: textColor,
-            fontSize: 18,
-            fontFamily: "DMSans_700Bold",
-          }}
-        >
-          {name.charAt(0).toUpperCase()}
-        </Text>
-      ) : (
-        <Image
-          source={{ uri: url }}
-          style={{ width: 32, height: 32, borderRadius: 6 }}
-          resizeMode="contain"
-          onError={() => setFailed(true)}
-        />
-      )}
+      <Image
+        source={{ uri: url }}
+        style={{ width: size - 8, height: size - 8, borderRadius: 6 }}
+        resizeMode="contain"
+        accessibilityLabel={`${name} logo`}
+        onLoad={() => onResolve?.(name, true)}
+        onError={() => onResolve?.(name, false)}
+      />
     </View>
+  );
+}
+
+/**
+ * Single bank row · logo, name, and a star pin in the corner.
+ * Shared by Favourites, Frequent, and category sections so the
+ * styling stays in lockstep. The `showStarPin` flag hides the pin on
+ * the Frequent row (those tiles are already implicit favourites-in-
+ * waiting · users can pin from any other section).
+ */
+function BankTile({
+  bank,
+  gridCols,
+  tileGap,
+  isSelected,
+  isFavourite,
+  showStarPin,
+  onSelect,
+  onLogoResolve,
+  onToggleFavourite,
+  tc,
+  isWeb,
+  t,
+}: {
+  bank: Bank;
+  gridCols: number;
+  tileGap: number;
+  isSelected: boolean;
+  isFavourite: boolean;
+  showStarPin: boolean;
+  onSelect: () => void;
+  onLogoResolve: (name: string, ok: boolean) => void;
+  onToggleFavourite: () => void;
+  tc: ReturnType<typeof getThemeColors>;
+  isWeb: boolean;
+  t: (k: string) => string;
+}) {
+  return (
+    <Pressable
+      onPress={onSelect}
+      style={({ pressed, hovered }: any) => ({
+        width: `calc(${100 / gridCols}% - ${(tileGap * (gridCols - 1)) / gridCols}px)` as any,
+        backgroundColor: isSelected ? colors.primary[400] + "20" : tc.dark.card,
+        borderRadius: 14,
+        padding: 12,
+        alignItems: "center",
+        borderWidth: 1.5,
+        borderColor: isSelected
+          ? colors.primary[400]
+          : hovered
+            ? colors.primary[400] + "60"
+            : tc.glass.border,
+        opacity: pressed ? 0.85 : 1,
+        position: "relative",
+        ...(isWeb
+          ? ({ cursor: "pointer", transition: "all 0.15s ease" } as any)
+          : {}),
+      })}
+      accessibilityRole="button"
+      accessibilityLabel={`${t("payment.pay")} ${bank.name}`}
+      testID={`bank-tile-${bank.slug}`}
+    >
+      {showStarPin && (
+        <Pressable
+          onPress={onToggleFavourite}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={
+            isFavourite ? t("payment.bankPinRemove") : t("payment.bankPinAdd")
+          }
+          style={({ pressed }: any) => ({
+            position: "absolute",
+            top: 6,
+            right: 6,
+            zIndex: 10,
+            padding: 4,
+            opacity: pressed ? 0.6 : 1,
+            ...(isWeb ? ({ cursor: "pointer" } as any) : {}),
+          })}
+        >
+          <Ionicons
+            name={isFavourite ? "star" : "star-outline"}
+            size={14}
+            color={isFavourite ? "#F59E0B" : tc.textMuted}
+          />
+        </Pressable>
+      )}
+      <BankTileLogo
+        url={bank.logo_url}
+        name={bank.name}
+        bg={tc.dark.elevated}
+        onResolve={onLogoResolve}
+      />
+      <Text
+        numberOfLines={2}
+        style={{
+          color: tc.textPrimary,
+          fontSize: 11,
+          fontFamily: "DMSans_600SemiBold",
+          textAlign: "center",
+          lineHeight: 14,
+          marginTop: 8,
+        }}
+        maxFontSizeMultiplier={1.2}
+      >
+        {bank.name}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -98,6 +211,14 @@ export default function SendToBankScreen() {
   const { data: wallets } = useWallets();
 
   const [banks, setBanks] = useState<Bank[]>([]);
+  const [grouped, setGrouped] = useState<Partial<Record<BankCategory, Bank[]>>>({});
+  const [categories, setCategories] = useState<BankCategory[]>([]);
+  // Slugs whose logo failed to load · those banks are dropped from the
+  // picker (per user guidance "drop banks without real logos").
+  const [failedLogos, setFailedLogos] = useState<Set<string>>(new Set());
+  const [favourites, setFavourites] = useState<string[]>([]);
+  const [frequent, setFrequent] = useState<string[]>([]);
+  const [search, setSearch] = useState("");
   const [selectedBank, setSelectedBank] = useState<Bank | null>(null);
   const [accountNumber, setAccountNumber] = useState("");
   const [amount, setAmount] = useState("");
@@ -117,21 +238,153 @@ export default function SendToBankScreen() {
   const { t } = useLocale();
 
   // Pull the bank registry on mount. The list is small and changes rarely
-  // so a single fetch per screen entry is enough.
+  // so a single fetch per screen entry is enough. Server returns:
+  //   { banks: [...], categories: [...], grouped: {tier1: [...], ...} }
+  // Older builds without category data get a single "All banks" section
+  // synthesised from `banks` so the new picker still works.
   useEffect(() => {
     let alive = true;
     paymentsApi
       .banks()
       .then(({ data }) => {
-        if (alive) setBanks(data.banks || []);
+        if (!alive) return;
+        const flat = data.banks || [];
+        setBanks(flat);
+        if (data.grouped && Object.keys(data.grouped).length > 0) {
+          setGrouped(data.grouped);
+          setCategories((data.categories as BankCategory[]) || []);
+        } else {
+          // Synthesise a fallback grouping from the flat list so the
+          // picker doesn't render empty when talking to an older API.
+          const fallback: Partial<Record<BankCategory, Bank[]>> = {
+            tier1: flat,
+          };
+          setGrouped(fallback);
+          setCategories(["tier1"]);
+        }
       })
       .catch(() => {
-        if (alive) toast.error("Error", "Could not load bank list. Try again.");
+        if (alive) toast.error("Error", t("payment.bankListError"));
       });
     return () => {
       alive = false;
     };
-  }, [toast]);
+  }, [toast, t]);
+
+  // Load favourites + frequent slugs in parallel. Done once on mount
+  // and refreshed whenever the user toggles a pin.
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const favs = await getFavouriteBanks();
+      if (!alive) return;
+      setFavourites(favs);
+      const freq = await getFrequentBanks(favs); // exclude favourites
+      if (!alive) return;
+      setFrequent(freq);
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const handleToggleFavourite = async (slug: string) => {
+    const next = await toggleFavourite(slug);
+    setFavourites(next);
+    const freq = await getFrequentBanks(next);
+    setFrequent(freq);
+  };
+
+  const handleLogoResolve = (bankName: string, ok: boolean) => {
+    if (ok) return;
+    // Map the failing logo back to a slug so we can hide that bank
+    // from every section on the next render.
+    const bank = banks.find((b) => b.name === bankName);
+    if (!bank) return;
+    setFailedLogos((prev) => {
+      if (prev.has(bank.slug)) return prev;
+      const next = new Set(prev);
+      next.add(bank.slug);
+      return next;
+    });
+  };
+
+  // ── Derived data · favourites / frequent / sections / search ──────
+  const visibleBanks = useMemo(
+    () => banks.filter((b) => !failedLogos.has(b.slug)),
+    [banks, failedLogos],
+  );
+
+  const slugIndex = useMemo(() => {
+    const m = new Map<string, Bank>();
+    for (const b of visibleBanks) m.set(b.slug, b);
+    return m;
+  }, [visibleBanks]);
+
+  const favouriteBanks = useMemo(
+    () =>
+      favourites
+        .map((s) => slugIndex.get(s))
+        .filter((b): b is Bank => Boolean(b)),
+    [favourites, slugIndex],
+  );
+
+  const frequentBanks = useMemo(
+    () =>
+      frequent
+        .map((s) => slugIndex.get(s))
+        .filter((b): b is Bank => Boolean(b)),
+    [frequent, slugIndex],
+  );
+
+  const sectionList = useMemo(() => {
+    // Use server-provided category order, falling back to our local
+    // CATEGORY_ORDER so a brand-new category from the server still
+    // renders at the bottom rather than vanishing.
+    const order: BankCategory[] = [
+      ...categories,
+      ...CATEGORY_ORDER.filter((c) => !categories.includes(c)),
+    ];
+    return order
+      .map((cat) => ({
+        category: cat,
+        rows: (grouped[cat] || []).filter((b) => !failedLogos.has(b.slug)),
+      }))
+      .filter((s) => s.rows.length > 0);
+  }, [categories, grouped, failedLogos]);
+
+  const filterSection = (rows: Bank[]) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter(
+      (b) =>
+        b.name.toLowerCase().includes(q) ||
+        b.slug.toLowerCase().includes(q) ||
+        b.paybill.includes(q),
+    );
+  };
+
+  const categoryLabel = (cat: BankCategory): string => {
+    switch (cat) {
+      case "tier1":
+        return t("payment.bankTier1");
+      case "midtier":
+        return t("payment.bankMidtier");
+      case "regional":
+        return t("payment.bankRegional");
+      case "sharia":
+        return t("payment.bankSharia");
+      default:
+        return cat;
+    }
+  };
+
+  // True when search has results in any visible section · drives the
+  // empty-state copy at the bottom of the picker.
+  const anyMatch = useMemo(() => {
+    if (!search.trim()) return true;
+    if (filterSection(favouriteBanks).length) return true;
+    if (filterSection(frequentBanks).length) return true;
+    return sectionList.some((s) => filterSection(s.rows).length > 0);
+  }, [search, favouriteBanks, frequentBanks, sectionList]);
 
   const handleGetQuote = async () => {
     if (!selectedBank) {
@@ -326,75 +579,240 @@ export default function SendToBankScreen() {
                 hours.
               </Text>
 
-              {/* Bank picker grid */}
+              {/* Bank picker · 2026-04-25 redesign with search,
+                  favourites, frequent, and category sections.
+                  Banks whose Clearbit logo fails to load are auto-
+                  filtered (see handleLogoResolve) so we never render
+                  letter-initial placeholders. */}
               <SectionHeader
-                title="Pick a bank"
+                title={t("payment.pickBank")}
                 icon="business-outline"
                 iconColor={colors.primary[400]}
               />
+
+              {/* Search */}
               <View
                 style={{
                   flexDirection: "row",
-                  flexWrap: "wrap",
-                  gap: tileGap,
-                  marginBottom: 20,
+                  alignItems: "center",
+                  backgroundColor: tc.dark.card,
+                  borderRadius: 14,
+                  borderWidth: 1,
+                  borderColor: focusedField === "search"
+                    ? colors.primary[400] + "60"
+                    : tc.dark.border,
+                  paddingHorizontal: 14,
+                  marginBottom: 14,
+                  ...(isWeb
+                    ? ({ transition: "border-color 0.15s ease" } as any)
+                    : {}),
+                  ...(focusedField === "search" && isWeb
+                    ? ({ boxShadow: `0 0 0 3px ${colors.primary[500]}15` } as any)
+                    : {}),
                 }}
               >
-                {banks.map((bank) => {
-                  const isSelected = selectedBank?.slug === bank.slug;
-                  return (
-                    <Pressable
-                      key={bank.slug}
-                      onPress={() => {
-                        setSelectedBank(bank);
-                        setQuote(null);
-                      }}
-                      style={({ pressed, hovered }: any) => ({
-                        width: `calc(${100 / gridCols}% - ${(tileGap * (gridCols - 1)) / gridCols}px)` as any,
-                        backgroundColor: isSelected ? colors.primary[400] + "20" : tc.dark.card,
-                        borderRadius: 14,
-                        padding: 12,
-                        alignItems: "center",
-                        borderWidth: 1.5,
-                        borderColor: isSelected
-                          ? colors.primary[400]
-                          : hovered
-                            ? colors.primary[400] + "60"
-                            : tc.glass.border,
-                        opacity: pressed ? 0.85 : 1,
-                        ...(isWeb
-                          ? ({
-                              cursor: "pointer",
-                              transition: "all 0.15s ease",
-                            } as any)
-                          : {}),
-                      })}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Select ${bank.name}`}
-                    >
-                      <BankTileLogo
-                        url={bank.logo_url}
-                        name={bank.name}
-                        bg={tc.dark.elevated}
-                        textColor={tc.textPrimary}
-                      />
-                      <Text
-                        numberOfLines={2}
-                        style={{
-                          color: tc.textPrimary,
-                          fontSize: 11,
-                          fontFamily: "DMSans_600SemiBold",
-                          textAlign: "center",
-                          lineHeight: 14,
-                        }}
-                        maxFontSizeMultiplier={1.2}
-                      >
-                        {bank.name}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
+                <Ionicons
+                  name="search"
+                  size={16}
+                  color={tc.textMuted}
+                  style={{ marginRight: 8 }}
+                />
+                <TextInput
+                  value={search}
+                  onChangeText={setSearch}
+                  placeholder={t("payment.bankSearchPlaceholder")}
+                  placeholderTextColor={tc.dark.muted}
+                  onFocus={() => setFocusedField("search")}
+                  onBlur={() => setFocusedField(null)}
+                  style={{
+                    flex: 1,
+                    color: tc.textPrimary,
+                    fontSize: 14,
+                    paddingVertical: 12,
+                    fontFamily: "DMSans_400Regular",
+                    ...(isWeb ? ({ outlineStyle: "none" } as any) : {}),
+                  }}
+                  accessibilityLabel={t("payment.bankSearchPlaceholder")}
+                  testID="bank-search-input"
+                />
+                {search.length > 0 && (
+                  <Pressable
+                    onPress={() => setSearch("")}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel="Clear search"
+                  >
+                    <Ionicons name="close-circle" size={18} color={tc.textMuted} />
+                  </Pressable>
+                )}
               </View>
+
+              {/* Favourites · pinned by the user. Renders as a single
+                  tight row of 1-line tiles above the categories. */}
+              {filterSection(favouriteBanks).length > 0 && (
+                <View style={{ marginBottom: 18 }}>
+                  <Text
+                    style={{
+                      color: tc.textMuted,
+                      fontSize: 11,
+                      fontFamily: "DMSans_600SemiBold",
+                      letterSpacing: 0.6,
+                      textTransform: "uppercase",
+                      marginBottom: 10,
+                    }}
+                  >
+                    {t("payment.bankFavourites")}
+                  </Text>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      flexWrap: "wrap",
+                      gap: tileGap,
+                    }}
+                  >
+                    {filterSection(favouriteBanks).map((bank) => (
+                      <BankTile
+                        key={`fav-${bank.slug}`}
+                        bank={bank}
+                        gridCols={gridCols}
+                        tileGap={tileGap}
+                        isSelected={selectedBank?.slug === bank.slug}
+                        isFavourite
+                        showStarPin
+                        onSelect={() => {
+                          setSelectedBank(bank);
+                          setQuote(null);
+                        }}
+                        onLogoResolve={handleLogoResolve}
+                        onToggleFavourite={() => handleToggleFavourite(bank.slug)}
+                        tc={tc}
+                        isWeb={isWeb}
+                        t={t}
+                      />
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              {/* Frequent · top-3 most-used (excluding favourites). */}
+              {filterSection(frequentBanks).length > 0 && (
+                <View style={{ marginBottom: 18 }}>
+                  <Text
+                    style={{
+                      color: tc.textMuted,
+                      fontSize: 11,
+                      fontFamily: "DMSans_600SemiBold",
+                      letterSpacing: 0.6,
+                      textTransform: "uppercase",
+                      marginBottom: 10,
+                    }}
+                  >
+                    {t("payment.bankFrequent")}
+                  </Text>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      flexWrap: "wrap",
+                      gap: tileGap,
+                    }}
+                  >
+                    {filterSection(frequentBanks).map((bank) => (
+                      <BankTile
+                        key={`freq-${bank.slug}`}
+                        bank={bank}
+                        gridCols={gridCols}
+                        tileGap={tileGap}
+                        isSelected={selectedBank?.slug === bank.slug}
+                        isFavourite={favourites.includes(bank.slug)}
+                        showStarPin={false}
+                        onSelect={() => {
+                          setSelectedBank(bank);
+                          setQuote(null);
+                        }}
+                        onLogoResolve={handleLogoResolve}
+                        onToggleFavourite={() => handleToggleFavourite(bank.slug)}
+                        tc={tc}
+                        isWeb={isWeb}
+                        t={t}
+                      />
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              {/* Category sections · tier1 → midtier → regional → sharia */}
+              {sectionList.map((section) => {
+                const filtered = filterSection(section.rows);
+                if (filtered.length === 0) return null;
+                return (
+                  <View key={`cat-${section.category}`} style={{ marginBottom: 18 }}>
+                    <Text
+                      style={{
+                        color: tc.textMuted,
+                        fontSize: 11,
+                        fontFamily: "DMSans_600SemiBold",
+                        letterSpacing: 0.6,
+                        textTransform: "uppercase",
+                        marginBottom: 10,
+                      }}
+                    >
+                      {categoryLabel(section.category)}
+                    </Text>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        flexWrap: "wrap",
+                        gap: tileGap,
+                      }}
+                    >
+                      {filtered.map((bank) => (
+                        <BankTile
+                          key={`${section.category}-${bank.slug}`}
+                          bank={bank}
+                          gridCols={gridCols}
+                          tileGap={tileGap}
+                          isSelected={selectedBank?.slug === bank.slug}
+                          isFavourite={favourites.includes(bank.slug)}
+                          showStarPin
+                          onSelect={() => {
+                            setSelectedBank(bank);
+                            setQuote(null);
+                          }}
+                          onLogoResolve={handleLogoResolve}
+                          onToggleFavourite={() => handleToggleFavourite(bank.slug)}
+                          tc={tc}
+                          isWeb={isWeb}
+                          t={t}
+                        />
+                      ))}
+                    </View>
+                  </View>
+                );
+              })}
+
+              {/* Empty state when search filters everything out */}
+              {!anyMatch && (
+                <View
+                  style={{
+                    paddingVertical: 24,
+                    alignItems: "center",
+                    marginBottom: 20,
+                  }}
+                >
+                  <Ionicons name="search-outline" size={28} color={tc.textMuted} />
+                  <Text
+                    style={{
+                      color: tc.textSecondary,
+                      fontSize: 13,
+                      fontFamily: "DMSans_500Medium",
+                      marginTop: 8,
+                      textAlign: "center",
+                    }}
+                  >
+                    {t("payment.bankNoneMatch").replace("{query}", search.trim())}
+                  </Text>
+                </View>
+              )}
 
               {/* Account number */}
               {selectedBank && (

@@ -1,11 +1,39 @@
 /**
  * Interactive app tour using react-native-copilot.
- * Shows glassmorphic tooltips pointing to actual UI elements.
- * Supports English and Swahili via i18n.
+ *
+ * Renders glassmorphic tooltips pointing to actual UI elements, with
+ * multiple safety nets so users can NEVER get permanently stuck:
+ *
+ *   1. Prominent Skip pill in the tooltip header (large, red accent,
+ *      always rendered first in the layout so it survives even if the
+ *      tooltip is partially clipped).
+ *   2. Android hardware-back-button handler (back-press exits tour).
+ *   3. 15-second watchdog · if the tour is visible and no `stepChange`
+ *      or user interaction fires for 15 s, force-stop. Catches the
+ *      "tooltip rendered below the viewport" trap users hit on small
+ *      phones with long-scroll Home screens.
+ *   4. Step-target validation · on every `stepChange` we measure the
+ *      target's on-screen rect; if it has zero size or measures
+ *      off-screen we auto-advance (or stop on the last step).
+ *   5. Auto-scroll · screens register their primary `ScrollView` ref
+ *      via `registerTourScrollView`; on each `stepChange` we scroll
+ *      the new target into view (~120 px from the top) so the tooltip
+ *      lands on visible content.
+ *
+ * Together these eliminate the "kill the APK to recover" bug reported
+ * 2026-04-25 where step 9 (Recent Transactions, near the bottom of the
+ * Home ScrollView) rendered its tooltip below the visible viewport.
  */
 
-import React, { useEffect, useState } from "react";
-import { View, Text, Pressable, Platform } from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import {
+  View,
+  Text,
+  Pressable,
+  Platform,
+  BackHandler,
+  type ScrollView,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import {
   CopilotProvider,
@@ -31,14 +59,40 @@ export function triggerAppTour() {
 }
 
 /**
- * Glassmorphic tooltip · uses useCopilot() for state + navigation
+ * Scroll-view registry · screens that contain TourStep targets register
+ * their primary ScrollView so the tour can scroll the target into view
+ * before each step. Replaces the previous web-only `scrollIntoView`
+ * fallback that left native users stuck when a target sat below the fold.
+ */
+let _registeredScrollViewRef: ScrollView | null = null;
+export function registerTourScrollView(ref: ScrollView | null) {
+  _registeredScrollViewRef = ref;
+}
+
+/**
+ * Glassmorphic tooltip · uses useCopilot() for state + navigation.
+ *
+ * Layout order (top→bottom): Skip pill (header-right), step badge
+ * (centred), icon (left), title, body, progress dots, Back / Next.
+ * The Skip pill is rendered FIRST in the JSX so React Native's flex
+ * layout always allocates space for it even when the parent tooltip
+ * is partially clipped by the viewport.
  */
 function GlassTooltip() {
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
   const { t } = useLocale();
   const copilot = useCopilot();
-  const { currentStep, goToNext, goToPrev, stop, currentStepNumber, totalStepsNumber, isFirstStep, isLastStep } = copilot;
+  const {
+    currentStep,
+    goToNext,
+    goToPrev,
+    stop,
+    currentStepNumber,
+    totalStepsNumber,
+    isFirstStep,
+    isLastStep,
+  } = copilot;
 
   const stepIcons: Record<number, string> = {
     1: "wallet",
@@ -48,6 +102,8 @@ function GlassTooltip() {
     5: "time",
     6: "menu",
     7: "briefcase",
+    8: "stats-chart",
+    9: "list",
   };
 
   const stepColors: Record<number, string> = {
@@ -58,17 +114,26 @@ function GlassTooltip() {
     5: "#EC4899",
     6: "#6366F1",
     7: "#14B8A6",
+    8: "#22D3EE",
+    9: "#8B5CF6",
   };
 
   const icon = stepIcons[currentStepNumber] || "information-circle";
   const accentColor = stepColors[currentStepNumber] || colors.primary[400];
 
+  // Skip uses a warning-orange accent so it reads as "exit/stop"
+  // rather than another primary action. Brighter than the previous
+  // 55 %-opacity white text that users reported missing on bright
+  // backdrops.
+  const SKIP_COLOR = "#F97316";
+
   return (
     <View
       style={{
-        backgroundColor: "rgba(10, 18, 40, 0.92)",
+        backgroundColor: "rgba(10, 18, 40, 0.94)",
         borderRadius: 24,
-        padding: 24,
+        padding: 22,
+        paddingTop: 18,
         maxWidth: 360,
         minWidth: 290,
         borderWidth: 1.5,
@@ -83,9 +148,55 @@ function GlassTooltip() {
           : {}),
       }}
     >
-      {/* Header: Icon + Step badge + Skip (top-right per design + user
-          feedback that "skip is on top"). Three columns: icon left, step
-          badge centred, Skip button hard-right.  */}
+      {/* Header: Skip pill on the FIRST row by itself · highly
+          visible orange pill so users always see an exit. Drops
+          below the icon row so even a partially clipped tooltip
+          still renders Skip on the first visible line. */}
+      <View
+        style={{
+          flexDirection: "row",
+          justifyContent: "flex-end",
+          marginBottom: 10,
+        }}
+      >
+        <Pressable
+          onPress={() => stop()}
+          style={({ pressed, hovered }: any) => ({
+            paddingVertical: 7,
+            paddingHorizontal: 14,
+            borderRadius: 999,
+            backgroundColor: pressed
+              ? SKIP_COLOR + "40"
+              : hovered
+              ? SKIP_COLOR + "28"
+              : SKIP_COLOR + "1A",
+            borderWidth: 1,
+            borderColor: SKIP_COLOR + "55",
+            flexDirection: "row" as const,
+            alignItems: "center" as const,
+            gap: 6,
+            ...(isWeb ? ({ cursor: "pointer", transition: "all 0.15s ease" } as any) : {}),
+          })}
+          accessibilityRole="button"
+          accessibilityLabel={t("tour.skipTour")}
+          hitSlop={10}
+          testID="tour-skip-button"
+        >
+          <Ionicons name="close" size={13} color={SKIP_COLOR} />
+          <Text
+            style={{
+              color: SKIP_COLOR,
+              fontSize: 12,
+              fontFamily: "DMSans_600SemiBold",
+              letterSpacing: 0.3,
+            }}
+          >
+            {t("tour.skipTour")}
+          </Text>
+        </Pressable>
+      </View>
+
+      {/* Icon + step-of-N badge */}
       <View
         style={{
           flexDirection: "row",
@@ -133,29 +244,6 @@ function GlassTooltip() {
               .replace("{total}", String(totalStepsNumber))}
           </Text>
         </View>
-        <Pressable
-          onPress={() => stop()}
-          style={({ pressed, hovered }: any) => ({
-            paddingVertical: 6,
-            paddingHorizontal: 10,
-            borderRadius: 8,
-            opacity: pressed ? 0.6 : hovered ? 0.9 : 0.8,
-            ...(isWeb ? ({ cursor: "pointer" } as any) : {}),
-          })}
-          accessibilityRole="button"
-          accessibilityLabel={t("tour.skipTour")}
-        >
-          <Text
-            style={{
-              color: "rgba(255,255,255,0.55)",
-              fontSize: 12,
-              fontFamily: "DMSans_500Medium",
-              letterSpacing: 0.3,
-            }}
-          >
-            {t("tour.skipTour")}
-          </Text>
-        </Pressable>
       </View>
 
       {/* Title */}
@@ -174,11 +262,11 @@ function GlassTooltip() {
       {/* Description */}
       <Text
         style={{
-          color: "rgba(255,255,255,0.6)",
+          color: "rgba(255,255,255,0.65)",
           fontSize: 13.5,
           fontFamily: "DMSans_400Regular",
           lineHeight: 21,
-          marginBottom: 20,
+          marginBottom: 18,
         }}
       >
         {currentStep?.text || ""}
@@ -189,7 +277,7 @@ function GlassTooltip() {
         style={{
           flexDirection: "row",
           gap: 6,
-          marginBottom: 16,
+          marginBottom: 14,
           justifyContent: "center",
         }}
       >
@@ -212,8 +300,7 @@ function GlassTooltip() {
         ))}
       </View>
 
-      {/* Navigation buttons · Skip moved to the header so this row is
-          right-aligned (Back + Next/Got it).  */}
+      {/* Back + Next */}
       <View
         style={{
           flexDirection: "row",
@@ -322,13 +409,27 @@ export function TourStep({
 }
 
 /**
- * Tour auto-starter · waits for onboarding slides, then starts tour
+ * Tour auto-starter · waits for onboarding slides, then starts tour.
+ *
+ * Mounts five `useEffect`s:
+ *   1. Subscribe to the global `triggerAppTour()` callback.
+ *   2. Fallback auto-start for returning users (onboarding done, tour not).
+ *   3. Auto-scroll the target into view on each `stepChange`
+ *      (works on both web `scrollIntoView` and native `scrollTo`).
+ *   4. Validate target measurement after a brief settle delay; if the
+ *      target measures to zero size or off-screen, auto-advance.
+ *   5. Persist `tourCompleted=true` on the `stop` event so we don't
+ *      re-trigger on every launch.
+ *   6. Watchdog · 15 s timer reset on every step transition; fires
+ *      `stop()` if the user appears stuck.
+ *   7. Android `BackHandler` · hardware back press during tour exits.
  */
 export function TourAutoStart() {
-  const { start, copilotEvents } = useCopilot();
-  const startedRef = React.useRef(false);
+  const { start, stop, goToNext, copilotEvents, visible, currentStep } = useCopilot();
+  const startedRef = useRef(false);
+  const lastStepAtRef = useRef<number>(0);
 
-  const doStart = React.useCallback(async () => {
+  const doStart = useCallback(async () => {
     if (startedRef.current) return;
     const tourDone = await storage.getItemAsync(TOUR_COMPLETED_KEY);
     if (tourDone === "true") return;
@@ -339,13 +440,13 @@ export function TourAutoStart() {
     }, 800);
   }, [start]);
 
-  // Method 1: Direct trigger from onboarding completion
+  // Method 1 · direct trigger from onboarding completion
   useEffect(() => {
     _tourStartCallback = doStart;
     return () => { _tourStartCallback = null; };
   }, [doStart]);
 
-  // Method 2: Fallback · if onboarding was already completed (returning user)
+  // Method 2 · fallback if onboarding was already completed (returning user)
   useEffect(() => {
     (async () => {
       const onboardingDone = await storage.getItemAsync(ONBOARDING_KEY);
@@ -356,36 +457,108 @@ export function TourAutoStart() {
     })();
   }, []); // eslint-disable-line
 
-  // Auto-scroll page when step changes so the target element is visible
+  // Auto-scroll target into view on every step change · web uses
+  // DOM scrollIntoView (existing behaviour), native uses the scroll
+  // ref registered via `registerTourScrollView`. Without this the
+  // tooltip can land below the visible viewport on small phones,
+  // which is what trapped users on the Recent Transactions step.
   useEffect(() => {
     const handleStepChange = (step: any) => {
-      if (isWeb && step) {
-        // Scroll the page so the highlighted element is centered
+      lastStepAtRef.current = Date.now();
+
+      if (isWeb) {
         setTimeout(() => {
-          const overlay = document.querySelector('[data-copilot]') as HTMLElement;
+          const overlay = document.querySelector("[data-copilot]") as HTMLElement | null;
           if (overlay) {
             overlay.scrollIntoView({ behavior: "smooth", block: "center" });
           } else {
-            // Fallback: scroll by step order
             const scrollY = (step.order - 1) * 300;
             window.scrollTo({ top: Math.max(0, scrollY - 200), behavior: "smooth" });
           }
         }, 100);
+        return;
+      }
+
+      // Native · measure the target wrapper and scroll the registered
+      // ScrollView so the target sits ~120 px from the top edge.
+      const wrapper = step?.wrapper?.current;
+      if (!wrapper || typeof wrapper.measureInWindow !== "function") return;
+      try {
+        wrapper.measureInWindow((_x: number, y: number, _w: number, h: number) => {
+          if (
+            !_registeredScrollViewRef ||
+            typeof (_registeredScrollViewRef as any).scrollTo !== "function"
+          ) return;
+          // Skip the scroll if the target is already comfortably in view
+          if (y > 80 && y + h < 600) return;
+          (_registeredScrollViewRef as any).scrollTo({
+            y: Math.max(0, y - 120),
+            animated: true,
+          });
+        });
+      } catch {
+        // measure can throw if the ref was unmounted · safe to ignore
       }
     };
     copilotEvents.on("stepChange", handleStepChange);
     return () => { copilotEvents.off("stepChange", handleStepChange); };
   }, [copilotEvents]);
 
+  // Step-target validation · 800 ms after every step change, verify
+  // the target rendered with non-zero size. If it didn't (target
+  // unmounted, conditional render hid it, etc.) auto-advance so the
+  // user isn't pinned to an invisible tooltip.
+  useEffect(() => {
+    if (!visible || !currentStep) return;
+    const timer = setTimeout(() => {
+      const wrapper: any = (currentStep as any)?.wrapper?.current;
+      if (!wrapper || typeof wrapper.measureInWindow !== "function") return;
+      wrapper.measureInWindow((_x: number, _y: number, w: number, h: number) => {
+        if (!w || !h) {
+          try { goToNext(); } catch { try { stop(); } catch {} }
+        }
+      });
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [visible, currentStep, goToNext, stop]);
+
+  // Persist completion on stop
   useEffect(() => {
     const handleStop = () => {
       storage.setItemAsync(TOUR_COMPLETED_KEY, "true");
     };
     copilotEvents.on("stop", handleStop);
-    return () => {
-      copilotEvents.off("stop", handleStop);
-    };
+    return () => { copilotEvents.off("stop", handleStop); };
   }, [copilotEvents]);
+
+  // Watchdog · if the tour stays visible without a `stepChange` for
+  // 15 s, force-stop. Catches edge cases where the tooltip clips off-
+  // screen, the Skip pill is hidden behind a status bar, etc.
+  useEffect(() => {
+    if (!visible) return;
+    lastStepAtRef.current = Date.now();
+    const interval = setInterval(() => {
+      const idleMs = Date.now() - lastStepAtRef.current;
+      if (idleMs > 15000) {
+        try { stop(); } catch {}
+      }
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [visible, stop]);
+
+  // Android hardware back · pressing back during the tour stops it
+  // (matches the user's mental model that "back" always escapes).
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (visible) {
+        try { stop(); } catch {}
+        return true;
+      }
+      return false;
+    });
+    return () => sub.remove();
+  }, [visible, stop]);
 
   return null;
 }

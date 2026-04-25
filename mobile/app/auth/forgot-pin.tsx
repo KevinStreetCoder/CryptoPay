@@ -470,6 +470,7 @@ export default function ForgotPINScreen() {
               <PinInput
                 onComplete={handleNewPin}
                 error={pinError}
+                loading={loading}
                 testID="forgot-pin-new-pin"
               />
             </View>
@@ -480,21 +481,9 @@ export default function ForgotPINScreen() {
               <PinInput
                 onComplete={handleConfirmPin}
                 error={pinError}
+                loading={loading}
                 testID="forgot-pin-confirm-pin"
               />
-              {loading && (
-                <Text
-                  style={{
-                    color: tc.primary[300],
-                    fontSize: 14,
-                    fontFamily: "DMSans_500Medium",
-                    textAlign: "center",
-                    marginTop: 20,
-                  }}
-                >
-                  Resetting PIN...
-                </Text>
-              )}
             </View>
           )}
 

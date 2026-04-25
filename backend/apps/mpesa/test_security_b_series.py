@@ -9,11 +9,19 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 from django.conf import settings
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from rest_framework.test import APIClient
 
 pytestmark = pytest.mark.django_db
+
+
+# Token minting in `apps.mpesa.middleware` refuses to fall back to
+# Django's SECRET_KEY in non-DEBUG mode, which is the safe default in
+# production but means tests that exercise the URL-token path must
+# provide a deterministic key. 64-hex-char dummy mirrors what we'd
+# generate via `secrets.token_hex(32)` in real envs.
+_TEST_HMAC_KEY = "0" * 64
 
 
 # -------------------------- B1 + B2: middleware prefix list -------------------------- #
@@ -146,7 +154,8 @@ class TestB12STKAmountMismatch(TestCase):
 
 # -------------------------- B28: status/reversal per-tx token URLs -------------------------- #
 
-class TestB28StatusReversalUseTokens:
+class TestB28StatusReversalUseTokens(TestCase):
+    @override_settings(MPESA_CALLBACK_HMAC_KEY=_TEST_HMAC_KEY)
     def test_transaction_status_result_url_contains_token_segment(self):
         from apps.mpesa.client import MpesaClient
         c = MpesaClient()

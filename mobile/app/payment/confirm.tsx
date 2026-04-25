@@ -13,6 +13,7 @@ import { PaymentStepper } from "../../src/components/PaymentStepper";
 import { useQueryClient } from "@tanstack/react-query";
 import { paymentsApi } from "../../src/api/payments";
 import { normalizeError } from "../../src/utils/apiErrors";
+import { recordBankUse } from "../../src/utils/bankPrefs";
 import { useScreenSecurity } from "../../src/hooks/useScreenSecurity";
 import { useTransactionPoller } from "../../src/hooks/useTransactionPoller";
 import { useBiometricAuth } from "../../src/hooks/useBiometricAuth";
@@ -343,6 +344,12 @@ export default function ConfirmPaymentScreen() {
 
       if (Platform.OS !== "web") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+      // Track bank usage so the picker's "Frequent" section reflects
+      // real behaviour. Fire-and-forget · the storage write never
+      // blocks the success-screen transition.
+      if (params.type === "bank" && params.bank_slug) {
+        void recordBankUse(params.bank_slug);
       }
       router.replace({
         pathname: "/payment/success",
@@ -954,7 +961,7 @@ export default function ConfirmPaymentScreen() {
                 />
               </View>
             ) : (
-              <PinInput onComplete={handlePinComplete} error={pinError} testID="confirm-pin-input" />
+              <PinInput onComplete={handlePinComplete} error={pinError} loading={loading} testID="confirm-pin-input" />
             )}
 
             {loading && (

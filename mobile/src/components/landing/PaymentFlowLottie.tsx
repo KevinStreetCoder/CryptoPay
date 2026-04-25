@@ -105,9 +105,13 @@ export function PaymentFlowLottie({
     let cancelled = false;
     (async () => {
       try {
-        const mod: any = await import(
-          /* webpackChunkName: "lottie-react" */ "lottie-react"
-        );
+        // `lottie-react` is web-only and pulled in lazily on first
+        // intersection. The module isn't installed in this monorepo
+        // (the landing only loads it in the public web bundle) so we
+        // suppress TS module-resolution and rely on the runtime
+        // dynamic-import failing gracefully into `setLoadFailed`.
+        // @ts-ignore · optional web-only dependency, resolved at runtime.
+        const mod: any = await import(/* webpackChunkName: "lottie-react" */ "lottie-react");
         if (!cancelled) setLottieComp(() => mod.default ?? mod.Lottie ?? mod);
       } catch {
         if (!cancelled) setLoadFailed(true);

@@ -111,11 +111,59 @@ class TestBankRegistry(TestCase):
             assert bank["paybill"].isdigit(), bank
             assert len(bank["paybill"]) == 6, bank
 
+    def test_every_bank_has_known_category(self):
+        # 2026-04-25 picker redesign · every bank carries a category
+        # (tier1 / midtier / regional / sharia) so the mobile picker
+        # can section them. Pin both the field's presence and its
+        # membership in the canonical CATEGORIES tuple.
+        from apps.payments.banks import CATEGORIES, list_banks
+        for bank in list_banks():
+            assert "category" in bank, bank
+            assert bank["category"] in CATEGORIES, bank
+
+    def test_every_logo_url_is_https(self):
+        # Mobile clients refuse plain-HTTP image loads on iOS ATS.
+        from apps.payments.banks import list_banks
+        for bank in list_banks():
+            assert bank["logo_url"].startswith("https://"), bank
+
+    def test_banks_by_category_round_trip(self):
+        # Sum of grouped entries must equal the flat list count.
+        from apps.payments.banks import banks_by_category, list_banks
+        grouped = banks_by_category()
+        total = sum(len(rows) for rows in grouped.values())
+        assert total == len(list_banks())
+        # Every grouped row keeps its category field.
+        for cat, rows in grouped.items():
+            for row in rows:
+                assert row["category"] == cat, (cat, row)
+
+    def test_banks_by_category_alphabetical_within_each(self):
+        from apps.payments.banks import banks_by_category
+        for _cat, rows in banks_by_category().items():
+            names = [b["name"] for b in rows]
+            assert names == sorted(names, key=lambda n: n.lower()), names
+
+    def test_tier1_includes_top_commercial_banks(self):
+        # Commits the picker UX promise · the four banks every Kenyan
+        # is expected to recognise sit in tier 1. Ensures a refactor
+        # doesn't downgrade them to mid-tier by mistake.
+        from apps.payments.banks import banks_by_category
+        tier1 = {b["slug"] for b in banks_by_category().get("tier1", [])}
+        assert {"equity", "kcb", "coop", "ncba"} <= tier1
+
 
 # ------------------------------------------------------------------
 # /payments/banks/
 # ------------------------------------------------------------------
 class TestBankListEndpoint(TestCase):
+    def setUp(self):
+        # The view caches its payload at the class level for performance.
+        # Reset between tests so a stale shape from an earlier run can't
+        # mask a real regression in the response payload.
+        from apps.payments.views import BankListView
+        BankListView._cached_payload = None
+
     def test_unauthenticated_returns_401(self):
         client = APIClient()
         resp = client.get("/api/v1/payments/banks/")
@@ -131,7 +179,27 @@ class TestBankListEndpoint(TestCase):
         assert len(body["banks"]) == 15
         # Every entry has the expected shape.
         for bank in body["banks"]:
-            assert {"slug", "name", "paybill", "logo_url", "account_format_hint"} <= set(bank.keys())
+            assert {"slug", "name", "paybill", "logo_url", "account_format_hint", "category"} <= set(bank.keys())
+
+    def test_authenticated_returns_categories_and_grouped(self):
+        user = _make_user_with_wallet(phone="+254700040202")
+        client = _authed(user)
+        resp = client.get("/api/v1/payments/banks/")
+        assert resp.status_code == 200, resp.data
+        body = resp.data
+        # Display-order tuple comes through as a list.
+        assert isinstance(body.get("categories"), list)
+        assert "tier1" in body["categories"]
+        # Grouped sub-payload.
+        grouped = body.get("grouped")
+        assert isinstance(grouped, dict)
+        assert "tier1" in grouped
+        # Every category present in `grouped` must also appear in the
+        # flat `banks` array (no orphaned entries).
+        flat_slugs = {b["slug"] for b in body["banks"]}
+        for cat, rows in grouped.items():
+            for row in rows:
+                assert row["slug"] in flat_slugs, (cat, row)
 
 
 # ------------------------------------------------------------------

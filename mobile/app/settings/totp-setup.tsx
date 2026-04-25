@@ -415,6 +415,7 @@ export default function TOTPSetupScreen() {
               <TextInput
                 value={code}
                 onChangeText={setCode}
+                editable={!loading}
                 placeholder="000000"
                 placeholderTextColor={tc.textMuted}
                 keyboardType="number-pad"
@@ -431,7 +432,8 @@ export default function TOTPSetupScreen() {
                   fontFamily: "DMSans_700Bold",
                   borderWidth: 2,
                   borderColor: code.length === 6 ? tc.primary[500] : tc.dark.border,
-                  ...(isWeb ? ({ outlineStyle: "none" } as any) : {}),
+                  opacity: loading ? 0.55 : 1,
+                  ...(isWeb ? ({ outlineStyle: "none", transition: "opacity 0.2s ease" } as any) : {}),
                 }}
               />
             </View>

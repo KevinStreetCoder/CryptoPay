@@ -1261,7 +1261,7 @@ export default function BuyCryptoScreen() {
             </Text>
           </View>
 
-          <PinInput onComplete={handlePinComplete} error={pinError} testID="buy-crypto-pin-input" />
+          <PinInput onComplete={handlePinComplete} error={pinError} loading={loading} testID="buy-crypto-pin-input" />
 
           {loading && (
             <View

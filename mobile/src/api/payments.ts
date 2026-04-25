@@ -94,12 +94,25 @@ export interface SendToBankData {
   quote_id: string;
 }
 
+export type BankCategory = "tier1" | "midtier" | "regional" | "sharia";
+
 export interface Bank {
   slug: string;
   name: string;
   paybill: string;
   logo_url: string;
   account_format_hint: string;
+  /** Picker section · backward-compatible (older builds may not see it). */
+  category?: BankCategory;
+}
+
+/** Response shape from GET /payments/banks/ (2026-04-25 picker redesign). */
+export interface BanksResponse {
+  banks: Bank[];
+  /** Display order of category keys · e.g. ["tier1", "midtier", ...]. */
+  categories?: BankCategory[];
+  /** Banks bucketed by category, alphabetised within each bucket. */
+  grouped?: Partial<Record<BankCategory, Bank[]>>;
 }
 
 export interface BuyCryptoData {
@@ -181,7 +194,7 @@ export const paymentsApi = {
       "/payments/send-to-bank/",
       data,
     ),
-  banks: () => api.get<{ banks: Bank[] }>("/payments/banks/"),
+  banks: () => api.get<BanksResponse>("/payments/banks/"),
   buyCrypto: (data: BuyCryptoData) => api.post<Transaction>("/payments/buy-crypto/", data),
   swap: (data: SwapData) => api.post<Transaction>("/payments/swap/", data),
   history: (page = 1) => api.get<{ results: Transaction[]; count: number }>("/payments/history/", { params: { page } }),

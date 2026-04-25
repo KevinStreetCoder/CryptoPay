@@ -69,7 +69,7 @@ export function HowItWorksMockup({ width = 280, aspect = 0.54 }: Props) {
         // Inject the hover rule once per page. Cheaper than styled-components
         // and keeps the transition local to this component's class.
         <style
-          // @ts-expect-error · raw <style> is web-only.
+          // @ts-ignore · raw <style> is web-only and types vary by RN-web version.
           dangerouslySetInnerHTML={{
             __html: `
               .cpay-howitworks-mockup:hover {

@@ -125,7 +125,7 @@ export function KesRateSparkline({
   if (error || !points || !geometry) {
     // Silent fallback: render nothing so the stats tiles above look
     // intentional rather than "oh, something failed to load".
-    return <View style={{ width, height, opacity: 0 }} />;
+    return <View style={{ width: width as any, height, opacity: 0 }} />;
   }
 
   const hover = hoverIdx != null ? geometry.coords[hoverIdx] : null;
@@ -134,7 +134,7 @@ export function KesRateSparkline({
   // On native we just render a flat placeholder · the stats section is
   // web-dominant and sparkline interactivity requires DOM events.
   if (Platform.OS !== "web") {
-    return <View style={{ width, height }} />;
+    return <View style={{ width: width as any, height }} />;
   }
 
   const formattedValue = (v: number) => {
@@ -148,15 +148,15 @@ export function KesRateSparkline({
 
   return (
     <View
-      // @ts-expect-error · web-only DOM events; RN-web forwards these.
+      // @ts-ignore · web-only DOM events; RN-web forwards these.
       onMouseMove={(e: any) => onMove(e.clientX)}
       onMouseLeave={() => setHoverIdx(null)}
-      // @ts-expect-error
+      // @ts-ignore
       onTouchStart={(e: any) => e.touches?.[0] && onMove(e.touches[0].clientX)}
-      // @ts-expect-error
+      // @ts-ignore
       onTouchMove={(e: any) => e.touches?.[0] && onMove(e.touches[0].clientX)}
       onTouchEnd={() => setHoverIdx(null)}
-      style={{ width, height, position: "relative" }}
+      style={{ width: width as any, height, position: "relative" }}
     >
       {/* Corner label: currency and 7d % change. Stays small and quiet. */}
       <View

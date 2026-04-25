@@ -33,7 +33,7 @@ from django.utils import timezone
 
 from apps.accounts.models import AuditLog
 
-from .banks import get_bank, list_banks
+from .banks import CATEGORIES as BANK_CATEGORIES, banks_by_category, get_bank, list_banks
 from .circuit_breaker import PaymentCircuitBreaker, PaymentsPaused
 from .models import SavedPaybill, Transaction
 from .saga import PaymentSaga, SagaError
@@ -386,6 +386,19 @@ class BankListView(APIView):
     of the response payload (the registry is a frozen dict that never
     changes at runtime; serializing it every request was waste).
 
+    Response shape (2026-04-25 · category groupings added):
+
+        {
+          "banks":      [...]            # flat alphabetical list (legacy)
+          "categories": ["tier1", ...]   # display order
+          "grouped":    {"tier1": [...], "midtier": [...], ...}
+        }
+
+    The flat `banks` array is kept for older mobile builds in the wild.
+    The new bank-picker UI iterates `categories` to know section order
+    and reads `grouped[<cat>]` for the rows. Both halves of the payload
+    derive from the same `_BANKS` dict so they can never disagree.
+
     Auth-required so we don't anonymously expose the consumer pattern
     of which banks Cpay routes to. The paybills themselves are public.
     """
@@ -398,7 +411,11 @@ class BankListView(APIView):
     def get(self, request):
         cls = type(self)
         if cls._cached_payload is None:
-            cls._cached_payload = {"banks": list_banks()}
+            cls._cached_payload = {
+                "banks": list_banks(),
+                "categories": list(BANK_CATEGORIES),
+                "grouped": banks_by_category(),
+            }
         return Response(cls._cached_payload)
 
 

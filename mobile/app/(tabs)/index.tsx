@@ -1179,7 +1179,12 @@ function MobileCryptoCharts({
   );
 }
 
-import { AppTourProvider, TourStep, TourAutoStart } from "../../src/components/AppTour";
+import {
+  AppTourProvider,
+  TourStep,
+  TourAutoStart,
+  registerTourScrollView,
+} from "../../src/components/AppTour";
 
 function HomeScreenContent() {
   const router = useRouter();
@@ -1320,6 +1325,7 @@ function HomeScreenContent() {
       // bottomTabBarHeight + 16` already accounts for the bar + inset.
       <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }} edges={["top", "left", "right"]}>
         <ScrollView
+          ref={(r) => { registerTourScrollView(r); }}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -1920,6 +1926,7 @@ function HomeScreenContent() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
       <ScrollView
+        ref={(r) => { registerTourScrollView(r); }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

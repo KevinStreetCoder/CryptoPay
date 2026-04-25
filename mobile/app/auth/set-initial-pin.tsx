@@ -220,6 +220,7 @@ export default function SetInitialPinScreen() {
               <PinInput
                 onComplete={activeStep.onComplete}
                 error={pinError}
+                loading={loading}
                 testID="set-initial-pin-input"
               />
             </View>

@@ -830,6 +830,7 @@ export default function RegisterScreen() {
                     setOtpDigits(code.split(""));
                   }}
                   error={false}
+                  loading={loading}
                   testID="otp-input"
                 />
               </View>
@@ -1161,6 +1162,7 @@ export default function RegisterScreen() {
               <View style={{ marginBottom: 20 }}>
                 <PinInput
                   onComplete={handlePinComplete}
+                  loading={loading}
                   testID="register-pin-input"
                 />
               </View>

@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { View, TextInput, Pressable, Platform, useWindowDimensions, Keyboard } from "react-native";
+import { View, Text, TextInput, Pressable, Platform, useWindowDimensions, Keyboard } from "react-native";
 import * as Haptics from "expo-haptics";
-import { getThemeColors } from "../constants/theme";
+import { colors, getThemeColors } from "../constants/theme";
 import { useThemeMode } from "../stores/theme";
+import { BrandedSpinner } from "./BrandedSpinner";
+import { useLocale } from "../hooks/useLocale";
 
 interface PinInputProps {
   length?: number;
@@ -15,6 +17,7 @@ interface PinInputProps {
 export function PinInput({ length = 6, onComplete, error, loading, testID }: PinInputProps) {
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
+  const { t } = useLocale();
   const [pin, setPin] = useState("");
   const inputRef = useRef<TextInput>(null);
   const { width: screenWidth } = useWindowDimensions();
@@ -59,6 +62,7 @@ export function PinInput({ length = 6, onComplete, error, loading, testID }: Pin
   }, [error, loading]);
 
   const handleChange = (text: string) => {
+    if (loading) return; // Drop keystrokes while a request is in flight
     const cleaned = text.replace(/[^0-9]/g, "").slice(0, length);
     setPin(cleaned);
     if (cleaned.length === length) {
@@ -72,11 +76,22 @@ export function PinInput({ length = 6, onComplete, error, loading, testID }: Pin
 
   return (
     <Pressable
-      onPress={() => inputRef.current?.focus()}
+      onPress={() => { if (!loading) inputRef.current?.focus(); }}
       accessibilityRole="none"
       accessibilityLabel={`PIN entry, ${pin.length} of ${length} digits entered`}
     >
-      <View style={{ flexDirection: "row", justifyContent: "center", gap, width: totalWidth, maxWidth: "100%", alignSelf: "center" }}>
+      <View
+        style={{
+          flexDirection: "row",
+          justifyContent: "center",
+          gap,
+          width: totalWidth,
+          maxWidth: "100%",
+          alignSelf: "center",
+          opacity: loading ? 0.55 : 1,
+          ...(Platform.OS === "web" ? ({ transition: "opacity 0.2s ease" } as any) : {}),
+        }}
+      >
         {Array.from({ length }).map((_, i) => {
           const isFilled = pin.length > i;
           const isActive = pin.length === i;
@@ -138,6 +153,7 @@ export function PinInput({ length = 6, onComplete, error, loading, testID }: Pin
         ref={inputRef}
         value={pin}
         onChangeText={handleChange}
+        editable={!loading}
         keyboardType="number-pad"
         maxLength={length}
         autoFocus={Platform.OS === "web"}
@@ -153,6 +169,35 @@ export function PinInput({ length = 6, onComplete, error, loading, testID }: Pin
         accessibilityHint={`Enter your ${length}-digit PIN`}
         testID={testID || "pin-input"}
       />
+
+      {/* Built-in loading banner · so every screen using PinInput gets
+          the same "request in flight" affordance without each one
+          having to render its own spinner separately. Sits 12 px under
+          the PIN row and centres horizontally. */}
+      {loading ? (
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            alignSelf: "center",
+            gap: 8,
+            marginTop: 14,
+            paddingVertical: 6,
+            paddingHorizontal: 12,
+            borderRadius: 999,
+            backgroundColor: colors.primary[400] + "12",
+            borderWidth: 1,
+            borderColor: colors.primary[400] + "26",
+          }}
+          accessibilityRole="progressbar"
+          accessibilityLabel={t("auth.confirmingPin")}
+        >
+          <BrandedSpinner size="small" color={colors.primary[400]} />
+          <Text style={{ color: tc.textPrimary, fontSize: 12.5, fontFamily: "DMSans_600SemiBold" }}>
+            {t("auth.confirmingPin")}
+          </Text>
+        </View>
+      ) : null}
     </Pressable>
   );
 }
