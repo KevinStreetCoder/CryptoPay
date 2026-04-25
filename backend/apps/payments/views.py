@@ -33,10 +33,11 @@ from django.utils import timezone
 
 from apps.accounts.models import AuditLog
 
+from .banks import get_bank, list_banks
 from .circuit_breaker import PaymentCircuitBreaker, PaymentsPaused
 from .models import SavedPaybill, Transaction
 from .saga import PaymentSaga, SagaError
-from .serializers import BuyCryptoSerializer, DepositQuoteSerializer, PayBillSerializer, PayTillSerializer, SavedPaybillSerializer, SendMpesaSerializer, SwapSerializer, TransactionSerializer, WithdrawSerializer
+from .serializers import BuyCryptoSerializer, DepositQuoteSerializer, PayBillSerializer, PayTillSerializer, SavedPaybillSerializer, SendMpesaSerializer, SendToBankSerializer, SwapSerializer, TransactionSerializer, WithdrawSerializer
 from .services import DailyLimitExceededError, check_daily_limit
 
 logger = logging.getLogger(__name__)
@@ -376,6 +377,242 @@ class PayBillView(APIView):
         return request.META.get("REMOTE_ADDR", "0.0.0.0")
 
 
+class BankListView(APIView):
+    """Read-only list of banks supported by Send-to-Bank.
+
+    Audit C5/H4 fix · was previously a `ListAPIView` overriding `get()`
+    which defeats the parent class's pagination/serializer machinery.
+    Now an APIView with explicit throttling and a module-level cache
+    of the response payload (the registry is a frozen dict that never
+    changes at runtime; serializing it every request was waste).
+
+    Auth-required so we don't anonymously expose the consumer pattern
+    of which banks Cpay routes to. The paybills themselves are public.
+    """
+
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [UserRateThrottle]
+
+    _cached_payload: dict | None = None
+
+    def get(self, request):
+        cls = type(self)
+        if cls._cached_payload is None:
+            cls._cached_payload = {"banks": list_banks()}
+        return Response(cls._cached_payload)
+
+
+class SendToBankView(APIView):
+    """Send crypto to a Kenyan bank account.
+
+    This is a thin wrapper that maps the bank slug to the bank's Pay
+    Bill number and reuses the same payment saga / quote / lock paths
+    `PayBillView` runs · no new Daraja endpoint, no fork of the saga.
+    The response includes the chosen bank metadata so the receipt
+    screen can render a proper "KCB Bank · 1234567890" line instead
+    of the bare paybill number.
+
+    For amounts above KES 50,000, we additionally require the user's
+    primary email to be verified · this matches the Layer 3 gating
+    spec in `docs/research/SIGNUP-EMAIL-ABUSE.md`.
+    """
+
+    # Email-verification threshold for Send-to-Bank · larger than the
+    # M-Pesa daily transaction cap (KES 250k) is meaningless here, so
+    # we set the tier-step at KES 50k. The mobile client should disclose
+    # this requirement up front via the quote response.
+    EMAIL_VERIFY_THRESHOLD_KES = Decimal("50000")
+
+    permission_classes = [IsNotSuspended]
+    throttle_classes = [PaymentRateThrottle]
+
+    def post(self, request):
+        serializer = SendToBankSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = request.user
+        data = serializer.validated_data
+
+        bank = get_bank(data["bank_slug"])
+        if bank is None:
+            # Defensive · ChoiceField + serializer.validate_bank_slug
+            # already handle the typical case but a registry hot-reload
+            # between request boundary and now is not impossible.
+            return Response(
+                {"error": "Unknown bank"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        pin_error = _verify_pin_with_lockout(user, data["pin"])
+        if pin_error:
+            return pin_error
+
+        idem_key = data["idempotency_key"]
+        redis_key = f"payment:{idem_key}"
+        if not cache.add(redis_key, "processing", timeout=300):
+            existing = Transaction.objects.filter(idempotency_key=idem_key).first()
+            if existing:
+                return Response(TransactionSerializer(existing).data)
+            return Response(
+                {"error": "Payment already in progress"},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        from apps.rates.services import RateService
+
+        quote = RateService.get_locked_quote(data["quote_id"], user_id=str(user.id))
+        if not quote:
+            cache.delete(redis_key)
+            return Response(
+                {"error": "Quote expired or invalid. Please request a new quote."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Email-verification gate for high-value bank transfers · matches
+        # the Layer 3 specification in SIGNUP-EMAIL-ABUSE.md. The mobile
+        # client should disclose this requirement when quoting; we still
+        # enforce it server-side.
+        kes_amount = Decimal(quote["kes_amount"])
+        if (
+            kes_amount > self.EMAIL_VERIFY_THRESHOLD_KES
+            and not user.email_verified
+        ):
+            cache.delete(redis_key)
+            return Response(
+                {
+                    "error": (
+                        "Bank transfers above KES 50,000 require a verified "
+                        "email. Please verify your email and try again."
+                    ),
+                    "error_code": "email_verification_required",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            daily_lock = check_daily_limit(user, kes_amount)
+        except DailyLimitExceededError as e:
+            cache.delete(redis_key)
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            PaymentCircuitBreaker.check_payment_allowed(kes_amount)
+        except PaymentsPaused as e:
+            daily_lock.release()
+            cache.delete(redis_key)
+            return Response(
+                {"error": e.reason, "circuit_breaker": True},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        quote = RateService.consume_locked_quote(data["quote_id"], user_id=str(user.id))
+        if not quote:
+            daily_lock.release()
+            cache.delete(redis_key)
+            return Response(
+                {"error": "Quote expired or was already used. Please request a new quote."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        slippage_err = _check_rate_slippage(quote)
+        if slippage_err:
+            daily_lock.release()
+            cache.delete(redis_key)
+            return Response({"error": slippage_err}, status=status.HTTP_409_CONFLICT)
+
+        try:
+            tx = Transaction.objects.create(
+                idempotency_key=idem_key,
+                user=user,
+                # Send-to-Bank IS a Pay Bill payment under the hood, so
+                # we keep the same Type. The bank metadata lives in
+                # saga_data so receipts can render "Bank · KCB" without
+                # a schema change.
+                type=Transaction.Type.PAYBILL_PAYMENT,
+                source_currency=quote["currency"],
+                source_amount=Decimal(quote["crypto_amount"]),
+                dest_currency="KES",
+                dest_amount=Decimal(quote["kes_amount"]),
+                exchange_rate=Decimal(quote["exchange_rate"]),
+                fee_amount=Decimal(quote["fee_kes"]),
+                fee_currency="KES",
+                excise_duty_amount=Decimal(quote.get("excise_duty_kes", "0")),
+                mpesa_paybill=bank["paybill"],
+                mpesa_account=data["account_number"],
+                ip_address=self._get_client_ip(request),
+                saga_data={
+                    "recipient_kind": "bank",
+                    "bank": {
+                        "slug": bank["slug"],
+                        "name": bank["name"],
+                        "paybill": bank["paybill"],
+                    },
+                },
+            )
+        except IntegrityError:
+            daily_lock.release()
+            cache.delete(redis_key)
+            existing = Transaction.objects.filter(idempotency_key=idem_key).first()
+            if existing:
+                return Response(TransactionSerializer(existing).data)
+            return Response(
+                {"error": "Duplicate payment detected"},
+                status=status.HTTP_409_CONFLICT,
+            )
+        finally:
+            daily_lock.release()
+
+        try:
+            saga = PaymentSaga(tx)
+            saga.execute()
+        except SagaError as e:
+            logger.error(f"Send-to-bank saga failed: {e}")
+            return Response(
+                {
+                    "error": "Bank transfer failed. Your funds have been returned.",
+                    "transaction": TransactionSerializer(tx).data,
+                },
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+
+        _apply_referral_credit(tx)
+
+        AuditLog.objects.create(
+            user=user,
+            action="SEND_TO_BANK",
+            entity_type="transaction",
+            entity_id=str(tx.id),
+            details={
+                "bank_slug": bank["slug"],
+                "bank_name": bank["name"],
+                "paybill": bank["paybill"],
+                "account_number": data["account_number"],
+                "kes_amount": str(quote["kes_amount"]),
+                "crypto_amount": str(quote["crypto_amount"]),
+                "currency": quote["currency"],
+            },
+            ip_address=self._get_client_ip(request),
+        )
+
+        # The TransactionSerializer reads `saga_data['bank']` and
+        # exposes it as a top-level `bank` field on the response, so
+        # receipts can render "KCB Bank" instead of "522522" without
+        # a second round trip.
+        return Response(
+            TransactionSerializer(tx).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    def _get_client_ip(self, request):
+        xff = request.META.get("HTTP_X_FORWARDED_FOR")
+        if xff:
+            return xff.split(",")[0].strip()
+        return request.META.get("REMOTE_ADDR", "0.0.0.0")
+
+
 class PayTillView(APIView):
     """Pay a Till number with crypto."""
 
@@ -544,6 +781,13 @@ class SendMpesaView(APIView):
             cache.delete(redis_key)
             return Response({"error": slippage_err}, status=status.HTTP_409_CONFLICT)
 
+        # Pochi la Biashara is not a separate Daraja product · it's the
+        # same SendMoney rail with the recipient's number flagged as a
+        # business account on Safaricom's side. We don't change the
+        # request shape; we just label the resulting Transaction so
+        # history can render "Business" next to the recipient.
+        recipient_kind = data.get("context") or "personal"
+
         try:
             tx = Transaction.objects.create(
                 idempotency_key=idem_key,
@@ -559,6 +803,7 @@ class SendMpesaView(APIView):
                 excise_duty_amount=Decimal(quote.get("excise_duty_kes", "0")),
                 mpesa_phone=data["phone"],
                 ip_address=self._get_client_ip(request),
+                saga_data={"recipient_kind": recipient_kind} if recipient_kind != "personal" else {},
             )
         except IntegrityError:
             daily_lock.release()
@@ -592,6 +837,7 @@ class SendMpesaView(APIView):
                 "kes_amount": str(quote["kes_amount"]),
                 "crypto_amount": str(quote["crypto_amount"]),
                 "currency": quote["currency"],
+                "context": recipient_kind,
             },
             ip_address=self._get_client_ip(request),
         )

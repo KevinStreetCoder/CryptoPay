@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from .banks import bank_slugs, get_bank
 from .models import SavedPaybill, Transaction
 
 
@@ -60,7 +61,15 @@ class PayTillSerializer(serializers.Serializer):
 
 
 class SendMpesaSerializer(serializers.Serializer):
-    """Crypto → M-Pesa send payment request."""
+    """Crypto → M-Pesa send payment request.
+
+    `context` is an optional UX-only label. The send-money rail itself
+    does not branch on it · Daraja's BusinessSendMoney command works
+    identically for personal numbers and Pochi la Biashara recipients.
+    When a Pochi-aware client passes `context=pochi`, the resulting
+    Transaction is tagged so the user's history can render "Business"
+    next to the recipient. See `docs/research/MPESA-RAILS.md`.
+    """
 
     phone = serializers.CharField(max_length=15)
     amount_kes = serializers.DecimalField(max_digits=12, decimal_places=2)
@@ -68,12 +77,57 @@ class SendMpesaSerializer(serializers.Serializer):
     pin = serializers.CharField(min_length=6, max_length=6, write_only=True)
     idempotency_key = serializers.CharField(max_length=64)
     quote_id = serializers.CharField(max_length=64)
+    context = serializers.ChoiceField(
+        choices=[("personal", "Personal"), ("pochi", "Pochi la Biashara")],
+        required=False,
+        default="personal",
+    )
 
     def validate_phone(self, value):
         return _normalize_phone(value)
 
     def validate_pin(self, value):
         return _validate_pin(value)
+
+
+class SendToBankSerializer(serializers.Serializer):
+    """Crypto → Kenyan bank account via the existing Pay Bill rail.
+
+    Wraps `PayBillSerializer` with a bank picker · the user selects a
+    bank slug from the curated registry, and we substitute the bank's
+    paybill server-side. The customer's bank account number flows
+    through as the Pay Bill `account` reference. No new Daraja API.
+    """
+
+    quote_id = serializers.CharField(max_length=64)
+    bank_slug = serializers.ChoiceField(choices=[(s, s) for s in bank_slugs()])
+    account_number = serializers.CharField(min_length=4, max_length=30)
+    pin = serializers.CharField(min_length=6, max_length=6, write_only=True)
+    idempotency_key = serializers.CharField(max_length=64)
+
+    def validate_account_number(self, value):
+        # Banks vary widely in account-number format · keep validation
+        # loose for the v1 launch and tighten per-bank later if support
+        # tickets show a typo pattern. We strip whitespace and refuse
+        # anything with letters or symbols (the M-Pesa receiving system
+        # rejects these anyway).
+        cleaned = value.strip().replace(" ", "").replace("-", "")
+        if not cleaned.isdigit():
+            raise serializers.ValidationError(
+                "Account number must be digits only."
+            )
+        return cleaned
+
+    def validate_pin(self, value):
+        return _validate_pin(value)
+
+    def validate_bank_slug(self, value):
+        # ChoiceField already restricts to known slugs but we double-
+        # check in case the registry was reloaded between request and
+        # validation (paranoid · cheap).
+        if get_bank(value) is None:
+            raise serializers.ValidationError("Unknown bank.")
+        return value
 
 
 class BuyCryptoSerializer(serializers.Serializer):
@@ -230,6 +284,8 @@ class TransactionSerializer(serializers.ModelSerializer):
     destination_address = serializers.SerializerMethodField()
     mpesa_phone = serializers.SerializerMethodField()
     mpesa_receipt = serializers.SerializerMethodField()
+    recipient_kind = serializers.SerializerMethodField()
+    bank = serializers.SerializerMethodField()
 
     class Meta:
         model = Transaction
@@ -242,6 +298,7 @@ class TransactionSerializer(serializers.ModelSerializer):
             "mpesa_phone", "mpesa_receipt",
             "chain", "tx_hash", "confirmations",
             "destination_address", "failure_reason",
+            "recipient_kind", "bank",
             "created_at", "completed_at",
         )
         read_only_fields = fields
@@ -262,3 +319,31 @@ class TransactionSerializer(serializers.ModelSerializer):
         if not receipt or len(receipt) < 6:
             return receipt
         return "****" + receipt[-6:]
+
+    def get_recipient_kind(self, obj):
+        """Surface the Pochi / business / bank label set in saga_data.
+
+        Returns one of "pochi", "bank", "personal", or "" (no label).
+        Mobile history uses this to render a small badge ("Business",
+        "Bank") next to the recipient line.
+        """
+        if not obj.saga_data:
+            return ""
+        return obj.saga_data.get("recipient_kind", "")
+
+    def get_bank(self, obj):
+        """For Send-to-Bank transactions, surface the destination bank
+        metadata so receipts can render a friendly name. Returns None
+        when the transaction wasn't a bank send.
+        """
+        if not obj.saga_data:
+            return None
+        meta = obj.saga_data.get("bank")
+        if not meta:
+            return None
+        # Defensive copy so we never leak future internal fields.
+        return {
+            "slug": meta.get("slug", ""),
+            "name": meta.get("name", ""),
+            "paybill": meta.get("paybill", ""),
+        }

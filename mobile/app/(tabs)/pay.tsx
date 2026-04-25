@@ -204,6 +204,28 @@ const PAYMENT_OPTIONS = [
     accentBg: "rgba(245, 158, 11, 0.12)",
     route: "/payment/send" as const,
   },
+  // Pochi la Biashara · same Send Money rail with the trader's number,
+  // separate tile so the user knows it's supported. See
+  // docs/research/MPESA-RAILS.md.
+  {
+    id: "pochi",
+    titleKey: "payment.payPochi" as any,
+    subtitleKey: "payment.payPochiSubtitle" as any,
+    icon: "storefront-outline" as const,
+    accent: "#22C55E",
+    accentBg: "rgba(34, 197, 94, 0.12)",
+    route: "/payment/send?context=pochi" as const,
+  },
+  // Send to Bank · UX wrapper around Pay Bill keyed by bank slug.
+  {
+    id: "bank",
+    titleKey: "payment.sendToBank" as any,
+    subtitleKey: "payment.sendToBankSubtitle" as any,
+    icon: "business-outline" as const,
+    accent: "#0EA5E9",
+    accentBg: "rgba(14, 165, 233, 0.12)",
+    route: "/payment/send-to-bank" as const,
+  },
   {
     id: "swap",
     titleKey: "payment.swapCrypto" as any,
@@ -338,7 +360,7 @@ export default function PayScreen() {
     <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }} edges={["top", "left", "right"]}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: bottomTabBarHeight + 6 }}
+        contentContainerStyle={{ paddingBottom: bottomTabBarHeight }}
       >
         {/* ── Header ─────────────────────────────────────────────────── */}
         <View

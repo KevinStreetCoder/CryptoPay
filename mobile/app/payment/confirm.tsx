@@ -225,6 +225,11 @@ export default function ConfirmPaymentScreen() {
     rate: string;
     fee: string;
     excise_duty?: string;
+    // Pochi flag forwarded from /payment/send?context=pochi.
+    context?: string;
+    // Send-to-Bank fields · forwarded from /payment/send-to-bank.
+    bank_slug?: string;
+    bank_name?: string;
   }>();
 
   const [step, setStep] = useState<"review" | "pin">("review");
@@ -300,6 +305,15 @@ export default function ConfirmPaymentScreen() {
           pin,
           idempotency_key: idempotencyKey,
           quote_id: params.quote_id,
+          ...(params.context === "pochi" ? { context: "pochi" as const } : {}),
+        });
+      } else if (params.type === "bank") {
+        txResponse = await paymentsApi.sendToBank({
+          bank_slug: params.bank_slug!,
+          account_number: params.account_number!,
+          pin,
+          idempotency_key: idempotencyKey,
+          quote_id: params.quote_id,
         });
       }
 
@@ -353,26 +367,50 @@ export default function ConfirmPaymentScreen() {
     }
   };
 
+  // C1 audit fix · add the `bank` branch alongside paybill / send / till.
+  // Without this, Send-to-Bank users used to land on the till-styled
+  // confirm screen with cart icon, "Pay Till" copy, and an undefined
+  // `recipientValue` (because send-to-bank.tsx forwards `account_number`,
+  // not `till_number`).
   const isPaybill = params.type === "paybill";
   const isSend = params.type === "send";
+  const isBank = params.type === "bank";
   const amountKES = parseFloat(params.amount_kes);
-  const recipientLabel = isPaybill ? t("payment.paybillNumber") : isSend ? t("payment.phoneNumber") : t("payment.tillNumber");
+  const recipientLabel = isPaybill
+    ? t("payment.paybillNumber")
+    : isSend
+      ? t("payment.phoneNumber")
+      : isBank
+        ? `${t("payment.bankAccount")}${params.bank_name ? ` · ${params.bank_name}` : ""}`
+        : t("payment.tillNumber");
   const recipientValue = isPaybill
     ? params.paybill_number
     : isSend
       ? params.phone
-      : params.till_number;
+      : isBank
+        ? params.account_number
+        : params.till_number;
   const typeIcon = isPaybill
     ? "receipt-outline"
     : isSend
       ? "phone-portrait-outline"
-      : "cart-outline";
+      : isBank
+        ? "business-outline"
+        : "cart-outline";
   const typeColor = isPaybill
     ? tc.primary[500]
     : isSend
       ? "#F59E0B"
-      : tc.accent;
-  const typeLabel = isPaybill ? t("payment.payBill") : isSend ? t("payment.sendToMpesa") : t("payment.payTill");
+      : isBank
+        ? "#0EA5E9"
+        : tc.accent;
+  const typeLabel = isPaybill
+    ? t("payment.payBill")
+    : isSend
+      ? t("payment.sendToMpesa")
+      : isBank
+        ? t("payment.sendToBank")
+        : t("payment.payTill");
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>

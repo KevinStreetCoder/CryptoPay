@@ -29,6 +29,11 @@ export interface Transaction {
   to_address?: string;
   destination_address?: string;
   failure_reason?: string;
+  // Recipient classification · "pochi" / "bank" / "personal" / ""
+  // Set server-side. Mobile history renders a small badge.
+  recipient_kind?: string;
+  // Populated only for Send-to-Bank transactions.
+  bank?: { slug: string; name: string; paybill: string } | null;
 }
 
 /** Helper: get the KES amount from a transaction (dest for payments, source for deposits) */
@@ -76,6 +81,25 @@ export interface SendMpesaData {
   pin: string;
   idempotency_key: string;
   quote_id: string;
+  // Optional · "pochi" tags the resulting transaction so history
+  // renders a "Business" label. The rail itself is unchanged.
+  context?: "personal" | "pochi";
+}
+
+export interface SendToBankData {
+  bank_slug: string;
+  account_number: string;
+  pin: string;
+  idempotency_key: string;
+  quote_id: string;
+}
+
+export interface Bank {
+  slug: string;
+  name: string;
+  paybill: string;
+  logo_url: string;
+  account_format_hint: string;
 }
 
 export interface BuyCryptoData {
@@ -152,6 +176,12 @@ export const paymentsApi = {
   payBill: (data: PayBillData) => api.post<Transaction>("/payments/pay-bill/", data),
   payTill: (data: PayTillData) => api.post<Transaction>("/payments/pay-till/", data),
   sendMpesa: (data: SendMpesaData) => api.post<Transaction>("/payments/send-mpesa/", data),
+  sendToBank: (data: SendToBankData) =>
+    api.post<Transaction & { bank?: { slug: string; name: string; paybill: string } }>(
+      "/payments/send-to-bank/",
+      data,
+    ),
+  banks: () => api.get<{ banks: Bank[] }>("/payments/banks/"),
   buyCrypto: (data: BuyCryptoData) => api.post<Transaction>("/payments/buy-crypto/", data),
   swap: (data: SwapData) => api.post<Transaction>("/payments/swap/", data),
   history: (page = 1) => api.get<{ results: Transaction[]; count: number }>("/payments/history/", { params: { page } }),

@@ -8,6 +8,9 @@ urlpatterns = [
     path("pay-bill/", views.PayBillView.as_view(), name="pay-bill"),
     path("pay-till/", views.PayTillView.as_view(), name="pay-till"),
     path("send-mpesa/", views.SendMpesaView.as_view(), name="send-mpesa"),
+    # Send-to-Bank · thin wrapper around Pay Bill keyed by bank slug.
+    path("send-to-bank/", views.SendToBankView.as_view(), name="send-to-bank"),
+    path("banks/", views.BankListView.as_view(), name="banks-list"),
     path("buy-crypto/", views.BuyCryptoView.as_view(), name="buy-crypto"),
     path("swap/", views.SwapView.as_view(), name="swap"),
     path("deposit/quote/", views.DepositQuoteView.as_view(), name="deposit-quote"),

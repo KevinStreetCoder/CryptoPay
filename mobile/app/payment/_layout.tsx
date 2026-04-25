@@ -17,6 +17,7 @@ export default function PaymentLayout() {
       <Stack.Screen name="paybill" />
       <Stack.Screen name="till" />
       <Stack.Screen name="send" />
+      <Stack.Screen name="send-to-bank" />
       <Stack.Screen name="detail" />
       <Stack.Screen name="buy-crypto" />
       <Stack.Screen name="deposit" />

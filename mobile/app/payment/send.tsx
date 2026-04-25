@@ -10,7 +10,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Button } from "../../src/components/Button";
 import { CryptoSelector } from "../../src/components/CryptoSelector";
@@ -32,6 +32,12 @@ const CRYPTO_OPTIONS: CurrencyCode[] = ["USDT", "USDC", "BTC", "ETH", "SOL"];
 export default function SendMpesaScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
+  // `context=pochi` switches the screen copy to "Pay a small business"
+  // and tags the resulting transaction so history can render "Business"
+  // next to the recipient. The underlying rail is identical to a normal
+  // M-Pesa send · see docs/research/MPESA-RAILS.md.
+  const params = useLocalSearchParams<{ context?: string }>();
+  const isPochi = (params.context || "") === "pochi";
   const isWeb = Platform.OS === "web";
   const isDesktop = isWeb && width >= 900;
   const { data: wallets } = useWallets();
@@ -117,6 +123,9 @@ export default function SendMpesaScreen() {
         rate: quote.exchange_rate,
         fee: quote.fee_kes,
         excise_duty: quote.excise_duty_kes || "0",
+        // Forward the Pochi flag so the confirm screen can pass it
+        // through to /payments/send-mpesa/ as `context=pochi`.
+        ...(isPochi ? { context: "pochi" } : {}),
       },
     });
   };
@@ -219,12 +228,35 @@ export default function SendMpesaScreen() {
                 }}
                 maxFontSizeMultiplier={1.3}
               >
-                {t("payment.sendToMpesa")}
+                {isPochi ? "Pay a small business" : t("payment.sendToMpesa")}
               </Text>
 
               {/* Step indicator */}
               <PaymentStepper currentStep={0} />
             </View>
+
+            {/* Pochi context subtitle · explains the rail to first-time users. */}
+            {isPochi && (
+              <View
+                style={{
+                  paddingHorizontal: isDesktop ? 0 : 20,
+                  marginTop: -4,
+                  marginBottom: 16,
+                }}
+              >
+                <Text
+                  style={{
+                    color: tc.textMuted,
+                    fontSize: 13,
+                    fontFamily: "DMSans_400Regular",
+                    lineHeight: 18,
+                  }}
+                  maxFontSizeMultiplier={1.3}
+                >
+                  Pay a Pochi la Biashara number directly. Same as M-Pesa Send Money.
+                </Text>
+              </View>
+            )}
 
             <View
               style={{
@@ -233,7 +265,11 @@ export default function SendMpesaScreen() {
               }}
             >
               {/* Phone Number */}
-              <SectionHeader title={t("payment.phoneNumber")} icon="call-outline" iconColor={colors.primary[400]} />
+              <SectionHeader
+                title={isPochi ? "Trader's phone number (Pochi)" : t("payment.phoneNumber")}
+                icon="call-outline"
+                iconColor={colors.primary[400]}
+              />
               <View
                 style={{
                   flexDirection: "row",
@@ -501,7 +537,7 @@ export default function SendMpesaScreen() {
                   />
                 ) : (
                   <Button
-                    title={t("payment.confirmPayment")}
+                    title={isPochi ? "Pay" : t("payment.confirmPayment")}
                     onPress={handleConfirm}
                     disabled={parseFloat(quote.crypto_amount) > balance}
                     size="lg"
