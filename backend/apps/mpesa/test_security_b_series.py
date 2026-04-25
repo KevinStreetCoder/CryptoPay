@@ -159,8 +159,19 @@ class TestB28StatusReversalUseTokens(TestCase):
     def test_transaction_status_result_url_contains_token_segment(self):
         from apps.mpesa.client import MpesaClient
         c = MpesaClient()
-        with patch("apps.mpesa.client.requests.post") as mock_post, \
+        # Patch BOTH the OAuth GET (otherwise the access_token property
+        # makes a live Daraja call to /oauth/v1/generate before the
+        # status POST, which is what was 400-ing in CI where MPESA_*
+        # credentials are unset) AND the status POST itself.
+        with patch("apps.mpesa.client.requests.get") as mock_get, \
+             patch("apps.mpesa.client.requests.post") as mock_post, \
+             patch.object(MpesaClient, "access_token", new="test-token"), \
              patch.object(c, "_get_security_credential", return_value="cred"):
+            mock_get.return_value = MagicMock(
+                status_code=200,
+                json=MagicMock(return_value={"access_token": "test-token", "expires_in": 3599}),
+            )
+            mock_get.return_value.raise_for_status = lambda: None
             mock_post.return_value = MagicMock(
                 status_code=200,
                 json=MagicMock(return_value={"ok": True}),
