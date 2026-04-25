@@ -158,13 +158,37 @@ api.interceptors.response.use(
         }
         originalRequest.headers.Authorization = `Bearer ${data.access}`;
         return api(originalRequest);
-      } catch {
-        // Mark session as expired to stop all future requests immediately
-        _sessionExpired = true;
-        await storage.deleteItemAsync("access_token");
-        await storage.deleteItemAsync("refresh_token");
-        _onSessionExpired?.();
-        return Promise.reject(new SessionExpiredError());
+      } catch (refreshErr: any) {
+        // Distinguish a real auth failure (refresh token actually
+        // rejected by the server with 401/403) from a transient
+        // network/upstream failure (5xx, timeout, no response). The
+        // earlier code force-logged-out for ANY refresh error, which
+        // meant a brief 4G hiccup at app-resume time silently kicked
+        // the user back to the phone screen even though their refresh
+        // token was perfectly valid · the user-reported "logged out
+        // after a few minutes" symptom.
+        const refreshStatus = refreshErr?.response?.status;
+        const refreshIsAuthFailure =
+          refreshStatus === 401 || refreshStatus === 403;
+        const refreshIsMissingToken =
+          refreshErr?.message === "No refresh token";
+
+        if (refreshIsAuthFailure || refreshIsMissingToken) {
+          // Token genuinely invalid (rotated chain blacklisted, expired,
+          // or never stored) · clear and force re-login.
+          _sessionExpired = true;
+          await storage.deleteItemAsync("access_token");
+          await storage.deleteItemAsync("refresh_token");
+          _onSessionExpired?.();
+          return Promise.reject(new SessionExpiredError());
+        }
+
+        // Network / 5xx / timeout · keep the session intact. Surface
+        // the original error so the caller's UI can show a "couldn't
+        // reach server, please retry" state without nuking the user's
+        // login. _sessionExpired stays false, so subsequent requests
+        // (or the next app-resume) will try again.
+        return Promise.reject(refreshErr);
       }
     }
     return Promise.reject(error);
