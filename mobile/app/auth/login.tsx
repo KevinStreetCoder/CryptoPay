@@ -250,8 +250,16 @@ export default function LoginScreen() {
     setLoading(true);
     setPinError(false);
     try {
-      await login(phone, pin);
-      router.replace("/(tabs)");
+      const data = await login(phone, pin);
+      // 2026-04-26 · gate accounts that landed with empty / disposable
+      // / unverified emails into the verification flow before the
+      // home tabs. Backend sets `email_verify_required` based on the
+      // current `User.email` and the disposable-domain blocklist.
+      if ((data as any)?.email_verify_required) {
+        router.replace("/auth/email-verify-required" as any);
+      } else {
+        router.replace("/(tabs)");
+      }
     } catch (err: unknown) {
       // Check if OTP challenge is required (3+ wrong PINs)
       const errorData = (err as any)?.response?.data;
@@ -299,8 +307,12 @@ export default function LoginScreen() {
           // The other device approved · finish login with challenge_id as proof.
           setLoading(true);
           try {
-            await login(phone, pendingPin, undefined, pushChallengeId);
-            router.replace("/(tabs)");
+            const data = await login(phone, pendingPin, undefined, pushChallengeId);
+            if ((data as any)?.email_verify_required) {
+              router.replace("/auth/email-verify-required" as any);
+            } else {
+              router.replace("/(tabs)");
+            }
           } catch (err) {
             const appError = normalizeError(err);
             toast.error(appError.title, appError.message);
@@ -336,8 +348,12 @@ export default function LoginScreen() {
     if (Platform.OS !== "web") Keyboard.dismiss();
     setLoading(true);
     try {
-      await login(phone, pendingPin, otp);
-      router.replace("/(tabs)");
+      const data = await login(phone, pendingPin, otp);
+      if ((data as any)?.email_verify_required) {
+        router.replace("/auth/email-verify-required" as any);
+      } else {
+        router.replace("/(tabs)");
+      }
     } catch (err: unknown) {
       const appError = normalizeError(err);
       toast.error(appError.title, appError.message);

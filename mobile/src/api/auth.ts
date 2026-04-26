@@ -68,6 +68,12 @@ export interface LoginResponse {
   user: User;
   pin_required?: boolean;
   phone_required?: boolean;
+  /**
+   * Server flag set when the user lands on login with an empty,
+   * disposable, or unverified email. The client routes to the
+   * email-verify-on-login gate before reaching the home tabs.
+   */
+  email_verify_required?: boolean;
 }
 
 export interface KYCDocument {
@@ -84,6 +90,22 @@ export interface KYCDocument {
 export const authApi = {
   /** Verify PIN for app lock screen (authenticated, no device/OTP checks) */
   verifyPin: (pin: string) => api.post<{ verified: boolean }>("/auth/verify-pin/", { pin }),
+
+  /**
+   * Schedule the user's account for deletion in 14 days.
+   * Server-side gates: PIN must match, all wallets must be at zero
+   * balance, no pending deletion already exists. The response carries
+   * `scheduled_for` (ISO date) so the client can show a grace banner.
+   */
+  requestAccountDeletion: (pin: string) =>
+    api.post<{ scheduled_for: string; grace_period_days: number; message: string }>(
+      "/auth/account/delete/",
+      { pin },
+    ),
+
+  /** Cancel a pending account deletion · PIN-gated. */
+  cancelAccountDeletion: (pin: string) =>
+    api.post<{ cancelled: boolean }>("/auth/account/delete/cancel/", { pin }),
 
   requestOTP: (phone: string, email?: string) =>
     api.post("/auth/otp/", { phone, ...(email ? { email } : {}) }),

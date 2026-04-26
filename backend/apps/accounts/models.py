@@ -193,6 +193,22 @@ class User(AbstractBaseUser, PermissionsMixin):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # ── Account deletion (Google Play compliance · effective May 2024) ──
+    # Two-stage hybrid · soft-delete for 14 days (undelete possible),
+    # then hard-delete with anonymised audit retention for 7 years per
+    # CBK Prudential Guideline + Kenya VASP Act 2025.
+    #   - `deletion_requested_at` non-null  → soft-deleted, login refused
+    #   - `deletion_scheduled_for` is when the Celery purge task will
+    #     hard-delete the account if the user hasn't cancelled.
+    deletion_requested_at = models.DateTimeField(
+        null=True, blank=True, db_index=True,
+        help_text="Set when the user initiates account deletion. Login is refused while non-null.",
+    )
+    deletion_scheduled_for = models.DateTimeField(
+        null=True, blank=True,
+        help_text="Hard-delete timestamp · 14 days after deletion_requested_at.",
+    )
+
     objects = UserManager()
 
     USERNAME_FIELD = "phone"

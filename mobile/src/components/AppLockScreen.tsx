@@ -1,4 +1,4 @@
-import { View, Text, Platform, Pressable, Keyboard, KeyboardAvoidingView, ScrollView } from "react-native";
+import { Image, View, Text, Platform, Pressable, Keyboard, KeyboardAvoidingView, ScrollView } from "react-native";
 import { useState, useEffect, useCallback } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, getThemeColors } from "../constants/theme";
@@ -7,6 +7,11 @@ import { useBiometricAuth } from "../hooks/useBiometricAuth";
 import { PinInput } from "./PinInput";
 import { Spinner } from "./brand/Spinner";
 import { authApi } from "../api/auth";
+
+// Brand mark used on the lock screens (PIN + biometric mode) so the
+// gate matches the rest of the app chrome instead of generic
+// Ionicons. Transparent-bg PNG · same asset google-unlock uses.
+const BRAND_MARK = require("../../assets/brand-mark.png");
 
 const isWeb = Platform.OS === "web";
 
@@ -58,6 +63,25 @@ export function AppLockScreen({ onUnlock, userPhone, onForgotPin }: AppLockScree
     setPinLoading(true);
     setPinError(false);
 
+    // Watchdog · the backend's verify-pin endpoint is fast (sub-100ms
+    // p99 in production) but if a flaky network or container restart
+    // makes the request hang, the user is stuck staring at six filled
+    // dots with no spinner advancement. Force-clear after 12 s with a
+    // generic error so they can retry. 12 s > axios default 15 s would
+    // timeout naturally; we set 12 to fire BEFORE that and surface a
+    // friendlier message. Cleared on success, error, or unmount.
+    let watchdog: ReturnType<typeof setTimeout> | null = setTimeout(() => {
+      setPinLoading(false);
+      setPinError(true);
+    }, 12000);
+
+    const clearWatchdog = () => {
+      if (watchdog) {
+        clearTimeout(watchdog);
+        watchdog = null;
+      }
+    };
+
     try {
       // Verify PIN via dedicated endpoint (no device/OTP checks).
       // The axios response interceptor in `client.ts` already handles
@@ -65,6 +89,7 @@ export function AppLockScreen({ onUnlock, userPhone, onForgotPin }: AppLockScree
       // string body. A 401 with `{verified: false}` (wrong PIN) is
       // re-thrown without refresh and lands in the catch below.
       await authApi.verifyPin(pin);
+      clearWatchdog();
       // Critical · clear loading + error BEFORE onUnlock so that if
       // anything causes AppLockScreen to re-render (e.g. a parent
       // state flush race) the user never sees a stale "Incorrect
@@ -73,6 +98,7 @@ export function AppLockScreen({ onUnlock, userPhone, onForgotPin }: AppLockScree
       setPinError(false);
       onUnlock();
     } catch (err: any) {
+      clearWatchdog();
       // Distinguish "wrong PIN" (status 401 + verified:false) from
       // a token-refresh failure that bubbled up. Both arrive here as
       // a thrown error, but only the first should put the user back
@@ -85,8 +111,13 @@ export function AppLockScreen({ onUnlock, userPhone, onForgotPin }: AppLockScree
         status === 401 &&
         (body?.verified === false || body?.error === "Incorrect PIN");
       const isRateLimited = status === 429;
+      // Network errors (no `response` because the request never
+      // landed) should also surface as "try again" rather than a
+      // silent stall · same UX path as wrong-PIN, just with a
+      // different cause.
+      const isNetworkError = !err?.response;
 
-      if (isWrongPin || isRateLimited) {
+      if (isWrongPin || isRateLimited || isNetworkError) {
         setPinError(true);
       }
       setPinLoading(false);
@@ -127,21 +158,46 @@ export function AppLockScreen({ onUnlock, userPhone, onForgotPin }: AppLockScree
       >
       {mode === "biometric" ? (
         <>
-          {/* Biometric mode */}
+          {/* Biometric mode · brand mark with the biometric icon
+              floating off the lower-right corner so the screen feels
+              owned by Cpay rather than generic platform UI. */}
           <View
             style={{
               width: 96,
               height: 96,
               borderRadius: 32,
-              backgroundColor: colors.primary[500] + "15",
+              backgroundColor: colors.primary[500] + "12",
               alignItems: "center",
               justifyContent: "center",
               marginBottom: 24,
               borderWidth: 1,
               borderColor: colors.primary[500] + "30",
+              position: "relative",
             }}
           >
-            <Ionicons name={iconName as any} size={44} color={colors.primary[400]} />
+            <Image
+              source={BRAND_MARK}
+              style={{ width: 56, height: 56 }}
+              resizeMode="contain"
+              accessibilityLabel="Cpay"
+            />
+            <View
+              style={{
+                position: "absolute",
+                bottom: -6,
+                right: -6,
+                width: 32,
+                height: 32,
+                borderRadius: 16,
+                backgroundColor: colors.primary[500],
+                alignItems: "center",
+                justifyContent: "center",
+                borderWidth: 2,
+                borderColor: tc.dark.bg,
+              }}
+            >
+              <Ionicons name={iconName as any} size={16} color="#FFFFFF" />
+            </View>
           </View>
 
           <Text
@@ -235,13 +291,15 @@ export function AppLockScreen({ onUnlock, userPhone, onForgotPin }: AppLockScree
         </>
       ) : (
         <>
-          {/* PIN mode */}
+          {/* PIN mode · brand mark instead of the generic keypad
+              Ionicons so the lock screen reads as Cpay's own chrome,
+              not a stock RN screen. */}
           <View
             style={{
               width: 72,
               height: 72,
               borderRadius: 24,
-              backgroundColor: colors.primary[500] + "12",
+              backgroundColor: colors.primary[500] + "10",
               alignItems: "center",
               justifyContent: "center",
               marginBottom: 20,
@@ -249,7 +307,12 @@ export function AppLockScreen({ onUnlock, userPhone, onForgotPin }: AppLockScree
               borderColor: colors.primary[500] + "25",
             }}
           >
-            <Ionicons name="keypad-outline" size={32} color={colors.primary[400]} />
+            <Image
+              source={BRAND_MARK}
+              style={{ width: 42, height: 42 }}
+              resizeMode="contain"
+              accessibilityLabel="Cpay"
+            />
           </View>
 
           <Text

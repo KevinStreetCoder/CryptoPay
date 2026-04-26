@@ -103,12 +103,20 @@ function TabIconOnly({
         position: "relative",
       }}
     >
-      {/* Active pill · animated emerald rounded-rect behind the icon. */}
+      {/* Active pill · animated emerald rounded-rect behind the icon.
+          The pill is absolutely positioned so it doesn't displace the
+          icon · we explicitly centre it on the parent's mid-line by
+          combining `left: 50%` with `marginLeft: -28` (half of the
+          56 px width). Without this, RN drops absolute children at
+          left:0 and the pill drifted ~16 px to the left of the icon
+          on Android, which the user reported as off-centre. */}
       <Animated.View
         pointerEvents="none"
         style={{
           position: "absolute",
           top: -4,
+          left: "50%",
+          marginLeft: -28,
           width: 56,
           height: 30,
           borderRadius: 15,

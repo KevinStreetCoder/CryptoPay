@@ -308,6 +308,13 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.referrals.tasks.expire_unused_credit",
         "schedule": crontab(hour=3, minute=0),
     },
+    # Account-deletion purge · scans users with deletion_scheduled_for
+    # past now() and hard-deletes them. Runs daily at 03:30 EAT,
+    # offset 30 min from referral expiry to avoid bursting the worker.
+    "purge-pending-deletions": {
+        "task": "apps.accounts.tasks.purge_pending_deletions",
+        "schedule": crontab(hour=3, minute=30),
+    },
 }
 
 # --- DRF ---

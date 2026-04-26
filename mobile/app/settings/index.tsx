@@ -694,6 +694,27 @@ export default function SettingsScreen() {
         },
       ],
     },
+    {
+      // Account-deletion section · separated from "About" so it
+      // doesn't blur with help / terms / version. Google Play's
+      // 2024 policy mandates a clear, in-app path; sitting it as
+      // its own group with a destructive-red icon is the
+      // industry-standard placement (Revolut, Wise, Cash App).
+      title: t("settings.account"),
+      icon: "person-circle-outline",
+      iconColor: tc.textSecondary,
+      items: [
+        {
+          key: "delete-account",
+          icon: "trash-outline",
+          iconColor: colors.error,
+          iconBg: "rgba(239,68,68,0.12)",
+          label: t("auth.deleteAccount"),
+          description: t("auth.deleteAccountSubtitle"),
+          route: "/settings/delete-account",
+        },
+      ],
+    },
   ];
 
   const handleItemPress = (item: MenuItem) => {

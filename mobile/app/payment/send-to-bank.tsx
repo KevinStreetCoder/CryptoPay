@@ -33,6 +33,7 @@ import {
   getFrequentBanks,
   toggleFavourite,
 } from "../../src/utils/bankPrefs";
+import { getBankBrandColor, getBankLogo } from "../../src/constants/bankLogos";
 
 const CRYPTO_OPTIONS: CurrencyCode[] = ["USDT", "USDC", "BTC", "ETH", "SOL"];
 
@@ -48,45 +49,66 @@ const CATEGORY_ORDER: readonly BankCategory[] = [
 ] as const;
 
 /**
- * Bank tile logo · 2026-04-25 redesign. NO letter-initial fallback ·
- * the user explicitly asked us to drop banks whose logo doesn't load
- * rather than rendering a placeholder character. The component reports
- * load success/failure to its parent via `onResolve`, and the parent
- * filters the bank list so failed tiles never paint.
+ * Bank tile logo · 2026-04-26 redesign.
+ *
+ * Logo strategy (per user instruction "Down the companies logo in the
+ * asserts and use them not depending on the url"):
+ *   1. Bundled local PNG via `getBankLogo(slug)` if we have one.
+ *   2. Otherwise paint a coloured-letter tile using the bank's brand
+ *      colour from `getBankBrandColor(slug)`.
+ *
+ * No runtime URL fetches · the picker works fully offline. If a bank
+ * doesn't have a bundled logo it still renders a clean branded tile
+ * (initial on its brand colour) instead of a broken-image glyph or
+ * being dropped from the list (per user "do not remove the banks").
  */
 function BankTileLogo({
-  url,
+  slug,
   name,
   bg,
   size = 36,
-  onResolve,
 }: {
-  url: string;
+  slug: string;
   name: string;
   bg: string;
   size?: number;
-  onResolve?: (slug: string, ok: boolean) => void;
 }) {
+  const localLogo = getBankLogo(slug);
+  const brandBg = getBankBrandColor(slug);
+  const useLetter = !localLogo;
+
   return (
     <View
       style={{
         width: size,
         height: size,
         borderRadius: 10,
-        backgroundColor: bg,
+        backgroundColor: useLetter ? brandBg : bg,
         alignItems: "center",
         justifyContent: "center",
         overflow: "hidden",
       }}
     >
-      <Image
-        source={{ uri: url }}
-        style={{ width: size - 8, height: size - 8, borderRadius: 6 }}
-        resizeMode="contain"
-        accessibilityLabel={`${name} logo`}
-        onLoad={() => onResolve?.(name, true)}
-        onError={() => onResolve?.(name, false)}
-      />
+      {useLetter ? (
+        <Text
+          style={{
+            color: "#FFFFFF",
+            fontSize: Math.round(size * 0.5),
+            fontFamily: "DMSans_700Bold",
+            letterSpacing: -0.5,
+          }}
+          accessibilityLabel={`${name} logo`}
+        >
+          {name.charAt(0).toUpperCase()}
+        </Text>
+      ) : (
+        <Image
+          source={localLogo!}
+          style={{ width: size - 8, height: size - 8, borderRadius: 6 }}
+          resizeMode="contain"
+          accessibilityLabel={`${name} logo`}
+        />
+      )}
     </View>
   );
 }
@@ -106,7 +128,6 @@ function BankTile({
   isFavourite,
   showStarPin,
   onSelect,
-  onLogoResolve,
   onToggleFavourite,
   tc,
   isWeb,
@@ -119,7 +140,6 @@ function BankTile({
   isFavourite: boolean;
   showStarPin: boolean;
   onSelect: () => void;
-  onLogoResolve: (name: string, ok: boolean) => void;
   onToggleFavourite: () => void;
   tc: ReturnType<typeof getThemeColors>;
   isWeb: boolean;
@@ -176,10 +196,9 @@ function BankTile({
         </Pressable>
       )}
       <BankTileLogo
-        url={bank.logo_url}
+        slug={bank.slug}
         name={bank.name}
         bg={tc.dark.elevated}
-        onResolve={onLogoResolve}
       />
       <Text
         numberOfLines={2}
@@ -213,9 +232,6 @@ export default function SendToBankScreen() {
   const [banks, setBanks] = useState<Bank[]>([]);
   const [grouped, setGrouped] = useState<Partial<Record<BankCategory, Bank[]>>>({});
   const [categories, setCategories] = useState<BankCategory[]>([]);
-  // Slugs whose logo failed to load · those banks are dropped from the
-  // picker (per user guidance "drop banks without real logos").
-  const [failedLogos, setFailedLogos] = useState<Set<string>>(new Set());
   const [favourites, setFavourites] = useState<string[]>([]);
   const [frequent, setFrequent] = useState<string[]>([]);
   const [search, setSearch] = useState("");
@@ -293,31 +309,15 @@ export default function SendToBankScreen() {
     setFrequent(freq);
   };
 
-  const handleLogoResolve = (bankName: string, ok: boolean) => {
-    if (ok) return;
-    // Map the failing logo back to a slug so we can hide that bank
-    // from every section on the next render.
-    const bank = banks.find((b) => b.name === bankName);
-    if (!bank) return;
-    setFailedLogos((prev) => {
-      if (prev.has(bank.slug)) return prev;
-      const next = new Set(prev);
-      next.add(bank.slug);
-      return next;
-    });
-  };
-
   // ── Derived data · favourites / frequent / sections / search ──────
-  const visibleBanks = useMemo(
-    () => banks.filter((b) => !failedLogos.has(b.slug)),
-    [banks, failedLogos],
-  );
-
+  // Note · 2026-04-26 we no longer drop banks for failed logos. Every
+  // bank in `banks` is selectable; missing logos render as a coloured-
+  // letter tile via the local `BankTileLogo` component.
   const slugIndex = useMemo(() => {
     const m = new Map<string, Bank>();
-    for (const b of visibleBanks) m.set(b.slug, b);
+    for (const b of banks) m.set(b.slug, b);
     return m;
-  }, [visibleBanks]);
+  }, [banks]);
 
   const favouriteBanks = useMemo(
     () =>
@@ -346,10 +346,10 @@ export default function SendToBankScreen() {
     return order
       .map((cat) => ({
         category: cat,
-        rows: (grouped[cat] || []).filter((b) => !failedLogos.has(b.slug)),
+        rows: grouped[cat] || [],
       }))
       .filter((s) => s.rows.length > 0);
-  }, [categories, grouped, failedLogos]);
+  }, [categories, grouped]);
 
   const filterSection = (rows: Bank[]) => {
     const q = search.trim().toLowerCase();
@@ -579,11 +579,12 @@ export default function SendToBankScreen() {
                 hours.
               </Text>
 
-              {/* Bank picker · 2026-04-25 redesign with search,
+              {/* Bank picker · 2026-04-26 redesign with search,
                   favourites, frequent, and category sections.
-                  Banks whose Clearbit logo fails to load are auto-
-                  filtered (see handleLogoResolve) so we never render
-                  letter-initial placeholders. */}
+                  Logos are bundled local PNGs (see
+                  src/constants/bankLogos.ts) with a coloured-letter
+                  fallback for banks where we couldn't source a clean
+                  PNG. Every bank stays selectable. */}
               <SectionHeader
                 title={t("payment.pickBank")}
                 icon="business-outline"
@@ -683,7 +684,7 @@ export default function SendToBankScreen() {
                           setSelectedBank(bank);
                           setQuote(null);
                         }}
-                        onLogoResolve={handleLogoResolve}
+
                         onToggleFavourite={() => handleToggleFavourite(bank.slug)}
                         tc={tc}
                         isWeb={isWeb}
@@ -729,7 +730,7 @@ export default function SendToBankScreen() {
                           setSelectedBank(bank);
                           setQuote(null);
                         }}
-                        onLogoResolve={handleLogoResolve}
+
                         onToggleFavourite={() => handleToggleFavourite(bank.slug)}
                         tc={tc}
                         isWeb={isWeb}
@@ -778,7 +779,7 @@ export default function SendToBankScreen() {
                             setSelectedBank(bank);
                             setQuote(null);
                           }}
-                          onLogoResolve={handleLogoResolve}
+
                           onToggleFavourite={() => handleToggleFavourite(bank.slug)}
                           tc={tc}
                           isWeb={isWeb}

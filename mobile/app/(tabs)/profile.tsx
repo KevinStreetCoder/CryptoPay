@@ -1321,6 +1321,11 @@ export default function ProfileScreen() {
   );
 
   // ── Version footer ──
+  // marginBottom kept small (8 px) · the ScrollView already pads the
+  // bottom by `bottomTabBarHeight` so anything more here stacked on top
+  // of that and read as a "dead strip" beneath the version line on the
+  // Me page (user feedback 2026-04-26 vs the other tabs which sit
+  // tighter against the tab bar).
   const renderVersion = () => (
     <Text
       style={{
@@ -1329,7 +1334,7 @@ export default function ProfileScreen() {
         fontFamily: "DMSans_400Regular",
         textAlign: "center",
         marginTop: 4,
-        marginBottom: 28,
+        marginBottom: 8,
         opacity: 0.5,
       }}
       maxFontSizeMultiplier={1.3}

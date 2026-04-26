@@ -381,6 +381,24 @@ class LoginView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        # Account-deletion guard · the user proved their PIN, so we
+        # surface the pending-deletion state explicitly so the mobile
+        # client can offer "Cancel deletion" rather than dumping them
+        # to a generic invalid-credentials toast. We deliberately
+        # short-circuit BEFORE issuing tokens · a pending-deletion
+        # account stays read-only until the user cancels (which uses
+        # the existing tokens) or the grace period expires.
+        if user.deletion_requested_at is not None:
+            return Response(
+                {
+                    "error_code": "account_pending_deletion",
+                    "error": "This account is scheduled for deletion.",
+                    "scheduled_for": user.deletion_scheduled_for.isoformat()
+                    if user.deletion_scheduled_for else None,
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         # Reset PIN attempts and OTP challenge on successful login
         user.pin_attempts = 0
         user.pin_locked_until = None
@@ -574,12 +592,31 @@ class LoginView(APIView):
             except Exception as e:
                 logger.error(f"New device security alert failed: {e}")
 
+        # Email-verify-on-login gate · 2026-04-26
+        # We force a verification-or-replace flow whenever the account
+        # is sitting on an email that's:
+        #   - empty (new accounts before they completed profile)
+        #   - on the disposable-domain blocklist (someone signed up
+        #     with a 10-minute mailbox before Layer 1 existed)
+        #   - present but unverified (left in limbo by an earlier flow)
+        # The mobile client reads `email_verify_required` and routes
+        # to a gate screen between login-success and the home tabs.
+        # The gate uses the existing /auth/email/verify/ + /confirm/
+        # endpoints so we don't fork a second mailing pipeline.
+        from .email_validation import is_disposable
+        email_verify_required = bool(
+            (not user.email)
+            or is_disposable(user.email)
+            or (user.email and not user.email_verified)
+        )
+
         response = Response({
             "user": UserSerializer(user, context={"request": request}).data,
             "tokens": {
                 "refresh": str(refresh),
                 "access": str(refresh.access_token),
             },
+            "email_verify_required": email_verify_required,
         })
         # C1: when the caller is the web bundle (signalled via
         # `X-Cpay-Web: 1`), also set HttpOnly cookies so the JS side can
@@ -1322,6 +1359,166 @@ class VerifyPINView(APIView):
             {"error": "Incorrect PIN", "verified": False},
             status=status.HTTP_401_UNAUTHORIZED,
         )
+
+
+# ── Account deletion (Google Play compliance) ────────────────────────
+#
+# Two endpoints expose a PIN-gated request flow + a same-PIN cancel
+# flow. The actual purge runs in `apps.accounts.tasks` Celery beat
+# task, which scans `User.deletion_scheduled_for <= now()` daily.
+#
+# Login guard lives in `LoginView` (separate edit) · login is allowed
+# only when `deletion_requested_at IS NULL`. A pending-deletion user
+# who enters the right PIN gets a 403 with `error_code:
+# "account_pending_deletion"` so the mobile client can offer Cancel
+# instead of bouncing to a generic "invalid" toast.
+
+
+class AccountDeletionRequestView(APIView):
+    """Schedule the user's account for deletion in 14 days.
+
+    Body: `{"pin": "123456"}` · PIN must match.
+
+    Pre-flight checks (refuse with 409 + actionable message):
+      - Any wallet with a non-zero balance · user must withdraw first.
+      - `deletion_requested_at` already set · already scheduled.
+
+    On success, sets `deletion_requested_at = now()` and
+    `deletion_scheduled_for = now() + 14 days`. Returns the schedule
+    date so the client can show the grace-period banner.
+
+    Tokens are NOT revoked here · the user retains read-only access
+    inside the 14-day window so they can cancel from any device they
+    were logged in on. The login flow refuses NEW logins.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from datetime import timedelta
+        from decimal import Decimal
+        from django.utils import timezone
+        from apps.wallets.models import Wallet
+
+        user = request.user
+
+        if user.deletion_requested_at is not None:
+            return Response(
+                {
+                    "error_code": "already_scheduled",
+                    "error": "Your account is already scheduled for deletion.",
+                    "scheduled_for": user.deletion_scheduled_for.isoformat()
+                    if user.deletion_scheduled_for else None,
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        pin = request.data.get("pin", "")
+        if not pin or not user.check_pin(pin):
+            # Generic message · do NOT leak whether the PIN matched
+            # vs the user has wallet balance, etc.
+            return Response(
+                {"error": "Incorrect PIN."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        # Pre-flight · non-zero crypto balance blocks deletion.
+        non_zero = (
+            Wallet.objects.filter(user=user)
+            .exclude(balance=Decimal("0"))
+            .values_list("currency", "balance")
+        )
+        if non_zero:
+            return Response(
+                {
+                    "error_code": "non_zero_balance",
+                    "error": "Withdraw or convert your crypto balance before deleting the account.",
+                    "balances": [
+                        {"currency": c, "balance": str(b)} for c, b in non_zero
+                    ],
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        now = timezone.now()
+        user.deletion_requested_at = now
+        user.deletion_scheduled_for = now + timedelta(days=14)
+        user.save(update_fields=[
+            "deletion_requested_at",
+            "deletion_scheduled_for",
+        ])
+
+        # Best-effort audit log · safe if the table is unreachable.
+        try:
+            AuditLog.objects.create(
+                user=user,
+                action="account_deletion_requested",
+                ip_address=_client_ip(request),
+                metadata={
+                    "scheduled_for": user.deletion_scheduled_for.isoformat(),
+                },
+            )
+        except Exception:
+            pass
+
+        return Response({
+            "scheduled_for": user.deletion_scheduled_for.isoformat(),
+            "grace_period_days": 14,
+            "message": "Your account is scheduled for deletion. You can cancel any time before the deadline.",
+        })
+
+
+class AccountDeletionCancelView(APIView):
+    """Cancel a pending deletion · clears both timestamps.
+
+    PIN-gated to mirror the request endpoint · prevents an attacker
+    with a stolen JWT from cancelling without proving the PIN. No
+    rate limit because the request endpoint already gated the flow.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+
+        if user.deletion_requested_at is None:
+            return Response(
+                {"error_code": "no_pending_deletion", "error": "No pending deletion to cancel."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        pin = request.data.get("pin", "")
+        if not pin or not user.check_pin(pin):
+            return Response(
+                {"error": "Incorrect PIN."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        user.deletion_requested_at = None
+        user.deletion_scheduled_for = None
+        user.save(update_fields=[
+            "deletion_requested_at",
+            "deletion_scheduled_for",
+        ])
+
+        try:
+            AuditLog.objects.create(
+                user=user,
+                action="account_deletion_cancelled",
+                ip_address=_client_ip(request),
+            )
+        except Exception:
+            pass
+
+        return Response({"cancelled": True})
+
+
+def _client_ip(request) -> str:
+    """Trust XFF only at the first hop; deeper hops would be spoofable."""
+    xff = request.META.get("HTTP_X_FORWARDED_FOR", "")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.META.get("REMOTE_ADDR", "")
 
 
 class KYCDocumentListView(APIView):
