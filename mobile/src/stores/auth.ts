@@ -198,6 +198,17 @@ export function useAuth() {
     // straight back onto AppLockScreen for a second PIN prompt. The
     // same stamp is refreshed on every bg→fg transition after this.
     await storage.setItemAsync("app_last_active", String(Date.now()));
+    // Remember the phone so that if the session ever expires (refresh
+    // chain blacklisted, 30-day TTL hit, app uninstalled then
+    // reinstalled with a backup) we can drop the user STRAIGHT to the
+    // PIN step on /auth/login instead of forcing them to retype the
+    // phone number every time. Stored separately from auth tokens so
+    // a logout → re-install flow still has it. User feedback
+    // 2026-04-26 · "after a few hours I have to start again from
+    // phone instead of just pin if I am still on this phone".
+    if (phone) {
+      try { await storage.setItemAsync("last_login_phone", phone); } catch {}
+    }
     resetSessionExpired(); // Allow API requests again after re-login
     _user = data.user;
     notify();
@@ -318,6 +329,13 @@ export function useAuth() {
   const logout = useCallback(async () => {
     await storage.deleteItemAsync("access_token");
     await storage.deleteItemAsync("refresh_token");
+    // Clear the saved phone too · explicit logout means "I want to
+    // sign in as a different user" or "this is a shared device". A
+    // session-expiry path (refresh chain blacklisted, 30-day TTL)
+    // does NOT call logout()/forceLogout()'s phone clear · only this
+    // user-initiated logout does. So a session blip still drops the
+    // user straight to the PIN screen with their phone prefilled.
+    await storage.deleteItemAsync("last_login_phone");
     _user = null;
     resetBalanceVisibility();
     notify();

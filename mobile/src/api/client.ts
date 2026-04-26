@@ -75,6 +75,53 @@ export async function refreshAccessToken(): Promise<void> {
   }
 }
 
+/**
+ * Refresh-token mutex · with `ROTATE_REFRESH_TOKENS=True` and
+ * `BLACKLIST_AFTER_ROTATION=True` on the backend (matches Binance/
+ * Revolut threat model · stolen tokens auto-invalidate on the legit
+ * client's next refresh) the OLD refresh token is blacklisted the
+ * moment a new pair is minted. If the user happens to have two
+ * requests fly out in parallel and both 401, both interceptors race
+ * to call /auth/token/refresh/. The second one presents an already-
+ * blacklisted token and gets 401 back · which the catch path then
+ * interprets as "real auth failure" and force-logs-out the user.
+ *
+ * Result: a benign double-401 (e.g. wallets + transactions queries
+ * firing together right after access-token expiry) silently kicked
+ * the user back to the login screen every ~15 minutes. The user
+ * reported this as "after a few hours I have to start again from
+ * phone instead of just pin if I am still on this phone right".
+ *
+ * Fix: coalesce all parallel refresh attempts behind a single
+ * in-flight Promise. The first 401 calls /auth/token/refresh/ for
+ * real; every subsequent caller in that window awaits the same
+ * Promise and inherits its result (success or failure). Cleared
+ * once the network call resolves so the next genuine expiry can
+ * trigger a fresh refresh.
+ */
+let _inflightRefresh: Promise<{ access: string; refresh?: string }> | null = null;
+
+async function performRefresh(): Promise<{ access: string; refresh?: string }> {
+  const refresh = await storage.getItemAsync("refresh_token");
+  if (!refresh) throw new Error("No refresh token");
+  const { data } = await axios.post(`${BASE_URL}/auth/token/refresh/`, { refresh });
+  await storage.setItemAsync("access_token", data.access);
+  if (data.refresh) {
+    await storage.setItemAsync("refresh_token", data.refresh);
+  }
+  return data;
+}
+
+async function coalescedRefresh(): Promise<{ access: string; refresh?: string }> {
+  if (_inflightRefresh) return _inflightRefresh;
+  _inflightRefresh = performRefresh().finally(() => {
+    // Clear the lock either way · failed refreshes shouldn't pin a
+    // dead promise that prevents future retries from running.
+    _inflightRefresh = null;
+  });
+  return _inflightRefresh;
+}
+
 api.interceptors.request.use(async (cfg) => {
   const isPublicAuth = AUTH_ENDPOINTS.some((ep) => cfg.url?.includes(ep));
   const isAuthWithToken = AUTH_WITH_TOKEN.some((ep) => cfg.url?.includes(ep));
@@ -146,16 +193,10 @@ api.interceptors.response.use(
 
       originalRequest._retry = true;
       try {
-        const refresh = await storage.getItemAsync("refresh_token");
-        if (!refresh) throw new Error("No refresh token");
-        const { data } = await axios.post(`${BASE_URL}/auth/token/refresh/`, {
-          refresh,
-        });
-        await storage.setItemAsync("access_token", data.access);
-        // Save rotated refresh token · backend blacklists the old one
-        if (data.refresh) {
-          await storage.setItemAsync("refresh_token", data.refresh);
-        }
+        // Coalesced refresh · see `coalescedRefresh` doc for why.
+        // Two parallel 401s share one network call instead of racing
+        // and blacklisting each other's tokens.
+        const data = await coalescedRefresh();
         originalRequest.headers.Authorization = `Bearer ${data.access}`;
         return api(originalRequest);
       } catch (refreshErr: any) {

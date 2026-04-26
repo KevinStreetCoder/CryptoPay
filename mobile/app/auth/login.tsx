@@ -159,6 +159,31 @@ export default function LoginScreen() {
   const tc = getThemeColors(isDark);
   const [step, setStep] = useState<Step>("phone");
   const [phone, setPhone] = useState("");
+
+  // Pre-fill phone from the last successful login on this device so the
+  // user doesn't have to retype it after a session expiry. If the phone
+  // is found, jump straight to the PIN step · skipping the phone screen
+  // entirely. User feedback 2026-04-26: "after a few hours I have to
+  // start again from phone instead of just pin if I am still on this
+  // phone right". `getItemAsync` is async so we do this in an effect;
+  // until it resolves we render the phone step normally (matches
+  // brand-new-install UX).
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const { storage } = await import("../../src/utils/storage");
+        const saved = await storage.getItemAsync("last_login_phone");
+        if (alive && saved && saved.length >= 9) {
+          setPhone(saved);
+          setStep("pin");
+        }
+      } catch {
+        // SecureStore unavailable · fall through to phone entry.
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [pinError, setPinError] = useState(false);
