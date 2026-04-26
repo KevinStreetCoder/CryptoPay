@@ -75,7 +75,12 @@ services:
       RESERVE_POOL_TIMEOUT: 3
       SERVER_IDLE_TIMEOUT: 600
       QUERY_WAIT_TIMEOUT: 30
-      AUTH_TYPE: md5
+      # Postgres 16 defaults to SCRAM-SHA-256 password storage. With
+      # AUTH_TYPE=md5 PgBouncer's backend authenticator cannot do
+      # SCRAM and the bouncer logs `cannot do SCRAM authentication:
+      # wrong password type`. Match the back-end's auth method ·
+      # both libpq (Django/psycopg) and pg_hba speak it.
+      AUTH_TYPE: scram-sha-256
       ADMIN_USERS: ${POSTGRES_USER:-cryptopay}
       MAX_PREPARED_STATEMENTS: 100
     ports:
