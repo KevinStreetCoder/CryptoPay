@@ -42,11 +42,42 @@ REST_FRAMEWORK["DEFAULT_RENDERER_CLASSES"] = (  # noqa: F405
 )
 
 # --- Database connection pooling ---
-DATABASES["default"]["CONN_MAX_AGE"] = env.int("DB_CONN_MAX_AGE", default=600)  # noqa: F405
-DATABASES["default"]["CONN_HEALTH_CHECKS"] = True  # noqa: F405
-DATABASES["default"]["OPTIONS"] = {  # noqa: F405
-    "connect_timeout": 10,
-}
+# When PgBouncer sits in front of Postgres (the default in
+# deploy/docker-compose.prod.yml as of 2026-04-26), we MUST adjust:
+#
+#   - CONN_MAX_AGE=0 · the pooler owns persistence; persistent Django
+#     connections nullify the pool because each Django worker would
+#     hold one bouncer slot indefinitely.
+#   - DISABLE_SERVER_SIDE_CURSORS=True · transaction-mode pooling can't
+#     keep the cursor across queries, so any `.iterator()` / chunked
+#     read crashes with "cursor does not exist".
+#   - prepare_threshold=None on OPTIONS · disables Django 5+ prepared
+#     statement caching, which transaction mode invalidates.
+#
+# Operators can disable PgBouncer (point DATABASE_URL straight at
+# postgres) by setting `PGBOUNCER_ENABLED=False` · we then revert to
+# the direct-connection persistence settings.
+PGBOUNCER_ENABLED = env.bool("PGBOUNCER_ENABLED", default=True)  # noqa: F405
+
+if PGBOUNCER_ENABLED:
+    DATABASES["default"]["CONN_MAX_AGE"] = 0  # noqa: F405
+    DATABASES["default"]["CONN_HEALTH_CHECKS"] = True  # noqa: F405
+    DATABASES["default"]["DISABLE_SERVER_SIDE_CURSORS"] = True  # noqa: F405
+    DATABASES["default"]["OPTIONS"] = {  # noqa: F405
+        "connect_timeout": 10,
+        # `prepare_threshold=None` is the libpq escape hatch supported
+        # by psycopg 3 (Django 4.2+). It tells libpq to never use the
+        # extended-protocol prepared-statement cache, which PgBouncer
+        # transaction mode invalidates between server sessions.
+        "prepare_threshold": None,
+    }
+else:
+    # Direct-connection mode · persistent connections + cursors fine.
+    DATABASES["default"]["CONN_MAX_AGE"] = env.int("DB_CONN_MAX_AGE", default=600)  # noqa: F405
+    DATABASES["default"]["CONN_HEALTH_CHECKS"] = True  # noqa: F405
+    DATABASES["default"]["OPTIONS"] = {  # noqa: F405
+        "connect_timeout": 10,
+    }
 
 # --- Sentry ---
 # Audit H7 · explicit opt-in for MX-record validation on signup. Production

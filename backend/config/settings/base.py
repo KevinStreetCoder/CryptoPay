@@ -315,6 +315,15 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.accounts.tasks.purge_pending_deletions",
         "schedule": crontab(hour=3, minute=30),
     },
+    # Reconciliation sweep · escalates breached cases (double-settlement,
+    # late callbacks, compensation failures). Runs every 5 minutes
+    # because the SLO for double-settlement detection is 5 min (Wise/
+    # Adyen industry standard) · a daily cadence would let billions of
+    # KES of double-paid transactions sit unnoticed for 24 h.
+    "sweep-reconciliation-cases": {
+        "task": "apps.payments.tasks.sweep_reconciliation_cases",
+        "schedule": 300.0,  # every 5 minutes
+    },
 }
 
 # --- DRF ---

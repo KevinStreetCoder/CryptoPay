@@ -36,6 +36,66 @@ services:
         limits:
           memory: 1G
 
+  # ── PgBouncer · transaction-mode connection pooler ───────────────
+  # Sits between Django/Celery and Postgres. Lets us fan out gunicorn
+  # workers + Celery concurrency without exhausting Postgres'
+  # `max_connections` ceiling at peak load.
+  #
+  # Pool mode = transaction (Django's recommended mode under PgBouncer).
+  # Sized for: 4 gunicorn workers + 1 Celery worker × concurrency 4 on
+  # a 4-vCPU VPS. Postgres backend cap is 12 + 4 reserve.
+  #
+  # IMPORTANT · `manage.py migrate` MUST bypass PgBouncer (DDL +
+  # advisory locks misbehave under transaction pooling). The web /
+  # celery entrypoints set DATABASE_URL_DIRECT pointing at db:5432 for
+  # migrations, then switch to pgbouncer:5432 for the long-running
+  # process.
+  pgbouncer:
+    image: edoburu/pgbouncer:1.23.1
+    container_name: cryptopay_pgbouncer
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER:-cryptopay}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      DB_NAME: ${POSTGRES_DB:-cryptopay}
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: 200
+      DEFAULT_POOL_SIZE: 12
+      MIN_POOL_SIZE: 4
+      RESERVE_POOL_SIZE: 4
+      RESERVE_POOL_TIMEOUT: 3
+      SERVER_IDLE_TIMEOUT: 600
+      QUERY_WAIT_TIMEOUT: 30
+      # AUTH_TYPE=md5 + PG 16 default scram-sha-256 collide unless
+      # we mirror the auth_query approach. The edoburu image picks
+      # up pg_hba via the `db` env vars and uses md5 for the bouncer
+      # listener · Django's libpq client speaks both.
+      AUTH_TYPE: md5
+      ADMIN_USERS: ${POSTGRES_USER:-cryptopay}
+      # Server-side prepared statements work in PgBouncer 1.21+
+      # under transaction mode. Set the cap matching Django's
+      # default prepared-statement reuse.
+      MAX_PREPARED_STATEMENTS: 100
+    ports:
+      # Bind to localhost only · prod web/celery talk via the
+      # docker network, not this port. Exposed for ad-hoc psql
+      # debugging from the host.
+      - "127.0.0.1:6432:5432"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U ${POSTGRES_USER:-cryptopay}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
   redis:
     image: redis:7-alpine
     container_name: cryptopay_redis
@@ -73,7 +133,17 @@ services:
       - -c
       - |
         set -e
-        python manage.py migrate --noinput
+        # ── Migrations bypass PgBouncer ────────────────────────────
+        # `manage.py migrate` issues DDL + session-scoped locks that
+        # break under PgBouncer's transaction pooling. Point Django
+        # at the direct Postgres host for the migrate step, then
+        # switch to PgBouncer for the long-running daphne process.
+        # `DATABASE_URL_DIRECT` is set by the web service env block.
+        if [ -n "$$DATABASE_URL_DIRECT" ]; then
+          DATABASE_URL="$$DATABASE_URL_DIRECT" python manage.py migrate --noinput
+        else
+          python manage.py migrate --noinput
+        fi
         python manage.py collectstatic --noinput
         python manage.py warm_rate_cache || true
         exec daphne -b 0.0.0.0 -p 8000 --proxy-headers --access-log - config.asgi:application
@@ -88,8 +158,17 @@ services:
       - .env.production
     environment:
       - DJANGO_SETTINGS_MODULE=config.settings.production
+      # Pooled connection · Django runtime traffic flows through
+      # PgBouncer so 4 gunicorn × N requests don't blow Postgres'
+      # max_connections at peak.
+      - DATABASE_URL=postgres://${POSTGRES_USER:-cryptopay}:${POSTGRES_PASSWORD}@pgbouncer:5432/${POSTGRES_DB:-cryptopay}
+      # Direct connection for migrations / management commands that
+      # need session-scoped locks (DDL, advisory_lock, vacuum).
+      - DATABASE_URL_DIRECT=postgres://${POSTGRES_USER:-cryptopay}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-cryptopay}
     depends_on:
       db:
+        condition: service_healthy
+      pgbouncer:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -134,8 +213,17 @@ services:
       - .env.production
     environment:
       - DJANGO_SETTINGS_MODULE=config.settings.production
+      # Pooled connection · Django runtime traffic flows through
+      # PgBouncer so 4 gunicorn × N requests don't blow Postgres'
+      # max_connections at peak.
+      - DATABASE_URL=postgres://${POSTGRES_USER:-cryptopay}:${POSTGRES_PASSWORD}@pgbouncer:5432/${POSTGRES_DB:-cryptopay}
+      # Direct connection for migrations / management commands that
+      # need session-scoped locks (DDL, advisory_lock, vacuum).
+      - DATABASE_URL_DIRECT=postgres://${POSTGRES_USER:-cryptopay}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-cryptopay}
     depends_on:
       db:
+        condition: service_healthy
+      pgbouncer:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -171,8 +259,17 @@ services:
       - .env.production
     environment:
       - DJANGO_SETTINGS_MODULE=config.settings.production
+      # Pooled connection · Django runtime traffic flows through
+      # PgBouncer so 4 gunicorn × N requests don't blow Postgres'
+      # max_connections at peak.
+      - DATABASE_URL=postgres://${POSTGRES_USER:-cryptopay}:${POSTGRES_PASSWORD}@pgbouncer:5432/${POSTGRES_DB:-cryptopay}
+      # Direct connection for migrations / management commands that
+      # need session-scoped locks (DDL, advisory_lock, vacuum).
+      - DATABASE_URL_DIRECT=postgres://${POSTGRES_USER:-cryptopay}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-cryptopay}
     depends_on:
       db:
+        condition: service_healthy
+      pgbouncer:
         condition: service_healthy
       redis:
         condition: service_healthy

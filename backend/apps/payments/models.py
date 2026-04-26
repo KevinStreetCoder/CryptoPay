@@ -77,6 +77,17 @@ class Transaction(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     completed_at = models.DateTimeField(null=True, blank=True)
 
+    # 2026-04-26 · denormalised flag set when a `ReconciliationCase`
+    # in OPEN status exists for this transaction. The user-facing API
+    # uses this to refuse sensitive actions (withdraw, swap) on a row
+    # that ops are still investigating · cheaper than a join on every
+    # request. Maintained by signal handlers on ReconciliationCase
+    # save / delete.
+    has_open_reconciliation = models.BooleanField(
+        default=False, db_index=True,
+        help_text="True while at least one ReconciliationCase row is OPEN/ESCALATED for this tx.",
+    )
+
     class Meta:
         db_table = "transactions"
         ordering = ["-created_at"]
@@ -87,6 +98,114 @@ class Transaction(models.Model):
 
     def __str__(self):
         return f"{self.type} {self.status} - {self.source_amount} {self.source_currency}"
+
+
+class ReconciliationCase(models.Model):
+    """Anomaly queue for payments that need ops attention.
+
+    2026-04-26 · introduced for the saga's "late M-Pesa success on
+    a compensated transaction" double-settlement case (saga.py:307).
+    Schema follows the Stripe-style ledger-intent pattern · separate
+    table holds the anomaly history; the parent Transaction stays in
+    its terminal status (`compensated`, `completed`, etc.) and a
+    denormalised `Transaction.has_open_reconciliation` flag lets
+    the API layer block sensitive actions while a case is open.
+
+    Industry-standard time-to-detect for double-settlement is 5
+    minutes (Wise, Adyen). `sla_breach_at = detected_at + 5 min`;
+    the daily sweep cron escalates breached cases to PagerDuty.
+    """
+
+    class CaseType(models.TextChoices):
+        # Compensation completed, but a late M-Pesa success callback
+        # arrived afterwards · user got both crypto refund AND M-Pesa
+        # transfer. The most dangerous failure mode in our system.
+        DOUBLE_SETTLEMENT = "double_settlement", "Double settlement"
+        # M-Pesa callback arrived AFTER our timeout-driven compensation
+        # decided to refund. Resolves to DOUBLE_SETTLEMENT once we
+        # confirm the M-Pesa side actually succeeded.
+        LATE_CALLBACK = "late_callback", "Late callback"
+        # M-Pesa B2B succeeded but no compensation was triggered AND
+        # no completion was recorded · saga state machine bug.
+        ORPHAN_B2B = "orphan_b2b", "Orphan B2B"
+        # `compensate_convert_async` exhausted all retries · user has
+        # NOT been credited the crypto refund they're owed.
+        COMPENSATE_FAILED = "compensate_failed", "Compensation failed"
+        # M-Pesa reversal call failed AND the active provider doesn't
+        # support automated reversal · ops must phone Safaricom.
+        REVERSAL_NOT_SUPPORTED = "reversal_not_supported", "Reversal not supported"
+
+    class Status(models.TextChoices):
+        OPEN = "open", "Open"
+        # Auto-recovery succeeded (e.g. B2C clawback to user phone for
+        # late-callback when amount < KES 10k AND user balance >= owed).
+        AUTO_RESOLVED = "auto_resolved", "Auto-resolved"
+        # Ops manually fixed it · resolution_action describes how.
+        HUMAN_RESOLVED = "human_resolved", "Human-resolved"
+        # SLA breached AND/OR severity bumped · routed to PagerDuty.
+        ESCALATED = "escalated", "Escalated"
+
+    class Severity(models.IntegerChoices):
+        INFO = 1, "Info"
+        LOW = 2, "Low"
+        MEDIUM = 3, "Medium"
+        HIGH = 4, "High"
+        CRITICAL = 5, "Critical · page on-call"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    transaction = models.ForeignKey(
+        "Transaction",
+        on_delete=models.CASCADE,
+        related_name="recon_cases",
+        db_index=True,
+    )
+    case_type = models.CharField(max_length=32, choices=CaseType.choices, db_index=True)
+    status = models.CharField(
+        max_length=16, choices=Status.choices, default=Status.OPEN, db_index=True,
+    )
+    severity = models.IntegerField(
+        choices=Severity.choices, default=Severity.HIGH,
+    )
+    detected_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    sla_breach_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="When this case crosses its SLO · auto-escalation trigger.",
+    )
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    resolution_action = models.CharField(
+        max_length=32, blank=True, default="",
+        help_text="reverse_refund / b2c_clawback / write_off / human_review / not_applicable",
+    )
+    assigned_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="assigned_recon_cases",
+    )
+    correlation_id = models.CharField(
+        max_length=64, blank=True, default="", db_index=True,
+        help_text="Saga correlation ID · ties together every log line, retry, and alert for this case.",
+    )
+    evidence = models.JSONField(
+        default=dict, blank=True,
+        help_text="Both callback payloads, timestamps, amounts, ABI codes, etc.",
+    )
+    notes = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "reconciliation_cases"
+        ordering = ["-detected_at"]
+        indexes = [
+            # Hot-path: ops dashboard "open cases by severity descending"
+            models.Index(fields=["status", "-severity", "detected_at"], name="recon_open_sev"),
+            # Daily sweep: cases whose SLA has expired
+            models.Index(fields=["status", "sla_breach_at"], name="recon_sla_sweep"),
+        ]
+
+    def __str__(self):
+        return f"{self.get_case_type_display()} · {self.transaction_id} · {self.status}"
 
 
 class SavedPaybill(models.Model):

@@ -59,3 +59,75 @@ class BlockchainConfig(AppConfig):
                     "hint": "BTC_WITHDRAWALS_ENABLED=True with testnet is almost certainly a misconfiguration.",
                 },
             )
+
+        # ── KMS boot-time health check ──────────────────────────────
+        # When KMS_ENABLED=True, do a real encrypt-decrypt round trip
+        # before the app starts serving traffic. Catches a class of
+        # silent failures the env-checks in production.py can't:
+        #
+        #   - GOOGLE_APPLICATION_CREDENTIALS path resolves but the JSON
+        #     is from a stale / different project
+        #   - Service account exists but lacks
+        #     `cloudkms.cryptoKeyEncrypterDecrypter` on this key
+        #   - Container has the right env vars but the bind-mount of
+        #     `/run/secrets/gcp-kms.json` failed silently
+        #   - Our own envelope format regressed (rare, but a half-
+        #     deployed migration could)
+        #
+        # In production (`REQUIRE_PROD_ENV_STRICT=True` or DEBUG=False),
+        # a failure raises ImproperlyConfigured · gunicorn refuses to
+        # come up · the deploy crashloops loud instead of silently
+        # routing every encrypted blob through LocalKMSManager (which
+        # derives keys from SECRET_KEY and defeats the whole KMS threat
+        # model). Dev logs + skips so `runserver` works without creds.
+        #
+        # Skipped entirely under `pytest` (DJANGO_SETTINGS_MODULE points
+        # at `config.settings.base` for tests, where KMS_ENABLED defaults
+        # to False); the conftest fixture also forces deterministic
+        # WALLET_MASTER_SEED so the smoke test isn't needed.
+        kms_enabled = getattr(settings, "KMS_ENABLED", False)
+        require_strict = bool(
+            getattr(settings, "REQUIRE_PROD_ENV_STRICT", False) or not debug
+        )
+        skip_kms_check = bool(getattr(settings, "SKIP_KMS_HEALTH_CHECK", False))
+        if kms_enabled and not skip_kms_check:
+            try:
+                from .kms import get_kms_manager
+                manager = get_kms_manager()
+                # CachedSeedManager wraps the underlying manager · unwrap
+                # so the smoke test hits the real KMS provider, not a
+                # cached blob.
+                inner = getattr(manager, "_inner", None) or manager
+                health = inner.health_check()
+                logger.info(
+                    "kms.health_ok",
+                    extra={
+                        "provider": getattr(settings, "KMS_PROVIDER", "aws"),
+                        "latency_ms": health.get("latency_ms"),
+                        "key_resource": health.get("key_resource"),
+                    },
+                )
+            except Exception as e:
+                logger.error(
+                    "kms.health_failed",
+                    extra={
+                        "provider": getattr(settings, "KMS_PROVIDER", "aws"),
+                        "error_type": type(e).__name__,
+                        "error": str(e),
+                        "hint": (
+                            "Run `python manage.py kms_health` for a verbose "
+                            "dump. Common causes: wrong service account, "
+                            "missing roles/cloudkms.cryptoKeyEncrypterDecrypter, "
+                            "stale GOOGLE_APPLICATION_CREDENTIALS path."
+                        ),
+                    },
+                )
+                if require_strict:
+                    from django.core.exceptions import ImproperlyConfigured
+                    raise ImproperlyConfigured(
+                        f"KMS health check failed at boot: {type(e).__name__}: {e}. "
+                        "Refusing to start · the LocalKMSManager fallback would "
+                        "decrypt every wallet blob with a SECRET_KEY-derived key, "
+                        "which defeats the platform's key hierarchy. Fix the KMS "
+                        "credentials or set KMS_ENABLED=False in dev."
+                    ) from e

@@ -119,6 +119,44 @@ class BaseKMSManager:
         """
         raise NotImplementedError
 
+    def health_check(self) -> dict:
+        """Boot-time smoke test · encrypt-decrypt round trip.
+
+        Proves the credentials work AND we have IAM rights for both
+        encrypt and decrypt on this specific key. Default
+        implementation does a full envelope round-trip on a 16-byte
+        payload (cheap · ~50-150 ms in production). Subclasses MAY
+        override with a lighter probe (e.g. GCP `GetCryptoKey` is
+        free and sufficient for IAM verification) but the round-trip
+        is the gold standard because it catches:
+
+          - wrong key resource path
+          - missing encrypter / decrypter IAM role
+          - DEK / IV format regressions in our own code
+          - clock skew on KMS-hosted hostname verification
+
+        Raises one of the typed `KMS*Error` exceptions on failure
+        OR `KMSError` for an unexpected failure mode. Returns a
+        `{ok: True, latency_ms: ..., key_resource: ...}` dict on
+        success so AppConfig.ready() can surface latency in logs.
+        """
+        import time as _time
+        probe = b"cpay-kms-health-check"
+        t0 = _time.perf_counter()
+        ciphertext = self.encrypt_seed(probe)
+        plaintext = self.decrypt_seed(ciphertext)
+        elapsed_ms = round((_time.perf_counter() - t0) * 1000, 1)
+        if plaintext != probe:
+            raise KMSError(
+                "KMS health-check decryption returned wrong plaintext. "
+                "Provider may have re-keyed this key resource."
+            )
+        return {
+            "ok": True,
+            "latency_ms": elapsed_ms,
+            "key_resource": getattr(self, "_key_resource", None) or getattr(self, "_key_id", None),
+        }
+
 
 class AWSKMSManager(BaseKMSManager):
     """

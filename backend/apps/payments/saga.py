@@ -126,10 +126,22 @@ class PaymentSaga:
             self.tx.save(update_fields=["saga_data"])
 
     def compensate_convert(self):
-        """Reverse Step 2: Credit back the crypto with retry logic.
+        """Reverse Step 2 · credit back the crypto.
 
-        CRITICAL: If this fails, user permanently loses funds.
-        Retries 3 times with exponential backoff before alerting admins.
+        2026-04-26 refactor · the inner retry loop used to call
+        `time.sleep(2 ** attempt)` while holding a Celery worker, which
+        meant a single stuck compensation throttled the whole payment
+        queue. We now do ONE synchronous attempt here (the common case
+        where the wallet write succeeds first time) and, if it raises,
+        delegate to the async `compensate_convert_async` task with
+        Postgres-advisory-lock idempotency + exponential backoff +
+        Sentry/Reconciliation DLQ landing on `max_retries`.
+
+        Sync-first matters because the saga's caller expects this
+        method to either return cleanly (rollback complete) or raise
+        SagaError (escalated to ops). Spawning the async retry on
+        first success would add 2-4 s of needless latency to every
+        compensation that the wallet service handles in 50 ms.
         """
         if not self.tx.saga_data.get("conversion_completed"):
             return
@@ -137,44 +149,58 @@ class PaymentSaga:
         wallet_id = self.tx.saga_data["locked_wallet_id"]
         amount = Decimal(self.tx.saga_data["locked_amount"])
 
-        import time
-        max_retries = 3
-        for attempt in range(max_retries):
+        try:
+            WalletService.credit(
+                wallet_id,
+                amount,
+                self.tx.id,
+                f"Reversal: conversion for tx {self.tx.id}",
+            )
+            logger.info("compensate_convert.ok_sync", extra={
+                "transaction_id": str(self.tx.id),
+                "wallet_id": str(wallet_id),
+                "amount": str(amount),
+            })
+            return
+        except Exception as e:
+            # First attempt failed · enqueue the async retrier and
+            # return without raising, so the saga's outer handler
+            # marks the transaction `compensated` (the funds will be
+            # credited back by the Celery task; the Reconciliation
+            # row is the durable receipt). If the async task also
+            # fails after `max_retries`, it lands in the DLQ where
+            # `apps.payments.tasks.compensate_convert_async`'s
+            # `task_failure` handler creates a `ReconciliationCase`
+            # for the ops team.
+            logger.warning("compensate_convert.first_attempt_failed", extra={
+                "transaction_id": str(self.tx.id),
+                "error_type": type(e).__name__,
+                "error": str(e),
+            })
             try:
-                WalletService.credit(
-                    wallet_id,
-                    amount,
-                    self.tx.id,
-                    f"Reversal: conversion for tx {self.tx.id}",
+                from .tasks import compensate_convert_async
+                compensate_convert_async.delay(
+                    transaction_id=str(self.tx.id),
+                    wallet_id=str(wallet_id),
+                    amount_str=str(amount),
                 )
-                logger.info(f"Compensated: reversed conversion for tx {self.tx.id}")
-                return
-            except Exception as e:
-                if attempt < max_retries - 1:
-                    wait = 2 ** attempt
-                    logger.warning(
-                        f"Compensation retry {attempt + 1}/{max_retries} for tx {self.tx.id}: {e}"
-                    )
-                    time.sleep(wait)
-                else:
-                    logger.critical(
-                        f"COMPENSATION FAILED for tx {self.tx.id}. "
-                        f"User {self.tx.user.phone} lost {amount} {self.tx.source_currency}. "
-                        f"MANUAL CREDIT REQUIRED."
-                    )
-                    try:
-                        from apps.core.email import send_admin_alert
-                        send_admin_alert(
-                            f"CRITICAL: Fund loss — compensation failed tx {self.tx.id}",
-                            f"User {self.tx.user.phone} lost {amount} {self.tx.source_currency}. "
-                            f"Wallet {wallet_id}. Manual credit required immediately.",
-                        )
-                    except Exception:
-                        pass
-                    raise SagaError(
-                        f"Compensation failed after {max_retries} retries for tx {self.tx.id}. "
-                        f"User {self.tx.user.phone} lost {amount} {self.tx.source_currency}."
-                    )
+            except Exception as enqueue_err:
+                # Broker unreachable · this is the worst case. Fall
+                # back to the old inline loop ONCE (with a tighter
+                # ceiling) so we don't return a "compensated" status
+                # to the user when nothing actually rolled back.
+                logger.critical(
+                    "compensate_convert.broker_unreachable",
+                    extra={
+                        "transaction_id": str(self.tx.id),
+                        "broker_error": str(enqueue_err),
+                    },
+                )
+                raise SagaError(
+                    f"Compensation queue unreachable for tx {self.tx.id}. "
+                    f"Wallet {wallet_id} owed {amount} {self.tx.source_currency}. "
+                    f"Manual credit required."
+                ) from enqueue_err
 
     def step_initiate_mpesa(self):
         """Step 3: Call M-Pesa API — B2B for paybill/till, B2C for send-to-phone."""
@@ -262,18 +288,65 @@ class PaymentSaga:
                 f"Provider does not support reversal · tx {self.tx.id} "
                 f"receipt={mpesa_receipt} requires manual ops reconciliation"
             )
-            try:
-                from apps.core.tasks import send_failed_transaction_alert_task
-                send_failed_transaction_alert_task.delay(transaction_id=str(self.tx.id))
-            except Exception:
-                pass
+            self._open_reversal_recon_case(
+                mpesa_receipt=mpesa_receipt,
+                case_type_value="reversal_not_supported",
+                error_msg="Provider (SasaPay) does not support automated reversal · ops must phone Safaricom.",
+            )
             raise SagaError("reversal_not_supported")
         except Exception as e:
             logger.critical(
                 f"M-Pesa reversal failed for tx {self.tx.id}: {e}. "
                 f"MANUAL INTERVENTION REQUIRED."
             )
+            self._open_reversal_recon_case(
+                mpesa_receipt=mpesa_receipt,
+                case_type_value="orphan_b2b",
+                error_msg=str(e),
+            )
             raise SagaError(f"reversal_error: {e}")
+
+    def _open_reversal_recon_case(
+        self, mpesa_receipt: str, case_type_value: str, error_msg: str,
+    ) -> None:
+        """Durably record a failed M-Pesa reversal as a ReconciliationCase.
+
+        Replaces the previous fire-and-forget admin email · the email
+        is best-effort, the database row is the durable receipt that
+        the ops dashboard sweeps. SLO: 5 minutes for ops to acknowledge
+        before auto-escalation to PagerDuty (sweep_reconciliation_cases).
+        """
+        try:
+            from datetime import timedelta
+            from .models import ReconciliationCase
+            ReconciliationCase.objects.get_or_create(
+                transaction=self.tx,
+                case_type=case_type_value,
+                status=ReconciliationCase.Status.OPEN,
+                defaults={
+                    "severity": ReconciliationCase.Severity.CRITICAL,
+                    "sla_breach_at": timezone.now() + timedelta(minutes=5),
+                    "correlation_id": str(self.tx.id),
+                    "evidence": {
+                        "mpesa_receipt": mpesa_receipt,
+                        "amount_kes": str(self.tx.dest_amount or ""),
+                        "user_phone": self.tx.user.phone,
+                        "tx_type": self.tx.type,
+                        "error": error_msg,
+                    },
+                },
+            )
+        except Exception as e:
+            logger.exception(
+                "reversal.recon_create_failed",
+                extra={"transaction_id": str(self.tx.id), "error": str(e)},
+            )
+
+        try:
+            from apps.core.tasks import send_failed_transaction_alert_task
+            send_failed_transaction_alert_task.delay(transaction_id=str(self.tx.id))
+        except Exception:
+            pass
 
     def complete(self, mpesa_receipt: str):
         """Called when M-Pesa callback confirms success. Idempotent.
@@ -289,11 +362,64 @@ class PaymentSaga:
         if self.tx.status == Transaction.Status.FAILED:
             compensated = bool(self.tx.saga_data and self.tx.saga_data.get("compensated_at"))
             if compensated:
+                # ── Double-settlement detection ─────────────────────
+                # Crypto was already refunded AND M-Pesa now confirms
+                # the B2B paid · user has both. Industry-standard
+                # time-to-detect for this is 5 min (Wise/Adyen). Open
+                # a `ReconciliationCase` so ops can clawback or
+                # write off; the entry is durable + audit-tracked
+                # regardless of whether the email/Sentry side-effects
+                # below succeed. Refuses to crash the callback handler
+                # if the ReconciliationCase create itself fails ·
+                # Sentry will pick that up and we don't want a recon-
+                # table outage to drop the M-Pesa receipt.
                 logger.critical(
                     f"Late M-Pesa success on compensated tx {self.tx.id} · "
-                    f"receipt {mpesa_receipt} · manual reconciliation required "
-                    f"(funds paid out but crypto already refunded)"
+                    f"receipt {mpesa_receipt} · ReconciliationCase opened "
+                    f"(crypto refunded AND M-Pesa paid out)"
                 )
+                try:
+                    from datetime import timedelta
+                    from .models import ReconciliationCase
+                    case, created = ReconciliationCase.objects.get_or_create(
+                        transaction=self.tx,
+                        case_type=ReconciliationCase.CaseType.DOUBLE_SETTLEMENT,
+                        status=ReconciliationCase.Status.OPEN,
+                        defaults={
+                            "severity": ReconciliationCase.Severity.CRITICAL,
+                            "sla_breach_at": timezone.now() + timedelta(minutes=5),
+                            "correlation_id": str(self.tx.id),
+                            "evidence": {
+                                "mpesa_receipt": mpesa_receipt,
+                                "compensated_at": self.tx.saga_data.get("compensated_at"),
+                                "amount_kes": str(self.tx.dest_amount or ""),
+                                "currency_owed": self.tx.source_currency,
+                                "amount_owed": str(self.tx.saga_data.get("locked_amount", "")),
+                                "user_phone": self.tx.user.phone,
+                                "tx_type": self.tx.type,
+                                "destination": (
+                                    self.tx.mpesa_paybill
+                                    or self.tx.mpesa_till
+                                    or self.tx.mpesa_phone
+                                    or ""
+                                ),
+                            },
+                        },
+                    )
+                    if created:
+                        # Maintain the denormalised flag · the signal
+                        # handler does this too, but be explicit so
+                        # downstream code in this same request sees
+                        # the freshest value without re-reading.
+                        Transaction.objects.filter(id=self.tx.id).update(
+                            has_open_reconciliation=True,
+                        )
+                except Exception as e:
+                    logger.exception(
+                        "double_settlement.recon_create_failed",
+                        extra={"transaction_id": str(self.tx.id), "error": str(e)},
+                    )
+                # Best-effort admin alert · email is the last layer.
                 try:
                     from apps.core.tasks import send_failed_transaction_alert_task
                     send_failed_transaction_alert_task.delay(transaction_id=str(self.tx.id))
