@@ -1,10 +1,13 @@
 import React, { useRef, useState, useEffect } from "react";
-import { View, Text, TextInput, Pressable, Platform, useWindowDimensions, Keyboard } from "react-native";
+import { View, Text, TextInput, Pressable, Platform, useWindowDimensions, Keyboard, Image } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, getThemeColors } from "../constants/theme";
 import { useThemeMode } from "../stores/theme";
-import { BrandedSpinner } from "./BrandedSpinner";
-import { useLocale } from "../hooks/useLocale";
+
+// Brand mark used in place of the generic Ionicons hero · keeps the
+// auth flows visually owned by Cpay rather than borrowing platform
+// glyphs. Caller can still pass an `icon` prop to override.
+const BRAND_MARK = require("../../assets/brand-mark.png");
 
 const isWeb = Platform.OS === "web";
 
@@ -39,7 +42,6 @@ export function OTPInput({
 }: OTPInputProps) {
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
-  const { t } = useLocale();
   const { width: screenWidth } = useWindowDimensions();
 
   const isMobile = screenWidth < 768;
@@ -140,6 +142,12 @@ export function OTPInput({
 
   return (
     <View style={{ alignItems: "center" }}>
+      {/* Hero · brand mark by default, Ionicons fallback if a caller
+          explicitly passes an `icon` prop (e.g. the new-device-OTP
+          path uses `phone-portrait` instead). 2026-04-26: previously
+          this was a hard-coded Ionicons regardless of icon name,
+          which made every auth flow feel like generic platform UI.
+          The brand mark grounds the screens in Cpay's chrome. */}
       {icon ? (
         <View
           style={{
@@ -156,7 +164,28 @@ export function OTPInput({
         >
           <Ionicons name={icon as any} size={28} color={effectiveIconColor} />
         </View>
-      ) : null}
+      ) : (
+        <View
+          style={{
+            width: 64,
+            height: 64,
+            borderRadius: 20,
+            backgroundColor: colors.primary[500] + "12",
+            alignItems: "center",
+            justifyContent: "center",
+            marginBottom: 20,
+            borderWidth: 1,
+            borderColor: colors.primary[500] + "25",
+          }}
+        >
+          <Image
+            source={BRAND_MARK}
+            style={{ width: 38, height: 38 }}
+            resizeMode="contain"
+            accessibilityLabel="Cpay"
+          />
+        </View>
+      )}
 
       {title ? (
         <Text
@@ -280,27 +309,11 @@ export function OTPInput({
         </View>
       ) : null}
 
-      {loading && (
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 10,
-            marginBottom: 16,
-            paddingVertical: 8,
-            paddingHorizontal: 14,
-            borderRadius: 999,
-            backgroundColor: colors.primary[400] + "12",
-            borderWidth: 1,
-            borderColor: colors.primary[400] + "26",
-          }}
-        >
-          <BrandedSpinner size="small" color={colors.primary[400]} />
-          <Text style={{ color: tc.textPrimary, fontSize: 13, fontFamily: "DMSans_600SemiBold" }}>
-            {t("auth.verifying")}
-          </Text>
-        </View>
-      )}
+      {/* Loading affordance handled by the cell-dim above (opacity 0.55
+          + editable={!loading} on every TextInput). The screen-level
+          "Signing in..." / "Verifying..." copy lives on the consumer
+          (login.tsx, register.tsx, forgot-pin.tsx, etc.) so we don't
+          stack two spinners · 2026-04-26 user feedback. */}
 
       {onResend && (
         <Pressable

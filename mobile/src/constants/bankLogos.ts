@@ -30,15 +30,23 @@ import type { ImageSourcePropType } from "react-native";
  * `BANK_BRAND_COLORS` below.
  */
 export const BANK_LOGOS: Record<string, ImageSourcePropType> = {
+  absa: require("../../assets/logos/banks/absa.png"),
   boa: require("../../assets/logos/banks/boa.png"),
   coop: require("../../assets/logos/banks/coop.png"),
+  dtb: require("../../assets/logos/banks/dtb.png"),
   ecobank: require("../../assets/logos/banks/ecobank.png"),
+  equity: require("../../assets/logos/banks/equity.png"),
   family: require("../../assets/logos/banks/family.png"),
+  gulf: require("../../assets/logos/banks/gulf.png"),
   hfc: require("../../assets/logos/banks/hfc.png"),
   im: require("../../assets/logos/banks/im.png"),
+  kcb: require("../../assets/logos/banks/kcb.png"),
   ncba: require("../../assets/logos/banks/ncba.png"),
   sidian: require("../../assets/logos/banks/sidian.png"),
   stanchart: require("../../assets/logos/banks/stanchart.png"),
+  // stanbic · all sources we tried (Wikipedia, Commons, Brandfetch,
+  // their CDN) returned 404 or HTML for the logo. Falls back to a
+  // coloured-letter "S" on Stanbic-navy in `BankTileLogo`.
 };
 
 /**

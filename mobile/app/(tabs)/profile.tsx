@@ -21,6 +21,7 @@ import { useAuth, isBiometricEnabled, setBiometricEnabled } from "../../src/stor
 import { useBiometricAuth } from "../../src/hooks/useBiometricAuth";
 import { getLockTimeout, setLockTimeout, LOCK_TIMEOUT_OPTIONS, LockTimeout } from "../../src/hooks/useAppLock";
 import { useToast } from "../../src/components/Toast";
+import { Spinner } from "../../src/components/brand/Spinner";
 import { usePhonePrivacy, maskPhone } from "../../src/utils/privacy";
 import { useLocale } from "../../src/hooks/useLocale";
 import { UserAvatar } from "../../src/components/UserAvatar";
@@ -354,6 +355,7 @@ export default function ProfileScreen() {
   const tierProgress = ((user?.kyc_tier ?? 0) + 1) / KYC_TIERS.length;
 
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const [showLanguagePicker, setShowLanguagePicker] = useState(false);
   const [biometricOn, setBiometricOn] = useState(false);
   const [lockTimeout, setLockTimeoutState] = useState<LockTimeout>(0);
@@ -511,28 +513,24 @@ export default function ProfileScreen() {
     );
   };
 
+  // Use the same in-app modal on both web and native · the previous
+  // native-Alert.alert path felt out-of-place vs the rest of Cpay's
+  // chrome (and didn't show the brand mark / destructive accent).
+  // 2026-04-26 redesign keeps a single modal definition, dimmable
+  // backdrop, brand-mark hero, two clearly-labelled actions.
   const handleLogout = () => {
-    if (Platform.OS === "web") {
-      setShowLogoutConfirm(true);
-    } else {
-      Alert.alert(t("profile.logout"), t("profile.logoutConfirm"), [
-        { text: t("common.cancel"), style: "cancel" },
-        {
-          text: t("profile.logout"),
-          style: "destructive",
-          onPress: async () => {
-            await logout();
-            router.replace("/auth/login");
-          },
-        },
-      ]);
-    }
+    setShowLogoutConfirm(true);
   };
 
   const confirmLogout = async () => {
-    setShowLogoutConfirm(false);
-    await logout();
-    router.replace("/auth/login");
+    setLoggingOut(true);
+    try {
+      await logout();
+    } finally {
+      setShowLogoutConfirm(false);
+      setLoggingOut(false);
+      router.replace("/auth/login");
+    }
   };
 
   const hPad = isLargeDesktop ? 32 : isDesktop ? 20 : 16;
@@ -1847,38 +1845,75 @@ export default function ProfileScreen() {
             left: 0,
             right: 0,
             bottom: 0,
-            backgroundColor: "rgba(0,0,0,0.6)",
+            backgroundColor: "rgba(0,0,0,0.72)",
             alignItems: "center",
             justifyContent: "center",
             zIndex: 100,
+            ...(isWeb ? ({ backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" } as any) : {}),
           }}
         >
+          {/* Tap-outside-to-dismiss layer · disabled mid-logout so the
+              user can't accidentally cancel a request in flight. */}
+          <Pressable
+            onPress={() => { if (!loggingOut) setShowLogoutConfirm(false); }}
+            style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
+            accessibilityLabel="Dismiss"
+          />
           <View
             style={{
               backgroundColor: tc.dark.card,
-              borderRadius: 24,
-              padding: 32,
-              maxWidth: 380,
+              borderRadius: 28,
+              padding: 28,
+              maxWidth: 400,
               width: "90%",
               borderWidth: 1,
-              borderColor: tc.glass.border,
+              borderColor: tc.glass.borderStrong,
               alignItems: "center",
               ...ts.lg,
+              ...(isWeb ? ({ boxShadow: "0 24px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04)" } as any) : {}),
             }}
           >
+            {/* Brand mark · same circular plate as the lock screens for
+                visual continuity. The destructive accent moves to a
+                small badge bottom-right where it signals action
+                without dominating the dialog. */}
             <View
               style={{
-                width: 64,
-                height: 64,
-                borderRadius: 20,
-                backgroundColor: colors.error + "15",
+                width: 72,
+                height: 72,
+                borderRadius: 24,
+                backgroundColor: colors.primary[500] + "12",
                 alignItems: "center",
                 justifyContent: "center",
-                marginBottom: 20,
-                ...ts.glow(colors.error, 0.2),
+                marginBottom: 22,
+                borderWidth: 1,
+                borderColor: colors.primary[500] + "25",
+                position: "relative",
               }}
             >
-              <Ionicons name="log-out-outline" size={32} color={colors.error} />
+              <Image
+                source={require("../../assets/brand-mark.png")}
+                style={{ width: 42, height: 42 }}
+                resizeMode="contain"
+                accessibilityLabel="Cpay"
+              />
+              <View
+                style={{
+                  position: "absolute",
+                  bottom: -4,
+                  right: -4,
+                  width: 30,
+                  height: 30,
+                  borderRadius: 15,
+                  backgroundColor: colors.error,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderWidth: 2,
+                  borderColor: tc.dark.card,
+                }}
+              >
+                <Ionicons name="log-out-outline" size={14} color="#FFFFFF" />
+              </View>
             </View>
             <Text
               style={{
@@ -1886,38 +1921,43 @@ export default function ProfileScreen() {
                 fontSize: 20,
                 fontFamily: "DMSans_700Bold",
                 marginBottom: 8,
+                letterSpacing: -0.3,
+                textAlign: "center",
               }}
             >
-              {t("profile.logout")}
+              {t("profile.logoutConfirmTitle")}
             </Text>
             <Text
               style={{
-                color: tc.textMuted,
+                color: tc.textSecondary,
                 fontSize: 14,
                 fontFamily: "DMSans_400Regular",
                 textAlign: "center",
-                marginBottom: 28,
+                marginBottom: 24,
                 lineHeight: 20,
+                paddingHorizontal: 8,
               }}
             >
-              {t("profile.logoutConfirm")}
+              {t("profile.logoutConfirmBody")}
             </Text>
-            <View style={{ flexDirection: "row", gap: 12, width: "100%" }}>
+            <View style={{ flexDirection: "row", gap: 10, width: "100%" }}>
               <Pressable
                 onPress={() => setShowLogoutConfirm(false)}
+                disabled={loggingOut}
                 style={({ pressed, hovered }: any) => ({
                   flex: 1,
-                  paddingVertical: 15,
+                  paddingVertical: 14,
                   borderRadius: 14,
                   backgroundColor: pressed
-                    ? tc.dark.elevated + "80"
+                    ? tc.dark.elevated
                     : isWeb && hovered
-                      ? tc.dark.elevated + "60"
-                      : tc.dark.elevated,
+                      ? tc.dark.elevated + "AA"
+                      : "transparent",
                   alignItems: "center",
                   borderWidth: 1,
                   borderColor: tc.glass.border,
-                  ...(isWeb ? { cursor: "pointer", transition: "all 0.2s ease" } as any : {}),
+                  opacity: loggingOut ? 0.5 : 1,
+                  ...(isWeb ? ({ cursor: loggingOut ? "default" : "pointer", transition: "all 0.15s ease" } as any) : {}),
                 })}
               >
                 <Text
@@ -1932,20 +1972,29 @@ export default function ProfileScreen() {
               </Pressable>
               <Pressable
                 onPress={confirmLogout}
+                disabled={loggingOut}
                 style={({ pressed, hovered }: any) => ({
                   flex: 1,
-                  paddingVertical: 15,
+                  paddingVertical: 14,
                   borderRadius: 14,
                   backgroundColor: pressed
-                    ? "#DC2626"
+                    ? "#B91C1C"
                     : isWeb && hovered
-                      ? "#E53E3E"
+                      ? "#DC2626"
                       : colors.error,
                   alignItems: "center",
-                  ...ts.glow(colors.error, 0.25),
-                  ...(isWeb ? { cursor: "pointer", transition: "all 0.2s ease" } as any : {}),
+                  flexDirection: "row",
+                  justifyContent: "center",
+                  gap: 8,
+                  ...ts.glow(colors.error, 0.3),
+                  ...(isWeb ? ({ cursor: loggingOut ? "wait" : "pointer", transition: "all 0.15s ease" } as any) : {}),
                 })}
               >
+                {loggingOut ? (
+                  <Spinner variant="arc" size={16} color="#FFFFFF" />
+                ) : (
+                  <Ionicons name="log-out-outline" size={16} color="#FFFFFF" />
+                )}
                 <Text
                   style={{
                     color: "#FFFFFF",
@@ -1953,7 +2002,7 @@ export default function ProfileScreen() {
                     fontFamily: "DMSans_600SemiBold",
                   }}
                 >
-                  {t("profile.logout")}
+                  {loggingOut ? t("profile.loggingOut") : t("profile.logout")}
                 </Text>
               </Pressable>
             </View>
