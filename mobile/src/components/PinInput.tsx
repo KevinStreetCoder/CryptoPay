@@ -1,10 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { View, Text, TextInput, Pressable, Platform, useWindowDimensions, Keyboard } from "react-native";
+import { View, TextInput, Pressable, Platform, useWindowDimensions, Keyboard } from "react-native";
 import * as Haptics from "expo-haptics";
-import { colors, getThemeColors } from "../constants/theme";
+import { getThemeColors } from "../constants/theme";
 import { useThemeMode } from "../stores/theme";
-import { BrandedSpinner } from "./BrandedSpinner";
-import { useLocale } from "../hooks/useLocale";
 
 interface PinInputProps {
   length?: number;
@@ -14,10 +12,18 @@ interface PinInputProps {
   testID?: string;
 }
 
+/**
+ * 6-cell PIN entry · the cells dim to 0.55 opacity while `loading`
+ * is true and keystrokes are dropped. We deliberately do NOT render
+ * a "Confirming" pill below the cells · the user reported that as a
+ * duplicate against the screen-level "Signing in..." banner that
+ * each consumer (login, change-pin, payment/confirm, etc.) renders
+ * for itself with screen-specific copy. Cell dim is sufficient
+ * loading affordance from this component's contract.
+ */
 export function PinInput({ length = 6, onComplete, error, loading, testID }: PinInputProps) {
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
-  const { t } = useLocale();
   const [pin, setPin] = useState("");
   const inputRef = useRef<TextInput>(null);
   const { width: screenWidth } = useWindowDimensions();
@@ -170,34 +176,6 @@ export function PinInput({ length = 6, onComplete, error, loading, testID }: Pin
         testID={testID || "pin-input"}
       />
 
-      {/* Built-in loading banner · so every screen using PinInput gets
-          the same "request in flight" affordance without each one
-          having to render its own spinner separately. Sits 12 px under
-          the PIN row and centres horizontally. */}
-      {loading ? (
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            alignSelf: "center",
-            gap: 8,
-            marginTop: 14,
-            paddingVertical: 6,
-            paddingHorizontal: 12,
-            borderRadius: 999,
-            backgroundColor: colors.primary[400] + "12",
-            borderWidth: 1,
-            borderColor: colors.primary[400] + "26",
-          }}
-          accessibilityRole="progressbar"
-          accessibilityLabel={t("auth.confirmingPin")}
-        >
-          <BrandedSpinner size="small" color={colors.primary[400]} />
-          <Text style={{ color: tc.textPrimary, fontSize: 12.5, fontFamily: "DMSans_600SemiBold" }}>
-            {t("auth.confirmingPin")}
-          </Text>
-        </View>
-      ) : null}
     </Pressable>
   );
 }

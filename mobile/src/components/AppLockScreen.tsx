@@ -1,5 +1,5 @@
 import { Image, View, Text, Platform, Pressable, Keyboard, KeyboardAvoidingView, ScrollView } from "react-native";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, getThemeColors } from "../constants/theme";
 import { useThemeMode } from "../stores/theme";
@@ -29,6 +29,24 @@ export function AppLockScreen({ onUnlock, userPhone, onForgotPin }: AppLockScree
   const [pinError, setPinError] = useState(false);
   const [pinLoading, setPinLoading] = useState(false);
   const [biometricFailed, setBiometricFailed] = useState(false);
+  const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isMountedRef = useRef(true);
+
+  // Cleanup · the watchdog timer below scheduledcsetState calls; if
+  // the component unmounts before the timer fires (because onUnlock
+  // navigated away successfully), the deferred setState would have
+  // landed on dead memory. Track the mount flag and bail in the
+  // timer body to avoid the warning.
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (watchdogRef.current) {
+        clearTimeout(watchdogRef.current);
+        watchdogRef.current = null;
+      }
+    };
+  }, []);
 
   const handleBiometricAuth = useCallback(async () => {
     if (!isAvailable) {
@@ -70,15 +88,17 @@ export function AppLockScreen({ onUnlock, userPhone, onForgotPin }: AppLockScree
     // generic error so they can retry. 12 s > axios default 15 s would
     // timeout naturally; we set 12 to fire BEFORE that and surface a
     // friendlier message. Cleared on success, error, or unmount.
-    let watchdog: ReturnType<typeof setTimeout> | null = setTimeout(() => {
+    if (watchdogRef.current) clearTimeout(watchdogRef.current);
+    watchdogRef.current = setTimeout(() => {
+      if (!isMountedRef.current) return;
       setPinLoading(false);
       setPinError(true);
     }, 12000);
 
     const clearWatchdog = () => {
-      if (watchdog) {
-        clearTimeout(watchdog);
-        watchdog = null;
+      if (watchdogRef.current) {
+        clearTimeout(watchdogRef.current);
+        watchdogRef.current = null;
       }
     };
 
