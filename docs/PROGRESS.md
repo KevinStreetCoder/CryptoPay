@@ -2,6 +2,201 @@
 
 **Last updated:** 2026-04-26
 
+## 2026-04-26 session 3 · 4 production-readiness P0s deployed + UI polish + auth re-login bug fixed
+
+End state · `origin/main` at `4fc10e5` (5 follow-up commits after the
+shipped APK). All four P0 audit findings are LIVE on prod backend.
+APK at `https://cpay.co.ke/download/cryptopay.apk` (md5
+`062a88168ff80da3c5ac21b8d868481b`, served 16:41 UTC).
+
+### Mobile · UI polish + auth fixes (commits e7c1fe9, 8fa4697)
+
+**Tab pill flex-centring** · third report on the active emerald pill
+sitting offset from the icon on Android. Previous fix used
+`position: absolute, left: 50%, marginLeft: -28` which RN-Android's
+percentage offset rendered inconsistently (~14 px left drift).
+Restructured · the pill is now a 56×30 flex container WRAPPING the
+icon, so `alignItems/justifyContent: center` locks the icon to the
+pill's centre on every platform. Transparent fill/border when
+unfocused so the bounding box stays the same and the icon never
+jumps on focus toggle.
+
+**Send-to-Bank picker collapse** · the picker (search + favourites +
+frequent + 4 category sections, ~14 tiles) ate the whole viewport;
+the form (account/amount/crypto) hid below. After bank selection
+the entire picker collapses into a single compact card showing the
+bundled logo + name + a "⇄ Change" pill. Tap to re-open. Form fields
+visible without scrolling. New i18n keys
+`payment.bankSelected` / `bankChange`.
+
+**Re-login bug · two root causes** (commit 8fa4697):
+
+1. **Refresh-token race** · `ROTATE_REFRESH_TOKENS=True` +
+   `BLACKLIST_AFTER_ROTATION=True` (Binance/Revolut threat model)
+   meant two parallel 401s raced to `/auth/token/refresh/`. First
+   won, second presented the now-blacklisted token, got 401 back,
+   `forceLogout` fired. From the user's POV: "after a few hours I
+   have to start again from phone instead of just pin". Fix:
+   `coalescedRefresh()` mutex in `mobile/src/api/client.ts` ·
+   parallel 401s share one network call.
+
+2. **Phone not remembered** · login screen always started at the
+   phone-entry step. Now `last_login_phone` is stamped in
+   SecureStore on every login; on `/auth/login` mount the screen
+   reads it and skips straight to the PIN step. Cleared only on
+   explicit logout (the dialog), not on session expiry · so a
+   token blip + re-auth is one PIN tap away. Treats explicit
+   logout as "I want a different account" vs session expiry as
+   "you're still you".
+
+### Backend · 4 production-readiness P0s (commits 1311989, 0c17ca7, 4fc10e5)
+
+**P0-2 · KMS boot health check** (`apps/blockchain/{apps,kms}.py`)
+
+- `BaseKMSManager.health_check()` does a 16-byte encrypt-decrypt
+  round trip · proves credentials, IAM
+  `cryptoKeyEncrypterDecrypter` role, and our envelope format all
+  work end-to-end.
+- `BlockchainConfig.ready()` runs the smoke test on every gunicorn
+  worker boot. In production raises `ImproperlyConfigured` so
+  gunicorn refuses to come up · prevents silent fallback to
+  `LocalKMSManager` (the `SECRET_KEY`-derived Fernet) that defeats
+  the entire KMS threat model.
+- Skipped under `DEBUG=True` and via `SKIP_KMS_HEALTH_CHECK=True`
+  for local dev.
+- Production logs `kms.health_ok` with provider + latency_ms +
+  key_resource on success. Verified live on the prod web container
+  (latency ~150 ms to GCP `africa-south1`).
+
+**P0-4 · Saga retry async refactor** (`apps/payments/{saga,tasks}.py`)
+
+- Was: `time.sleep(2 ** attempt)` inside `compensate_convert`
+  blocked the whole Celery worker queue. A single stuck wallet
+  write starved every other in-flight saga.
+- Now: ONE synchronous attempt for the 50-ms happy path. On
+  failure, enqueues `compensate_convert_async` Celery task with
+  `bind=True, autoretry_for=(Exception,), retry_backoff=2,
+  retry_backoff_max=600, retry_jitter=True, max_retries=8,
+  acks_late=True, reject_on_worker_lost=True`. ~17-min total
+  spread with randomised jitter; outlasts an M-Pesa flap.
+- Postgres advisory-xact-lock (`pg_try_advisory_xact_lock(bigint)`
+  · single-arg form using `(namespace::bigint << 32) |
+  (hashtext(tx_id) & 2147483647)` to dodge the int4-vs-bigint
+  signature trap) per `transaction_id` serialises concurrent
+  retries.
+- DLQ via `task_failure` signal handler · creates
+  `ReconciliationCase(case_type=COMPENSATE_FAILED, severity=
+  CRITICAL)` row + Sentry event with stable
+  `fingerprint=[task, transaction_id]` + best-effort admin email
+  + `Transaction.failure_reason` audit stamp.
+
+**P0-3 · ReconciliationCase queue** (`apps/payments/{models,signals,
+saga,tasks}.py`, migration `0007`, `test_reconciliation.py`)
+
+- New `payments_reconciliation_cases` table, Stripe-style ledger-
+  intent pattern · separate table holds anomaly history, parent
+  Transaction stays in its terminal status.
+- 5 case types (DOUBLE_SETTLEMENT / LATE_CALLBACK / ORPHAN_B2B /
+  COMPENSATE_FAILED / REVERSAL_NOT_SUPPORTED), 4 statuses
+  (OPEN → AUTO_RESOLVED / HUMAN_RESOLVED / ESCALATED), 5
+  severity levels (1=info → 5=page-on-call).
+- Denormalised `Transaction.has_open_reconciliation` boolean
+  maintained by `signals.py` post_save / post_delete handlers ·
+  idempotent re-compute, never lets a flag-update failure break
+  the cascade.
+- `saga.complete()` on late-callback-after-compensation now opens
+  a CRITICAL case with 5-min `sla_breach_at` (industry standard
+  TTD per Wise/Adyen). Idempotent via `get_or_create` keyed on
+  (tx, type, status=OPEN) · same callback delivered twice
+  doesn't open two cases.
+- `saga.compensate_mpesa()` SasaPay-doesn't-support-reversal and
+  any other reversal failure now open a REVERSAL_NOT_SUPPORTED /
+  ORPHAN_B2B case with full evidence.
+- Daily Celery beat task `sweep_reconciliation_cases` runs every
+  5 min. Walks OPEN cases past `sla_breach_at`, takes per-case
+  advisory xact lock, escalates to ESCALATED status + CRITICAL
+  severity, fires Sentry alert + admin email. Uses
+  `select_for_update(skip_locked=True)` so manual ops queries
+  don't deadlock the sweep.
+- 5 new tests (test_reconciliation.py): late-callback opens case,
+  idempotent double-callback, flag-flip on resolve, flag-flip on
+  delete, sweep escalates breached.
+
+**P0-6 · PgBouncer** (`deploy/docker-compose.prod.yml` +
+`config/settings/production.py`)
+
+- New `pgbouncer` service · `edoburu/pgbouncer:v1.23.1-p3` (the
+  shipped tag · `1.23.1` unprefixed doesn't exist on Docker Hub),
+  transaction pool mode, sized for 4-vCPU VPS:
+  `MAX_CLIENT_CONN=200, DEFAULT_POOL_SIZE=12, RESERVE_POOL_SIZE=4,
+  MAX_PREPARED_STATEMENTS=100`. `AUTH_TYPE=scram-sha-256` to
+  match Postgres 16's default password storage (md5 trips
+  "cannot do SCRAM authentication: wrong password type").
+- web/celery/celery-beat now connect via
+  `DATABASE_URL=postgres://…@pgbouncer:5432/…`. Their entrypoints
+  also receive `DATABASE_URL_DIRECT=postgres://…@db:5432/…` and
+  the web entrypoint script switches to direct for `manage.py
+  migrate` (DDL + advisory_lock break under transaction pooling).
+- `production.py` · `PGBOUNCER_ENABLED` toggle (default True).
+  When on: `CONN_MAX_AGE=0`, `DISABLE_SERVER_SIDE_CURSORS=True`,
+  `OPTIONS={'prepare_threshold': None}` per Django + psycopg-3
+  transaction-pooling guidance. When off: falls back to direct-
+  connection persistence.
+
+### Operator actions taken on the VPS
+
+- `REQUIRE_PROD_ENV_STRICT=True` was added then rolled back to
+  `False` · the strict guard correctly fires on
+  `MPESA_ENVIRONMENT='sandbox'` which is the right state pre-Daraja-
+  approval. **TODO: flip back to True** the moment Safaricom switches
+  the merchant code to production AND the operator updates
+  `MPESA_ENVIRONMENT=production` + `SASAPAY_ENVIRONMENT=production`
+  in `.env.production`.
+
+### Codebase audit · no fake/stub/placeholder in production paths
+
+A full sweep for `TODO`, `FIXME`, `NotImplementedError`, `mock`,
+`fake`, `placeholder`, `stub` confirmed:
+
+- All chain broadcasts are real: Tron (tronpy), EVM/Polygon
+  (web3.py), Solana (solders), Bitcoin (bit). Each guarded by
+  hot-wallet key loading via `secure_keys.load_hot_wallet_key`.
+- KMS · real GCP envelope encryption · health check now wired.
+- KYC · real Smile Identity v2 with HMAC-SHA256 signatures.
+- M-Pesa client · real Daraja + SasaPay implementations. The one
+  intentional `NotImplementedError` (SasaPay reversal) is correct
+  · SasaPay's API doesn't have reversal, and the saga now opens
+  a `REVERSAL_NOT_SUPPORTED` ReconciliationCase when SasaPay is
+  the active provider.
+- The `mock_hash` returns in `_broadcast_to_chain` are guarded
+  by `if django_settings.DEBUG` · only fire in dev mode.
+
+### Tests + deploy
+
+- Backend: 400 passed (was 395; +5 reconciliation tests).
+- Mobile typecheck clean.
+- CI pipeline green for every commit (`8fa4697`, `1311989`,
+  `0c17ca7`, `4fc10e5`).
+- Prod backend redeployed end-to-end · 6 commits ahead of the
+  last green deploy. KMS health check passes (logged
+  `kms.health_ok` at boot). PgBouncer healthy · web/celery/beat
+  all running through it. Banks endpoint returns 401 (auth
+  required, working).
+
+### Two prod-deploy trip-ups (both fixed in flight)
+
+1. `edoburu/pgbouncer:1.23.1` doesn't exist on Docker Hub · the
+   real tag format is `vX.Y.Z-pN`. Listed tags via Docker Hub
+   API and switched to `v1.23.1-p3`.
+2. `AUTH_TYPE=md5` couldn't talk to Postgres 16's SCRAM-SHA-256
+   default. Switched to `AUTH_TYPE=scram-sha-256` which both
+   libpq (Django/psycopg) and pg_hba speak natively.
+
+End state: `origin/main` at `4fc10e5`. Pipeline + APK + backend
+all in lockstep. No items pending.
+
+---
+
 ## 2026-04-26 session 2 · delete-account compliance + email-verify-on-login + bank logos bundled + lock/OTP brand mark + redesigned logout modal
 
 End state on `origin/main` is `b34bf20`. APK shipped to
