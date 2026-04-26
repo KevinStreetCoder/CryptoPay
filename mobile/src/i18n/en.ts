@@ -245,6 +245,8 @@ const en = {
     bankListError: "Could not load bank list. Try again.",
     bankSendCap: "Single bank transfers are capped at KES 250,000 per M-Pesa.",
     sendingToBank: "Sending to {bank} · {acct}",
+    bankSelected: "Selected bank",
+    bankChange: "Change",
     bankFavourites: "Favourites",
     bankFrequent: "Frequent",
     bankTier1: "Top banks",

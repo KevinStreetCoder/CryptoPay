@@ -100,53 +100,62 @@ function TabIconOnly({
       style={{
         alignItems: "center",
         justifyContent: "center",
-        position: "relative",
       }}
     >
-      {/* Active pill · animated emerald rounded-rect behind the icon.
-          The pill is absolutely positioned so it doesn't displace the
-          icon · we explicitly centre it on the parent's mid-line by
-          combining `left: 50%` with `marginLeft: -28` (half of the
-          56 px width). Without this, RN drops absolute children at
-          left:0 and the pill drifted ~16 px to the left of the icon
-          on Android, which the user reported as off-centre. */}
+      {/* Active pill · the WRAPPER around the icon (not absolute) so
+          flex centering locks the icon to the pill's centre on every
+          platform. Earlier attempts used `position: absolute` with
+          `left: 50%, marginLeft: -28` to centre, but Android's RN
+          implementation interpreted the percentage offset
+          inconsistently · the pill ended up ~14 px to the left of the
+          icon on devices the user tested. Wrapping is the simpler
+          truth: pill = container, icon = child, both centred by the
+          parent's flex.
+
+          When not focused, the wrapper renders a 1-px transparent
+          border + transparent fill so its bounding box matches the
+          focused state · prevents the icon from jumping when focus
+          toggles. */}
       <Animated.View
-        pointerEvents="none"
         style={{
-          position: "absolute",
-          top: -4,
-          left: "50%",
-          marginLeft: -28,
           width: 56,
           height: 30,
           borderRadius: 15,
-          backgroundColor: "rgba(16, 185, 129, 0.16)",
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: focused ? "rgba(16, 185, 129, 0.16)" : "transparent",
           borderWidth: 1,
-          borderColor: "rgba(16, 185, 129, 0.30)",
-          opacity: scaleAnim,
+          borderColor: focused ? "rgba(16, 185, 129, 0.30)" : "transparent",
+          opacity: scaleAnim.interpolate({
+            inputRange: [0, 1],
+            outputRange: [1, 1], // never animate opacity · just background/border
+          }),
           transform: [
             {
               scale: scaleAnim.interpolate({
                 inputRange: [0, 1],
-                outputRange: [0.7, 1],
+                outputRange: [0.95, 1],
               }),
             },
           ],
-          ...(isWeb
+          ...(isWeb && focused
             ? ({
                 boxShadow: "0 0 14px rgba(16, 185, 129, 0.20)",
+                transition: "all 0.2s ease",
               } as any)
             : {}),
         }}
-      />
-      <Animated.View
-        style={{
-          transform: [{ scale: iconScaleAnim }],
-          position: "relative",
-        }}
       >
-        {showBadge && <PendingBadge />}
-        <Ionicons name={name} size={size} color={color} />
+        <Animated.View
+          style={{
+            transform: [{ scale: iconScaleAnim }],
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          {showBadge && <PendingBadge />}
+          <Ionicons name={name} size={size} color={color} />
+        </Animated.View>
       </Animated.View>
     </View>
   );

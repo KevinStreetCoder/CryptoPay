@@ -247,6 +247,8 @@ const sw: Translations = {
     bankListError: "Imeshindikana kupakia orodha ya benki. Jaribu tena.",
     bankSendCap: "Uhamishaji wa benki mmoja umewekwa kikomo cha KES 250,000 kwa kila M-Pesa.",
     sendingToBank: "Inatuma kwa {bank} · {acct}",
+    bankSelected: "Benki iliyochaguliwa",
+    bankChange: "Badilisha",
     bankFavourites: "Vipendwa",
     bankFrequent: "Hutumika sana",
     bankTier1: "Benki kuu",

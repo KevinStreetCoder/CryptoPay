@@ -584,13 +584,108 @@ export default function SendToBankScreen() {
                   Logos are bundled local PNGs (see
                   src/constants/bankLogos.ts) with a coloured-letter
                   fallback for banks where we couldn't source a clean
-                  PNG. Every bank stays selectable. */}
+                  PNG. Every bank stays selectable.
+
+                  Once the user picks a bank, we collapse the entire
+                  picker (search + favourites + frequent + categories)
+                  into a compact "Selected bank" card so the account-
+                  number / amount / crypto form below is visible
+                  without scrolling. Tapping "Change" puts the picker
+                  back. UX feedback 2026-04-26 · the previous layout
+                  hid the form behind 14 bank tiles. */}
               <SectionHeader
                 title={t("payment.pickBank")}
                 icon="business-outline"
                 iconColor={colors.primary[400]}
               />
 
+              {selectedBank && (
+                <Pressable
+                  onPress={() => {
+                    setSelectedBank(null);
+                    setQuote(null);
+                  }}
+                  style={({ pressed, hovered }: any) => ({
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 14,
+                    backgroundColor: pressed
+                      ? colors.primary[400] + "1A"
+                      : isWeb && hovered
+                        ? colors.primary[400] + "12"
+                        : colors.primary[400] + "0E",
+                    borderRadius: 16,
+                    borderWidth: 1.5,
+                    borderColor: colors.primary[400] + "55",
+                    paddingVertical: 14,
+                    paddingHorizontal: 14,
+                    marginBottom: 16,
+                    ...(isWeb ? ({ cursor: "pointer", transition: "all 0.15s ease" } as any) : {}),
+                  })}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${t("payment.bankSelected")}: ${selectedBank.name}. ${t("payment.bankChange")}`}
+                  testID="bank-selected-card"
+                >
+                  <BankTileLogo
+                    slug={selectedBank.slug}
+                    name={selectedBank.name}
+                    bg={tc.dark.elevated}
+                    size={44}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={{
+                        color: tc.textMuted,
+                        fontSize: 11,
+                        fontFamily: "DMSans_600SemiBold",
+                        letterSpacing: 0.6,
+                        textTransform: "uppercase",
+                        marginBottom: 2,
+                      }}
+                    >
+                      {t("payment.bankSelected")}
+                    </Text>
+                    <Text
+                      numberOfLines={1}
+                      style={{
+                        color: tc.textPrimary,
+                        fontSize: 15,
+                        fontFamily: "DMSans_600SemiBold",
+                      }}
+                    >
+                      {selectedBank.name}
+                    </Text>
+                  </View>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 4,
+                      paddingVertical: 6,
+                      paddingHorizontal: 10,
+                      borderRadius: 999,
+                      backgroundColor: tc.dark.card,
+                      borderWidth: 1,
+                      borderColor: tc.glass.border,
+                    }}
+                  >
+                    <Ionicons name="swap-horizontal" size={13} color={colors.primary[400]} />
+                    <Text
+                      style={{
+                        color: colors.primary[400],
+                        fontSize: 12,
+                        fontFamily: "DMSans_600SemiBold",
+                      }}
+                    >
+                      {t("payment.bankChange")}
+                    </Text>
+                  </View>
+                </Pressable>
+              )}
+
+              {/* Picker · only rendered when no bank is selected. */}
+              {!selectedBank && (
+                <View>
               {/* Search */}
               <View
                 style={{
@@ -677,7 +772,7 @@ export default function SendToBankScreen() {
                         bank={bank}
                         gridCols={gridCols}
                         tileGap={tileGap}
-                        isSelected={selectedBank?.slug === bank.slug}
+                        isSelected={false}
                         isFavourite
                         showStarPin
                         onSelect={() => {
@@ -723,7 +818,7 @@ export default function SendToBankScreen() {
                         bank={bank}
                         gridCols={gridCols}
                         tileGap={tileGap}
-                        isSelected={selectedBank?.slug === bank.slug}
+                        isSelected={false}
                         isFavourite={favourites.includes(bank.slug)}
                         showStarPin={false}
                         onSelect={() => {
@@ -772,7 +867,7 @@ export default function SendToBankScreen() {
                           bank={bank}
                           gridCols={gridCols}
                           tileGap={tileGap}
-                          isSelected={selectedBank?.slug === bank.slug}
+                          isSelected={false}
                           isFavourite={favourites.includes(bank.slug)}
                           showStarPin
                           onSelect={() => {
@@ -812,6 +907,8 @@ export default function SendToBankScreen() {
                   >
                     {t("payment.bankNoneMatch").replace("{query}", search.trim())}
                   </Text>
+                </View>
+              )}
                 </View>
               )}
 
