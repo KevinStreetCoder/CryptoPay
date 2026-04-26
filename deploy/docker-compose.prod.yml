@@ -51,40 +51,33 @@ services:
   # migrations, then switch to pgbouncer:5432 for the long-running
   # process.
   pgbouncer:
-    # bitnami/pgbouncer is the most reliably-tagged maintained image as
-    # of 2026 · `edoburu/pgbouncer:1.23.x` was pulled from Docker Hub.
-    # The bitnami image uses env vars `POSTGRESQL_HOST`, `POSTGRESQL_USERNAME`,
-    # etc. (different from edoburu's `DB_HOST` style) so the env block
-    # below adapts. We pin to 1.21.0 because it's the first release
-    # that supports `max_prepared_statements` in transaction mode
-    # (Django 5 + psycopg 3 prepared-statement compatibility).
-    image: bitnami/pgbouncer:1.23.1
+    # edoburu/pgbouncer is the most active community image. Real tag
+    # format is `vX.Y.Z-pN` (PgBouncer X.Y.Z + edoburu's patch level).
+    # We pin to v1.23.1-p3 which is the patch revision shipping the
+    # `max_prepared_statements` fixes for transaction-mode pooling
+    # (Django 5 + psycopg 3 compatibility · the unprefixed `1.23.1`
+    # tag attempted earlier doesn't exist on Docker Hub).
+    image: edoburu/pgbouncer:v1.23.1-p3
     container_name: cryptopay_pgbouncer
     environment:
-      # Bitnami env-var names differ from edoburu · this block is
-      # written for the bitnami image. `POSTGRESQL_HOST` etc. are
-      # the back-end (real Postgres); `PGBOUNCER_*` are the front-
-      # end (the PgBouncer listener Django connects to).
-      POSTGRESQL_HOST: db
-      POSTGRESQL_PORT: 5432
-      POSTGRESQL_USERNAME: ${POSTGRES_USER:-cryptopay}
-      POSTGRESQL_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
-      POSTGRESQL_DATABASE: ${POSTGRES_DB:-cryptopay}
-      PGBOUNCER_PORT: 5432
-      PGBOUNCER_DATABASE: ${POSTGRES_DB:-cryptopay}
-      PGBOUNCER_AUTH_TYPE: md5
-      PGBOUNCER_POOL_MODE: transaction
-      PGBOUNCER_MAX_CLIENT_CONN: 200
-      PGBOUNCER_DEFAULT_POOL_SIZE: 12
-      PGBOUNCER_MIN_POOL_SIZE: 4
-      PGBOUNCER_RESERVE_POOL_SIZE: 4
-      PGBOUNCER_RESERVE_POOL_TIMEOUT: 3
-      PGBOUNCER_SERVER_IDLE_TIMEOUT: 600
-      PGBOUNCER_QUERY_WAIT_TIMEOUT: 30
-      # Server-side prepared statements work in PgBouncer 1.21+
-      # under transaction mode. Cap mirrors Django/psycopg-3
-      # prepared-statement reuse.
-      PGBOUNCER_MAX_PREPARED_STATEMENTS: 100
+      # edoburu env-var contract · DB_* point at the upstream
+      # Postgres back-end, the rest configure the bouncer listener.
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER:-cryptopay}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      DB_NAME: ${POSTGRES_DB:-cryptopay}
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: 200
+      DEFAULT_POOL_SIZE: 12
+      MIN_POOL_SIZE: 4
+      RESERVE_POOL_SIZE: 4
+      RESERVE_POOL_TIMEOUT: 3
+      SERVER_IDLE_TIMEOUT: 600
+      QUERY_WAIT_TIMEOUT: 30
+      AUTH_TYPE: md5
+      ADMIN_USERS: ${POSTGRES_USER:-cryptopay}
+      MAX_PREPARED_STATEMENTS: 100
     ports:
       # Bind to localhost only · prod web/celery talk via the
       # docker network, not this port. Exposed for ad-hoc psql
