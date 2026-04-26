@@ -94,10 +94,15 @@ class BlockchainConfig(AppConfig):
             try:
                 from .kms import get_kms_manager
                 manager = get_kms_manager()
-                # CachedSeedManager wraps the underlying manager · unwrap
-                # so the smoke test hits the real KMS provider, not a
-                # cached blob.
-                inner = getattr(manager, "_inner", None) or manager
+                # CachedSeedManager wraps the underlying manager via
+                # `self._kms` · unwrap to the real provider so the
+                # smoke test hits live KMS rather than the cached
+                # plaintext-seed blob in memory.
+                inner = (
+                    getattr(manager, "_kms", None)
+                    or getattr(manager, "_inner", None)
+                    or manager
+                )
                 health = inner.health_check()
                 logger.info(
                     "kms.health_ok",
