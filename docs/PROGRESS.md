@@ -2,6 +2,115 @@
 
 **Last updated:** 2026-04-26
 
+## 2026-04-26 session 2 · delete-account compliance + email-verify-on-login + bank logos bundled + lock/OTP brand mark + redesigned logout modal
+
+End state on `origin/main` is `b34bf20`. APK shipped to
+`https://cpay.co.ke/download/cryptopay.apk` (114.6 MB,
+md5 `9a4086186903f8e64038dac97d59e033`, served 12:28 UTC). Backend
+redeployed on the VPS · all endpoints live. Twelve fixes landed
+across three commits (`a005a27`, `81949e2`, `b34bf20`); pipeline
+fully green for every commit.
+
+### What landed
+
+**Account deletion (Google Play compliance · effective May 2024):**
+- New User fields `deletion_requested_at`, `deletion_scheduled_for`
+  (migration `0019`), both nullable + indexed.
+- `POST /auth/account/delete/` · PIN-gated, refuses on non-zero
+  wallet balance, schedules a 14-day grace.
+- `POST /auth/account/delete/cancel/` · PIN-gated.
+- LoginView refuses login while pending · 403 with
+  `error_code: account_pending_deletion` so the mobile client can
+  offer Cancel rather than dumping a generic 401 toast.
+- Celery beat task `purge_pending_deletions` (daily 03:30 EAT) hard-
+  deletes due users; archives an anonymised SHA-256-hash mirror of
+  their transactions for the 7-year AML retention required by
+  Kenya VASP Act 2025 + CBK PG/08 before the cascade fires.
+- Mobile `app/settings/delete-account.tsx` · 3-state screen
+  (review → PIN → scheduled), pre-flight panel, what-removes /
+  what-retains disclosure, Cancel-via-PIN. Linked from Settings
+  under a new "Account" section with a destructive-red icon.
+- 10 new backend tests covering schedule / cancel / wrong-PIN /
+  balance-block / login-guard / cancel-restores-login / purge-task.
+
+**Email-verify-on-login gate:**
+- LoginView returns `email_verify_required: true` whenever the
+  account has empty / disposable / unverified email · checked
+  against the existing `is_disposable` blocklist.
+- Mobile login routes to `/auth/email-verify-required` (new screen)
+  when the flag is set · forces real email + OTP via existing
+  `/auth/email/verify/` + `/auth/email/confirm/` endpoints. No
+  skip button · sign-out lands them right back on the gate.
+- 4 new backend tests covering empty / disposable / unverified /
+  verified-real cases.
+
+**Bundled bank logos (per user "Down the companies logo in the
+asserts and use them not depending on the url"):**
+- 14 of 15 Kenyan banks ship a real PNG bundled at
+  `mobile/assets/logos/banks/<slug>.png`. Sources used (in
+  preference order): Wikimedia Commons API search, the bank's own
+  homepage og:image / `<img src*=logo>`, brand favicon at 256-px
+  upscaled with ImageMagick, rsvg-convert for SVG sources.
+- Banks shipping real logos: ABSA, Bank of Africa, Co-op, DTB,
+  Ecobank, Equity, Family, Gulf African, HFC, I&M, KCB, NCBA,
+  Sidian, Standard Chartered.
+- Stanbic falls back to a coloured-letter "S" on Stanbic-navy ·
+  every URL we tried (Wikipedia, Commons, Brandfetch, their CDN)
+  returned HTML or 404 for the logo file.
+- `BankTileLogo` is now a pure local-asset render · zero runtime
+  URL fetches. Refresh process documented in `scripts/`:
+  `download-bank-logos.sh`, `refetch-bank-logos.sh`,
+  `convert-bank-logos.sh`, `fetch-via-commons-search.sh`.
+
+**Lock-screen + OTP brand mark:**
+- `AppLockScreen` swaps the keypad / fingerprint Ionicons for the
+  Cpay brand mark PNG (`assets/brand-mark.png`) with the biometric
+  icon as a corner accent · matches the rest of the app chrome
+  instead of generic platform UI.
+- `OTPInput` hero defaults to the brand mark · callers can still
+  pass an explicit `icon` prop (the new-device-OTP path uses
+  `phone-portrait` for example).
+
+**Redesigned logout modal:**
+- Single in-app modal on BOTH web and native (was native
+  `Alert.alert` + web modal · two visual languages).
+- Brand-mark hero with destructive-red badge bottom-right ·
+  matches the AppLockScreen / DeleteAccount visual language.
+- Tap-outside-to-dismiss with `backdropFilter: blur(8px)` on web ·
+  disabled mid-logout to prevent accidental cancel.
+- In-button arc-spinner + "Logging out" copy while the API
+  call is in flight (was a frozen "Logout" frame before).
+
+**Login-flow polish:**
+- Pay tab pill centred (`left: 50%, marginLeft: -28`).
+- Me page version-footer `marginBottom: 28 → 8` removes the dead
+  strip below the last content.
+- Drop duplicate spinner pills · PinInput + OTPInput now ONLY
+  dim cells (opacity 0.55 + drop keystrokes) · per-screen
+  "Signing in..." / "Verifying..." copy stays on each consumer.
+- AppLockScreen PIN-stuck watchdog now uses `useRef` +
+  `isMountedRef` cleanup so the 12-second timer can't fire
+  setState on unmounted components after navigation.
+
+### CI / deploy
+
+- Three commits, all green:
+  - `a005a27` · delete-account + email-verify gate + lock-screen
+    brand mark + Pay tab pill + Me page tail + duplicate spinners
+  - `81949e2` · drop PinInput pill + harden watchdog cleanup
+  - `b34bf20` · 5 more bank logos (Equity, KCB, ABSA, DTB, Gulf) +
+    OTPInput pill removed + brand-mark hero + redesigned logout
+- 395 backend tests pass (was 381; +14 new).
+- Mobile `tsc --noEmit` clean, `expo export --platform web` ok.
+- VPS backend redeployed on `b34bf20`; migrations applied (0019).
+- APK · 47-min cold build (fresh EAS sandbox, no caches), 114.6 MB,
+  shipped + verified end-to-end via md5 + `curl -skI`.
+
+End state: `origin/main` at `b34bf20`. Pipeline + APK + backend
+all in lockstep.
+
+---
+
 ## 2026-04-26 session · tour escape · spinner consistency · bank picker redesign · Pochi copy · CI green-up
 
 Six landed-as-one items shipped through a fully green CI pipeline
