@@ -43,11 +43,17 @@ from django.utils import timezone
 from apps.wallets.models import Wallet
 from apps.wallets.services import WalletService
 
-# Side-effect imports · register listener tasks with Celery's autodiscovery.
+# Side-effect imports · register sibling-module tasks with Celery's
+# autodiscovery (which only walks `<app>/tasks.py` by default).
+# Listeners (per-chain deposit monitoring) and sweep_tasks (HOT-wallet
+# consolidation flow) all decorate functions with @shared_task; without
+# the explicit imports here the worker logs "Received unregistered task
+# of type 'apps.blockchain.<module>.<func>'" every time beat dispatches.
 from . import eth_listener as _eth_listener  # noqa: F401
 from . import btc_listener as _btc_listener  # noqa: F401
 from . import sol_listener as _sol_listener  # noqa: F401
 from . import polygon_listener as _polygon_listener  # noqa: F401
+from . import sweep_tasks as _sweep_tasks  # noqa: F401
 
 from .models import BlockchainDeposit
 from .security import (
