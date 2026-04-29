@@ -444,9 +444,14 @@ MPESA_CALLBACK_HMAC_KEY = env("MPESA_CALLBACK_HMAC_KEY", default="")
 #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 TOTP_ENCRYPTION_KEY = env("TOTP_ENCRYPTION_KEY", default="")
 
-# --- SasaPay (alternative payment provider — CBK-licensed PSP) ---
-# Set PAYMENT_PROVIDER=sasapay to use SasaPay instead of Daraja
-PAYMENT_PROVIDER = env("PAYMENT_PROVIDER", default="daraja")  # "daraja" or "sasapay"
+# --- Payment provider switch ---
+# Three rails supported, switched purely by env var so we can flip
+# without code changes. See docs/research/PAYMENT-RAILS-COMPARISON-
+# 2026-04-30.md for the full decision tree.
+#   "daraja"   · Safaricom direct (requires CBK Letter of No Objection)
+#   "sasapay"  · SasaPay PSP (CBK-licensed, partial reversal API)
+#   "kopokopo" · Kopo Kopo aggregator (Daraja-approved merchant of record)
+PAYMENT_PROVIDER = env("PAYMENT_PROVIDER", default="daraja")
 SASAPAY_ENVIRONMENT = env("SASAPAY_ENVIRONMENT", default="sandbox")
 SASAPAY_CLIENT_ID = env("SASAPAY_CLIENT_ID", default="")
 SASAPAY_CLIENT_SECRET = env("SASAPAY_CLIENT_SECRET", default="")
@@ -463,6 +468,26 @@ SASAPAY_WEBHOOK_SECRET = env("SASAPAY_WEBHOOK_SECRET", default="")
 # signature header. Generated on initiate(), embedded in the callback
 # URL, consumed once-only via Redis SETNX.
 SASAPAY_CALLBACK_HMAC_KEY = env("SASAPAY_CALLBACK_HMAC_KEY", default="")
+
+# --- Kopo Kopo (third payment provider · Daraja-approved aggregator) ---
+# Set PAYMENT_PROVIDER=kopokopo to use Kopo Kopo instead of Daraja
+# or SasaPay. Onboarding via developers.kopokopo.com · KYB-only.
+KOPOKOPO_ENVIRONMENT = env("KOPOKOPO_ENVIRONMENT", default="sandbox")
+KOPOKOPO_CLIENT_ID = env("KOPOKOPO_CLIENT_ID", default="")
+KOPOKOPO_CLIENT_SECRET = env("KOPOKOPO_CLIENT_SECRET", default="")
+# K2 ties STK Push to a single till_number you receive at KYB approval.
+# All `incoming_payments` requests target this number.
+KOPOKOPO_TILL_NUMBER = env("KOPOKOPO_TILL_NUMBER", default="")
+KOPOKOPO_CALLBACK_URL = env(
+    "KOPOKOPO_CALLBACK_URL",
+    default="https://cpay.co.ke/api/v1/kopokopo/callback/",
+)
+# K2 webhook signing key · they sign every callback with HMAC-SHA256
+# of the raw body. The production guard refuses to boot when
+# PAYMENT_PROVIDER=kopokopo and this is empty (mirrors the SasaPay
+# WEBHOOK_SECRET gate).
+KOPOKOPO_API_KEY = env("KOPOKOPO_API_KEY", default="")
+KOPOKOPO_WEBHOOK_SECRET = env("KOPOKOPO_WEBHOOK_SECRET", default="")
 
 # --- CoinGecko ---
 COINGECKO_API_KEY = env("COINGECKO_API_KEY", default="")
@@ -497,6 +522,15 @@ MPESA_ALLOWED_IPS = env.list("MPESA_ALLOWED_IPS", default=[
 # 127.x). Default kept as private ranges for dev convenience; production
 # .env.production must set the real SasaPay source IPs.
 SASAPAY_ALLOWED_IPS = env.list("SASAPAY_ALLOWED_IPS", default=[
+    "192.168.0.0/16",
+    "127.0.0.0/8",
+])
+# K2 webhook source IPs · Kopo Kopo publishes their range on request.
+# Kept as private CIDR by default for dev convenience; production
+# .env.production overrides with the real K2 source IPs (the
+# production guard mirrors the SASAPAY rule and refuses boot when
+# PAYMENT_PROVIDER=kopokopo with private-only ranges).
+KOPOKOPO_ALLOWED_IPS = env.list("KOPOKOPO_ALLOWED_IPS", default=[
     "192.168.0.0/16",
     "127.0.0.0/8",
 ])

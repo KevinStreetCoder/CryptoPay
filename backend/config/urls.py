@@ -88,6 +88,23 @@ urlpatterns = [
     path("api/v1/sasapay/callback/", __import__("apps.mpesa.sasapay_views", fromlist=["sasapay_callback"]).sasapay_callback, name="sasapay-callback-root"),
     path("api/v1/sasapay/callback/<str:token>/", __import__("apps.mpesa.sasapay_views", fromlist=["sasapay_callback"]).sasapay_callback, name="sasapay-callback-root-token"),
     path("api/v1/sasapay/ipn/", __import__("apps.mpesa.sasapay_views", fromlist=["sasapay_ipn"]).sasapay_ipn, name="sasapay-ipn-root"),
+
+    # ── Kopo Kopo callbacks · LIVE 2026-04-30 ──
+    # Parallel aggregator rail · applied alongside SasaPay so whichever
+    # provider clears compliance first ships first. K2-Connect is the
+    # better long-term B2B story (first-class reversal API + KES 50
+    # flat outbound) so we route paybills + tills via Kopo Kopo if both
+    # approve.
+    #
+    # Security model mirrors SasaPay:
+    #   - Header HMAC `X-KopoKopo-Signature` verified against
+    #     KOPOKOPO_API_KEY (or KOPOKOPO_WEBHOOK_SECRET fallback)
+    #   - production.py refuses boot when PAYMENT_PROVIDER=kopokopo
+    #     AND KOPOKOPO_API_KEY is empty
+    #   - KOPOKOPO_ALLOWED_IPS for an extra IP allow-list
+    path("api/v1/kopokopo/callback/", __import__("apps.mpesa.kopokopo_views", fromlist=["kopokopo_callback"]).kopokopo_callback, name="kopokopo-callback-root"),
+    path("api/v1/kopokopo/callback/<str:token>/", __import__("apps.mpesa.kopokopo_views", fromlist=["kopokopo_callback"]).kopokopo_callback, name="kopokopo-callback-root-token"),
+    path("api/v1/kopokopo/ipn/", __import__("apps.mpesa.kopokopo_views", fromlist=["kopokopo_ipn"]).kopokopo_ipn, name="kopokopo-ipn-root"),
     # OpenAPI / Swagger — only in development (exposes full API surface)
     *([
         path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
