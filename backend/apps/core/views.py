@@ -37,20 +37,37 @@ class HealthCheckView(APIView):
         checks = {}
         overall_healthy = True
 
-        # Database check
+        # ── DB + Redis are MUST-BE-UP for the API to serve traffic.
+        #    A failure on either marks the response 503 so the docker
+        #    healthcheck restarts the container.
+
         checks["database"] = self._check_database()
         if checks["database"]["status"] != "healthy":
             overall_healthy = False
 
-        # Redis check
         checks["redis"] = self._check_redis()
         if checks["redis"]["status"] != "healthy":
             overall_healthy = False
 
-        # Celery check
+        # ── Celery is INFORMATIONAL · the web container can serve API
+        #    requests fine even if the worker is busy or briefly down.
+        #    Previous code used `inspect.active()` which broadcasts a
+        #    control message via Redis and waits for a roundtrip · under
+        #    load (or when the worker was processing a long task) the
+        #    2 s window expired and `active` came back None, the check
+        #    flipped to 503, and docker marked the container unhealthy.
+        #    On 2026-04-29 prod logs we saw 26 such intermittent 503s
+        #    in the last hour · all false positives, all triggered by
+        #    the worker being mid-task during the docker healthcheck
+        #    poll.
+        #
+        #    The fix keeps the celery probe (so /health/full payload
+        #    still surfaces worker status to the ops dashboard) but
+        #    DOES NOT contribute to the overall_healthy boolean. A
+        #    real worker outage is caught by the celery container's
+        #    own healthcheck + the dedicated celery-exporter Prometheus
+        #    metric · two stronger signals than a 2 s broadcast.
         checks["celery"] = self._check_celery()
-        if checks["celery"]["status"] != "healthy":
-            overall_healthy = False
 
         status_code = 200 if overall_healthy else 503
 
@@ -87,20 +104,35 @@ class HealthCheckView(APIView):
             return {"status": "unhealthy", "error": str(e)}
 
     def _check_celery(self) -> dict:
+        """Lightweight celery probe · informational only.
+
+        Uses `app.control.ping()` with a short 1 s timeout (returns
+        a list per-worker, no broadcast queue traffic) and degrades
+        silently if no worker replies. Matches the Celery user-guide
+        recommendation for liveness probes (broadcast `inspect.active`
+        is for the management UI, not health endpoints).
+
+        See `HealthCheckView.get()` for why a celery degradation no
+        longer flips the overall response to 503.
+        """
         try:
             from config.celery import app as celery_app
 
-            inspector = celery_app.control.inspect(timeout=2.0)
-            active = inspector.active()
-
-            if active is None:
-                return {"status": "unhealthy", "error": "No workers responding"}
-
-            worker_count = len(active)
-            return {"status": "healthy", "workers": worker_count}
+            replies = celery_app.control.ping(timeout=1.0) or []
+            if not replies:
+                # No worker responded inside the timeout window. Mark
+                # degraded but DO NOT fail the overall health check ·
+                # the worker is probably mid-task and will reply on the
+                # next poll. The Celery container's own healthcheck +
+                # celery-exporter cover the real "worker actually down"
+                # case with a much stronger signal.
+                return {"status": "degraded", "warning": "no workers responded within 1s"}
+            return {"status": "healthy", "workers": len(replies)}
         except Exception as e:
-            logger.error(f"Celery health check failed: {e}")
-            return {"status": "unhealthy", "error": str(e)}
+            # Connection blip to the broker · don't flap the API
+            # health on it. Surface to ops via the response payload.
+            logger.warning(f"Celery health check probe failed: {e}")
+            return {"status": "degraded", "warning": str(e)}
 
 
 # ────────────────────────────────────────────────────────────────

@@ -2,12 +2,26 @@
 Celery tasks for blockchain deposit monitoring.
 
 Tron (TRC-20 USDT) listener and shared deposit-crediting logic.
-ETH, BTC, and SOL listeners live in their own dedicated modules:
-  - eth_listener.py  (Ethereum / ERC-20)
-  - btc_listener.py  (Bitcoin via BlockCypher)
-  - sol_listener.py  (Solana / SPL)
+ETH, BTC, SOL, and Polygon listeners live in their own dedicated
+modules:
+  - eth_listener.py     (Ethereum / ERC-20)
+  - btc_listener.py     (Bitcoin via Esplora/BlockCypher)
+  - sol_listener.py     (Solana / SPL)
+  - polygon_listener.py (Polygon / ERC-20)
 
-Production-grade security hardening:
+Why import them here · Celery's `autodiscover_tasks()` only walks
+each Django app's `tasks.py` (or `tasks/` package) by default ·
+it does NOT pick up sibling modules like `eth_listener.py`. Without
+the explicit imports below, the @shared_task decorators in those
+files never run, the worker never registers their task names, and
+beat-scheduled `apps.blockchain.eth_listener.monitor_eth_deposits`
+calls land in the worker as "unregistered task" errors. This was
+caught on prod 2026-04-29 logs.
+
+Importing for side effects only — pyflakes/E501 ignored via the
+`noqa: F401` markers.
+
+Production-grade security hardening (Tron listener):
   - Dust attack prevention (minimum deposit thresholds)
   - Amount-based confirmation tiers (more confs for larger deposits)
   - Address format validation
@@ -28,6 +42,12 @@ from django.utils import timezone
 
 from apps.wallets.models import Wallet
 from apps.wallets.services import WalletService
+
+# Side-effect imports · register listener tasks with Celery's autodiscovery.
+from . import eth_listener as _eth_listener  # noqa: F401
+from . import btc_listener as _btc_listener  # noqa: F401
+from . import sol_listener as _sol_listener  # noqa: F401
+from . import polygon_listener as _polygon_listener  # noqa: F401
 
 from .models import BlockchainDeposit
 from .security import (
