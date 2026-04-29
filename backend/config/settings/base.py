@@ -597,6 +597,12 @@ WALLET_MASTER_SEED = env("WALLET_MASTER_SEED", default="")
 KMS_ENABLED = env.bool("KMS_ENABLED", default=False)
 KMS_PROVIDER = env("KMS_PROVIDER", default="aws").lower()
 KMS_SEED_CACHE_TTL = env.int("KMS_SEED_CACHE_TTL", default=300)
+# Skip the boot-time KMS round-trip on services that have no
+# encrypt/decrypt path (e.g. celery-beat, which only writes the
+# schedule table and dispatches task names). Read by
+# `BlockchainConfig.ready()`. Default False · web + celery still
+# run the gate.
+SKIP_KMS_HEALTH_CHECK = env.bool("SKIP_KMS_HEALTH_CHECK", default=False)
 
 # AWS KMS settings (used when KMS_PROVIDER=aws)
 KMS_KEY_ID = env("KMS_KEY_ID", default="")           # AWS KMS key ARN or alias
