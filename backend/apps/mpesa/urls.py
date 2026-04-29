@@ -37,12 +37,12 @@ urlpatterns = [
     path("callback/balance/<str:token>/", views.BalanceCallbackView.as_view(), name="balance-callback-token"),
     path("callback/balance/timeout/<str:token>/", views.TimeoutCallbackView.as_view(), name="balance-timeout-token"),
 
-    # ── SasaPay callbacks · DISABLED ──
-    # Daraja is the primary rail (April 2026 application submitted).
-    # See config/urls.py for the rationale; uncomment alongside the
-    # top-level routes there when re-enabling SasaPay as a fallback.
-    #
-    # path("sasapay/callback/", sasapay_views.sasapay_callback, name="sasapay-callback"),
-    # path("sasapay/callback/<str:token>/", sasapay_views.sasapay_callback, name="sasapay-callback-token"),
-    # path("sasapay/ipn/", sasapay_views.sasapay_ipn, name="sasapay-ipn"),
+    # ── SasaPay callbacks under /api/v1/mpesa/sasapay/ ──
+    # 2026-04-30 · re-enabled. Daraja onboarding blocked on CBK LNO,
+    # SasaPay (CBK-licensed PSP) becomes the primary rail. Top-level
+    # routes at /api/v1/sasapay/* are also live (see config/urls.py)
+    # so we can register either variant with SasaPay's dashboard.
+    path("sasapay/callback/", sasapay_views.sasapay_callback, name="sasapay-callback"),
+    path("sasapay/callback/<str:token>/", sasapay_views.sasapay_callback, name="sasapay-callback-token"),
+    path("sasapay/ipn/", sasapay_views.sasapay_ipn, name="sasapay-ipn"),
 ]

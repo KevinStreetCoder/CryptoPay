@@ -69,21 +69,25 @@ urlpatterns = [
         __import__("apps.referrals.views", fromlist=["PublicReferrerLandingView"]).PublicReferrerLandingView.as_view(),
         name="referral-public-landing",
     ),
-    # ── SasaPay callbacks · DISABLED ──
-    # We submitted to Safaricom Daraja and are using that as the primary
-    # rail. SasaPay code stays in tree (apps/mpesa/sasapay_views.py and
-    # apps/mpesa/sasapay_client.py) so we can flip back if Daraja onboarding
-    # falls through, but the URL routes are commented out so an attacker
-    # who finds the path gets a 404 instead of a live handler.
+    # ── SasaPay callbacks · LIVE 2026-04-30 ──
+    # Re-enabled because Safaricom Daraja onboarding hit the CBK
+    # Letter-of-No-Objection blocker (see
+    # `docs/research/DARAJA-CBK-BLOCKER-2026-04-30.md`). Cpay routes
+    # primary M-Pesa flows through SasaPay (CBK-licensed PSP, in the
+    # Nov 2025 PSP directory) until the LNO lands and direct Daraja
+    # approves us · then we flip `PAYMENT_PROVIDER` back.
     #
-    # When re-enabling: set PAYMENT_PROVIDER=sasapay AND uncomment the
-    # routes below AND set SASAPAY_WEBHOOK_SECRET / SASAPAY_CALLBACK_HMAC_KEY
-    # in .env.production. The production-settings guard will refuse to
-    # boot if those are missing while PAYMENT_PROVIDER=sasapay.
-    #
-    # path("api/v1/sasapay/callback/", __import__("apps.mpesa.sasapay_views", fromlist=["sasapay_callback"]).sasapay_callback, name="sasapay-callback-root"),
-    # path("api/v1/sasapay/callback/<str:token>/", __import__("apps.mpesa.sasapay_views", fromlist=["sasapay_callback"]).sasapay_callback, name="sasapay-callback-root-token"),
-    # path("api/v1/sasapay/ipn/", __import__("apps.mpesa.sasapay_views", fromlist=["sasapay_ipn"]).sasapay_ipn, name="sasapay-ipn-root"),
+    # Security model:
+    #   - Header HMAC `X-SasaPay-Signature` verified against
+    #     SASAPAY_WEBHOOK_SECRET (signed by SasaPay)
+    #   - Optional URL-token variant (`/<token>/`) checked against
+    #     SASAPAY_CALLBACK_HMAC_KEY · per-tx tokens minted by us
+    #   - production.py refuses to boot when PAYMENT_PROVIDER=sasapay
+    #     AND both secrets are empty
+    #   - SASAPAY_ALLOWED_IPS for an extra IP allow-list
+    path("api/v1/sasapay/callback/", __import__("apps.mpesa.sasapay_views", fromlist=["sasapay_callback"]).sasapay_callback, name="sasapay-callback-root"),
+    path("api/v1/sasapay/callback/<str:token>/", __import__("apps.mpesa.sasapay_views", fromlist=["sasapay_callback"]).sasapay_callback, name="sasapay-callback-root-token"),
+    path("api/v1/sasapay/ipn/", __import__("apps.mpesa.sasapay_views", fromlist=["sasapay_ipn"]).sasapay_ipn, name="sasapay-ipn-root"),
     # OpenAPI / Swagger — only in development (exposes full API surface)
     *([
         path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
