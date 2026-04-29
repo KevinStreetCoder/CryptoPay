@@ -265,13 +265,19 @@ services:
       - .env.production
     environment:
       - DJANGO_SETTINGS_MODULE=config.settings.production
-      # Pooled connection · Django runtime traffic flows through
-      # PgBouncer so 4 gunicorn × N requests don't blow Postgres'
-      # max_connections at peak.
+      # Pooled connection · beat reads/writes the schedule table
+      # through pgbouncer for connection-pool sharing with web/celery.
       - DATABASE_URL=postgres://${POSTGRES_USER:-cryptopay}:${POSTGRES_PASSWORD}@pgbouncer:5432/${POSTGRES_DB:-cryptopay}
-      # Direct connection for migrations / management commands that
-      # need session-scoped locks (DDL, advisory_lock, vacuum).
       - DATABASE_URL_DIRECT=postgres://${POSTGRES_USER:-cryptopay}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-cryptopay}
+      # beat doesn't encrypt or decrypt anything · it only writes
+      # schedule rows + dispatches task names to the broker. Skip
+      # the boot-time KMS round-trip so we don't have to hand the
+      # GCP credential file to a service that has no business
+      # touching it (principle of least privilege). The web +
+      # celery containers do the round trip and refuse-to-boot if
+      # KMS is broken; beat following them up adds zero coverage
+      # while widening the credential's attack surface.
+      - SKIP_KMS_HEALTH_CHECK=True
     depends_on:
       db:
         condition: service_healthy
