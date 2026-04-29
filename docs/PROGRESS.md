@@ -1,6 +1,120 @@
 # Cpay · Development Progress
 
-**Last updated:** 2026-04-26
+**Last updated:** 2026-04-30
+
+## 2026-04-30 · Daraja onboarding BLOCKED on CBK Letter of No Objection + payment-rail decision
+
+Safaricom Falcon application halted at Validation 66 %. Reviewer
+comment: *"as per details on website https://cpay.co.ke/, please
+share letter of no Objection from CBK"*. The reviewer Googled the
+landing page, saw crypto language, and bounced us pending CBK
+clearance.
+
+### Why this matters
+
+- Direct Daraja gives the cleanest UX (M-Pesa SMS reads "CPAY",
+  same-day settlement, full reversal API, base fee bands).
+- Without it we either (a) wait for the CBK Letter of No-Objection
+  + VASP licence (months), or (b) route through an aggregator that
+  already has Daraja approval + a CBK-acceptable position.
+
+### Research-driven decision (2026-04-30)
+
+Two new docs ship in `docs/research/`:
+
+- `DARAJA-CBK-BLOCKER-2026-04-30.md` · regulatory state, decision
+  tree, operator todos
+- `PAYMENT-RAILS-COMPARISON-2026-04-30.md` · provider-by-provider
+  matrix (Daraja, Kopo Kopo, SasaPay, Pesapal, Cellulant), full
+  fee structures, API parity tables, sources
+
+Key findings:
+
+- **No Kenyan crypto fintech has gone direct-Daraja.** BitPesa
+  sued Safaricom in 2015 and lost. Yellow Card uses partner rails.
+  Kotani Pay is FSCA-licensed (South Africa), not CBK. Aggregator
+  routing is the strategic norm, not a workaround.
+- **VASP Act 2025** is in force (4 Nov 2025) but regulations not
+  yet gazetted. **No VASP licensed yet.** Cpay (custodial wallet
+  + crypto-fiat payment processor) sits under the **CBK** licensing
+  track, not CMA.
+- **CBK LNO process** · application fee KES 100 K + capital floor
+  KES 20-50 M + legal counsel ~KES 1.5-3 M + 6-12 months realistic
+  timeline. Engage AMG Advocates / CM Advocates LLP.
+- **SasaPay is CBK-licensed** (since 15 Sep 2021 per the Nov 2025
+  PSP directory). Has Daraja access. We already have
+  `apps/mpesa/sasapay_client.py` covering login/B2C/C2B/balance.
+- **Kopo Kopo** has better B2C economics (KES 50 flat outbound)
+  but no Cpay code yet · adds 1-2 days of integration work.
+
+### Recommendation · ship via SasaPay this week
+
+1. Email SasaPay compliance with the Cpay business profile,
+   disclose crypto-onramp model upfront, ask for production
+   approval. Expected timeline 1-3 weeks sandbox-to-prod.
+2. Once approved, flip `PAYMENT_PROVIDER=sasapay` in
+   `.env.production` (already plumbed through
+   `apps/mpesa/provider.py`).
+3. Update mobile receipt copy: "Paid via SasaPay payment partner
+   · ref XXX" so users understand why the M-Pesa SMS shows
+   SASAPAY instead of CPAY.
+4. The reversal-API gap is already absorbed by the
+   `REVERSAL_NOT_SUPPORTED` ReconciliationCase type (shipped
+   2026-04-26 in commit 1311989).
+5. **Do NOT reply to the Safaricom Falcon ticket** until LNO is
+   in hand. The reply IS the LNO. Replying without it just
+   resets the clock.
+6. **In parallel**, engage Kenyan counsel and start the CBK LNO
+   filing. 6-12 month track. Direct Daraja is the eventual goal,
+   not the launch blocker.
+
+### Operator action queue (this week)
+
+- [ ] Email `support@sasapay.app` + `developers@sasapay.app` ·
+      pre-clear crypto-onramp use case
+- [ ] If SasaPay approves: generate prod credentials, flip env,
+      live-test (100 KES → 10 K → 100 K → ramp)
+- [ ] Engage AMG Advocates / CM Advocates LLP · open the CBK LNO
+      file. Plan KES 1.5-3 M legal + KES 100 K filing
+- [ ] Tone down landing-page crypto copy ("digital asset payments"
+      reads less regulatorily-charged than "buy crypto with
+      M-Pesa") while regulator negotiations are open
+
+### Code state (no changes needed for the SasaPay flip)
+
+- `apps/mpesa/provider.py` · provider abstraction switches on
+  `PAYMENT_PROVIDER` env var (already supports both Daraja +
+  SasaPay)
+- `apps/mpesa/sasapay_client.py` · login, B2C, C2B, balance, B2B
+- `apps/payments/saga.py` · `compensate_mpesa()` opens a
+  `REVERSAL_NOT_SUPPORTED` ReconciliationCase when the active
+  provider doesn't support reversals (live since 1311989)
+- ReconciliationCase queue + 5-min sweep cron handle the
+  durability + escalation (shipped 2026-04-26)
+
+---
+
+## 2026-04-29 · prod log audit + 5 production fixes
+
+Pulled logs from every container, found 5 real bugs, all fixed
+end-to-end. Backend logs are clean across web, celery, beat,
+pgbouncer, db, redis.
+
+| # | Issue | Fix | Commit |
+|---|---|---|---|
+| 1 | `/health` flips 503 intermittently (26 in 1 hr) | Lighter `app.control.ping(timeout=1)` + celery becomes informational, not fatal | 25945bf |
+| 2 | `apps.blockchain.{eth,sol,polygon,btc}_listener.*` unregistered | Side-effect imports in `apps/blockchain/tasks.py` so autodiscovery walks them | 25945bf |
+| 3 | `celery-beat` crashlooping with `KMSCredentialError` | `SKIP_KMS_HEALTH_CHECK=True` env on beat (no decrypt path · principle of least privilege) | fc0c4e3, 8dc5a26 |
+| 4 | `apps.blockchain.sweep_tasks.*` (3 tasks) unregistered | Same autodiscovery fix · added `from . import sweep_tasks` | 6d188e8 |
+| 5 | Celery container `unhealthy` (healthcheck timeout) | Replaced `celery inspect ping` (Django boot every poll) with Python one-liner using already-running app | 6d188e8 |
+
+Bonus fix: Polygon listener was logging `Expecting value: line 1
+column 1 (char 0)` because the operator's Alchemy app didn't have
+MATIC_MAINNET enabled. Swapped `POLYGON_RPC_URL` to
+`https://polygon-bor-rpc.publicnode.com` (free public, no auth).
+Documented the alt list in `.env.example`. Commit `c5546d4`.
+
+---
 
 ## 2026-04-26 session 3 · 4 production-readiness P0s deployed + UI polish + auth re-login bug fixed
 

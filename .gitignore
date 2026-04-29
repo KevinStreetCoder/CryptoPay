@@ -108,11 +108,13 @@ Temp delete/
 Temp_delete/
 cryptopay_full_playbook.md
 docs/research/*
-# Exception: the balance-lock feature decision doc is reviewed content
-# (no raw secrets / no PII / small markdown), check it in. Must use
-# `/*` on the parent so the un-ignore below actually fires — git can't
-# reinstate files whose parent directory is ignored outright.
+# Exception: reviewed decision docs (no raw secrets / no PII / small
+# markdown · check them in). Must use `/*` on the parent so each
+# un-ignore below actually fires · git can't reinstate files whose
+# parent directory is ignored outright.
 !docs/research/BALANCE-LOCK.md
+!docs/research/DARAJA-CBK-BLOCKER-2026-04-30.md
+!docs/research/PAYMENT-RAILS-COMPARISON-2026-04-30.md
 docs/architecture/*.docx
 docs/*.pdf
 CryptoPay_Receipt_*.pdf
