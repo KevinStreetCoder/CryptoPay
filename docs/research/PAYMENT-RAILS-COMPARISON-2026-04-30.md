@@ -5,26 +5,31 @@
 **Updated:** 2026-04-30
 **Companion:** `DARAJA-CBK-BLOCKER-2026-04-30.md`
 
-## TL;DR · ship via SasaPay this week
+## TL;DR · two-rail strategy (revised 2026-04-30)
 
 The CBK Letter of No-Objection blocking direct Daraja is real and
-unavoidable — months of regulatory work · but it does NOT block
-production. **Two-track:**
+unavoidable · months of regulatory work · but it does NOT block
+production. **Three-track:**
 
-1. **Production rail TODAY = SasaPay** (we already have the client
-   code · `apps/mpesa/sasapay_client.py`). Pre-clear with their
-   compliance team in a single email, sandbox → prod in 1-3 weeks.
-2. **Parallel = open the CBK LNO file** with KE counsel
-   (AMG Advocates / CM Advocates). Budget KES 1.5-3M legal + KES
-   100K filing + 6-12 months. Reply to Safaricom Falcon ONLY when
-   the LNO lands · your reply IS the LNO. Replying without it just
-   resets the clock.
+1. **SasaPay** · submit the production application today. Code
+   already exists (`apps/mpesa/sasapay_client.py`), callback URL
+   live, 5 env vars to add when approved. 1-3 weeks.
+2. **Kopo Kopo** · apply in parallel this week. Better economics
+   (KES 50 flat outbound), first-class reversal API, full B2B
+   Paybill / Till support via `pay_service` (originally mis-read
+   as a gap · verified 2026-04-30 against the k2-connect-python
+   SDK README). 1-2 days of new client code mirroring the
+   `MpesaClient` interface.
+3. **CBK LNO file** · engage KE counsel (AMG Advocates / CM
+   Advocates LLP). KES 1.5-3M legal + KES 100K filing + 6-12
+   months. Reply to Safaricom Falcon ONLY when the LNO lands.
+   The reply IS the LNO, not an explanation.
 
-Bottom line: do not let a Safaricom Falcon reviewer become your
-roadmap. SasaPay rides the same M-Pesa rails as a licensed
-aggregator. Branding on the SMS receipt becomes "SASAPAY" instead
-of "CPAY" — that's the cost of speed, reclaimable once the LNO
-clears.
+Whichever aggregator clears compliance first ships first. If both
+approve, route by transaction type: paybills + tills via Kopo
+Kopo (better economics + first-class reversal), STK + B2C via
+either. Bottom line: do not let a Safaricom Falcon reviewer become
+your roadmap.
 
 ---
 
@@ -115,13 +120,35 @@ activity becomes obviously crypto.** Blunt up-front conversation
 with their compliance team is the only way to confirm.
 
 ### API capability map (K2-Connect)
+
+**2026-04-30 correction:** an earlier draft of this doc incorrectly
+reported B2B Paybill / Till as "partial". That was a misread of the
+docs · the `transfer_service` is for settlement to YOUR OWN
+accounts, but K2-Connect has a separate `pay_service` that
+explicitly supports paying arbitrary third-party paybills and
+tills via `recipient_type: "paybill"` / `"till"`. Verified against
+the kopokopo/k2-connect-python README on GitHub:
+
+```python
+# Paybill recipient (e.g. KPLC paybill 888880)
+{
+   "recipient_type": "paybill",
+   "paybill_name": "...",
+   "paybill_number": "...",
+   "paybill_account_number": "..."
+}
+# then send_pay with destination_type: "paybill"
+```
+
 | Capability | Status | Notes |
 |---|---|---|
-| C2B / STK Push | ✅ | Public docs at `developers.kopokopo.com/guides/receive-money/mpesa-stk.html` |
-| B2C (pay user) | ✅ | "Pay" / Settlement Transfer · pays out to mobile money or bank |
-| B2B paybill payment | ⚠ partial | Bank payout is first-class; paybill-as-recipient via M-Pesa not in public docs |
-| Reversal | ✅ | "Reverse Incoming Transactions" endpoint |
-| Webhooks + tx status polling | ✅ | |
+| C2B / STK Push | ✅ | `POST /api/v2/incoming_payments` |
+| B2C (pay user) | ✅ | `pay_service` · destination_type `mobile_wallet` |
+| B2B Paybill | ✅ | `pay_service` · destination_type `paybill` |
+| B2B Till / Buy Goods | ✅ | `pay_service` · destination_type `till` |
+| Bank payout | ✅ | `pay_service` · destination_type `bank_account` |
+| Reversal | ✅ | First-class · `POST /api/v2/reversals` |
+| Webhooks + tx status polling | ✅ | Subscription + polling endpoints |
 | SDKs | ✅ | Ruby, PHP, Python, Node, Dart |
 
 ### Fees
@@ -227,14 +254,16 @@ no public status page. **Regulator: CBK.** They are not a VASP.
 | | Direct Daraja | Kopo Kopo | SasaPay | Pesapal | Cellulant |
 |---|---|---|---|---|---|
 | **Time to live** | 6-18 months | 1-3 weeks | 1-3 weeks | 2-6 weeks | 6-12 weeks |
-| **Capital / fees** | KES 20-50M + LNO process | 0.55% in, KES 50 out | tiered, < Safaricom | ~3.5% per tx | enterprise quote-only |
+| **Capital / fees** | KES 20-50M + LNO process | 0.55% in, KES 50 out flat | tiered, < Safaricom | ~3.5% per tx | enterprise quote-only |
 | **CBK letter req?** | YES (blocked) | NO (theirs) | NO (theirs) | NO (theirs) | NO (theirs) |
 | **Crypto-friendly** | unclear (case-by-case) | tolerant (no policy) | silent (no policy) | hostile (refuses) | enterprise (depends) |
-| **Reversal API** | YES | YES | partial | YES | YES |
+| **Reversal API** | YES | YES (first-class) | partial (gap) | YES | YES |
+| **B2B Paybill** | YES | YES (`pay_service`, verified 2026-04-30) | YES | partial | YES |
+| **B2B Till / Buy Goods** | YES | YES (`pay_service`, verified 2026-04-30) | YES | partial | YES |
 | **Branding on SMS** | "CPAY" | "KOPO KOPO" | "SASAPAY" | "PESAPAL" | "TINGG" |
 | **B2C cap / tx** | KES 250K | KES 250K | KES 250K | KES 150K | KES 250K |
-| **Public docs** | strong | strong | strong | medium | weak |
-| **Already integrated in Cpay?** | yes (`mpesa/client.py`) | NO | yes (`mpesa/sasapay_client.py`) | NO | NO |
+| **Public docs** | strong | strongest (5-lang SDKs) | strong | medium | weak |
+| **Already integrated in Cpay?** | yes (`mpesa/client.py`) | NO (1-2 days work) | yes (`mpesa/sasapay_client.py`) | NO | NO |
 
 ---
 
@@ -292,8 +321,10 @@ no public status page. **Regulator: CBK.** They are not a VASP.
 
 | Date | Decision | Rationale |
 |---|---|---|
-| 2026-04-30 | **Primary rail: SasaPay** | Code already exists, 1-3 wk to prod, CBK-licensed PSP so no separate LNO needed. Reversal gap absorbed by ReconciliationCase queue (already shipped). |
-| 2026-04-30 | **Fallback rail: Kopo Kopo** | Only if SasaPay refuses. Better B2C economics (KES 50 flat) but adds engineering effort (new client). |
+| 2026-04-30 | **Submit SasaPay app today** | Code exists, callback URL already live, 5 env vars to add when approved. 1-3 wk to prod. Saves the integration time that Kopo Kopo would cost. |
+| 2026-04-30 (revised) | **Apply Kopo Kopo this week IN PARALLEL** | Originally listed as "fallback only if SasaPay refuses" because of a docs misread. After verification (2026-04-30) Kopo Kopo's `pay_service` supports B2B paybill + till + first-class reversal. Better economics (KES 50 flat) and a stronger reversal story than SasaPay. Worth the 1-2 days of integration. |
+| 2026-04-30 | **If both approve · route by tx type** | Paybills + tills via Kopo Kopo (better economics + reversal). C2B + B2C via whichever has lower latency on the day. Migration from SasaPay-primary to Kopo-Kopo-primary as transaction volume justifies. |
 | 2026-04-30 | **Long-track: CBK LNO via legal counsel** | Direct Daraja is the eventual goal. 6-12 month process. Run in parallel, do not block production on it. |
 | 2026-04-30 | **Pesapal: rejected** | Hostile to crypto per public reports. |
 | 2026-04-30 | **Cellulant: deferred** | Enterprise-only, slow onboarding, weak public docs. Not appropriate for our scale yet. |
+| 2026-04-30 | **Correction logged** | Earlier draft of this doc claimed Kopo Kopo lacked first-class B2B paybill. That was a misread of the docs · the `transfer_service` is for settlement to YOUR OWN accounts, but the separate `pay_service` accepts `recipient_type: paybill / till` for arbitrary third-party payments. Verified against the k2-connect-python SDK README. |
