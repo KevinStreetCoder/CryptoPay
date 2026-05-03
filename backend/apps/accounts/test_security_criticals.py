@@ -307,3 +307,45 @@ class TestC1CookieAuth(TestCase):
         if resp.status_code == 200:
             assert "cpay_access" not in resp.cookies
             assert "cpay_refresh" not in resp.cookies
+
+    def test_authenticated_request_via_cookie_only(self):
+        """The live regression: after a web login, GETs to protected
+        endpoints must succeed via the `cpay_access` cookie alone, with
+        NO Authorization header. Previously DRF's stock JWTAuthentication
+        ignored the cookie and returned 401 on every authenticated call,
+        producing a post-login 401 storm on cpay.co.ke.
+        """
+        from apps.accounts.authentication import CookieJWTAuthentication
+        from rest_framework_simplejwt.tokens import RefreshToken
+
+        # Mint a real access token directly so the test doesn't have to
+        # care about device-challenge / OTP gates that LoginView may put
+        # in front of a fresh login.
+        refresh = RefreshToken.for_user(self.user)
+        access = str(refresh.access_token)
+
+        client = APIClient()
+        client.cookies["cpay_access"] = access
+        resp = client.get("/api/v1/auth/profile/")
+        assert resp.status_code == 200, (
+            f"Cookie auth must grant access, got {resp.status_code}: {resp.content!r}"
+        )
+
+        # Without the cookie the same endpoint must reject the request.
+        client.cookies.clear()
+        resp = client.get("/api/v1/auth/profile/")
+        assert resp.status_code == 401
+
+        # Bearer header still works · native app compatibility.
+        client = APIClient(HTTP_AUTHORIZATION=f"Bearer {access}")
+        resp = client.get("/api/v1/auth/profile/")
+        assert resp.status_code == 200
+
+        # CookieJWTAuthentication must be the registered default so the
+        # cookie path is reachable on every IsAuthenticated view, not
+        # just /auth/profile/.
+        from django.conf import settings as dj_settings
+        assert (
+            "apps.accounts.authentication.CookieJWTAuthentication"
+            in dj_settings.REST_FRAMEWORK["DEFAULT_AUTHENTICATION_CLASSES"]
+        )

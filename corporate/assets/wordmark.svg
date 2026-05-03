@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 56" role="img" aria-label="Cpay Technologies">
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="28" cy="28" r="20" fill="none" stroke="#1a2433" stroke-width="2"></circle>
+    <path d="M 42 18 A 20 20 0 0 0 14 18" stroke="#10B981" stroke-width="3" fill="none"></path>
+    <text x="28" y="34" font-family="DM Sans, system-ui, sans-serif" font-size="20" font-weight="700" fill="#F5F2EC" text-anchor="middle">C</text>
+  </g>
+  <text x="62" y="32" font-family="DM Sans, system-ui, sans-serif" font-size="22" font-weight="700" fill="#F5F2EC" letter-spacing="-0.5">Cpay</text>
+  <text x="62" y="48" font-family="DM Sans, system-ui, sans-serif" font-size="10" font-weight="500" fill="#9AA3AF" letter-spacing="1.2">TECHNOLOGIES</text>
+</svg>

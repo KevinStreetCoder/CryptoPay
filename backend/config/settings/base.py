@@ -329,7 +329,13 @@ CELERY_BEAT_SCHEDULE = {
 # --- DRF ---
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        # Cookie-aware subclass · falls through to `cpay_access` HttpOnly
+        # cookie when no Authorization header is present, so the web client
+        # can run in cookies-only mode (XSS-resistant) while the native app
+        # keeps using Bearer tokens. Plain JWTAuthentication never reads
+        # cookies, which left every authenticated GET on the web bundle
+        # returning 401 even with valid cookies set.
+        "apps.accounts.authentication.CookieJWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
