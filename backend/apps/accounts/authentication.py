@@ -29,3 +29,30 @@ class CookieJWTAuthentication(JWTAuthentication):
             raw_token = cookie.encode("utf-8") if isinstance(cookie, str) else cookie
         validated_token = self.get_validated_token(raw_token)
         return self.get_user(validated_token), validated_token
+
+
+# drf-spectacular OpenAPI scheme · without this `manage.py check --deploy
+# --fail-level WARNING` fails because the schema generator can't introspect
+# our custom auth class. Wrapped in try/except so the module still imports
+# in environments where drf-spectacular isn't installed (e.g. minimal
+# scripts).
+try:
+    from drf_spectacular.extensions import OpenApiAuthenticationExtension
+
+    class CookieJWTScheme(OpenApiAuthenticationExtension):
+        target_class = "apps.accounts.authentication.CookieJWTAuthentication"
+        name = "cookieJWT"
+        match_subclasses = False
+
+        def get_security_definition(self, auto_schema):
+            return {
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "JWT",
+                "description": (
+                    "Bearer JWT in Authorization header (native clients), "
+                    "or `cpay_access` HttpOnly cookie (web client)."
+                ),
+            }
+except ImportError:  # pragma: no cover
+    pass
