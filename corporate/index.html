@@ -101,6 +101,21 @@
     position: relative;
     padding: 120px 0 140px;
     overflow: hidden;
+    /* Layered background. Order back to front:
+       1. Solid ink fallback (always renders even before the image loads).
+       2. Hero photo · monochrome low-poly geometry by Steve A Johnson on
+          Pexels (free license). Positioned right so the geometric mass
+          sits opposite the headline; the wash overlay below pulls the
+          left half back to ink so the text stays high-contrast.
+       3. Vertical fade at the bottom · cleans the transition into the
+          next section's solid ink without a hard seam.
+       4. Horizontal wash · 85 % ink at the left edge fading to 30 % at
+          the right keeps the headline crisp at any viewport width. */
+    background:
+      linear-gradient(180deg, transparent 0%, transparent 65%, var(--ink) 100%),
+      linear-gradient(90deg, var(--ink) 0%, rgba(4,10,20,0.88) 25%, rgba(4,10,20,0.55) 55%, rgba(4,10,20,0.30) 100%),
+      url('./assets/hero-bg.jpg') center right / cover no-repeat,
+      var(--ink);
   }
   .hero::before {
     content: '';
@@ -108,10 +123,28 @@
     inset: -20% -10% auto -10%;
     height: 80%;
     background:
-      radial-gradient(ellipse at 30% 20%, rgba(16,185,129,0.12), transparent 55%),
-      radial-gradient(ellipse at 80% 10%, rgba(16,185,129,0.06), transparent 60%);
+      radial-gradient(ellipse at 30% 20%, rgba(16,185,129,0.14), transparent 55%),
+      radial-gradient(ellipse at 80% 10%, rgba(16,185,129,0.08), transparent 60%);
     pointer-events: none;
     z-index: 0;
+    mix-blend-mode: screen;
+  }
+  /* Slim mobile viewports · the photo dominates the framing too much when
+     the column shrinks. Anchor it to the top-right so the headline still
+     sits on the dark wash. */
+  @media (max-width: 720px) {
+    .hero {
+      background:
+        linear-gradient(180deg, transparent 0%, transparent 55%, var(--ink) 100%),
+        linear-gradient(90deg, var(--ink) 0%, rgba(4,10,20,0.92) 30%, rgba(4,10,20,0.55) 100%),
+        url('./assets/hero-bg.jpg') top right / 180% auto no-repeat,
+        var(--ink);
+    }
+  }
+  /* Honour user's data-saver preference · skip the photo on metered
+     connections, fall back to the original radial-gradient hero. */
+  @media (prefers-reduced-data: reduce) {
+    .hero { background-image: none; background: var(--ink); }
   }
   .hero-grid {
     position: absolute;
