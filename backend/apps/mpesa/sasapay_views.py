@@ -29,6 +29,7 @@ import hashlib
 import hmac
 import json
 import logging
+import re
 from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
@@ -459,14 +460,95 @@ def _process_failed_payment(
     logger.warning("sasapay payment failed: tx=%s reason=%s", tx.id, reason)
 
 
-def _process_c2b_deposit(data: dict):
-    """Process a C2B deposit · credit the user's KES wallet.
+_C2B_SUPPORTED_CRYPTOS = {"USDT", "USDC", "BTC", "ETH", "SOL"}
+# Accepted account-suffix delimiters · Safaricom keypads send a `*` when
+# customers paste a hyphen, and some POS/USSD flows pass `-` straight
+# through. Either is fine; we strip both and normalise.
+_C2B_ACCOUNT_SPLIT_RE = re.compile(r"[-*]+")
 
-    Amount tamper protection is built-in here too: we only credit the
-    amount the callback claimed AFTER cross-referencing the user via
-    MSISDN. The deterministic credit_tx_id (uuid5 over the TransID)
-    means a replayed callback with the same TransID is a no-op at the
-    WalletService layer too · belt-and-braces with our Redis dedup.
+
+def _normalise_phone_e164(raw: str) -> str:
+    """Convert any Kenyan-mobile representation to +254XXXXXXXXX form,
+    or empty string if unparseable. Mirrors the helper in intasend_client
+    but without the strict ValueError · this codepath has callback
+    payload data and we'd rather degrade than 500 the IPN."""
+    s = (raw or "").strip().replace(" ", "")
+    if not s:
+        return ""
+    if s.startswith("+254") and len(s) == 13 and s[4:].isdigit():
+        return s
+    if s.startswith("254") and len(s) == 12 and s.isdigit():
+        return "+" + s
+    if s.startswith("0") and len(s) == 10 and s.isdigit():
+        return "+254" + s[1:]
+    if s.startswith(("7", "1")) and len(s) == 9 and s.isdigit():
+        return "+254" + s
+    return ""
+
+
+def _parse_c2b_account(account_str: str) -> tuple[str | None, str | None]:
+    """Parse a SasaPay C2B account suffix into (currency, phone_e164).
+
+    Accepted forms (in priority order):
+      <merchant>-<CRYPTO>-<phone>      e.g. 1334777-USDT-254712345678
+      <merchant>*<CRYPTO>*<phone>      same with `*` separator
+      <CRYPTO>-<phone>                 e.g. USDT-0712345678 (legacy Daraja)
+      <CRYPTO>                         alone · falls back to MSISDN as phone
+      <merchant> alone                 → returns (None, None) → KES credit only
+      anything else                    → returns (None, None) → KES credit only
+
+    Returns (None, None) when no valid auto-buy intent can be inferred
+    so the caller falls back to the safe KES-credit path.
+    """
+    if not account_str:
+        return None, None
+    parts = [p for p in _C2B_ACCOUNT_SPLIT_RE.split(account_str.strip()) if p]
+    if not parts:
+        return None, None
+
+    merchant_code = (getattr(settings, "SASAPAY_MERCHANT_CODE", "") or "").strip()
+    if merchant_code and parts[0] == merchant_code:
+        parts = parts[1:]
+
+    if not parts:
+        # Just the merchant code · valid SasaPay deposit but no crypto intent.
+        return None, None
+
+    currency = parts[0].upper()
+    if currency not in _C2B_SUPPORTED_CRYPTOS:
+        # Unknown leading token · safest to fall back to KES credit.
+        return None, None
+
+    phone = ""
+    if len(parts) >= 2:
+        phone = _normalise_phone_e164(parts[1])
+
+    # If the suffix didn't include a phone, the caller should fall back
+    # to MSISDN. Currency alone is still useful · we return it without
+    # a phone and let the caller decide.
+    return currency, phone or None
+
+
+def _process_c2b_deposit(data: dict):
+    """Process a C2B deposit.
+
+    Two paths after MSISDN/amount validation:
+      1. Auto-buy · the customer entered an account like
+         `1334777-USDT-254712...`. We look up the user, fetch the live
+         KES→<crypto> rate (1.5% spread + KES 10 flat fee, matching the
+         BUY flow contract), credit the crypto wallet, and create a
+         COMPLETED Transaction with type=BUY.
+      2. KES credit fallback · the account didn't encode a crypto, OR
+         the chosen crypto is unsupported, OR rate engine returned an
+         unusable result. We credit the user's KES wallet and create a
+         COMPLETED type=DEPOSIT Transaction. User can convert later via
+         the in-app swap.
+
+    Amount tamper protection is built-in: we only credit the amount the
+    callback claimed AFTER cross-referencing the user via MSISDN. The
+    deterministic credit_tx_id (uuid5 over the TransID) means a replayed
+    callback with the same TransID is a no-op at the WalletService
+    layer too · belt-and-braces with our Redis dedup.
     """
     from apps.payments.models import Transaction
     from apps.accounts.models import User
@@ -474,6 +556,18 @@ def _process_c2b_deposit(data: dict):
     phone = data.get("MSISDN", "")
     amount = data.get("TransAmount", "0")
     trans_id = data.get("TransID", "")
+    # SasaPay can populate the account in any of these depending on the
+    # merchant flow + integration version. Read all and prefer the most
+    # specific. `BillRefNumber` mirrors Daraja, `BusinessAccount` /
+    # `BusinessAccountNumber` are SasaPay-native.
+    account_raw = (
+        data.get("BillRefNumber")
+        or data.get("BusinessAccountNumber")
+        or data.get("BusinessAccount")
+        or data.get("AccountReference")
+        or data.get("InvoiceNumber")
+        or ""
+    )
 
     if not phone or not amount or not trans_id:
         return
@@ -482,8 +576,18 @@ def _process_c2b_deposit(data: dict):
     user = User.objects.filter(phone=normalised).first()
     if not user:
         user = User.objects.filter(phone=phone).first()
+
+    # Parse the account first · allows account-encoded phone to override
+    # MSISDN when a parent pays for a child / a friend tops someone up.
+    target_currency, account_phone = _parse_c2b_account(account_raw)
+    if account_phone and not user:
+        user = User.objects.filter(phone=account_phone).first()
+
     if not user:
-        logger.warning("sasapay C2B: no user for phone %s", phone)
+        logger.warning(
+            "sasapay C2B: no user for phone=%s account=%r",
+            phone, account_raw,
+        )
         return
 
     if Transaction.objects.filter(mpesa_receipt=trans_id).exists():
@@ -493,26 +597,184 @@ def _process_c2b_deposit(data: dict):
     try:
         kes_amount = Decimal(str(amount).replace(",", "").strip())
     except (InvalidOperation, ValueError):
-        logger.warning("sasapay C2B: malformed amount %r for TransID %s", amount, trans_id)
+        logger.warning(
+            "sasapay C2B: malformed amount %r for TransID %s",
+            amount, trans_id,
+        )
         return
-
     if kes_amount <= 0:
         return
 
+    if target_currency and target_currency in _C2B_SUPPORTED_CRYPTOS:
+        if _credit_crypto_via_c2b(
+            user=user,
+            currency=target_currency,
+            kes_amount=kes_amount,
+            trans_id=trans_id,
+            phone=phone,
+            account_raw=account_raw,
+        ):
+            return
+        # _credit_crypto_via_c2b returned False · rate engine unavailable
+        # or crypto wallet creation failed. Fall through to KES credit.
+        logger.warning(
+            "sasapay C2B: auto-buy %s failed for tx %s, falling back to KES",
+            target_currency, trans_id,
+        )
+
+    _credit_kes_via_c2b(
+        user=user,
+        kes_amount=kes_amount,
+        trans_id=trans_id,
+        phone=phone,
+        account_raw=account_raw,
+    )
+
+
+def _credit_crypto_via_c2b(
+    *,
+    user,
+    currency: str,
+    kes_amount: Decimal,
+    trans_id: str,
+    phone: str,
+    account_raw: str,
+) -> bool:
+    """Auto-buy path · convert KES → <currency>, credit crypto wallet,
+    create COMPLETED type=BUY Transaction. Returns True on success.
+
+    Idempotent on `trans_id` · the deterministic credit_tx_id makes
+    re-runs a no-op at the WalletService layer.
+    """
+    import uuid as _uuid
     from django.utils import timezone
+    from apps.rates.services import RateService
+    from apps.wallets.models import Wallet
     from apps.wallets.services import WalletService
+    from apps.payments.models import Transaction
 
     try:
-        from apps.wallets.models import Wallet
-        import uuid as _uuid
+        rate_info = RateService.get_crypto_kes_rate(currency)
+    except Exception:
+        logger.exception(
+            "sasapay C2B auto-buy: rate engine error for %s tx %s",
+            currency, trans_id,
+        )
+        return False
 
+    try:
+        final_rate = Decimal(str(rate_info.get("final_rate") or "0"))
+    except (InvalidOperation, ValueError):
+        return False
+    if final_rate <= 0:
+        return False
+
+    flat_fee = Decimal(str(rate_info.get("flat_fee_kes", "10")))
+    spread_pct = Decimal(str(getattr(settings, "PLATFORM_SPREAD_PERCENT", "1.5"))) / Decimal("100")
+    spread_revenue = (kes_amount * spread_pct).quantize(Decimal("0.01"))
+    platform_fee = (spread_revenue + flat_fee).quantize(Decimal("0.01"))
+    excise_pct = Decimal(str(getattr(settings, "EXCISE_DUTY_PERCENT", "10"))) / Decimal("100")
+    excise_duty = (platform_fee * excise_pct).quantize(Decimal("0.01"))
+
+    # Net KES that buys crypto = paid - flat - excise. Spread revenue is
+    # baked into final_rate so don't subtract it twice.
+    net_for_crypto = kes_amount - flat_fee - excise_duty
+    if net_for_crypto <= 0:
+        logger.info(
+            "sasapay C2B auto-buy: amount %s too small for %s after fees, "
+            "falling back to KES credit (tx %s)",
+            kes_amount, currency, trans_id,
+        )
+        return False
+
+    crypto_amount = (net_for_crypto / final_rate).quantize(Decimal("0.00000001"))
+    if crypto_amount <= 0:
+        return False
+
+    try:
+        from django.db import transaction as db_tx
+        with db_tx.atomic():
+            wallet, _created = Wallet.objects.get_or_create(user=user, currency=currency)
+            credit_tx_id = _uuid.uuid5(
+                _uuid.NAMESPACE_URL, f"sasapay_c2b_buy:{trans_id}",
+            )
+            WalletService.credit(
+                wallet.id,
+                crypto_amount,
+                credit_tx_id,
+                f"SasaPay C2B auto-buy {currency} {trans_id}",
+            )
+
+            tx = Transaction.objects.create(
+                user=user,
+                type=Transaction.Type.BUY,
+                status=Transaction.Status.COMPLETED,
+                source_currency="KES",
+                source_amount=kes_amount,
+                dest_currency=currency,
+                dest_amount=crypto_amount,
+                exchange_rate=final_rate,
+                fee_amount=platform_fee,
+                fee_currency="KES",
+                excise_duty_amount=excise_duty,
+                mpesa_receipt=trans_id,
+                mpesa_phone=phone,
+                completed_at=timezone.now(),
+                saga_data={
+                    "rail": "sasapay_c2b",
+                    "account_raw": account_raw,
+                    "spread_revenue_kes": str(spread_revenue),
+                    "flat_fee_kes": str(flat_fee),
+                },
+            )
+        logger.info(
+            "sasapay C2B auto-buy: %s KES → %s %s for %s (tx %s)",
+            kes_amount, crypto_amount, currency, user.phone, trans_id,
+        )
+
+        try:
+            from apps.core.email import send_transaction_notifications
+            send_transaction_notifications(user, tx)
+        except Exception:
+            logger.exception(
+                "sasapay C2B auto-buy: notification dispatch failed for tx %s",
+                trans_id,
+            )
+        return True
+    except Exception:
+        logger.exception(
+            "sasapay C2B auto-buy: credit failed for %s tx %s",
+            currency, trans_id,
+        )
+        return False
+
+
+def _credit_kes_via_c2b(
+    *,
+    user,
+    kes_amount: Decimal,
+    trans_id: str,
+    phone: str,
+    account_raw: str,
+) -> None:
+    """Fallback path · credit KES wallet directly. Used when the
+    customer didn't encode a crypto in the account, or auto-buy
+    couldn't be completed (rate engine offline, currency unsupported,
+    etc.). The user can later convert via swap."""
+    import uuid as _uuid
+    from django.utils import timezone
+    from apps.wallets.models import Wallet
+    from apps.wallets.services import WalletService
+    from apps.payments.models import Transaction
+
+    try:
         wallet, _created = Wallet.objects.get_or_create(user=user, currency="KES")
         credit_tx_id = _uuid.uuid5(_uuid.NAMESPACE_URL, f"sasapay_c2b:{trans_id}")
         WalletService.credit(
-            wallet.id, kes_amount, credit_tx_id, f"SasaPay deposit {trans_id}"
+            wallet.id, kes_amount, credit_tx_id, f"SasaPay deposit {trans_id}",
         )
 
-        Transaction.objects.create(
+        tx = Transaction.objects.create(
             user=user,
             type=Transaction.Type.DEPOSIT,
             status=Transaction.Status.COMPLETED,
@@ -523,14 +785,25 @@ def _process_c2b_deposit(data: dict):
             mpesa_receipt=trans_id,
             mpesa_phone=phone,
             completed_at=timezone.now(),
+            saga_data={
+                "rail": "sasapay_c2b",
+                "account_raw": account_raw,
+            },
         )
 
-        logger.info("sasapay C2B deposit credited: KES %s to %s", kes_amount, user.phone)
+        logger.info(
+            "sasapay C2B deposit credited: KES %s to %s",
+            kes_amount, user.phone,
+        )
 
-        from apps.core.email import send_transaction_notifications
-        tx = Transaction.objects.filter(mpesa_receipt=trans_id).first()
-        if tx:
+        try:
+            from apps.core.email import send_transaction_notifications
             send_transaction_notifications(user, tx)
+        except Exception:
+            logger.exception(
+                "sasapay C2B: notification dispatch failed for tx %s",
+                trans_id,
+            )
     except Exception:
         logger.exception("sasapay C2B credit failed")
 

@@ -462,6 +462,14 @@ SASAPAY_ENVIRONMENT = env("SASAPAY_ENVIRONMENT", default="sandbox")
 SASAPAY_CLIENT_ID = env("SASAPAY_CLIENT_ID", default="")
 SASAPAY_CLIENT_SECRET = env("SASAPAY_CLIENT_SECRET", default="")
 SASAPAY_MERCHANT_CODE = env("SASAPAY_MERCHANT_CODE", default="")
+# SasaPay's aggregator paybill that customers enter as the "Business
+# Number" on M-Pesa. The merchant account (SASAPAY_MERCHANT_CODE) is
+# what they enter as the "Account Number". For Cpay's production app
+# (approved 2026-05-08) the combination is:
+#   Paybill: 756756 · Account: 1334777-<CRYPTO>-<phone>
+# The auto-buy flow (apps/mpesa/sasapay_views.py::_process_c2b_deposit)
+# parses the account suffix to identify the crypto + user.
+SASAPAY_C2B_PAYBILL = env("SASAPAY_C2B_PAYBILL", default="756756")
 SASAPAY_CALLBACK_URL = env("SASAPAY_CALLBACK_URL", default="https://cpay.co.ke/api/v1/sasapay/callback/")
 # SasaPay webhook signing secret · used to verify the HMAC on incoming
 # callbacks. Without this, the only authentication is the IP allow-list,

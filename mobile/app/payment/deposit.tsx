@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import * as Clipboard from "expo-clipboard";
 import { CryptoLogo } from "../../src/components/CryptoLogo";
 import { Button } from "../../src/components/Button";
 import { useToast } from "../../src/components/Toast";
@@ -506,8 +507,12 @@ export default function DepositScreen() {
               </View>
             ) : c2bInstructions ? (
               <>
-                {/* Paybill Number Card */}
-                <View
+                {/* Paybill Number Card · provider badge + tap-to-copy */}
+                <Pressable
+                  onPress={async () => {
+                    await Clipboard.setStringAsync(c2bInstructions.paybill);
+                    toast.success("Copied", `Paybill ${c2bInstructions.paybill}`);
+                  }}
                   style={{
                     backgroundColor: colors.primary[500] + "08",
                     borderRadius: 18,
@@ -517,8 +522,38 @@ export default function DepositScreen() {
                     alignItems: "center",
                     gap: 8,
                     ...ts.sm,
+                    ...(isWeb ? ({ cursor: "pointer" } as any) : {}),
                   }}
                 >
+                  {c2bInstructions.provider_label ? (
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 6,
+                        backgroundColor: colors.primary[500] + "15",
+                        paddingHorizontal: 10,
+                        paddingVertical: 4,
+                        borderRadius: 10,
+                      }}
+                    >
+                      <Ionicons
+                        name="shield-checkmark"
+                        size={12}
+                        color={colors.primary[400]}
+                      />
+                      <Text
+                        style={{
+                          color: colors.primary[400],
+                          fontSize: 11,
+                          fontFamily: "DMSans_600SemiBold",
+                          letterSpacing: 0.4,
+                        }}
+                      >
+                        Powered by {c2bInstructions.provider_label}
+                      </Text>
+                    </View>
+                  ) : null}
                   <Text
                     style={{
                       color: tc.textMuted,
@@ -530,16 +565,29 @@ export default function DepositScreen() {
                   >
                     Business Number (Paybill)
                   </Text>
-                  <Text
+                  <View
                     style={{
-                      color: colors.primary[400],
-                      fontSize: 36,
-                      fontFamily: "DMSans_700Bold",
-                      letterSpacing: 2,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 8,
                     }}
                   >
-                    {c2bInstructions.paybill}
-                  </Text>
+                    <Text
+                      style={{
+                        color: colors.primary[400],
+                        fontSize: 36,
+                        fontFamily: "DMSans_700Bold",
+                        letterSpacing: 2,
+                      }}
+                    >
+                      {c2bInstructions.paybill}
+                    </Text>
+                    <Ionicons
+                      name="copy-outline"
+                      size={18}
+                      color={colors.primary[400]}
+                    />
+                  </View>
                   <Text
                     style={{
                       color: tc.textMuted,
@@ -550,7 +598,7 @@ export default function DepositScreen() {
                     Min: KES {c2bInstructions.min_amount.toLocaleString()} | Max: KES{" "}
                     {c2bInstructions.max_amount.toLocaleString()} | Fee: {c2bInstructions.fee_percent}%
                   </Text>
-                </View>
+                </Pressable>
 
                 {/* Account Formats */}
                 <View>
@@ -568,8 +616,15 @@ export default function DepositScreen() {
                   </Text>
                   <View style={{ gap: 8 }}>
                     {c2bInstructions.account_formats.map((fmt) => (
-                      <View
+                      <Pressable
                         key={fmt.currency}
+                        onPress={async () => {
+                          await Clipboard.setStringAsync(fmt.account_number);
+                          toast.success(
+                            "Copied",
+                            `${fmt.currency} account number`,
+                          );
+                        }}
                         style={{
                           flexDirection: "row",
                           alignItems: "center",
@@ -579,6 +634,7 @@ export default function DepositScreen() {
                           borderWidth: 1,
                           borderColor: tc.glass.border,
                           gap: 12,
+                          ...(isWeb ? ({ cursor: "pointer" } as any) : {}),
                         }}
                       >
                         <CryptoLogo currency={fmt.currency} size={28} />
@@ -603,9 +659,58 @@ export default function DepositScreen() {
                             {fmt.description}
                           </Text>
                         </View>
-                      </View>
+                        <Ionicons
+                          name="copy-outline"
+                          size={18}
+                          color={tc.textMuted}
+                        />
+                      </Pressable>
                     ))}
                   </View>
+                  {c2bInstructions.merchant_account ? (
+                    <View
+                      style={{
+                        marginTop: 10,
+                        backgroundColor: tc.dark.elevated,
+                        borderRadius: 12,
+                        padding: 12,
+                        borderWidth: 1,
+                        borderColor: tc.glass.border,
+                        flexDirection: "row",
+                        alignItems: "flex-start",
+                        gap: 10,
+                      }}
+                    >
+                      <Ionicons
+                        name="information-circle-outline"
+                        size={16}
+                        color={tc.textMuted}
+                        style={{ marginTop: 2 }}
+                      />
+                      <Text
+                        style={{
+                          flex: 1,
+                          color: tc.textMuted,
+                          fontSize: 12,
+                          fontFamily: "DMSans_400Regular",
+                          lineHeight: 17,
+                        }}
+                      >
+                        If you skip the crypto suffix and just enter
+                        account{" "}
+                        <Text
+                          style={{
+                            color: tc.textSecondary,
+                            fontFamily: "DMSans_700Bold",
+                          }}
+                        >
+                          {c2bInstructions.merchant_account}
+                        </Text>
+                        , funds land as KES in your wallet · you can
+                        convert to any crypto from there.
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
 
                 {/* Step-by-step Instructions */}

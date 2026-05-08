@@ -1357,57 +1357,103 @@ class DepositStatusView(APIView):
 
 
 class C2BInstructionsView(APIView):
-    """Return M-Pesa C2B deposit instructions for the authenticated user."""
+    """Return M-Pesa C2B deposit instructions for the authenticated user.
+
+    Provider-aware · the paybill + account-format pair depends on
+    `PAYMENT_PROVIDER`:
+
+      sasapay  · SasaPay aggregator paybill (default 756756) + account
+                 in the form `<MERCHANT>-<CRYPTO>-<phone>` so the
+                 SasaPay IPN can identify the user + their intended
+                 crypto without a pre-deposit quote.
+      daraja   · Cpay's own M-Pesa shortcode + account `<CRYPTO>-<phone>`
+                 (the legacy format · kept for the day Daraja LNO lands).
+      intasend · IntaSend supplies its own paybill at onboarding · for
+                 now we surface the SasaPay format and ops flips
+                 PAYMENT_PROVIDER when ready.
+
+    Mobile + web read this contract from /payments/deposit/c2b-
+    instructions/. The response shape is stable across providers (just
+    the values change) so the deposit screen needs no per-provider
+    logic.
+    """
 
     permission_classes = [IsAuthenticated]
+
+    SUPPORTED_C2B_CURRENCIES = ("USDT", "USDC", "BTC", "ETH", "SOL")
 
     def get(self, request):
         from django.conf import settings as app_settings
 
         user = request.user
         phone = user.phone.replace("+", "") if user.phone else ""
+        provider = getattr(app_settings, "PAYMENT_PROVIDER", "daraja").lower()
 
-        return Response({
-            "paybill": app_settings.MPESA_SHORTCODE,
-            "account_formats": [
-                {
-                    "currency": "USDT",
-                    "account_number": f"USDT-{phone}",
-                    "description": "Deposit and receive USDT (Tether)",
-                },
-                {
-                    "currency": "USDC",
-                    "account_number": f"USDC-{phone}",
-                    "description": "Deposit and receive USDC (USD Coin)",
-                },
-                {
-                    "currency": "BTC",
-                    "account_number": f"BTC-{phone}",
-                    "description": "Deposit and receive Bitcoin",
-                },
-                {
-                    "currency": "ETH",
-                    "account_number": f"ETH-{phone}",
-                    "description": "Deposit and receive Ethereum",
-                },
-                {
-                    "currency": "SOL",
-                    "account_number": f"SOL-{phone}",
-                    "description": "Deposit and receive Solana",
-                },
-            ],
-            "min_amount": app_settings.DEPOSIT_MIN_KES,
-            "max_amount": app_settings.DEPOSIT_MAX_KES,
-            "fee_percent": app_settings.DEPOSIT_FEE_PERCENTAGE,
-            "instructions": [
+        if provider == "sasapay":
+            paybill = getattr(app_settings, "SASAPAY_C2B_PAYBILL", "756756")
+            merchant = getattr(app_settings, "SASAPAY_MERCHANT_CODE", "")
+            # New account format · embeds the merchant account so SasaPay
+            # routes correctly + the crypto choice + the user's phone for
+            # auto-credit.
+            account_for = lambda crypto: (
+                f"{merchant}-{crypto}-{phone}" if merchant else f"{crypto}-{phone}"
+            )
+            provider_label = "SasaPay"
+            instructions = [
                 "Open M-Pesa on your phone",
                 "Select Lipa Na M-Pesa → Pay Bill",
-                f"Enter Business Number: {app_settings.MPESA_SHORTCODE}",
+                f"Enter Business Number: {paybill}",
+                "Copy the Account Number for the crypto you want, then paste it",
+                f"  (the format is {merchant}-<CRYPTO>-<your-phone>)",
+                "Enter the KES amount you want to deposit",
+                "Enter your M-Pesa PIN to confirm",
+                "Your crypto is credited at the current market rate · usually within 30 seconds",
+            ]
+        else:
+            # Legacy / Daraja / IntaSend-fallback path: account is just
+            # `<CRYPTO>-<phone>` keyed off the M-Pesa shortcode.
+            paybill = app_settings.MPESA_SHORTCODE
+            account_for = lambda crypto: f"{crypto}-{phone}"
+            provider_label = "M-Pesa"
+            instructions = [
+                "Open M-Pesa on your phone",
+                "Select Lipa Na M-Pesa → Pay Bill",
+                f"Enter Business Number: {paybill}",
                 "Enter Account Number using format above (e.g., USDT-0712345678)",
                 "Enter the KES amount you want to deposit",
                 "Enter your M-Pesa PIN to confirm",
                 "Your crypto will be credited at the current market rate",
-            ],
+            ]
+
+        descriptions = {
+            "USDT": "Deposit and receive USDT (Tether)",
+            "USDC": "Deposit and receive USDC (USD Coin)",
+            "BTC":  "Deposit and receive Bitcoin",
+            "ETH":  "Deposit and receive Ethereum",
+            "SOL":  "Deposit and receive Solana",
+        }
+        account_formats = [
+            {
+                "currency": c,
+                "account_number": account_for(c),
+                "description": descriptions[c],
+            }
+            for c in self.SUPPORTED_C2B_CURRENCIES
+        ]
+
+        return Response({
+            "provider": provider,
+            "provider_label": provider_label,
+            "paybill": paybill,
+            # Surface the merchant account separately so a UI can show
+            # the user-friendly "If you skip the crypto suffix the deposit
+            # lands as KES in your wallet" fallback hint.
+            "merchant_account": getattr(app_settings, "SASAPAY_MERCHANT_CODE", "") if provider == "sasapay" else "",
+            "account_formats": account_formats,
+            "min_amount": app_settings.DEPOSIT_MIN_KES,
+            "max_amount": app_settings.DEPOSIT_MAX_KES,
+            "fee_percent": app_settings.DEPOSIT_FEE_PERCENTAGE,
+            "instructions": instructions,
         })
 
 

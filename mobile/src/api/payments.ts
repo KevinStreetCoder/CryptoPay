@@ -158,6 +158,13 @@ export interface C2BInstructions {
   max_amount: number;
   fee_percent: number;
   instructions: string[];
+  // 2026-05-08 · SasaPay support · provider id ("sasapay" / "daraja"
+  // / "intasend") + human label, plus the merchant account hint for
+  // SasaPay (lets the UI show the "deposit lands as KES if you skip
+  // the crypto suffix" fallback message).
+  provider?: string;
+  provider_label?: string;
+  merchant_account?: string;
 }
 
 export interface SavedPaybill {
