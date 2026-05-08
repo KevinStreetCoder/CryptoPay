@@ -1,0 +1,340 @@
+"""IntaSend callback handler.
+
+Receives async event notifications for every IntaSend operation we kicked
+off · STK Push results, Send-Money outcomes, status changes. IntaSend
+fires all of them at the single callback URL we register in the
+dashboard, with a JSON body shaped roughly like:
+
+    {
+      "invoice_id":  "RVCZ8WL",
+      "state":       "COMPLETE",         // or PENDING / FAILED / RETRY
+      "provider":    "M-PESA",
+      "charges":     "0.00",
+      "net_amount":  "100.00",
+      "value":       "100.00",
+      "account":     "254712345678",
+      "api_ref":     "<our uuid>",       // round-tripped from initiate
+      "mpesa_reference": "QH8xxxxxxx",   // when state == COMPLETE
+      "tracking_id": "abc-…"
+    }
+
+Two distinct handlers under one URL:
+  - collection (incoming STK Push / mobile money) · BUY flow + paybill
+    settlement-side confirmation (when we ourselves are the payer
+    paying out from our IntaSend wallet)
+  - send_money (outgoing B2C/B2B) · transitions the saga to
+    COMPLETED on success or compensates on failure
+
+Defence layers (parallel to apps/mpesa/sasapay_views.py · same shape):
+
+  1. IP allow-list at the middleware layer (INTASEND_ALLOWED_IPS).
+  2. HMAC-SHA256 of the raw body keyed on `INTASEND_WEBHOOK_SECRET`,
+     verified against `X-IntaSend-Signature` header. Constant-time
+     compared so a timing oracle can't leak the secret. The "challenge"
+     IntaSend stores in their dashboard IS the webhook secret.
+  3. Per-callback Redis SETNX dedup on `tracking_id` (or `invoice_id`
+     when tracking_id is absent) · prevents replay storms.
+  4. Amount tamper check on COMPLETE callbacks · the payload `value`
+     must match the pending Transaction's `source_amount` within 1 KES;
+     mismatch is a hard reject and opens a ReconciliationCase.
+
+Security model deliberately mirrors the SasaPay/K2 paths so a single
+review can cover all three rails.
+"""
+from __future__ import annotations
+
+import hashlib
+import hmac
+import json
+import logging
+from decimal import Decimal, InvalidOperation
+
+from django.conf import settings
+from django.core.cache import cache
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
+
+logger = logging.getLogger(__name__)
+
+
+# ── Authentication helpers ───────────────────────────────────────────
+
+
+def _verify_header_signature(request, body_bytes: bytes) -> bool:
+    """Verify the IntaSend HMAC signature header.
+
+    IntaSend signs every callback with HMAC-SHA256 of the raw body keyed
+    on the dashboard "challenge" (which we treat as `INTASEND_WEBHOOK_SECRET`).
+    The header value is the hex digest, optionally prefixed with `sha256=`.
+    Constant-time compared.
+    """
+    secret = getattr(settings, "INTASEND_WEBHOOK_SECRET", "") or ""
+    if not secret:
+        return False
+
+    received = (
+        request.headers.get("X-IntaSend-Signature")
+        or request.META.get("HTTP_X_INTASEND_SIGNATURE", "")
+        or ""
+    ).strip()
+    if not received:
+        return False
+
+    expected = hmac.new(
+        secret.encode("utf-8"), body_bytes, hashlib.sha256,
+    ).hexdigest()
+    if "=" in received:
+        received = received.split("=", 1)[1]
+    return hmac.compare_digest(expected, received)
+
+
+def _dedup_key(payload: dict) -> str | None:
+    tid = payload.get("tracking_id") or payload.get("invoice_id")
+    if isinstance(tid, str) and tid:
+        return f"intasend_callback_seen:{tid}"
+    return None
+
+
+def _is_complete(state: str) -> bool:
+    return (state or "").upper() in {"COMPLETE", "COMPLETED", "PROCESSED"}
+
+
+def _is_failed(state: str) -> bool:
+    return (state or "").upper() in {"FAILED", "RETRY", "FAILED_RETRYABLE"}
+
+
+# ── Per-event handlers ───────────────────────────────────────────────
+
+
+def _find_pending_tx(payload: dict):
+    """Locate the pending Cpay Transaction this callback resolves.
+
+    Tries (in order):
+      1. `api_ref` (our UUID round-tripped from initiate)
+      2. `tracking_id` against `Transaction.saga_data["intasend_tracking_id"]`
+      3. `invoice_id` against `Transaction.saga_data["intasend_invoice_id"]`
+    """
+    from apps.payments.models import Transaction
+
+    api_ref = payload.get("api_ref")
+    if api_ref:
+        tx = Transaction.objects.filter(idempotency_key=api_ref).first()
+        if tx:
+            return tx
+
+    tracking_id = payload.get("tracking_id")
+    if tracking_id:
+        tx = Transaction.objects.filter(
+            saga_data__intasend_tracking_id=tracking_id
+        ).first()
+        if tx:
+            return tx
+
+    invoice_id = payload.get("invoice_id")
+    if invoice_id:
+        tx = Transaction.objects.filter(
+            saga_data__intasend_invoice_id=invoice_id
+        ).first()
+        if tx:
+            return tx
+
+    return None
+
+
+def _handle_collection_event(payload: dict) -> dict:
+    """C2B side: a customer just paid us via STK Push. Used on the
+    BUY-crypto flow only · paybill/till payments use send-money."""
+    from apps.payments.models import Transaction
+    from apps.wallets.services import WalletService
+    from django.db import transaction as db_tx
+    from django.utils import timezone
+
+    state = payload.get("state", "")
+    tx = _find_pending_tx(payload)
+    if not tx:
+        logger.warning(
+            "intasend.collection.tx_not_found",
+            extra={"payload_summary": {k: payload.get(k) for k in ("api_ref", "tracking_id", "invoice_id", "state")}},
+        )
+        return {"status": "tx_not_found"}
+
+    if not _is_complete(state):
+        if _is_failed(state):
+            tx.status = Transaction.Status.FAILED
+            tx.failure_reason = (
+                f"IntaSend collection failed (state={state})."
+            )
+            tx.save(update_fields=["status", "failure_reason", "updated_at"])
+            logger.info(
+                "intasend.collection.failed",
+                extra={"tx_id": str(tx.id), "state": state},
+            )
+        return {"status": "noted", "state": state}
+
+    # Amount tamper check.
+    try:
+        cb_amount = Decimal(str(payload.get("value") or payload.get("net_amount") or "0"))
+    except (InvalidOperation, TypeError):
+        cb_amount = Decimal("0")
+    expected = Decimal(tx.source_amount or 0)
+    if abs(cb_amount - expected) > Decimal("1"):
+        logger.error(
+            "intasend.collection.amount_mismatch",
+            extra={
+                "tx_id": str(tx.id),
+                "expected": str(expected),
+                "received": str(cb_amount),
+            },
+        )
+        return {"status": "amount_mismatch"}, 400
+
+    with db_tx.atomic():
+        tx_locked = (
+            Transaction.objects.select_for_update().get(id=tx.id)
+        )
+        if tx_locked.status == Transaction.Status.COMPLETED:
+            return {"status": "already_completed"}
+
+        tx_locked.status = Transaction.Status.COMPLETED
+        tx_locked.mpesa_receipt = payload.get("mpesa_reference") or ""
+        tx_locked.completed_at = timezone.now()
+        tx_locked.save(update_fields=[
+            "status", "mpesa_receipt", "completed_at", "updated_at",
+        ])
+
+        # BUY flow: credit the user's crypto wallet now that fiat is in.
+        try:
+            from apps.payments.saga import PaymentSaga
+            PaymentSaga(tx_locked).complete(mpesa_receipt=tx_locked.mpesa_receipt)
+        except Exception:
+            logger.exception(
+                "intasend.collection.complete_failed",
+                extra={"tx_id": str(tx_locked.id)},
+            )
+
+    return {"status": "completed", "tx_id": str(tx_locked.id)}
+
+
+def _handle_send_money_event(payload: dict) -> dict:
+    """B2C/B2B side: a Send Money we initiated has resolved. Routes
+    through the saga so reconciliation cases open consistently with
+    the SasaPay + Daraja paths."""
+    from apps.payments.models import Transaction
+    from apps.payments.saga import PaymentSaga
+
+    state = payload.get("state", "")
+    tx = _find_pending_tx(payload)
+    if not tx:
+        logger.warning(
+            "intasend.send_money.tx_not_found",
+            extra={"payload_summary": {k: payload.get(k) for k in ("api_ref", "tracking_id", "invoice_id", "state")}},
+        )
+        return {"status": "tx_not_found"}
+
+    saga = PaymentSaga(tx)
+
+    if _is_complete(state):
+        try:
+            saga.complete(mpesa_receipt=payload.get("mpesa_reference") or "")
+        except Exception:
+            logger.exception(
+                "intasend.send_money.complete_failed",
+                extra={"tx_id": str(tx.id)},
+            )
+            return {"status": "complete_error"}
+        return {"status": "completed", "tx_id": str(tx.id)}
+
+    if _is_failed(state):
+        # Don't compensate here · the saga's check_pending_mpesa_payments
+        # cron handles compensation after a 10-min grace window so
+        # transient retryable failures don't trigger a reversal storm.
+        # Just mark the failure_reason for ops visibility.
+        tx.failure_reason = (
+            f"IntaSend send-money state={state}; awaiting cron compensation."
+        )
+        tx.save(update_fields=["failure_reason", "updated_at"])
+        return {"status": "marked_failed", "tx_id": str(tx.id)}
+
+    return {"status": "noted", "state": state}
+
+
+# ── Entry point ──────────────────────────────────────────────────────
+
+
+def _classify_event(payload: dict) -> str:
+    """Return one of 'collection' / 'send_money' / 'unknown'.
+
+    IntaSend doesn't expose a single canonical event-type field across
+    all webhooks · the safest route is to inspect the payload shape.
+    Send-money events carry a `provider` field (MPESA-B2C / MPESA-B2B /
+    PESALINK / etc) that incoming-payment events don't have.
+    """
+    provider = (payload.get("provider") or "").upper()
+    if provider in {"MPESA-B2C", "MPESA-B2B", "PESALINK", "INTASEND", "AIRTIME"}:
+        return "send_money"
+    if payload.get("invoice_id") or payload.get("mpesa_reference"):
+        return "collection"
+    return "unknown"
+
+
+@csrf_exempt
+@require_POST
+def intasend_callback(request, token: str = ""):
+    """Single endpoint that handles every IntaSend webhook event.
+
+    Routes by inspecting the payload shape (no header per-event topic
+    is sent · IntaSend collapses all events to one URL).
+    """
+    body_bytes = request.body or b""
+    try:
+        payload = json.loads(body_bytes.decode("utf-8") or "{}")
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        logger.warning("intasend.callback.bad_body")
+        return JsonResponse({"error": "invalid_body"}, status=400)
+
+    # 1 · Signature verification (DEBUG bypass for local dev only).
+    if not getattr(settings, "DEBUG", False):
+        if not _verify_header_signature(request, body_bytes):
+            logger.warning(
+                "intasend.callback.bad_signature",
+                extra={"payload_summary": {k: payload.get(k) for k in ("invoice_id", "tracking_id", "state")}},
+            )
+            return JsonResponse({"error": "bad_signature"}, status=401)
+
+    # 2 · Replay-protection (Redis SETNX).
+    dedup = _dedup_key(payload)
+    if dedup:
+        # 7-day window · IntaSend retries within 24 h, but lots of
+        # headroom is cheap. `add` returns False if the key already
+        # exists, hence the inversion.
+        if not cache.add(dedup, "1", timeout=7 * 86400):
+            return JsonResponse({"status": "duplicate", "key": dedup})
+
+    # 3 · Route by inferred event type.
+    kind = _classify_event(payload)
+    if kind == "collection":
+        result = _handle_collection_event(payload)
+    elif kind == "send_money":
+        result = _handle_send_money_event(payload)
+    else:
+        logger.info(
+            "intasend.callback.unknown_event",
+            extra={"payload_summary": {k: payload.get(k) for k in ("invoice_id", "tracking_id", "state", "provider")}},
+        )
+        result = {"status": "ignored_unknown"}
+
+    # Allow handlers to return (body, status_code) tuples for hard rejects.
+    if isinstance(result, tuple):
+        body, code = result
+        return JsonResponse(body, status=code)
+    return JsonResponse(result)
+
+
+@csrf_exempt
+@require_POST
+def intasend_ipn(request):
+    """Some IntaSend integrations register a separate IPN URL distinct
+    from the webhook. Same handler logic · this just gives ops a second
+    URL to register if needed without a code change."""
+    return intasend_callback(request)

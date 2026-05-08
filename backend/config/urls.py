@@ -89,22 +89,24 @@ urlpatterns = [
     path("api/v1/sasapay/callback/<str:token>/", __import__("apps.mpesa.sasapay_views", fromlist=["sasapay_callback"]).sasapay_callback, name="sasapay-callback-root-token"),
     path("api/v1/sasapay/ipn/", __import__("apps.mpesa.sasapay_views", fromlist=["sasapay_ipn"]).sasapay_ipn, name="sasapay-ipn-root"),
 
-    # ── Kopo Kopo callbacks · LIVE 2026-04-30 ──
-    # Parallel aggregator rail · applied alongside SasaPay so whichever
-    # provider clears compliance first ships first. K2-Connect is the
-    # better long-term B2B story (first-class reversal API + KES 50
-    # flat outbound) so we route paybills + tills via Kopo Kopo if both
-    # approve.
+    # ── IntaSend callbacks · LIVE 2026-05-08 ──
+    # Secondary aggregator rail alongside SasaPay (primary). Replaces
+    # the briefly-shipped Kopo Kopo K2-Connect rail (2026-04-30) ·
+    # IntaSend approval landed first and we don't need both aggregators
+    # in production. The saga routes by `PAYMENT_PROVIDER`:
+    #   sasapay  → primary, CBK-licensed
+    #   intasend → secondary, this rail
+    #   daraja   → kept for the day the CBK Letter of No Objection lands
     #
     # Security model mirrors SasaPay:
-    #   - Header HMAC `X-KopoKopo-Signature` verified against
-    #     KOPOKOPO_API_KEY (or KOPOKOPO_WEBHOOK_SECRET fallback)
-    #   - production.py refuses boot when PAYMENT_PROVIDER=kopokopo
-    #     AND KOPOKOPO_API_KEY is empty
-    #   - KOPOKOPO_ALLOWED_IPS for an extra IP allow-list
-    path("api/v1/kopokopo/callback/", __import__("apps.mpesa.kopokopo_views", fromlist=["kopokopo_callback"]).kopokopo_callback, name="kopokopo-callback-root"),
-    path("api/v1/kopokopo/callback/<str:token>/", __import__("apps.mpesa.kopokopo_views", fromlist=["kopokopo_callback"]).kopokopo_callback, name="kopokopo-callback-root-token"),
-    path("api/v1/kopokopo/ipn/", __import__("apps.mpesa.kopokopo_views", fromlist=["kopokopo_ipn"]).kopokopo_ipn, name="kopokopo-ipn-root"),
+    #   - Header HMAC `X-IntaSend-Signature` verified against
+    #     INTASEND_WEBHOOK_SECRET (the dashboard "challenge" value)
+    #   - production.py refuses boot when PAYMENT_PROVIDER=intasend
+    #     AND INTASEND_API_SECRET / INTASEND_WEBHOOK_SECRET are empty
+    #   - INTASEND_ALLOWED_IPS for an extra IP allow-list
+    path("api/v1/intasend/callback/", __import__("apps.mpesa.intasend_views", fromlist=["intasend_callback"]).intasend_callback, name="intasend-callback-root"),
+    path("api/v1/intasend/callback/<str:token>/", __import__("apps.mpesa.intasend_views", fromlist=["intasend_callback"]).intasend_callback, name="intasend-callback-root-token"),
+    path("api/v1/intasend/ipn/", __import__("apps.mpesa.intasend_views", fromlist=["intasend_ipn"]).intasend_ipn, name="intasend-ipn-root"),
     # OpenAPI / Swagger — only in development (exposes full API surface)
     *([
         path("api/schema/", SpectacularAPIView.as_view(), name="schema"),

@@ -1,0 +1,333 @@
+"""IntaSend Payment API client.
+
+Replaces the Kopo Kopo K2-Connect rail (2026-05-08) · IntaSend is the
+secondary aggregator alongside CBK-licensed SasaPay (primary) while we
+chase the Daraja Letter-of-No-Objection from CBK (tertiary).
+
+Order of preference at the saga layer:
+  1. SasaPay   (CBK-licensed PSP, primary)
+  2. IntaSend  (this client · approved 2026-05-08)
+  3. Daraja    (direct M-Pesa, blocked on CBK LNO)
+
+Auth model: a single static `Authorization: Bearer ISSecretKey_…`
+header. No OAuth bearer-token round-trip (contrast SasaPay's
+client-credentials grant). Keys come from `INTASEND_API_SECRET` env var; the publishable
+key (`INTASEND_PUBLISHABLE_KEY`) is for frontend SDK use and unused
+server-side.
+
+API surface implemented · matches the SasaPayClient interface so the
+provider adapter routes transparently:
+  - stk_push           (C2B · /api/v1/payment/mpesa-stk-push/)
+  - pay_paybill        (B2B paybill via send-money/initiate, MPESA-B2B)
+  - pay_till           (B2B till    via send-money/initiate, MPESA-B2B)
+  - send_to_mobile     (B2C         via send-money/initiate, MPESA-B2C)
+  - query_transaction  (status      via /api/v1/payment/status/)
+  - reversal           (NOT SUPPORTED · IntaSend has no reversal API ·
+                        the saga opens REVERSAL_NOT_SUPPORTED case
+                        identical to the SasaPay path)
+
+Sources:
+  https://developers.intasend.com/docs/authentication
+  https://developers.intasend.com/reference (API index)
+  https://github.com/IntaSend/intasend-python (transfer.py provider names)
+"""
+from __future__ import annotations
+
+import logging
+import uuid
+from typing import Optional
+
+import requests
+from django.conf import settings
+
+logger = logging.getLogger(__name__)
+
+
+class IntaSendError(Exception):
+    """IntaSend API error."""
+
+
+# ── Phone normalisation ────────────────────────────────────────────────
+#
+# IntaSend accepts E.164 (+254712...) but its B2C send-money is happiest
+# with the bare 254712… form. Normalise once at the boundary so callers
+# can pass any of the four common Kenyan formats.
+
+def _normalise_phone(raw: str) -> str:
+    """Convert any sane Kenyan-mobile representation to +254XXXXXXXXX.
+
+    Raises ValueError on garbage so a bad number can't silently 400 the
+    upstream API call.
+    """
+    s = (raw or "").strip().replace(" ", "").replace("-", "")
+    if not s:
+        raise ValueError("Empty phone number")
+
+    if s.startswith("+254") and len(s) == 13 and s[4:].isdigit():
+        return s
+    if s.startswith("254") and len(s) == 12 and s.isdigit():
+        return "+" + s
+    if s.startswith("0") and len(s) == 10 and s.isdigit():
+        return "+254" + s[1:]
+    if s.startswith("7") and len(s) == 9 and s.isdigit():
+        return "+254" + s
+    if s.startswith("1") and len(s) == 9 and s.isdigit():
+        # Safaricom's 01-prefix range (introduced 2022).
+        return "+254" + s
+    raise ValueError(f"Unrecognised Kenyan phone format: {raw!r}")
+
+
+def _bare_254(phone_e164: str) -> str:
+    """Convert +254XXX… → 254XXX… for IntaSend's preferred shape."""
+    return phone_e164.lstrip("+")
+
+
+# ── Client ─────────────────────────────────────────────────────────────
+
+
+class IntaSendClient:
+    SANDBOX_BASE = "https://sandbox.intasend.com"
+    PRODUCTION_BASE = "https://payment.intasend.com"
+
+    def __init__(self):
+        self.environment = getattr(settings, "INTASEND_ENVIRONMENT", "sandbox")
+        self.base_url = (
+            self.PRODUCTION_BASE
+            if self.environment == "production"
+            else self.SANDBOX_BASE
+        )
+        self.api_secret = getattr(settings, "INTASEND_API_SECRET", "")
+        self.publishable_key = getattr(settings, "INTASEND_PUBLISHABLE_KEY", "")
+        self.callback_url = getattr(settings, "INTASEND_CALLBACK_URL", "")
+        self.wallet_id = getattr(settings, "INTASEND_WALLET_ID", "") or None
+
+    # ── Internals ──────────────────────────────────────────────────────
+
+    def _headers(self) -> dict:
+        if not self.api_secret:
+            raise IntaSendError(
+                "INTASEND_API_SECRET is not configured. Set it in the env "
+                "before invoking the IntaSend rail."
+            )
+        return {
+            "Authorization": f"Bearer {self.api_secret}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+
+    def _post(self, path: str, payload: dict, *, timeout: int = 30) -> dict:
+        url = f"{self.base_url}{path}"
+        try:
+            resp = requests.post(
+                url, json=payload, headers=self._headers(), timeout=timeout,
+            )
+        except requests.exceptions.RequestException as e:
+            raise IntaSendError(f"IntaSend network error on {path}: {e}") from e
+
+        # Decode body even on non-2xx · IntaSend returns a JSON error body.
+        try:
+            data = resp.json()
+        except ValueError:
+            data = {"raw": resp.text[:500]}
+
+        if not resp.ok:
+            logger.warning(
+                "intasend.api_error",
+                extra={"path": path, "status": resp.status_code, "body": data},
+            )
+            detail = data.get("detail") or data.get("error") or resp.text[:200]
+            raise IntaSendError(
+                f"IntaSend {resp.status_code} on {path}: {detail}"
+            )
+        return data
+
+    # ── C2B · STK Push (collect) ────────────────────────────────────────
+
+    def stk_push(
+        self,
+        phone: str,
+        amount: float,
+        account_ref: str = "",
+        description: str = "",
+        email: Optional[str] = None,
+    ) -> dict:
+        """Initiate an M-Pesa STK Push to the customer's phone.
+
+        IntaSend wants the bare 254XXX… form and treats `narrative`
+        like Daraja's `AccountReference` (visible on the M-Pesa SMS).
+        """
+        normalised = _normalise_phone(phone)
+        api_ref = str(uuid.uuid4())
+
+        payload = {
+            "phone_number": _bare_254(normalised),
+            "amount": int(round(float(amount))),
+            "currency": "KES",
+            "api_ref": api_ref,
+            "narrative": (description or account_ref or "Payment")[:64],
+        }
+        if email:
+            payload["email"] = email
+
+        data = self._post("/api/v1/payment/mpesa-stk-push/", payload)
+        # IntaSend response carries `invoice` with id + state, plus a
+        # top-level `tracking_id`. Saga stores tracking_id so the
+        # callback can resolve back to the originating Transaction.
+        invoice = data.get("invoice") or {}
+        return {
+            "InvoiceID": invoice.get("invoice_id") or data.get("id", ""),
+            "TrackingID": data.get("tracking_id") or invoice.get("tracking_id", ""),
+            "ResponseCode": "0",
+            "ResponseDescription": invoice.get("state", "PENDING"),
+            "CustomerMessage": "Check your phone for the M-Pesa prompt.",
+            "raw": data,
+        }
+
+    # ── B2B · Pay paybill / till ───────────────────────────────────────
+    #
+    # IntaSend's transfer module collapses both into the MPESA-B2B
+    # provider on /send-money/initiate/. Per the SDK convention the
+    # paybill case adds a separate account_number; till payments just
+    # carry the till in the `account` field. This shape is consistent
+    # with how M-Pesa B2B works under the hood.
+
+    def pay_paybill(
+        self,
+        paybill: str,
+        account: str,
+        amount: float,
+        reference: Optional[str] = None,
+        narrative: str = "Bill payment",
+    ) -> dict:
+        """B2B Paybill · pays an M-Pesa paybill on behalf of the merchant
+        wallet. Auto-approves (`requires_approval='NO'`) so the saga's
+        ~17-min retry envelope still fits."""
+        return self._send_money(
+            provider="MPESA-B2B",
+            transactions=[{
+                "name": (reference or "Cpay")[:32],
+                "account": str(paybill),
+                "account_number": str(account),
+                "amount": int(round(float(amount))),
+                "narrative": narrative[:64],
+            }],
+            reference=reference,
+        )
+
+    def pay_till(
+        self,
+        till: str,
+        amount: float,
+        reference: Optional[str] = None,
+        narrative: str = "BuyGoods",
+    ) -> dict:
+        """B2B Till · pays an M-Pesa BuyGoods till."""
+        return self._send_money(
+            provider="MPESA-B2B",
+            transactions=[{
+                "name": (reference or "Cpay")[:32],
+                "account": str(till),
+                "amount": int(round(float(amount))),
+                "narrative": narrative[:64],
+            }],
+            reference=reference,
+        )
+
+    def send_to_mobile(
+        self,
+        phone: str,
+        amount: float,
+        reason: str = "Payment",
+        reference: Optional[str] = None,
+    ) -> dict:
+        """B2C · sends KES from our IntaSend wallet to a mobile number.
+
+        Used by withdrawals and the saga's b2c clawback path when a
+        late-callback opens a recoverable double-settlement case.
+        """
+        normalised = _normalise_phone(phone)
+        return self._send_money(
+            provider="MPESA-B2C",
+            transactions=[{
+                "name": (reference or "Customer")[:32],
+                "account": _bare_254(normalised),
+                "amount": int(round(float(amount))),
+                "narrative": reason[:64],
+            }],
+            reference=reference,
+        )
+
+    def _send_money(
+        self,
+        *,
+        provider: str,
+        transactions: list,
+        reference: Optional[str],
+    ) -> dict:
+        """Initiate-and-approve the send-money flow as a single logical
+        operation. IntaSend supports a two-step `initiate → approve` if
+        `requires_approval=YES`; we set NO so the saga doesn't have to
+        track an extra state machine. The wallet selection is implicit
+        when `wallet_id` is empty (uses the merchant's default wallet)."""
+        api_ref = reference or str(uuid.uuid4())
+        payload = {
+            "provider": provider,
+            "currency": "KES",
+            "transactions": transactions,
+            "requires_approval": "NO",
+            "device_id": "cpay-saga",
+            "api_ref": api_ref,
+        }
+        if self.callback_url:
+            payload["callback_url"] = self.callback_url
+        if self.wallet_id:
+            payload["wallet_id"] = self.wallet_id
+
+        data = self._post("/api/v1/send-money/initiate/", payload)
+        tracking_id = (
+            data.get("tracking_id")
+            or (data.get("file_id") or "")
+            or (data.get("transactions", [{}])[0] or {}).get("tracking_id", "")
+        )
+        # Normalise to the provider-adapter contract: the saga reads
+        # ConversationID + ResponseCode and persists ConversationID on
+        # the Transaction so the callback path can re-resolve the row.
+        return {
+            "ConversationID": tracking_id,
+            "OriginatorConversationID": api_ref,
+            "ResponseCode": "0",
+            "ResponseDescription": data.get("state", "QUEUED"),
+            "raw": data,
+        }
+
+    # ── Status query ─────────────────────────────────────────────────
+
+    def query_transaction(
+        self,
+        invoice_id: Optional[str] = None,
+        tracking_id: Optional[str] = None,
+    ) -> dict:
+        """Poll a payment by invoice or tracking id. Used by the
+        check-pending sweep when no callback arrives within 60s."""
+        if not (invoice_id or tracking_id):
+            raise IntaSendError("query_transaction requires invoice_id or tracking_id")
+
+        payload = {}
+        if invoice_id:
+            payload["invoice_id"] = invoice_id
+        if tracking_id:
+            payload["tracking_id"] = tracking_id
+
+        return self._post("/api/v1/payment/status/", payload)
+
+    # ── Reversal · NOT SUPPORTED ─────────────────────────────────────
+
+    def reversal(self, transaction_id: str, amount: int = 0, remarks: str = "") -> dict:
+        """IntaSend has no reversal API on the public surface. The saga
+        opens a REVERSAL_NOT_SUPPORTED ReconciliationCase identical to
+        the SasaPay path · ops resolves manually via IntaSend support
+        + the user's M-Pesa receipt."""
+        raise NotImplementedError(
+            f"IntaSend does not support automated reversals. "
+            f"Transaction {transaction_id} requires a manual reconciliation."
+        )

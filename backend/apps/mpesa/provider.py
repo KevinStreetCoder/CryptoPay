@@ -1,5 +1,5 @@
 """
-Payment provider factory · switches between Daraja, SasaPay and Kopo Kopo.
+Payment provider factory · switches between Daraja, SasaPay and IntaSend.
 
 Usage:
     from apps.mpesa.provider import get_payment_client
@@ -7,14 +7,20 @@ Usage:
     client.pay_paybill(...)   # Routes to whichever provider is configured
 
 Set PAYMENT_PROVIDER in .env:
-    daraja   · Safaricom M-Pesa direct (default · requires CBK LNO)
-    sasapay  · SasaPay PSP (CBK-licensed)
-    kopokopo · Kopo Kopo aggregator (Daraja-approved merchant of record)
+    daraja    · Safaricom M-Pesa direct (default · blocked on CBK LNO
+                · keep configured for the day approval lands)
+    sasapay   · SasaPay PSP (CBK-licensed · primary rail)
+    intasend  · IntaSend aggregator (secondary rail · approved 2026-05-08)
 
 Each backend has a different method shape. This adapter normalises
 them into a Daraja-compatible response (ConversationID, ResponseCode,
 etc.) so the saga and the rest of the codebase don't have to know
 which rail is currently in use.
+
+History · the previous secondary rail was Kopo Kopo K2-Connect. Replaced
+with IntaSend on 2026-05-08 after IntaSend approval landed before
+Kopo Kopo's. The K2 client + webhook + tests were removed in the same
+commit · K2 had no production callbacks before retirement.
 """
 
 import logging
@@ -24,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 class PaymentProviderAdapter:
-    """Unified interface around MpesaClient / SasaPayClient / KopoKopoClient.
+    """Unified interface around MpesaClient / SasaPayClient / IntaSendClient.
 
     The three backends have different method names and response shapes ·
     this adapter normalises them so callers (saga, views) only need to
@@ -39,10 +45,10 @@ class PaymentProviderAdapter:
             from .sasapay_client import SasaPayClient
             self._client = SasaPayClient()
             logger.info("Using SasaPay payment provider")
-        elif provider == "kopokopo":
-            from .kopokopo_client import KopoKopoClient
-            self._client = KopoKopoClient()
-            logger.info("Using Kopo Kopo payment provider")
+        elif provider == "intasend":
+            from .intasend_client import IntaSendClient
+            self._client = IntaSendClient()
+            logger.info("Using IntaSend payment provider")
         else:
             from .client import MpesaClient
             self._client = MpesaClient()
@@ -57,8 +63,15 @@ class PaymentProviderAdapter:
         return self._provider_name == "sasapay"
 
     @property
-    def is_kopokopo(self) -> bool:
-        return self._provider_name == "kopokopo"
+    def is_intasend(self) -> bool:
+        return self._provider_name == "intasend"
+
+    @property
+    def supports_reversal(self) -> bool:
+        """Only Daraja has a first-class automated-reversal API. SasaPay
+        and IntaSend force manual reconciliation · the saga opens a
+        REVERSAL_NOT_SUPPORTED case in those paths."""
+        return self._provider_name == "daraja"
 
     # ── B2B — Pay Paybill ──────────────────────────────────────────────
 
@@ -73,25 +86,20 @@ class PaymentProviderAdapter:
             )
             return {
                 "ConversationID": result.get("B2BRequestID", result.get("ConversationID", "")),
-                "OriginatorConversationID": result.get("OriginatorConversationID",
-                                                        result.get("MerchantTransactionReference", "")),
+                "OriginatorConversationID": result.get(
+                    "OriginatorConversationID",
+                    result.get("MerchantTransactionReference", ""),
+                ),
                 "ResponseCode": result.get("ResponseCode", "0"),
                 "ResponseDescription": result.get("detail", ""),
             }
-        elif self.is_kopokopo:
+        elif self.is_intasend:
             result = self._client.pay_paybill(
                 paybill=paybill, account=account,
                 amount=float(amount), reference=reference,
             )
-            # K2 returns the resource Location URL · we treat it as the
-            # ConversationID so the saga can find it later from the
-            # callback (saga stores `kopokopo_pay_resource_url` on the tx).
-            return {
-                "ConversationID": result.get("k2_resource_url", ""),
-                "OriginatorConversationID": result.get("destination_reference", ""),
-                "ResponseCode": "0" if result.get("status_code", 0) in (200, 201) else "1",
-                "ResponseDescription": "queued" if result.get("status_code") else "",
-            }
+            # IntaSendClient already conforms to the adapter contract.
+            return result
         else:
             return self._client.b2b_payment(
                 paybill=paybill, account=account,
@@ -114,16 +122,10 @@ class PaymentProviderAdapter:
                 "ResponseCode": result.get("ResponseCode", "0"),
                 "ResponseDescription": result.get("detail", ""),
             }
-        elif self.is_kopokopo:
-            result = self._client.pay_till(
+        elif self.is_intasend:
+            return self._client.pay_till(
                 till=till, amount=float(amount), reference=reference,
             )
-            return {
-                "ConversationID": result.get("k2_resource_url", ""),
-                "OriginatorConversationID": result.get("destination_reference", ""),
-                "ResponseCode": "0" if result.get("status_code", 0) in (200, 201) else "1",
-                "ResponseDescription": "queued" if result.get("status_code") else "",
-            }
         else:
             return self._client.buy_goods(
                 till=till, amount=amount, remarks=remarks,
@@ -146,18 +148,12 @@ class PaymentProviderAdapter:
                 "ResponseCode": result.get("ResponseCode", "0"),
                 "ResponseDescription": result.get("detail", ""),
             }
-        elif self.is_kopokopo:
-            result = self._client.send_to_mobile(
+        elif self.is_intasend:
+            return self._client.send_to_mobile(
                 phone=phone, amount=float(amount),
                 reason=remarks or "Payment",
                 reference=transaction_id,
             )
-            return {
-                "ConversationID": result.get("k2_resource_url", ""),
-                "OriginatorConversationID": result.get("destination_reference", ""),
-                "ResponseCode": "0" if result.get("status_code", 0) in (200, 201) else "1",
-                "ResponseDescription": "queued" if result.get("status_code") else "",
-            }
         else:
             return self._client.b2c_payment(
                 phone=phone, amount=amount,
@@ -182,20 +178,22 @@ class PaymentProviderAdapter:
                 "ResponseDescription": result.get("detail", ""),
                 "CustomerMessage": result.get("CustomerMessage", ""),
             }
-        elif self.is_kopokopo:
+        elif self.is_intasend:
             result = self._client.stk_push(
                 phone=phone, amount=float(amount),
                 account_ref=account_ref, description=description,
             )
-            # K2's analogue to CheckoutRequestID is the resource URL
-            # in the Location header. Saga stores it on the tx so the
-            # callback can find the row.
             return {
-                "CheckoutRequestID": result.get("k2_resource_url", ""),
-                "MerchantRequestID": result.get("k2_resource_url", ""),
-                "ResponseCode": "0" if result.get("status_code", 0) in (200, 201) else "1",
-                "ResponseDescription": "stk_initiated" if result.get("status_code") else "",
-                "CustomerMessage": "Check your phone for the M-Pesa popup.",
+                "CheckoutRequestID": result.get("InvoiceID", ""),
+                "MerchantRequestID": result.get("TrackingID", ""),
+                "ResponseCode": result.get("ResponseCode", "0"),
+                "ResponseDescription": result.get(
+                    "ResponseDescription", "stk_initiated",
+                ),
+                "CustomerMessage": result.get(
+                    "CustomerMessage",
+                    "Check your phone for the M-Pesa prompt.",
+                ),
             }
         else:
             return self._client.stk_push(
@@ -207,28 +205,17 @@ class PaymentProviderAdapter:
 
     def reversal(self, transaction_id: str, amount: int, remarks: str = "") -> dict:
         if self.is_sasapay:
-            # SasaPay's reversal API is partial · the saga handles this
-            # by opening a REVERSAL_NOT_SUPPORTED ReconciliationCase.
             logger.warning(f"SasaPay reversal not supported. tx={transaction_id}")
             raise NotImplementedError(
                 f"SasaPay does not support reversals. Transaction {transaction_id} "
                 f"requires manual intervention."
             )
-        elif self.is_kopokopo:
-            # K2's reversal IS first-class · this is one of the main
-            # reasons we prefer Kopo Kopo for B2B over SasaPay. The
-            # saga's compensate_mpesa works without having to open a
-            # ReconciliationCase.
-            result = self._client.reversal(
-                transaction_id=transaction_id,
-                amount=amount, remarks=remarks,
+        elif self.is_intasend:
+            logger.warning(f"IntaSend reversal not supported. tx={transaction_id}")
+            raise NotImplementedError(
+                f"IntaSend does not support automated reversals. "
+                f"Transaction {transaction_id} requires manual intervention."
             )
-            return {
-                "ConversationID": result.get("k2_resource_url", ""),
-                "OriginatorConversationID": "",
-                "ResponseCode": "0" if result.get("status_code", 0) in (200, 201) else "1",
-                "ResponseDescription": "reversal_queued" if result.get("status_code") else "",
-            }
         else:
             return self._client.reversal(
                 transaction_id=transaction_id,

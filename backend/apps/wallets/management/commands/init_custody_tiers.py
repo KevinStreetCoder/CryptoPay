@@ -11,6 +11,7 @@ Usage::
 
     docker compose exec backend python manage.py init_custody_tiers
     docker compose exec backend python manage.py init_custody_tiers --dry-run
+    docker compose exec backend python manage.py init_custody_tiers --check
 """
 
 from django.conf import settings
@@ -35,8 +36,21 @@ class Command(BaseCommand):
             action="store_true",
             help="Show what would change without writing to the DB.",
         )
+        parser.add_argument(
+            "--check",
+            action="store_true",
+            help=(
+                "Report the current SystemWallet state and which "
+                "COLD_WALLET_* env vars are configured. Read-only. "
+                "Useful for a deploy-readiness sanity check."
+            ),
+        )
 
     def handle(self, *args, **opts):
+        if opts.get("check"):
+            self._handle_check()
+            return
+
         dry_run = opts["dry_run"]
         service = CustodyService()
 
@@ -120,3 +134,53 @@ class Command(BaseCommand):
             self.stdout.write(
                 self.style.WARNING("DRY RUN — no DB changes were made.")
             )
+
+    def _handle_check(self):
+        """Read-only ops report · current SystemWallet state + env config."""
+        service = CustodyService()
+        chains_seen = set()
+
+        self.stdout.write("\n=== Custody tier configuration ===\n")
+        for currency in service.CRYPTO_CURRENCIES:
+            chain = service._currency_to_chain(currency)
+            chains_seen.add(chain)
+            cold_env = (
+                getattr(settings, f"COLD_WALLET_{chain.upper()}", "") or ""
+            ).strip()
+
+            self.stdout.write(self.style.MIGRATE_HEADING(f"\n{currency}"))
+            for wallet_type in ("hot", "warm", "cold"):
+                row = SystemWallet.objects.filter(
+                    wallet_type=wallet_type, currency=currency,
+                ).first()
+                if not row:
+                    self.stdout.write(
+                        self.style.WARNING(
+                            f"  {wallet_type:5s} · NOT_SEEDED "
+                            f"(run init_custody_tiers without --check)"
+                        )
+                    )
+                    continue
+                addr = row.address or ""
+                if wallet_type == "cold":
+                    env_state = (
+                        f" env={cold_env[:10]}…" if cold_env else " env=(empty)"
+                    )
+                    if addr:
+                        marker = self.style.SUCCESS(f"OK  {addr[:14]}…")
+                    elif cold_env:
+                        marker = self.style.WARNING(
+                            f"env_set_but_db_empty · {cold_env[:14]}…"
+                        )
+                    else:
+                        marker = self.style.ERROR(
+                            "MISSING · set COLD_WALLET_"
+                            + chain.upper()
+                            + " in .env.production"
+                        )
+                    self.stdout.write(f"  cold  · {marker}{env_state}")
+                else:
+                    state = self.style.SUCCESS(addr[:14] + "…") if addr else self.style.WARNING("(empty)")
+                    self.stdout.write(f"  {wallet_type:5s} · {state}")
+
+        self.stdout.write("")

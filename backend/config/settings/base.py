@@ -456,7 +456,7 @@ TOTP_ENCRYPTION_KEY = env("TOTP_ENCRYPTION_KEY", default="")
 # 2026-04-30.md for the full decision tree.
 #   "daraja"   · Safaricom direct (requires CBK Letter of No Objection)
 #   "sasapay"  · SasaPay PSP (CBK-licensed, partial reversal API)
-#   "kopokopo" · Kopo Kopo aggregator (Daraja-approved merchant of record)
+#   "intasend" · IntaSend aggregator (replaced Kopo Kopo on 2026-05-08)
 PAYMENT_PROVIDER = env("PAYMENT_PROVIDER", default="daraja")
 SASAPAY_ENVIRONMENT = env("SASAPAY_ENVIRONMENT", default="sandbox")
 SASAPAY_CLIENT_ID = env("SASAPAY_CLIENT_ID", default="")
@@ -475,25 +475,31 @@ SASAPAY_WEBHOOK_SECRET = env("SASAPAY_WEBHOOK_SECRET", default="")
 # URL, consumed once-only via Redis SETNX.
 SASAPAY_CALLBACK_HMAC_KEY = env("SASAPAY_CALLBACK_HMAC_KEY", default="")
 
-# --- Kopo Kopo (third payment provider · Daraja-approved aggregator) ---
-# Set PAYMENT_PROVIDER=kopokopo to use Kopo Kopo instead of Daraja
-# or SasaPay. Onboarding via developers.kopokopo.com · KYB-only.
-KOPOKOPO_ENVIRONMENT = env("KOPOKOPO_ENVIRONMENT", default="sandbox")
-KOPOKOPO_CLIENT_ID = env("KOPOKOPO_CLIENT_ID", default="")
-KOPOKOPO_CLIENT_SECRET = env("KOPOKOPO_CLIENT_SECRET", default="")
-# K2 ties STK Push to a single till_number you receive at KYB approval.
-# All `incoming_payments` requests target this number.
-KOPOKOPO_TILL_NUMBER = env("KOPOKOPO_TILL_NUMBER", default="")
-KOPOKOPO_CALLBACK_URL = env(
-    "KOPOKOPO_CALLBACK_URL",
-    default="https://cpay.co.ke/api/v1/kopokopo/callback/",
+# --- IntaSend (third payment provider · approved 2026-05-08) ---
+# Set PAYMENT_PROVIDER=intasend to route through IntaSend instead of
+# Daraja or SasaPay. Onboarding at developers.intasend.com · KYB +
+# dashboard challenge for webhooks.
+#
+# Replaced the previous Kopo Kopo K2-Connect rail (2026-04-29) on
+# 2026-05-08 because IntaSend approval landed first and we don't need
+# both aggregators in production. Provider order at the saga layer:
+# SasaPay (primary, CBK-licensed) → IntaSend (secondary) → Daraja
+# (kept configured for the day the CBK Letter of No Objection lands).
+INTASEND_ENVIRONMENT = env("INTASEND_ENVIRONMENT", default="sandbox")
+INTASEND_PUBLISHABLE_KEY = env("INTASEND_PUBLISHABLE_KEY", default="")
+INTASEND_API_SECRET = env("INTASEND_API_SECRET", default="")
+INTASEND_CALLBACK_URL = env(
+    "INTASEND_CALLBACK_URL",
+    default="https://cpay.co.ke/api/v1/intasend/callback/",
 )
-# K2 webhook signing key · they sign every callback with HMAC-SHA256
-# of the raw body. The production guard refuses to boot when
-# PAYMENT_PROVIDER=kopokopo and this is empty (mirrors the SasaPay
-# WEBHOOK_SECRET gate).
-KOPOKOPO_API_KEY = env("KOPOKOPO_API_KEY", default="")
-KOPOKOPO_WEBHOOK_SECRET = env("KOPOKOPO_WEBHOOK_SECRET", default="")
+# IntaSend webhook signing key · the dashboard "challenge" value.
+# Verified as HMAC-SHA256(INTASEND_WEBHOOK_SECRET, raw_body) against
+# the X-IntaSend-Signature header. The production guard refuses to
+# boot when PAYMENT_PROVIDER=intasend and this is empty.
+INTASEND_WEBHOOK_SECRET = env("INTASEND_WEBHOOK_SECRET", default="")
+# Optional · explicit IntaSend wallet to disburse from. Empty uses
+# the merchant's default wallet on the dashboard.
+INTASEND_WALLET_ID = env("INTASEND_WALLET_ID", default="")
 
 # --- CoinGecko ---
 COINGECKO_API_KEY = env("COINGECKO_API_KEY", default="")
@@ -531,12 +537,12 @@ SASAPAY_ALLOWED_IPS = env.list("SASAPAY_ALLOWED_IPS", default=[
     "192.168.0.0/16",
     "127.0.0.0/8",
 ])
-# K2 webhook source IPs · Kopo Kopo publishes their range on request.
-# Kept as private CIDR by default for dev convenience; production
-# .env.production overrides with the real K2 source IPs (the
-# production guard mirrors the SASAPAY rule and refuses boot when
-# PAYMENT_PROVIDER=kopokopo with private-only ranges).
-KOPOKOPO_ALLOWED_IPS = env.list("KOPOKOPO_ALLOWED_IPS", default=[
+# IntaSend webhook source IPs · IntaSend publishes their range on
+# request. Kept as private CIDR by default for dev convenience;
+# production .env.production overrides with the real IntaSend source
+# IPs (the production guard mirrors the SASAPAY rule and refuses boot
+# when PAYMENT_PROVIDER=intasend with private-only ranges).
+INTASEND_ALLOWED_IPS = env.list("INTASEND_ALLOWED_IPS", default=[
     "192.168.0.0/16",
     "127.0.0.0/8",
 ])

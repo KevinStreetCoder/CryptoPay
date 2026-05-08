@@ -245,66 +245,50 @@ def _assert_production_env():
                 f"{bad_cidrs}. Override with the SasaPay-documented public "
                 "source IPs only."
             )
-    elif payment_provider == "kopokopo":
-        # 2026-04-30 · Kopo Kopo onboarded as a parallel rail to
-        # SasaPay. Same shape of guards: HMAC secret on the webhook
-        # AND a non-private IP allow-list.
-        kopokopo_env = globals().get("KOPOKOPO_ENVIRONMENT", "sandbox")
-        if kopokopo_env != "production":
+    elif payment_provider == "intasend":
+        # 2026-05-08 · IntaSend onboarded as the secondary aggregator
+        # alongside SasaPay (replaces the brief Kopo Kopo trial). Same
+        # shape of guards: HMAC secret on the webhook AND a non-private
+        # IP allow-list.
+        intasend_env = globals().get("INTASEND_ENVIRONMENT", "sandbox")
+        if intasend_env != "production":
             issues.append(
-                f"KOPOKOPO_ENVIRONMENT={kopokopo_env!r} in production — "
+                f"INTASEND_ENVIRONMENT={intasend_env!r} in production — "
                 "set to 'production' in .env.production"
             )
-        # HMAC gate · K2 signs every callback with X-KopoKopo-Signature
-        # using the merchant API key. Without it the only authentication
+        if not globals().get("INTASEND_API_SECRET", ""):
+            issues.append(
+                "PAYMENT_PROVIDER=intasend but INTASEND_API_SECRET is empty. "
+                "Set the live ISSecretKey_… value from the IntaSend dashboard "
+                "in .env.production."
+            )
+        # Webhook HMAC gate · without it the only callback authentication
         # is the IP allow-list, which is fragile.
-        kopokopo_secret = (
-            globals().get("KOPOKOPO_API_KEY", "")
-            or globals().get("KOPOKOPO_WEBHOOK_SECRET", "")
-        )
-        if not kopokopo_secret:
+        if not globals().get("INTASEND_WEBHOOK_SECRET", ""):
             issues.append(
-                "PAYMENT_PROVIDER=kopokopo but neither KOPOKOPO_API_KEY "
-                "nor KOPOKOPO_WEBHOOK_SECRET is set. Callbacks would be "
-                "unauthenticated (IP allow-list only). Set the API key "
-                "from the K2 developer dashboard."
+                "PAYMENT_PROVIDER=intasend but INTASEND_WEBHOOK_SECRET is "
+                "empty. Set the dashboard 'challenge' value · we verify "
+                "X-IntaSend-Signature with HMAC-SHA256(this_secret, body)."
             )
-        # OAuth credentials must be present too · without them the
-        # client can't even make outbound API calls, never mind verify
-        # callbacks.
-        if not globals().get("KOPOKOPO_CLIENT_ID", ""):
-            issues.append(
-                "PAYMENT_PROVIDER=kopokopo but KOPOKOPO_CLIENT_ID is empty."
-            )
-        if not globals().get("KOPOKOPO_CLIENT_SECRET", ""):
-            issues.append(
-                "PAYMENT_PROVIDER=kopokopo but KOPOKOPO_CLIENT_SECRET is empty."
-            )
-        if not globals().get("KOPOKOPO_TILL_NUMBER", ""):
-            issues.append(
-                "PAYMENT_PROVIDER=kopokopo but KOPOKOPO_TILL_NUMBER is empty. "
-                "STK Push needs the till number assigned at K2 KYB approval."
-            )
-        # IP allow-list must not be private-only in prod (same rule as SasaPay)
-        kopokopo_ips = globals().get("KOPOKOPO_ALLOWED_IPS", []) or []
-        bad_kopokopo_cidrs = [
-            ip for ip in kopokopo_ips
+        intasend_ips = globals().get("INTASEND_ALLOWED_IPS", []) or []
+        bad_intasend_cidrs = [
+            ip for ip in intasend_ips
             if ip.startswith(("10.", "127.", "172.16.", "172.17.", "172.18.",
                               "172.19.", "172.20.", "172.21.", "172.22.",
                               "172.23.", "172.24.", "172.25.", "172.26.",
                               "172.27.", "172.28.", "172.29.", "172.30.",
                               "172.31.", "192.168.", "169.254."))
         ]
-        if bad_kopokopo_cidrs:
+        if bad_intasend_cidrs:
             issues.append(
-                f"KOPOKOPO_ALLOWED_IPS contains private CIDRs in production: "
-                f"{bad_kopokopo_cidrs}. Override with the K2-documented "
+                f"INTASEND_ALLOWED_IPS contains private CIDRs in production: "
+                f"{bad_intasend_cidrs}. Override with the IntaSend-documented "
                 "public source IPs only."
             )
     elif payment_provider:
         issues.append(
             f"PAYMENT_PROVIDER={payment_provider!r} is not supported. "
-            "Use 'daraja', 'sasapay', or 'kopokopo'."
+            "Use 'daraja', 'sasapay', or 'intasend'."
         )
 
     # Audit HIGH-1: TOTP secret encryption key must NOT fall back to

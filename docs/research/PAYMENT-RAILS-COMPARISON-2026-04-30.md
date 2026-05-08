@@ -1,35 +1,45 @@
-# Payment-rail comparison · post-Daraja-block (2026-04-30)
+# Payment-rail comparison · post-Daraja-block (2026-04-30 → revised 2026-05-08)
 
-**Status:** decision-ready
+**Status:** decision-ready · IntaSend + SasaPay both approved
 **Owner:** payments + regulatory
-**Updated:** 2026-04-30
+**Updated:** 2026-05-08 (originally 2026-04-30)
 **Companion:** `DARAJA-CBK-BLOCKER-2026-04-30.md`
 
-## TL;DR · two-rail strategy (revised 2026-04-30)
+## TL;DR · final rail order (2026-05-08)
 
 The CBK Letter of No-Objection blocking direct Daraja is real and
 unavoidable · months of regulatory work · but it does NOT block
-production. **Three-track:**
+production. Three rails are now in code, **switched purely by
+`PAYMENT_PROVIDER` env var** so we can flip between them without a
+deploy:
 
-1. **SasaPay** · submit the production application today. Code
-   already exists (`apps/mpesa/sasapay_client.py`), callback URL
-   live, 5 env vars to add when approved. 1-3 weeks.
-2. **Kopo Kopo** · apply in parallel this week. Better economics
-   (KES 50 flat outbound), first-class reversal API, full B2B
-   Paybill / Till support via `pay_service` (originally mis-read
-   as a gap · verified 2026-04-30 against the k2-connect-python
-   SDK README). 1-2 days of new client code mirroring the
-   `MpesaClient` interface.
-3. **CBK LNO file** · engage KE counsel (AMG Advocates / CM
-   Advocates LLP). KES 1.5-3M legal + KES 100K filing + 6-12
-   months. Reply to Safaricom Falcon ONLY when the LNO lands.
-   The reply IS the LNO, not an explanation.
+1. **SasaPay** · **PRIMARY · approved 2026-05-08** · Merchant Code
+   `1334777`, callback `https://cpay.co.ke/api/v1/sasapay/callback/`.
+   Code in `apps/mpesa/sasapay_client.py` and
+   `apps/mpesa/sasapay_views.py`. CBK-licensed PSP (Nov 2025 PSP
+   directory). The default rail going to public beta.
+2. **IntaSend** · **SECONDARY · approved 2026-05-08** · Live API
+   keys provisioned, dashboard challenge for webhooks set, code
+   in `apps/mpesa/intasend_client.py` and
+   `apps/mpesa/intasend_views.py`. Replaced the briefly-shipped
+   Kopo Kopo K2-Connect rail (2026-04-29) on 2026-05-08 because
+   IntaSend cleared compliance before Kopo Kopo and we don't need
+   both aggregators in production.
+3. **Daraja** · kept configured for the day the CBK Letter of No
+   Objection lands. Direct Safaricom rail · cleanest UX (M-Pesa
+   SMS reads "CPAY", same-day settlement, full reversal API). Set
+   `PAYMENT_PROVIDER=daraja` once the LNO is in hand.
 
-Whichever aggregator clears compliance first ships first. If both
-approve, route by transaction type: paybills + tills via Kopo
-Kopo (better economics + first-class reversal), STK + B2C via
-either. Bottom line: do not let a Safaricom Falcon reviewer become
-your roadmap.
+The old "whichever clears compliance first ships first" race is
+resolved · IntaSend won that. Kopo Kopo code retired on 2026-05-08
+(see git log `137b3aa..HEAD apps/mpesa/kopokopo_*` · the K2 client +
+webhook + tests were never used in production).
+
+**Operational rule:** if SasaPay rate-limits or has a regional
+outage, ops flips `PAYMENT_PROVIDER=intasend` in `.env.production`
++ restarts web containers · zero code change. The provider
+adapter (`apps/mpesa/provider.py`) normalises the response shape
+across all three rails.
 
 ---
 
