@@ -1,10 +1,14 @@
 import csv
+import json
 
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.http import HttpResponse
+from django.urls import reverse
 from django.utils import timezone
+from django.utils.html import format_html
 
-from .models import SavedPaybill, Transaction
+from . import admin_actions
+from .models import ReconciliationCase, SavedPaybill, Transaction
 
 
 def mark_as_reviewed(modeladmin, request, queryset):
@@ -129,3 +133,280 @@ class SavedPaybillAdmin(admin.ModelAdmin):
     list_filter = ("paybill_number",)
     search_fields = ("user__phone", "paybill_number", "account_number", "label")
     readonly_fields = ("id", "created_at")
+
+
+# ── ReconciliationCase admin ─────────────────────────────────────────────
+#
+# 2026-05-08 · turns the ReconciliationCase queue from "rows in Postgres"
+# into something ops can actually work. Severity-coloured pills, SLA
+# countdown, transaction crosslinks, evidence pretty-printer, and bulk
+# actions (assign-to-me, resolve, escalate, mark auto-resolved) all
+# routed through `admin_actions` so the audit trail (notes column)
+# stays consistent across the Django admin and the DRF admin API.
+
+_SEVERITY_LABELS = {1: "INFO", 2: "LOW", 3: "MED", 4: "HIGH", 5: "CRIT"}
+_SEVERITY_COLORS = {1: "#9CA3AF", 2: "#60A5FA", 3: "#FBBF24", 4: "#F97316", 5: "#DC2626"}
+_STATUS_COLORS = {
+    "open": "#F97316",
+    "escalated": "#DC2626",
+    "human_resolved": "#10B981",
+    "auto_resolved": "#10B981",
+}
+
+
+@admin.register(ReconciliationCase)
+class ReconciliationCaseAdmin(admin.ModelAdmin):
+    list_display = (
+        "short_id",
+        "case_type_label",
+        "status_pill",
+        "severity_pill",
+        "transaction_link",
+        "user_phone",
+        "kes_amount",
+        "assigned_username",
+        "age",
+        "sla_countdown",
+        "detected_at",
+    )
+    list_filter = ("status", "case_type", "severity", "assigned_to")
+    list_select_related = ("transaction", "transaction__user", "assigned_to")
+    search_fields = (
+        "id",
+        "transaction__id",
+        "transaction__user__phone",
+        "transaction__mpesa_receipt",
+        "correlation_id",
+    )
+    readonly_fields = (
+        "id",
+        "transaction_link_full",
+        "case_type",
+        "detected_at",
+        "sla_breach_at",
+        "resolved_at",
+        "correlation_id",
+        "evidence_pretty",
+        "created_at",
+        "updated_at",
+    )
+    date_hierarchy = "detected_at"
+    list_per_page = 50
+    ordering = ("-severity", "sla_breach_at", "-detected_at")
+    actions = [
+        "action_assign_to_me",
+        "action_resolve_human_review",
+        "action_escalate",
+        "action_mark_auto_resolved",
+        "action_reopen",
+    ]
+    fieldsets = (
+        ("Case", {
+            "fields": (
+                "id",
+                "transaction_link_full",
+                "case_type",
+                "status",
+                "severity",
+                "assigned_to",
+            ),
+        }),
+        ("Resolution", {
+            "fields": ("resolution_action", "resolved_at", "notes"),
+        }),
+        ("SLA", {
+            "fields": ("detected_at", "sla_breach_at", "correlation_id"),
+        }),
+        ("Evidence", {
+            "fields": ("evidence_pretty",),
+            "classes": ("collapse",),
+        }),
+        ("Timestamps", {
+            "fields": ("created_at", "updated_at"),
+            "classes": ("collapse",),
+        }),
+    )
+
+    # ── List display helpers ────────────────────────────────────────
+
+    def short_id(self, obj):
+        return str(obj.id)[:8]
+    short_id.short_description = "ID"
+
+    def case_type_label(self, obj):
+        return obj.get_case_type_display()
+    case_type_label.short_description = "Type"
+    case_type_label.admin_order_field = "case_type"
+
+    def status_pill(self, obj):
+        color = _STATUS_COLORS.get(obj.status, "#6B7280")
+        return format_html(
+            '<span style="color:{};font-weight:600">{}</span>',
+            color,
+            obj.get_status_display(),
+        )
+    status_pill.short_description = "Status"
+    status_pill.admin_order_field = "status"
+
+    def severity_pill(self, obj):
+        return format_html(
+            '<span style="background:{};color:#fff;padding:2px 8px;'
+            'border-radius:10px;font-size:11px;font-weight:600">{}</span>',
+            _SEVERITY_COLORS.get(obj.severity, "#6B7280"),
+            _SEVERITY_LABELS.get(obj.severity, str(obj.severity)),
+        )
+    severity_pill.short_description = "Sev"
+    severity_pill.admin_order_field = "-severity"
+
+    def transaction_link(self, obj):
+        url = reverse("admin:payments_transaction_change", args=[obj.transaction_id])
+        return format_html('<a href="{}">{}…</a>', url, str(obj.transaction_id)[:8])
+    transaction_link.short_description = "Tx"
+    transaction_link.admin_order_field = "transaction_id"
+
+    def transaction_link_full(self, obj):
+        url = reverse("admin:payments_transaction_change", args=[obj.transaction_id])
+        tx = obj.transaction
+        return format_html(
+            '<a href="{}">{}</a> · {} {} → {} {} · <em>{}</em>',
+            url,
+            str(obj.transaction_id),
+            tx.source_amount,
+            tx.source_currency,
+            tx.dest_amount,
+            tx.dest_currency,
+            tx.get_status_display(),
+        )
+    transaction_link_full.short_description = "Transaction"
+
+    def user_phone(self, obj):
+        return obj.transaction.user.phone
+    user_phone.short_description = "User"
+    user_phone.admin_order_field = "transaction__user__phone"
+
+    def kes_amount(self, obj):
+        if obj.transaction.dest_currency == "KES":
+            return f"KES {obj.transaction.dest_amount:,.0f}"
+        return f"{obj.transaction.dest_amount} {obj.transaction.dest_currency}"
+    kes_amount.short_description = "Amount"
+
+    def assigned_username(self, obj):
+        return obj.assigned_to.get_username() if obj.assigned_to_id else "—"
+    assigned_username.short_description = "Assigned"
+    assigned_username.admin_order_field = "assigned_to__phone"
+
+    def age(self, obj):
+        secs = int((timezone.now() - obj.detected_at).total_seconds())
+        if secs < 60:
+            return f"{secs}s"
+        if secs < 3600:
+            return f"{secs // 60}m"
+        if secs < 86400:
+            return f"{secs // 3600}h"
+        return f"{secs // 86400}d"
+    age.short_description = "Age"
+
+    def sla_countdown(self, obj):
+        # Resolved cases · no countdown.
+        if obj.status in {
+            ReconciliationCase.Status.HUMAN_RESOLVED,
+            ReconciliationCase.Status.AUTO_RESOLVED,
+        }:
+            return "—"
+        if not obj.sla_breach_at:
+            return "—"
+        delta = obj.sla_breach_at - timezone.now()
+        secs = int(delta.total_seconds())
+        if secs < 0:
+            return format_html(
+                '<span style="color:#DC2626;font-weight:700">BREACHED</span>'
+            )
+        if secs < 60:
+            return format_html('<span style="color:#F97316">{}s</span>', secs)
+        if secs < 3600:
+            return format_html('<span style="color:#F97316">{}m</span>', secs // 60)
+        return format_html('<span style="color:#10B981">{}h</span>', secs // 3600)
+    sla_countdown.short_description = "SLA"
+
+    def evidence_pretty(self, obj):
+        if not obj.evidence:
+            return "—"
+        try:
+            payload = json.dumps(obj.evidence, indent=2, default=str, sort_keys=True)
+        except (TypeError, ValueError):
+            payload = repr(obj.evidence)
+        return format_html(
+            '<pre style="background:#F3F4F6;padding:8px;border-radius:4px;'
+            'font-size:12px;overflow-x:auto;max-height:300px">{}</pre>',
+            payload,
+        )
+    evidence_pretty.short_description = "Evidence"
+
+    # ── Bulk actions ──────────────────────────────────────────────────
+
+    def _run_bulk(self, request, queryset, fn, *, label, **kwargs):
+        ok, fail, errors = 0, 0, []
+        for case in queryset:
+            try:
+                fn(case, request.user, **kwargs)
+                ok += 1
+            except ValueError as e:
+                fail += 1
+                errors.append(f"{str(case.id)[:8]}: {e}")
+        if ok:
+            self.message_user(
+                request,
+                f"{ok} case(s) {label}." + (f" {fail} skipped." if fail else ""),
+                messages.SUCCESS,
+            )
+        if fail and not ok:
+            self.message_user(
+                request,
+                f"No cases {label}: " + "; ".join(errors[:5]),
+                messages.WARNING,
+            )
+
+    @admin.action(description="Assign selected to me")
+    def action_assign_to_me(self, request, queryset):
+        self._run_bulk(
+            request,
+            queryset,
+            lambda c, actor: admin_actions.assign_to(c, actor, actor),
+            label="assigned",
+        )
+
+    @admin.action(description="Resolve as human-review")
+    def action_resolve_human_review(self, request, queryset):
+        self._run_bulk(
+            request,
+            queryset,
+            lambda c, actor: admin_actions.resolve(c, actor, "human_review"),
+            label="resolved",
+        )
+
+    @admin.action(description="Escalate to CRITICAL")
+    def action_escalate(self, request, queryset):
+        self._run_bulk(
+            request,
+            queryset,
+            lambda c, actor: admin_actions.escalate(c, actor, reason="manual escalation"),
+            label="escalated",
+        )
+
+    @admin.action(description="Mark as auto-resolved (no_action / not_applicable)")
+    def action_mark_auto_resolved(self, request, queryset):
+        self._run_bulk(
+            request,
+            queryset,
+            lambda c, actor: admin_actions.auto_resolve(c, actor, "not_applicable"),
+            label="auto-resolved",
+        )
+
+    @admin.action(description="Reopen selected")
+    def action_reopen(self, request, queryset):
+        self._run_bulk(
+            request,
+            queryset,
+            lambda c, actor: admin_actions.reopen(c, actor, reason="manual reopen"),
+            label="reopened",
+        )

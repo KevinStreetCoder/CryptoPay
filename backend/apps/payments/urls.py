@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views
+from . import admin_views, views
 
 app_name = "payments"
 
@@ -30,4 +30,43 @@ urlpatterns = [
     # Saved Paybills
     path("saved-paybills/", views.SavedPaybillListCreateView.as_view(), name="saved-paybills"),
     path("saved-paybills/<uuid:pk>/", views.SavedPaybillDeleteView.as_view(), name="saved-paybill-delete"),
+    # ── Admin: ReconciliationCase queue (staff only) ──────────────────
+    # 2026-05-08 · turns the ReconciliationCase rows into an operable
+    # queue for ops. Mirrors the Django admin actions so an in-app
+    # surface can drive the same audit-trail logic.
+    path(
+        "admin/reconciliation/",
+        admin_views.AdminReconCaseListView.as_view(),
+        name="admin-recon-list",
+    ),
+    path(
+        "admin/reconciliation/stats/",
+        admin_views.AdminReconCaseStatsView.as_view(),
+        name="admin-recon-stats",
+    ),
+    path(
+        "admin/reconciliation/<uuid:case_id>/",
+        admin_views.AdminReconCaseDetailView.as_view(),
+        name="admin-recon-detail",
+    ),
+    path(
+        "admin/reconciliation/<uuid:case_id>/assign/",
+        admin_views.AdminReconCaseAssignView.as_view(),
+        name="admin-recon-assign",
+    ),
+    path(
+        "admin/reconciliation/<uuid:case_id>/resolve/",
+        admin_views.AdminReconCaseResolveView.as_view(),
+        name="admin-recon-resolve",
+    ),
+    path(
+        "admin/reconciliation/<uuid:case_id>/escalate/",
+        admin_views.AdminReconCaseEscalateView.as_view(),
+        name="admin-recon-escalate",
+    ),
+    path(
+        "admin/reconciliation/<uuid:case_id>/reopen/",
+        admin_views.AdminReconCaseReopenView.as_view(),
+        name="admin-recon-reopen",
+    ),
 ]
