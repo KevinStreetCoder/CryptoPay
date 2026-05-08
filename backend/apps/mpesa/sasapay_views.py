@@ -572,24 +572,6 @@ def _process_c2b_deposit(data: dict):
     if not phone or not amount or not trans_id:
         return
 
-    normalised = phone if phone.startswith("+") else f"+{phone}"
-    user = User.objects.filter(phone=normalised).first()
-    if not user:
-        user = User.objects.filter(phone=phone).first()
-
-    # Parse the account first · allows account-encoded phone to override
-    # MSISDN when a parent pays for a child / a friend tops someone up.
-    target_currency, account_phone = _parse_c2b_account(account_raw)
-    if account_phone and not user:
-        user = User.objects.filter(phone=account_phone).first()
-
-    if not user:
-        logger.warning(
-            "sasapay C2B: no user for phone=%s account=%r",
-            phone, account_raw,
-        )
-        return
-
     if Transaction.objects.filter(mpesa_receipt=trans_id).exists():
         logger.info("sasapay C2B: duplicate TransID %s", trans_id)
         return
@@ -605,6 +587,48 @@ def _process_c2b_deposit(data: dict):
     if kes_amount <= 0:
         return
 
+    normalised = phone if phone.startswith("+") else f"+{phone}"
+
+    # 1. Short-code DepositIntent lookup · the primary path.
+    #    The customer entered a 6-char Crockford code as the M-Pesa
+    #    account number · we look it up directly and route to the
+    #    pre-staged (user, currency) tuple. This is robust regardless
+    #    of how SasaPay handles the account string (verbatim forward,
+    #    parsed merchant prefix, or anything in between).
+    from apps.payments import deposit_intent as intent_service
+
+    intent = intent_service.lookup_active(account_raw)
+    if intent is not None:
+        if _credit_via_intent(
+            intent=intent,
+            kes_amount=kes_amount,
+            trans_id=trans_id,
+            phone=phone,
+            account_raw=account_raw,
+        ):
+            return
+        logger.warning(
+            "sasapay C2B: intent-credit failed for code=%s tx %s, "
+            "falling through to legacy path",
+            intent.code, trans_id,
+        )
+
+    # 2. Legacy long-format fallback · `1334777-USDT-254712345678`
+    user = User.objects.filter(phone=normalised).first()
+    if not user:
+        user = User.objects.filter(phone=phone).first()
+
+    target_currency, account_phone = _parse_c2b_account(account_raw)
+    if account_phone and not user:
+        user = User.objects.filter(phone=account_phone).first()
+
+    if not user:
+        logger.warning(
+            "sasapay C2B: no user for phone=%s account=%r",
+            phone, account_raw,
+        )
+        return
+
     if target_currency and target_currency in _C2B_SUPPORTED_CRYPTOS:
         if _credit_crypto_via_c2b(
             user=user,
@@ -615,13 +639,12 @@ def _process_c2b_deposit(data: dict):
             account_raw=account_raw,
         ):
             return
-        # _credit_crypto_via_c2b returned False · rate engine unavailable
-        # or crypto wallet creation failed. Fall through to KES credit.
         logger.warning(
             "sasapay C2B: auto-buy %s failed for tx %s, falling back to KES",
             target_currency, trans_id,
         )
 
+    # 3. KES wallet fallback · safest. User can convert later via swap.
     _credit_kes_via_c2b(
         user=user,
         kes_amount=kes_amount,
@@ -629,6 +652,75 @@ def _process_c2b_deposit(data: dict):
         phone=phone,
         account_raw=account_raw,
     )
+
+
+def _credit_via_intent(
+    *,
+    intent,
+    kes_amount: Decimal,
+    trans_id: str,
+    phone: str,
+    account_raw: str,
+) -> bool:
+    """Route the deposit through a matched DepositIntent · credits the
+    target currency (or KES if intent.currency=='KES'), marks the
+    intent CONSUMED, returns True on success.
+
+    The intent's user is authoritative · MSISDN is recorded on the tx
+    but NOT used to look up the user (parent-pays-for-child works
+    because the intent was minted for the right user)."""
+    from apps.payments import deposit_intent as intent_service
+
+    user = intent.user
+    currency = intent.currency
+
+    if currency == "KES":
+        try:
+            _credit_kes_via_c2b(
+                user=user,
+                kes_amount=kes_amount,
+                trans_id=trans_id,
+                phone=phone,
+                account_raw=account_raw,
+            )
+        except Exception:
+            logger.exception(
+                "sasapay C2B intent: KES credit failed for code %s tx %s",
+                intent.code, trans_id,
+            )
+            return False
+    else:
+        if not _credit_crypto_via_c2b(
+            user=user,
+            currency=currency,
+            kes_amount=kes_amount,
+            trans_id=trans_id,
+            phone=phone,
+            account_raw=account_raw,
+        ):
+            return False
+
+    # Find the freshly-created Transaction so we can link it to the
+    # intent. _credit_crypto_via_c2b / _credit_kes_via_c2b both create
+    # a Transaction with mpesa_receipt=trans_id.
+    try:
+        from apps.payments.models import Transaction
+        tx = Transaction.objects.filter(mpesa_receipt=trans_id).first()
+        if tx:
+            intent_service.consume(intent, tx)
+    except Exception:
+        logger.exception(
+            "sasapay C2B intent: consume failed for code %s tx %s "
+            "· tx credited, intent left OPEN",
+            intent.code, trans_id,
+        )
+        # Do NOT fail the credit · the money already moved.
+
+    logger.info(
+        "sasapay C2B intent: credited code=%s currency=%s user=%s amount=%s tx=%s",
+        intent.code, currency, user.phone, kes_amount, trans_id,
+    )
+    return True
 
 
 def _credit_crypto_via_c2b(

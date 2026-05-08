@@ -89,8 +89,13 @@ class PaymentSagaTest(TestCase):
         self.wallet.refresh_from_db()
         self.assertEqual(self.wallet.balance, Decimal("100.00000000"))
 
+    @override_settings(PAYMENT_PROVIDER="daraja")
     @patch("apps.mpesa.client.MpesaClient.b2b_payment")
     def test_full_saga_success(self, mock_b2b):
+        # Pin PAYMENT_PROVIDER=daraja · the patch targets MpesaClient
+        # (the Daraja client). Without this override, a test env that
+        # inherits PAYMENT_PROVIDER=sasapay routes to SasaPayClient,
+        # bypasses the patch, and tries to hit the SasaPay sandbox API.
         mock_b2b.return_value = {
             "ConversationID": "conv-123",
             "OriginatorConversationID": "orig-456",
@@ -111,6 +116,7 @@ class PaymentSagaTest(TestCase):
         self.wallet.refresh_from_db()
         self.assertEqual(self.wallet.balance, Decimal("80.00000000"))
 
+    @override_settings(PAYMENT_PROVIDER="daraja")
     @patch("apps.mpesa.client.MpesaClient.b2b_payment")
     def test_full_saga_mpesa_fails_compensates(self, mock_b2b):
         mock_b2b.side_effect = Exception("M-Pesa service unavailable")

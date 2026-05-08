@@ -1019,12 +1019,41 @@ class BuyCryptoView(APIView):
             kes_amount = int(Decimal(quote["total_kes"]).quantize(Decimal("1")))
             mpesa_phone = data["phone"].replace("+", "")
 
-            stk_result = client.stk_push(
+            # Build a per-tx signed callback URL so SasaPay's IPN
+            # authenticates against `SASAPAY_CALLBACK_HMAC_KEY` even
+            # when SasaPay doesn't sign the X-SasaPay-Signature header.
+            # Without this the live test on 2026-05-08 hung because
+            # SasaPay's callbacks all 403'd at the auth gate. Daraja /
+            # IntaSend ignore the callback_url kwarg gracefully.
+            stk_callback_url = None
+            if client.is_sasapay:
+                from apps.mpesa.sasapay_views import build_sasapay_callback_url
+                stk_callback_url = build_sasapay_callback_url(
+                    str(tx.id), kind="stk",
+                )
+
+            stk_kwargs = dict(
                 phone=mpesa_phone,
                 amount=kes_amount,
                 account_ref=f"BUY-{str(tx.id)[:8].upper()}",
                 description=f"Buy {quote['crypto_amount']} {quote['currency']}",
             )
+            if stk_callback_url and client.is_sasapay:
+                # Bypass the adapter for this one path · the inner
+                # client takes a callback_url kwarg the adapter signature
+                # doesn't surface yet.
+                stk_result_inner = client._client.stk_push(  # noqa: SLF001
+                    **stk_kwargs, callback_url=stk_callback_url,
+                )
+                stk_result = {
+                    "CheckoutRequestID": stk_result_inner.get("CheckoutRequestID", ""),
+                    "MerchantRequestID": stk_result_inner.get("MerchantRequestID", ""),
+                    "ResponseCode": stk_result_inner.get("ResponseCode", "0"),
+                    "ResponseDescription": stk_result_inner.get("detail", ""),
+                    "CustomerMessage": stk_result_inner.get("CustomerMessage", ""),
+                }
+            else:
+                stk_result = client.stk_push(**stk_kwargs)
 
             # Store STK Push tracking info
             tx.status = Transaction.Status.PROCESSING
@@ -1431,15 +1460,28 @@ class C2BInstructionsView(APIView):
     Provider-aware · the paybill + account-format pair depends on
     `PAYMENT_PROVIDER`:
 
-      sasapay  · SasaPay aggregator paybill (default 756756) + account
-                 in the form `<MERCHANT>-<CRYPTO>-<phone>` so the
-                 SasaPay IPN can identify the user + their intended
-                 crypto without a pre-deposit quote.
+      sasapay  · SasaPay aggregator paybill (default 756756) + a
+                 short DepositIntent code as the account number. The
+                 long `<MERCHANT>-<CRYPTO>-<phone>` format is included
+                 as a `legacy_account_format` field for backwards
+                 compat (still parsed by the IPN as a fallback).
       daraja   · Cpay's own M-Pesa shortcode + account `<CRYPTO>-<phone>`
                  (the legacy format · kept for the day Daraja LNO lands).
       intasend · IntaSend supplies its own paybill at onboarding · for
                  now we surface the SasaPay format and ops flips
                  PAYMENT_PROVIDER when ready.
+
+    Query params:
+      currency · USDT | USDC | BTC | ETH | SOL | KES (optional)
+                 If provided AND provider==sasapay, the response
+                 includes an `intent_code` field · a fresh 6-char
+                 deposit-intent code that the IPN handler routes to
+                 the right user + currency without depending on
+                 SasaPay forwarding the long account string verbatim.
+                 If not provided, only the legacy account formats
+                 are returned (clients can still display them but
+                 they depend on SasaPay's account-string forwarding
+                 behaviour, which is currently undocumented).
 
     Mobile + web read this contract from /payments/deposit/c2b-
     instructions/. The response shape is stable across providers (just
@@ -1510,6 +1552,31 @@ class C2BInstructionsView(APIView):
             for c in self.SUPPORTED_C2B_CURRENCIES
         ]
 
+        # If the caller passes ?currency=X AND we're on SasaPay, mint
+        # a fresh DepositIntent and surface its short code · this is
+        # the path that DOESN'T depend on SasaPay forwarding the long
+        # account string verbatim. Six-char Crockford code; 30-min TTL.
+        intent_payload = None
+        currency_param = (request.query_params.get("currency") or "").strip().upper()
+        if provider == "sasapay" and currency_param:
+            from .deposit_intent import create_intent
+
+            try:
+                intent = create_intent(user, currency_param)
+                intent_payload = {
+                    "code": intent.code,
+                    "currency": intent.currency,
+                    "expires_at": intent.expires_at.isoformat(),
+                    "expires_in_seconds": int(
+                        (intent.expires_at - timezone.now()).total_seconds()
+                    ),
+                }
+            except ValueError as e:
+                return Response(
+                    {"error": str(e)},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         return Response({
             "provider": provider,
             "provider_label": provider_label,
@@ -1519,10 +1586,80 @@ class C2BInstructionsView(APIView):
             # lands as KES in your wallet" fallback hint.
             "merchant_account": getattr(app_settings, "SASAPAY_MERCHANT_CODE", "") if provider == "sasapay" else "",
             "account_formats": account_formats,
+            # New 2026-05-08 · short-code intent flow · safer than
+            # the long account format because it doesn't depend on
+            # SasaPay forwarding the customer-entered string verbatim.
+            "intent": intent_payload,
             "min_amount": app_settings.DEPOSIT_MIN_KES,
             "max_amount": app_settings.DEPOSIT_MAX_KES,
             "fee_percent": app_settings.DEPOSIT_FEE_PERCENTAGE,
             "instructions": instructions,
+        })
+
+
+class DepositIntentView(APIView):
+    """Mint a fresh deposit-intent code for the SasaPay C2B flow.
+
+    POST /api/v1/payments/deposit/intent/
+        body · {"currency": "USDT" | "USDC" | "BTC" | "ETH" | "SOL" | "KES"}
+        returns · {"code", "currency", "expires_at", "expires_in_seconds",
+                   "paybill", "instructions"}
+
+    Use case: when a user changes the currency dropdown on the deposit
+    screen we want to show a fresh code without re-fetching the entire
+    C2BInstructions payload (which is mostly static). This endpoint is
+    the surgical version of `GET /deposit/c2b-instructions/?currency=X`.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from django.conf import settings as app_settings
+        from .deposit_intent import create_intent
+
+        currency = (request.data.get("currency") or "").strip().upper()
+        if not currency:
+            return Response(
+                {"error": "currency is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        provider = getattr(app_settings, "PAYMENT_PROVIDER", "daraja").lower()
+        if provider != "sasapay":
+            return Response(
+                {
+                    "error": (
+                        "Deposit intents are a SasaPay-only feature · current "
+                        f"PAYMENT_PROVIDER={provider}. Use the legacy account "
+                        "format on `/deposit/c2b-instructions/`."
+                    ),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            intent = create_intent(request.user, currency)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        paybill = getattr(app_settings, "SASAPAY_C2B_PAYBILL", "756756")
+        return Response({
+            "code": intent.code,
+            "currency": intent.currency,
+            "expires_at": intent.expires_at.isoformat(),
+            "expires_in_seconds": int(
+                (intent.expires_at - timezone.now()).total_seconds()
+            ),
+            "paybill": paybill,
+            "instructions": [
+                "Open M-Pesa on your phone",
+                "Select Lipa Na M-Pesa → Pay Bill",
+                f"Enter Business Number: {paybill}",
+                f"Enter Account Number: {intent.code}",
+                "Enter the KES amount you want to deposit",
+                "Enter your M-Pesa PIN to confirm",
+                f"Your {intent.currency} is credited within 30 seconds at the live rate",
+            ],
         })
 
 

@@ -17,6 +17,10 @@ urlpatterns = [
     path("deposit/<uuid:transaction_id>/status/", views.DepositStatusView.as_view(), name="deposit-status"),
     path("<uuid:transaction_id>/status/", views.DepositStatusView.as_view(), name="transaction-status"),
     path("deposit/c2b-instructions/", views.C2BInstructionsView.as_view(), name="c2b-instructions"),
+    # 2026-05-08 · short-code deposit-intent flow · safer than the long
+    # account format because it doesn't depend on SasaPay forwarding
+    # the customer-entered string verbatim in BillRefNumber.
+    path("deposit/intent/", views.DepositIntentView.as_view(), name="deposit-intent"),
     path("withdraw/", views.WithdrawView.as_view(), name="withdraw"),
     path("withdraw/<uuid:transaction_id>/status/", views.WithdrawStatusView.as_view(), name="withdraw-status"),
     path("withdraw/fee/", views.WithdrawFeeView.as_view(), name="withdraw-fee"),

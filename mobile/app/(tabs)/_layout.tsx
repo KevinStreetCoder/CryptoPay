@@ -283,6 +283,12 @@ export default function TabLayout() {
           marginBottom: 0,
           paddingBottom: 1,
           includeFontPadding: false,
+          // 2026-05-08 · explicit `none` for web · Chrome was inheriting
+          // a default `text-decoration-line: underline` on focus that
+          // showed up as small horizontal marks between the icon and
+          // the label on the focused tab. Belt-and-braces · the next
+          // override on the wrapper button kills the focus ring too.
+          ...(isWeb ? ({ textDecorationLine: "none" } as any) : {}),
         },
         tabBarIconStyle: {
           marginTop: 0,
@@ -293,6 +299,21 @@ export default function TabLayout() {
           paddingVertical: 0,
           justifyContent: "flex-start" as const,
           alignItems: "center" as const,
+          // 2026-05-08 · React Navigation web wraps every tab in a
+          // <button> element. Chrome / Android-Chrome render that
+          // button's default focus ring + a faint border on tap,
+          // showing as small dots / dashes between the icon and the
+          // label on the focused tab. Killing the outline + tap-
+          // highlight so the visual is the emerald pill ONLY.
+          ...(isWeb
+            ? ({
+                outlineWidth: 0,
+                outlineStyle: "none",
+                borderWidth: 0,
+                WebkitTapHighlightColor: "transparent",
+                userSelect: "none",
+              } as any)
+            : {}),
         },
       }}
     >

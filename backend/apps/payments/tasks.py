@@ -332,6 +332,167 @@ def sweep_reconciliation_cases():
     return {"escalated": escalated_count, "checked_at": now.isoformat()}
 
 
+def _resolve_via_sasapay_status(tx, checkout_request_id: str) -> None:
+    """Active-poll SasaPay's transaction-status endpoint and resolve
+    the saga · either complete (success) or compensate (failure).
+
+    Why this exists: SasaPay callbacks occasionally drop on transient
+    network blips; without an active probe the tx hangs in PROCESSING
+    until the 10-min compensate timer fires, by which point the user
+    has already given up. This is the audit hardening the previous
+    branch in this task was supposed to do (it was a no-op).
+
+    SasaPay's `query_transaction` returns the same Daraja-shaped
+    `ResultCode` field SasaPay uses on callbacks · 0 means SUCCESS,
+    any other code is a hard failure for STK Push purposes (1037 user
+    declined, 1032 timeout, 2001 wrong PIN, etc).
+    """
+    from apps.mpesa.sasapay_client import SasaPayClient, SasaPayError
+    from .saga import PaymentSaga
+
+    try:
+        result = SasaPayClient().query_transaction(
+            checkout_request_id=checkout_request_id,
+        )
+    except SasaPayError as e:
+        logger.warning(
+            "sasapay.status_query.error",
+            extra={"tx_id": str(tx.id), "error": str(e)},
+        )
+        return
+
+    # SasaPay's status response wraps the Daraja-shape under a parent.
+    # Be tolerant of either layout.
+    inner = result.get("data") or result.get("result") or result
+    result_code = str(
+        inner.get("ResultCode")
+        or inner.get("resultCode")
+        or result.get("ResultCode")
+        or ""
+    )
+    receipt = (
+        inner.get("TransactionCode")
+        or inner.get("MpesaReceiptNumber")
+        or inner.get("ReceiptNumber")
+        or ""
+    )
+
+    if not result_code:
+        # SasaPay reports the tx as still PENDING · keep waiting,
+        # cron will recheck on the next tick.
+        logger.debug(
+            "sasapay.status_query.pending",
+            extra={"tx_id": str(tx.id), "raw": str(result)[:200]},
+        )
+        return
+
+    if result_code == "0":
+        try:
+            PaymentSaga(tx).complete(mpesa_receipt=receipt or "")
+            logger.info("sasapay.status_query.completed", extra={
+                "tx_id": str(tx.id), "receipt": receipt,
+            })
+        except Exception:
+            logger.exception(
+                "sasapay.status_query.complete_failed",
+                extra={"tx_id": str(tx.id)},
+            )
+    else:
+        # Hard failure · compensate so the user's KES wallet is
+        # unlocked / crypto refunded.
+        desc = (
+            inner.get("ResultDesc")
+            or inner.get("resultDesc")
+            or _sasapay_friendly_message(result_code)
+        )
+        tx.failure_reason = f"M-Pesa rejected: {desc} (code {result_code})"
+        tx.status = Transaction.Status.FAILED
+        tx.save(update_fields=["failure_reason", "status", "updated_at"])
+        try:
+            PaymentSaga(tx).compensate_convert()
+        except Exception:
+            logger.exception(
+                "sasapay.status_query.compensate_failed",
+                extra={"tx_id": str(tx.id)},
+            )
+        logger.info("sasapay.status_query.failed_compensated", extra={
+            "tx_id": str(tx.id), "result_code": result_code, "desc": desc,
+        })
+
+
+def _resolve_via_intasend_status(tx, tracking_id: str) -> None:
+    """Active-poll IntaSend's payment-status endpoint and resolve
+    the saga. Same rationale as the SasaPay path."""
+    from apps.mpesa.intasend_client import IntaSendClient, IntaSendError
+    from .saga import PaymentSaga
+
+    try:
+        result = IntaSendClient().query_transaction(
+            tracking_id=tracking_id,
+        )
+    except IntaSendError as e:
+        logger.warning(
+            "intasend.status_query.error",
+            extra={"tx_id": str(tx.id), "error": str(e)},
+        )
+        return
+
+    state = (result.get("state") or result.get("status") or "").upper()
+    receipt = result.get("mpesa_reference") or result.get("api_ref") or ""
+
+    if state in {"COMPLETE", "COMPLETED", "PROCESSED"}:
+        try:
+            PaymentSaga(tx).complete(mpesa_receipt=receipt)
+        except Exception:
+            logger.exception(
+                "intasend.status_query.complete_failed",
+                extra={"tx_id": str(tx.id)},
+            )
+    elif state in {"FAILED", "RETRY", "FAILED_RETRYABLE"}:
+        tx.failure_reason = f"IntaSend reported state {state}."
+        tx.status = Transaction.Status.FAILED
+        tx.save(update_fields=["failure_reason", "status", "updated_at"])
+        try:
+            PaymentSaga(tx).compensate_convert()
+        except Exception:
+            logger.exception(
+                "intasend.status_query.compensate_failed",
+                extra={"tx_id": str(tx.id)},
+            )
+
+
+# ── User-facing error message map ────────────────────────────────────
+#
+# When the M-Pesa rail rejects an STK Push, the customer sees a numeric
+# code on their phone (e.g. "Request cancelled by user"). The provider
+# IPN gives us that code · we translate it into a friendly sentence the
+# mobile app surfaces verbatim. Generic fallback covers unmapped codes.
+
+_SASAPAY_ERROR_MESSAGES = {
+    "0":     "Payment successful.",
+    "1":     "Insufficient M-Pesa balance · top up and try again.",
+    "1001":  "Another payment is in progress · wait a moment then retry.",
+    "1019":  "Transaction already in progress · please retry shortly.",
+    "1025":  "Daily transaction limit reached · raise your KYC tier or try tomorrow.",
+    "1031":  "M-Pesa is offline · please retry in a minute.",
+    "1032":  "You took too long to enter the PIN · retry the deposit.",
+    "1036":  "M-Pesa system error · please retry.",
+    "1037":  "Payment cancelled · you can retry from the deposit screen.",
+    "2001":  "Wrong M-Pesa PIN · retry and enter the correct PIN.",
+    "9999":  "Payment failed · contact support if KES was deducted.",
+}
+
+
+def _sasapay_friendly_message(result_code: str) -> str:
+    """Map a SasaPay numeric result code to a user-readable sentence.
+    Falls back to a generic message if the code isn't in our dictionary."""
+    return _SASAPAY_ERROR_MESSAGES.get(
+        str(result_code),
+        "Payment did not go through. Please retry · if KES was deducted, "
+        "contact support with the M-Pesa SMS receipt.",
+    )
+
+
 @shared_task
 def check_pending_mpesa_payments():
     """
@@ -356,25 +517,41 @@ def check_pending_mpesa_payments():
         ],
     )
 
-    provider = getattr(app_settings, "PAYMENT_PROVIDER", "daraja")
+    provider = getattr(app_settings, "PAYMENT_PROVIDER", "daraja").lower()
 
     for tx in stuck:
-        conversation_id = tx.saga_data.get("mpesa_conversation_id", "")
+        # Pull whichever ID the active rail recorded · key names differ.
+        sd = tx.saga_data or {}
+        conversation_id = (
+            sd.get("mpesa_conversation_id")
+            or sd.get("mpesa_checkout_request_id")  # SasaPay STK
+            or sd.get("checkout_request_id")
+            or ""
+        )
         if not conversation_id:
             continue
 
-        # Try querying transaction status (Daraja only — SasaPay uses callbacks)
-        if provider != "sasapay":
-            try:
+        # Active poll the provider · catches the case where the
+        # callback dropped or got firewalled. Promotes "stuck in
+        # PROCESSING" to either COMPLETED (saga.complete) or FAILED
+        # (saga.compensate) without waiting on the cron's 10-min
+        # timeout.
+        try:
+            if provider == "sasapay":
+                _resolve_via_sasapay_status(tx, conversation_id)
+            elif provider == "intasend":
+                _resolve_via_intasend_status(tx, conversation_id)
+            else:
                 from apps.mpesa.client import MpesaClient
                 client = MpesaClient()
                 result = client.transaction_status(conversation_id)
-                logger.info(f"Status query for tx {tx.id}: {result}")
-            except Exception as e:
-                logger.error(f"Status query failed for tx {tx.id}: {e}")
-        else:
-            # SasaPay relies on callbacks — log that we're waiting
-            logger.debug(f"SasaPay tx {tx.id} pending callback (no status query API)")
+                logger.info("status_query.daraja", extra={
+                    "tx_id": str(tx.id), "result_code": result.get("ResponseCode"),
+                })
+        except Exception as e:
+            logger.error("status_query.failed", extra={
+                "tx_id": str(tx.id), "provider": provider, "error": str(e),
+            })
 
         # After 10 minutes with no resolution, compensate and mark FAILED
         ten_min_cutoff = timezone.now() - timedelta(minutes=10)

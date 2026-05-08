@@ -151,6 +151,13 @@ export interface WithdrawFeeInfo {
   minimum_amount: string;
 }
 
+export interface DepositIntentInfo {
+  code: string;
+  currency: string;
+  expires_at: string;
+  expires_in_seconds: number;
+}
+
 export interface C2BInstructions {
   paybill: string;
   account_formats: { currency: string; account_number: string; description: string }[];
@@ -165,6 +172,18 @@ export interface C2BInstructions {
   provider?: string;
   provider_label?: string;
   merchant_account?: string;
+  // 2026-05-08 · short-code intent · only present when caller passed
+  // ?currency=X. Don't depend on it for non-SasaPay providers.
+  intent?: DepositIntentInfo | null;
+}
+
+export interface DepositIntentResponse {
+  code: string;
+  currency: string;
+  expires_at: string;
+  expires_in_seconds: number;
+  paybill: string;
+  instructions: string[];
 }
 
 export interface SavedPaybill {
@@ -209,9 +228,15 @@ export const paymentsApi = {
     api.get<ActivityResponse>("/payments/activity/", { params: { page: 1, page_size: 20, ...params } }),
   // KES Deposit endpoints
   depositQuote: (data: DepositQuoteData) => api.post("/payments/deposit/quote/", data),
+  // 2026-05-08 · short-code SasaPay deposit-intent flow
+  depositIntent: (currency: string) =>
+    api.post<DepositIntentResponse>("/payments/deposit/intent/", { currency }),
   depositStatus: (transactionId: string) => api.get<Transaction>(`/payments/deposit/${transactionId}/status/`),
   transactionStatus: (transactionId: string) => api.get<Transaction>(`/payments/${transactionId}/status/`),
-  c2bInstructions: () => api.get<C2BInstructions>("/payments/deposit/c2b-instructions/"),
+  c2bInstructions: (currency?: string) =>
+    api.get<C2BInstructions>("/payments/deposit/c2b-instructions/", {
+      params: currency ? { currency } : {},
+    }),
   // Withdrawal endpoints
   withdraw: (data: WithdrawData) => api.post<Transaction>("/payments/withdraw/", data),
   withdrawStatus: (transactionId: string) => api.get<Transaction & { summary?: string }>(`/payments/withdraw/${transactionId}/status/`),

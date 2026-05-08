@@ -67,6 +67,11 @@ export default function DepositScreen() {
   const [c2bInstructions, setC2bInstructions] = useState<C2BInstructions | null>(null);
   const [loadingC2B, setLoadingC2B] = useState(false);
   const [ethDepositAddress, setEthDepositAddress] = useState<string>("");
+  // 2026-05-08 · short-code SasaPay deposit-intent flow
+  const [intentCode, setIntentCode] = useState<string>("");
+  const [intentExpiresAt, setIntentExpiresAt] = useState<number>(0);
+  const [intentRemaining, setIntentRemaining] = useState<number>(0);
+  const [intentLoading, setIntentLoading] = useState<boolean>(false);
 
   // Fetch ETH deposit address for WalletConnect deposits
   useEffect(() => {
@@ -96,6 +101,49 @@ export default function DepositScreen() {
         .finally(() => setLoadingC2B(false));
     }
   }, [method]);
+
+  // 2026-05-08 · whenever the user picks a crypto on the C2B tab, mint
+  // a fresh deposit-intent code for it. The short code is the primary
+  // path · doesn't depend on SasaPay forwarding the long account string
+  // verbatim. Re-mint on currency change so each pick is fresh.
+  const refreshIntent = useCallback(() => {
+    if (method !== "c2b" || c2bInstructions?.provider !== "sasapay") return;
+    setIntentLoading(true);
+    paymentsApi
+      .depositIntent(currency)
+      .then((res) => {
+        setIntentCode(res.data.code);
+        const expiresMs = new Date(res.data.expires_at).getTime();
+        setIntentExpiresAt(expiresMs);
+        setIntentRemaining(Math.max(0, Math.floor((expiresMs - Date.now()) / 1000)));
+      })
+      .catch((err) => {
+        const e = normalizeError(err);
+        toast.error(e.title, e.message);
+      })
+      .finally(() => setIntentLoading(false));
+  }, [method, currency, c2bInstructions, toast]);
+
+  useEffect(() => {
+    refreshIntent();
+  }, [refreshIntent]);
+
+  // Tick the countdown every second so the user sees the remaining
+  // time. When it hits 0 the code is expired · auto-refresh.
+  useEffect(() => {
+    if (!intentExpiresAt) return;
+    const id = setInterval(() => {
+      const remaining = Math.max(
+        0,
+        Math.floor((intentExpiresAt - Date.now()) / 1000),
+      );
+      setIntentRemaining(remaining);
+      if (remaining === 0) {
+        clearInterval(id);
+      }
+    }, 1000);
+    return () => clearInterval(id);
+  }, [intentExpiresAt]);
 
   const handleSTKDeposit = useCallback(() => {
     const kesAmount = parseFloat(amount);
@@ -600,7 +648,187 @@ export default function DepositScreen() {
                   </Text>
                 </Pressable>
 
-                {/* Account Formats */}
+                {/* Currency picker for SasaPay deposit-intent flow */}
+                {c2bInstructions.provider === "sasapay" && (
+                  <View>
+                    <Text
+                      style={{
+                        color: tc.textSecondary,
+                        fontSize: 13,
+                        fontFamily: "DMSans_700Bold",
+                        textTransform: "uppercase",
+                        letterSpacing: 0.5,
+                        marginBottom: 10,
+                      }}
+                    >
+                      Receive As
+                    </Text>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={{ gap: 8 }}
+                    >
+                      {CRYPTO_OPTIONS.map((opt) => (
+                        <Pressable
+                          key={opt.id}
+                          onPress={() => setCurrency(opt.id)}
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 8,
+                            paddingVertical: 10,
+                            paddingHorizontal: 14,
+                            borderRadius: 14,
+                            backgroundColor:
+                              currency === opt.id
+                                ? opt.color + "18"
+                                : tc.dark.card,
+                            borderWidth: 1.5,
+                            borderColor:
+                              currency === opt.id
+                                ? opt.color + "40"
+                                : tc.glass.border,
+                            ...(isWeb
+                              ? ({ cursor: "pointer" } as any)
+                              : {}),
+                          }}
+                        >
+                          <CryptoLogo currency={opt.id} size={22} />
+                          <Text
+                            style={{
+                              color:
+                                currency === opt.id
+                                  ? tc.textPrimary
+                                  : tc.textSecondary,
+                              fontSize: 14,
+                              fontFamily:
+                                currency === opt.id
+                                  ? "DMSans_700Bold"
+                                  : "DMSans_500Medium",
+                            }}
+                          >
+                            {opt.id}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+
+                {/* Big Account-Number display · the short DepositIntent
+                    code · primary path on SasaPay. */}
+                {c2bInstructions.provider === "sasapay" && (
+                  <Pressable
+                    onPress={async () => {
+                      if (!intentCode) return;
+                      await Clipboard.setStringAsync(intentCode);
+                      toast.success("Copied", `Account ${intentCode}`);
+                    }}
+                    style={{
+                      backgroundColor: tc.dark.card,
+                      borderRadius: 18,
+                      padding: 22,
+                      borderWidth: 1.5,
+                      borderColor: colors.primary[500] + "40",
+                      alignItems: "center",
+                      gap: 10,
+                      ...ts.sm,
+                      ...(isWeb ? ({ cursor: "pointer" } as any) : {}),
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: tc.textMuted,
+                        fontSize: 12,
+                        fontFamily: "DMSans_600SemiBold",
+                        textTransform: "uppercase",
+                        letterSpacing: 0.5,
+                      }}
+                    >
+                      Account Number
+                    </Text>
+                    {intentLoading ? (
+                      <Spinner size={28} color={colors.primary[400]} />
+                    ) : (
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 10,
+                        }}
+                      >
+                        <Text
+                          style={{
+                            color: tc.textPrimary,
+                            fontSize: 40,
+                            fontFamily: "DMSans_700Bold",
+                            letterSpacing: 6,
+                          }}
+                        >
+                          {intentCode || "------"}
+                        </Text>
+                        <Ionicons
+                          name="copy-outline"
+                          size={20}
+                          color={tc.textSecondary}
+                        />
+                      </View>
+                    )}
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 8,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: tc.textMuted,
+                          fontSize: 12,
+                          fontFamily: "DMSans_500Medium",
+                        }}
+                      >
+                        Receive {currency} ·{" "}
+                        {intentRemaining > 0
+                          ? `Code expires in ${Math.floor(intentRemaining / 60)}m ${intentRemaining % 60}s`
+                          : "Code expired · tap to refresh"}
+                      </Text>
+                      <Pressable
+                        onPress={(e) => {
+                          e?.stopPropagation?.();
+                          refreshIntent();
+                        }}
+                        hitSlop={10}
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 4,
+                          paddingHorizontal: 8,
+                          paddingVertical: 4,
+                          borderRadius: 10,
+                          backgroundColor: colors.primary[500] + "15",
+                        }}
+                      >
+                        <Ionicons
+                          name="refresh"
+                          size={12}
+                          color={colors.primary[400]}
+                        />
+                        <Text
+                          style={{
+                            color: colors.primary[400],
+                            fontSize: 11,
+                            fontFamily: "DMSans_600SemiBold",
+                          }}
+                        >
+                          New
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </Pressable>
+                )}
+
+                {/* Account Formats · the long-format fallback */}
                 <View>
                   <Text
                     style={{
@@ -612,7 +840,9 @@ export default function DepositScreen() {
                       marginBottom: 10,
                     }}
                   >
-                    Account Number Format
+                    {c2bInstructions.provider === "sasapay"
+                      ? "Or use the long format"
+                      : "Account Number Format"}
                   </Text>
                   <View style={{ gap: 8 }}>
                     {c2bInstructions.account_formats.map((fmt) => (
