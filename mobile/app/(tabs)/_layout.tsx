@@ -221,8 +221,22 @@ export default function TabLayout() {
   // (most 3-button Android setups when the nav bar is non-overlay).
   // 8 px gives the label row a guaranteed gutter without making the
   // tab bar look fat on devices with a real gesture-nav inset.
+  // 2026-05-09 · third iteration on label clipping. Two earlier
+  // attempts (lineHeight bump, includeFontPadding flip) didn't fully
+  // resolve · the actual root cause is React Navigation's internal
+  // layout: it allocates label space as `tabBarHeight - paddingTop -
+  // paddingBottom - iconBoundingBox - labelMargin`. Our 30 px tall
+  // green pill (wrapping the 22 px icon for the active-state visual)
+  // makes RN see a 30 px icon area, leaving only ~17 px for the
+  // label · enough for a 16 px lineHeight tight, but the OS clips
+  // the descender + the bottom row of pixels. Bump contentHeight by
+  // 14 px to give labels a guaranteed 31 px of vertical room. iOS
+  // already has 34 px from the home-indicator safe-area inset so
+  // the visual change is Android-only (3-button nav: 8 px → 22 px
+  // gutter under the labels; gesture nav: same insets.bottom + the
+  // extra content-height makes the bar 14 px taller than before).
   const safeBottom = isWeb ? 10 : Math.max(insets.bottom, 8);
-  const contentHeight = isSmallPhone ? 52 : 56;
+  const contentHeight = isSmallPhone ? 66 : 70;
   const tabBarHeight = contentHeight + safeBottom;
   const tabBarPaddingBottom = safeBottom;
 
@@ -288,9 +302,13 @@ export default function TabLayout() {
           lineHeight: 16,
           fontFamily: "DMSans_600SemiBold",
           letterSpacing: 0.15,
-          marginTop: 3,
+          marginTop: 4,
           marginBottom: 0,
-          paddingBottom: 2,
+          // 2026-05-09 · paddingBottom 2 → 6 so even if RN's internal
+          // label-area calculation is slightly off, descenders (y/g/p)
+          // still render without the bottom-pixel clip the user
+          // reported on Android Chrome + sideloaded APK.
+          paddingBottom: 6,
           includeFontPadding: true,
           ...(isWeb ? ({ textDecorationLine: "none" } as any) : {}),
         },
