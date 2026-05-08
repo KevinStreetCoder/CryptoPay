@@ -69,4 +69,15 @@ urlpatterns = [
         admin_views.AdminReconCaseReopenView.as_view(),
         name="admin-recon-reopen",
     ),
+    # ── Admin: platform limits + float guard (2026-05-08) ─────────────
+    # Admin-settable caps on outgoing payment volume. Layered above
+    # the float-driven circuit breaker · stops a hot-wallet compromise
+    # from draining treasury even when the float reading still looks
+    # healthy. GET returns current caps + usage + circuit breaker.
+    # PATCH updates caps with full audit trail.
+    path(
+        "admin/limits/",
+        admin_views.AdminPlatformLimitsView.as_view(),
+        name="admin-platform-limits",
+    ),
 ]

@@ -343,3 +343,88 @@ class AdminReconCaseStatsView(APIView):
             "by_case_type": by_case_type,
             "as_of": timezone.now().isoformat(),
         })
+
+
+# ── Platform limits admin (caps on outgoing volume) ─────────────────────
+
+
+class AdminPlatformLimitsView(APIView):
+    """Admin-settable safety caps on outgoing payments.
+
+    GET   · returns current caps + sliding-window usage + remaining
+            headroom. Layered with the float-driven circuit breaker:
+              - circuit breaker  → reactive · pauses on low M-Pesa float
+              - platform limits  → proactive · caps volume regardless of float
+
+    PATCH · update one or more caps. Body fields (all optional · only
+            present fields are updated):
+              max_per_tx_kes         decimal · 0 disables the cap
+              max_per_hour_kes       decimal · 0 disables the cap
+              max_per_day_kes        decimal · 0 disables the cap
+              max_tx_per_hour_count  int     · 0 disables the cap
+              hard_pause             bool    · kill switch
+              hard_pause_reason      string  · human-readable context
+
+    Every PATCH writes a row to AuditLog (action=PLATFORM_LIMITS_UPDATED)
+    with before/after diff so an incident review can reconstruct the
+    sequence of admin changes.
+
+    Bonus payload includes `circuit_breaker` block · admins typically
+    want both readings on the same screen.
+    """
+
+    permission_classes = [IsStaffUser]
+
+    def get(self, request):
+        from .platform_limits import get_status as platform_status
+        from .circuit_breaker import PaymentCircuitBreaker
+
+        return Response({
+            **platform_status(),
+            "circuit_breaker": PaymentCircuitBreaker.get_status_dict(),
+        })
+
+    def patch(self, request):
+        from .platform_limits import update_limits, get_status as platform_status
+
+        # Whitelist updateable fields · ignore anything else for safety.
+        allowed_fields = (
+            "max_per_tx_kes",
+            "max_per_hour_kes",
+            "max_per_day_kes",
+            "max_tx_per_hour_count",
+            "hard_pause",
+            "hard_pause_reason",
+        )
+        payload = {k: request.data[k] for k in allowed_fields if k in request.data}
+
+        # Validate numeric fields shape early · clearer error than
+        # the model layer's InvalidOperation cascade.
+        for k in ("max_per_tx_kes", "max_per_hour_kes", "max_per_day_kes"):
+            if k in payload:
+                try:
+                    val = float(payload[k])
+                    if val < 0:
+                        return Response(
+                            {"error": f"{k} must be >= 0"}, status=400,
+                        )
+                except (TypeError, ValueError):
+                    return Response(
+                        {"error": f"{k} must be a decimal number"}, status=400,
+                    )
+        if "max_tx_per_hour_count" in payload:
+            try:
+                val = int(payload["max_tx_per_hour_count"])
+                if val < 0:
+                    return Response(
+                        {"error": "max_tx_per_hour_count must be >= 0"},
+                        status=400,
+                    )
+            except (TypeError, ValueError):
+                return Response(
+                    {"error": "max_tx_per_hour_count must be an integer"},
+                    status=400,
+                )
+
+        update_limits(request.user, **payload)
+        return Response(platform_status())

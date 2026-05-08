@@ -35,6 +35,7 @@ from apps.accounts.models import AuditLog
 
 from .banks import CATEGORIES as BANK_CATEGORIES, banks_by_category, get_bank, list_banks
 from .circuit_breaker import PaymentCircuitBreaker, PaymentsPaused
+from .platform_limits import PlatformLimitExceeded, enforce_outgoing
 from .models import SavedPaybill, Transaction
 from .saga import PaymentSaga, SagaError
 from .serializers import BuyCryptoSerializer, DepositQuoteSerializer, PayBillSerializer, PayTillSerializer, SavedPaybillSerializer, SendMpesaSerializer, SendToBankSerializer, SwapSerializer, TransactionSerializer, WithdrawSerializer
@@ -271,6 +272,24 @@ class PayBillView(APIView):
             cache.delete(redis_key)
             return Response(
                 {"error": e.reason, "circuit_breaker": True},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        # Admin-set platform limits (max-per-tx, hour, day, count, hard pause).
+        # Layered on top of the float-driven circuit breaker · stops a hot-
+        # wallet compromise from draining treasury even when the float
+        # reading still looks healthy.
+        try:
+            enforce_outgoing(Decimal(quote["kes_amount"]))
+        except PlatformLimitExceeded as e:
+            daily_lock.release()
+            cache.delete(redis_key)
+            return Response(
+                {
+                    "error": str(e),
+                    "platform_limit": True,
+                    "cap": e.cap_name,
+                },
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
@@ -525,6 +544,20 @@ class SendToBankView(APIView):
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
+        try:
+            enforce_outgoing(kes_amount)
+        except PlatformLimitExceeded as e:
+            daily_lock.release()
+            cache.delete(redis_key)
+            return Response(
+                {
+                    "error": str(e),
+                    "platform_limit": True,
+                    "cap": e.cap_name,
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
         quote = RateService.consume_locked_quote(data["quote_id"], user_id=str(user.id))
         if not quote:
             daily_lock.release()
@@ -679,6 +712,24 @@ class PayTillView(APIView):
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
+        # Admin-set platform limits (max-per-tx, hour, day, count, hard pause).
+        # Layered on top of the float-driven circuit breaker · stops a hot-
+        # wallet compromise from draining treasury even when the float
+        # reading still looks healthy.
+        try:
+            enforce_outgoing(Decimal(quote["kes_amount"]))
+        except PlatformLimitExceeded as e:
+            daily_lock.release()
+            cache.delete(redis_key)
+            return Response(
+                {
+                    "error": str(e),
+                    "platform_limit": True,
+                    "cap": e.cap_name,
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
         quote = RateService.consume_locked_quote(data["quote_id"], user_id=str(user.id))
         if not quote:
             daily_lock.release()
@@ -783,6 +834,24 @@ class SendMpesaView(APIView):
             cache.delete(redis_key)
             return Response(
                 {"error": e.reason, "circuit_breaker": True},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        # Admin-set platform limits (max-per-tx, hour, day, count, hard pause).
+        # Layered on top of the float-driven circuit breaker · stops a hot-
+        # wallet compromise from draining treasury even when the float
+        # reading still looks healthy.
+        try:
+            enforce_outgoing(Decimal(quote["kes_amount"]))
+        except PlatformLimitExceeded as e:
+            daily_lock.release()
+            cache.delete(redis_key)
+            return Response(
+                {
+                    "error": str(e),
+                    "platform_limit": True,
+                    "cap": e.cap_name,
+                },
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 

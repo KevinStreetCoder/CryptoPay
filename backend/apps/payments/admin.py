@@ -8,7 +8,7 @@ from django.utils import timezone
 from django.utils.html import format_html
 
 from . import admin_actions
-from .models import ReconciliationCase, SavedPaybill, Transaction
+from .models import PlatformLimit, ReconciliationCase, SavedPaybill, Transaction
 
 
 def mark_as_reviewed(modeladmin, request, queryset):
@@ -409,4 +409,75 @@ class ReconciliationCaseAdmin(admin.ModelAdmin):
             queryset,
             lambda c, actor: admin_actions.reopen(c, actor, reason="manual reopen"),
             label="reopened",
+        )
+
+
+# ── PlatformLimit admin ──────────────────────────────────────────────────
+#
+# Singleton row · ops sets the safety caps on outgoing payments. Both
+# the django.contrib.admin form (this) and the DRF endpoint at
+# /api/v1/payments/admin/limits/ go through `platform_limits.update_limits()`
+# so the AuditLog trail captures every change uniformly.
+
+
+@admin.register(PlatformLimit)
+class PlatformLimitAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "max_per_tx_kes",
+        "max_per_hour_kes",
+        "max_per_day_kes",
+        "max_tx_per_hour_count",
+        "hard_pause_pill",
+        "last_updated_by",
+        "updated_at",
+    )
+    fields = (
+        "max_per_tx_kes",
+        "max_per_hour_kes",
+        "max_per_day_kes",
+        "max_tx_per_hour_count",
+        "hard_pause",
+        "hard_pause_reason",
+        "last_updated_by",
+        "updated_at",
+        "created_at",
+    )
+    readonly_fields = ("last_updated_by", "updated_at", "created_at")
+
+    def hard_pause_pill(self, obj):
+        if obj.hard_pause:
+            return format_html(
+                '<span style="color:#fff;background:#DC2626;padding:2px 8px;'
+                'border-radius:10px;font-weight:700">PAUSED</span>'
+            )
+        return format_html(
+            '<span style="color:#10B981;font-weight:600">live</span>'
+        )
+    hard_pause_pill.short_description = "Pause"
+    hard_pause_pill.admin_order_field = "hard_pause"
+
+    def has_add_permission(self, request):
+        # Singleton · refuse adding a second row (UI-only · the model
+        # itself doesn't enforce because Django admin uses bulk APIs
+        # we don't want to brittle-couple to).
+        return not PlatformLimit.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        # Never delete the singleton. Use hard_pause to stop payments.
+        return False
+
+    def save_model(self, request, obj, form, change):
+        # Route through the service so the audit trail is identical
+        # to what the DRF PATCH endpoint produces.
+        from .platform_limits import update_limits
+
+        update_limits(
+            request.user,
+            max_per_tx_kes=obj.max_per_tx_kes,
+            max_per_hour_kes=obj.max_per_hour_kes,
+            max_per_day_kes=obj.max_per_day_kes,
+            max_tx_per_hour_count=obj.max_tx_per_hour_count,
+            hard_pause=obj.hard_pause,
+            hard_pause_reason=obj.hard_pause_reason,
         )

@@ -435,6 +435,28 @@ class PaymentSaga:
         self.tx.save(update_fields=["mpesa_receipt", "status", "completed_at", "updated_at"])
         logger.info(f"Payment completed: tx {self.tx.id}, receipt {mpesa_receipt}")
 
+        # Record this outflow against the platform-limits sliding windows
+        # so the next caller sees an accurate "outgoing in last hour/day"
+        # reading. Outgoing-only · DEPOSIT / BUY / SWAP / KES_DEPOSIT_C2B
+        # are not counted.
+        if self.tx.type in (
+            Transaction.Type.PAYBILL_PAYMENT,
+            Transaction.Type.TILL_PAYMENT,
+            Transaction.Type.SEND_MPESA,
+            Transaction.Type.WITHDRAWAL,
+        ):
+            try:
+                from .platform_limits import record_outgoing
+                from decimal import Decimal as _D
+                amount_kes = _D(self.tx.dest_amount or 0) if self.tx.dest_currency == "KES" \
+                    else _D(self.tx.source_amount or 0)
+                record_outgoing(amount_kes, str(self.tx.id))
+            except Exception:
+                logger.exception(
+                    "platform_limits.record_outgoing_failed_in_saga",
+                    extra={"transaction_id": str(self.tx.id)},
+                )
+
         # Send all notifications (email, SMS, push, PDF receipt)
         try:
             from apps.core.email import send_transaction_notifications

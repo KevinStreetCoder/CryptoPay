@@ -230,3 +230,104 @@ class SavedPaybill(models.Model):
 
     def __str__(self):
         return f"{self.user} — {self.label or self.paybill_number} ({self.account_number})"
+
+
+class PlatformLimit(models.Model):
+    """Admin-settable safety caps on outgoing payment volume.
+
+    Layered above (independent of) the existing PaymentCircuitBreaker:
+
+      Circuit breaker  · gates per-tx based on LIVE float health.
+                         Auto-managed by the float-balance check task.
+      PlatformLimit    · gates per-tx + per-window based on ADMIN
+                         policy. Survives a healthy float reading.
+                         Stops a hot-wallet compromise from draining
+                         the treasury even if the float balance is
+                         still healthy enough to clear each tx.
+
+    Single-row table by design · accessed via
+    `PlatformLimit.current()` which fetches the singleton (creating
+    sane defaults on first read). Admin DRF endpoints
+    `/api/v1/payments/admin/limits/` GET/PATCH this row.
+
+    All values are KES. Set a cap to 0 to disable that specific guard
+    (useful if ops wants to relax one cap without disabling the
+    others). `hard_pause=True` is the kill switch · refuses every
+    outgoing payment regardless of other caps. Audit log on every
+    change so post-incident review can reconstruct who flipped what.
+    """
+
+    id = models.AutoField(primary_key=True)
+
+    # Per-transaction maximum · refuses any single outgoing payment
+    # above this amount. 0 disables this cap.
+    max_per_tx_kes = models.DecimalField(
+        max_digits=18, decimal_places=2, default=300_000,
+        help_text="Hard cap on a single outgoing transaction (KES). "
+                  "0 disables.",
+    )
+
+    # Rolling-hour outgoing cap · sum of completed outgoing tx in the
+    # last 60 minutes must not exceed this. Protects against burst
+    # drain. 0 disables.
+    max_per_hour_kes = models.DecimalField(
+        max_digits=18, decimal_places=2, default=2_000_000,
+        help_text="Cap on outgoing volume in the last 60 minutes "
+                  "(KES). 0 disables.",
+    )
+
+    # Rolling-day outgoing cap. 0 disables.
+    max_per_day_kes = models.DecimalField(
+        max_digits=18, decimal_places=2, default=10_000_000,
+        help_text="Cap on outgoing volume in the last 24 hours "
+                  "(KES). 0 disables.",
+    )
+
+    # Velocity guard · refuse if MORE than N outgoing tx in last hour.
+    # Caught us in 2026-03-21 audit · a stolen API key was firing
+    # 50 KES txs/sec; we want a count cap, not just KES.
+    max_tx_per_hour_count = models.IntegerField(
+        default=200,
+        help_text="Cap on outgoing tx COUNT in the last 60 minutes. "
+                  "0 disables.",
+    )
+
+    # Kill switch · refuses every outgoing payment regardless of other
+    # caps. Use for incident response.
+    hard_pause = models.BooleanField(
+        default=False,
+        help_text="If True, refuses ALL outgoing payments. Kill switch "
+                  "for incident response · independent of the float-"
+                  "based circuit breaker.",
+    )
+    hard_pause_reason = models.CharField(
+        max_length=255, blank=True, default="",
+    )
+
+    # Last admin to update + when (audit summary; full trail in AuditLog).
+    last_updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="updated_platform_limits",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "platform_limits"
+
+    def __str__(self):
+        return (
+            f"PlatformLimit · per_tx={self.max_per_tx_kes} "
+            f"hour={self.max_per_hour_kes} "
+            f"day={self.max_per_day_kes} "
+            f"count_hr={self.max_tx_per_hour_count} "
+            f"paused={self.hard_pause}"
+        )
+
+    @classmethod
+    def current(cls) -> "PlatformLimit":
+        """Return the singleton row · creates with defaults on first read."""
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
