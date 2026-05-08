@@ -273,21 +273,25 @@ export default function TabLayout() {
         tabBarShowLabel: true,
         tabBarLabelStyle: {
           fontSize: 10.5,
-          lineHeight: 13,
+          // 2026-05-08 (second iteration) · `Pay` was rendering as
+          // `Pav` because the lowercase y-descender clipped at the
+          // bottom edge of the label box. Two fixes layered together:
+          //   1. lineHeight: 13 → 16 · gives the descender room
+          //   2. includeFontPadding: false → true (Android only) · the
+          //      Android paint normally adds a top + bottom font-metric
+          //      pad that prevents descender clipping. We turned it
+          //      off in an earlier round to tighten the bar; the
+          //      wallet/profile labels look fine but the Pay/Wallet/
+          //      Me labels with descenders or g/y/p-style chars get
+          //      clipped without it. Trade-off: 1-2 px taller label
+          //      row · acceptable.
+          lineHeight: 16,
           fontFamily: "DMSans_600SemiBold",
           letterSpacing: 0.15,
-          // Tightened gap to match the 56 px content height (was 70 px,
-          // user reported the bar felt bulky). 3 px below a 22 px icon
-          // is the iOS Human Interface default.
           marginTop: 3,
           marginBottom: 0,
-          paddingBottom: 1,
-          includeFontPadding: false,
-          // 2026-05-08 · explicit `none` for web · Chrome was inheriting
-          // a default `text-decoration-line: underline` on focus that
-          // showed up as small horizontal marks between the icon and
-          // the label on the focused tab. Belt-and-braces · the next
-          // override on the wrapper button kills the focus ring too.
+          paddingBottom: 2,
+          includeFontPadding: true,
           ...(isWeb ? ({ textDecorationLine: "none" } as any) : {}),
         },
         tabBarIconStyle: {

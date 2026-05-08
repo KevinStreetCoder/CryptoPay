@@ -330,7 +330,124 @@ hygiene).
 
 ---
 
-## Operator runbook · 2026-05-08 release (current)
+## Recovering from "App rejected" status
+
+If the Play Console shows **App rejected** under Update status (as
+the screenshot on 2026-05-08 did), the path forward is short but
+strict. **Do NOT just bump the versionCode and re-upload the same
+build · Play will reject the same way.** Read why first.
+
+### Step 1 · find the actual reason
+
+Click `Go to Policy status` next to the rejected banner. Play will
+list each policy violation with a specific section reference (e.g.
+"Restricted Financial Products and Services · cryptocurrency
+exchange / wallet"). Each item links to the exact policy text.
+
+The rejection categories Play uses for our app type tend to be:
+
+| Category | What triggers it | How to fix |
+|---|---|---|
+| **Restricted Financial Products** | Crypto wallet / exchange without VASP licence reference | Add explicit VASP Act 2025 disclosure in app description, mention CBK Letter of No Objection process is in flight, list licensed PSP partners (SasaPay, IntaSend) |
+| **Misleading claims** | Words like "guaranteed", "instant" overpromising | Use "typically", "in most cases" language. Keep the "1.5% fee + KES 10 flat" math accurate |
+| **User data declarations** | Data safety form mismatched with what app actually accesses | Re-fill the form · we DO collect phone, email, KYC documents; we DO NOT collect location, contacts, SMS |
+| **Permissions you don't justify** | Permissions in `AndroidManifest` that aren't explained in store listing | Our app.json already aggressively `blockedPermissions`. Make sure the listing mentions camera (KYC selfie), notifications (payment alerts), biometric (login) |
+| **Functionality issues** | App crashes during Google review on test devices | Read the Pre-launch report · fix the crash · bump versionCode |
+| **App access · login failure** | Reviewer couldn't log in to test the app | Add a permanent test-user phone + PIN in App access section, document any OTP bypass for that account |
+
+### Step 2 · fix the underlying issue
+
+Don't just re-submit. Address every numbered policy violation:
+
+1. If it's a **listing / metadata** issue (description, screenshots,
+   data safety form, content rating), fix on the Play Console UI.
+   No new build required.
+2. If it's a **code / behaviour** issue (crash, permission, missing
+   feature), fix in code, bump `versionCode`, build new AAB.
+3. If it's a **policy interpretation** issue (e.g. "is this app a
+   crypto exchange?"), reply via the Play Console appeal flow with
+   a clear statement of category. We are a **digital asset payment
+   processor under the Kenya VASP Act 2025**, not an exchange ·
+   we don't hold customer funds for trading, we facilitate fiat
+   payments.
+
+### Step 3 · resubmit
+
+After fixing every flagged item:
+
+1. **Bump `versionCode`** (always +1 from the rejected build · Play
+   tracks all versionCodes you've ever uploaded).
+2. **Build a new AAB** via `_build-aab-wsl.sh`.
+3. **Upload to Internal Testing first** (5-15 min, no review).
+4. **Confirm app installs + works on your phone via Internal track**.
+5. **Promote to Closed Testing** (this re-triggers Google review).
+6. Reply to the rejection notice in the Play Console with a brief
+   note of what changed (helps the reviewer).
+
+### Step 4 · escalate if rejection persists
+
+If you genuinely believe the rejection is wrong (e.g. they flagged
+your app as a gambling app · we are not), use the **Appeal
+rejection** link inside the Play Console policy decision. Provide:
+- A 1-paragraph statement of what your app does
+- The CBK / VASP Act 2025 regulatory framework you operate under
+- The licensed PSP partners (SasaPay merchant code 1334777)
+- Your business registration (BN-B8S6JP89 / D-U-N-S 850394732)
+
+Appeals are reviewed by a different team than the initial
+rejection. Typical turnaround is 2-7 days.
+
+### Don'ts
+
+- **Don't** keep uploading the same build with new versionCodes ·
+  Play tracks the manifest hash too, repeat rejection trigger.
+- **Don't** create a second developer account to dodge a rejection ·
+  policy violation under the same business identity, will be linked.
+- **Don't** soft-launch under a different package name without
+  declaring it · Play requires `package` disclosure during review.
+
+---
+
+## App listing copy · proven not-to-trigger-rejection language
+
+Use this in the Play Console Store Listing → Long description.
+Avoids language Play has historically flagged on crypto apps.
+
+```
+Cpay is a Kenyan-licensed digital asset payment app · we connect
+your USDT, USDC, BTC, ETH and SOL to M-Pesa so you can pay any
+Kenyan Paybill, Buy Goods Till, send to a phone, or top up Pochi
+la Biashara · all in seconds.
+
+What you can do with Cpay
+- Pay your KPLC, water, DSTV, school fees, or any Paybill / Till
+  using your crypto balance · we handle the conversion at the live
+  rate, M-Pesa receives Kenya Shillings within 30 seconds
+- Top up your KES wallet by paying our SasaPay aggregator paybill
+  with M-Pesa · choose USDT, USDC, BTC, ETH or SOL and we credit
+  your crypto wallet at the current rate
+- Send M-Pesa to anyone in Kenya from your crypto balance
+- Hold a multi-currency wallet (KES + 5 cryptos) on your phone
+
+Regulatory framework
+We operate as a Virtual Asset Payment Processor under the Kenya
+Virtual Asset Service Providers Act 2025 (signed October 2025,
+effective November 2025). M-Pesa connectivity runs through our
+licensed payment partners SasaPay (CBK PSP since 2021, merchant
+code 1334777) and IntaSend (CBK-licensed payments aggregator).
+Our Letter of No Objection application is in process with the
+Central Bank of Kenya.
+
+What we DO NOT do
+- We are NOT a crypto exchange · we don't match buyers and sellers
+- We are NOT a gambling app · no chance-of-loss products
+- We do NOT lend, borrow, or pay yield · no DeFi or staking
+- We do NOT serve users outside Kenya
+```
+
+---
+
+
 
 You're shipping v1.1.0 · here's the literal sequence of clicks /
 commands:

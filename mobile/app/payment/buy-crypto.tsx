@@ -383,11 +383,24 @@ export default function BuyCryptoScreen() {
           >
             Select Crypto
           </Text>
+          {/* Uniform-width grid · 2 cols on phones, 3 on tablets, 5 on
+              desktop. Fixes the asymmetric BTC card (KSh 10M wrapping
+              to a second line) creating visible alignment gaps when
+              other cards rendered short prices like KSh 127. Each
+              card now gets a consistent width regardless of price
+              length · the price text shrinks / wraps inside its slot.
+              `flex-grow` on the orphan card in the last row lets it
+              expand to match the row width rather than render half. */}
+          {(() => {
+            const cryptoCols = width >= 1100 ? 5 : width >= 700 ? 3 : 2;
+            const cryptoGap = 10;
+            const itemBasis = `${100 / cryptoCols}%`;
+            return (
           <View
             style={{
               flexDirection: "row",
               flexWrap: "wrap",
-              gap: 8,
+              gap: cryptoGap,
               marginBottom: 24,
             }}
             accessibilityRole="radiogroup"
@@ -401,16 +414,23 @@ export default function BuyCryptoScreen() {
                   key={crypto.id}
                   onPress={() => handleCryptoSelect(crypto.id)}
                   style={({ pressed }) => ({
+                    // Uniform basis · each card claims the same row
+                    // fraction. flexGrow:1 lets a half-orphan in the
+                    // last row expand to fill its column slot rather
+                    // than render half-width.
+                    flexBasis: `calc(${itemBasis} - ${(cryptoGap * (cryptoCols - 1)) / cryptoCols}px)` as any,
+                    flexGrow: 1,
+                    minWidth: 0,
+                    minHeight: 70,
                     flexDirection: "row" as const,
                     alignItems: "center" as const,
-                    alignSelf: "flex-start" as const,
-                    gap: 8,
+                    gap: 10,
                     backgroundColor: isSelected
                       ? crypto.color + "1A"
                       : tc.dark.card,
                     borderRadius: 14,
-                    paddingVertical: 10,
-                    paddingHorizontal: 14,
+                    paddingVertical: 12,
+                    paddingHorizontal: 12,
                     borderWidth: 1.5,
                     borderColor: isSelected
                       ? crypto.color + "60"
@@ -429,13 +449,14 @@ export default function BuyCryptoScreen() {
                     size={24}
                     fallbackColor={crypto.color}
                   />
-                  <View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
                     <Text
                       style={{
                         color: isSelected ? tc.textPrimary : tc.textSecondary,
                         fontSize: 14,
                         fontFamily: isSelected ? "DMSans_700Bold" : "DMSans_500Medium",
                       }}
+                      numberOfLines={1}
                       maxFontSizeMultiplier={1.3}
                     >
                       {crypto.id}
@@ -448,6 +469,7 @@ export default function BuyCryptoScreen() {
                           fontFamily: "DMSans_400Regular",
                           marginTop: 1,
                         }}
+                        numberOfLines={1}
                         maxFontSizeMultiplier={1.3}
                       >
                         KSh {parseFloat(liveRates[crypto.id]).toLocaleString("en-KE", { maximumFractionDigits: 0 })}
@@ -458,6 +480,8 @@ export default function BuyCryptoScreen() {
               );
             })}
           </View>
+            );
+          })()}
 
           {/* Amount Input */}
           <Text
