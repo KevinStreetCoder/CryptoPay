@@ -319,6 +319,36 @@ export default function RootLayout() {
     return () => clearTimeout(timer);
   }, []);
 
+  // 2026-05-09 · paint <html> + <body> + the Expo root with the brand
+  // dark background on web. Without this, browser over-scroll bounces
+  // (Chrome mobile, Safari iOS) show the body's default white through
+  // the page edges, reading as an out-of-place white stripe at the
+  // bottom of any scrollable screen. Setting on body alone is not
+  // enough · iOS uses html for the bounce paint, Chrome mobile uses
+  // either depending on viewport-fit. Belt-and-braces · cover both
+  // plus the #root mount point.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const colour = "#060E1F"; // ink-1 brand dark
+    const apply = () => {
+      try {
+        document.documentElement.style.backgroundColor = colour;
+        document.body.style.backgroundColor = colour;
+        // Belt-and-braces · the Expo Router web root often sits at #root
+        const root = document.getElementById("root");
+        if (root) root.style.backgroundColor = colour;
+      } catch {
+        // Silently ignore on environments where DOM access is gated
+        // (e.g. SSR snapshots). Native is unaffected.
+      }
+    };
+    apply();
+    // Re-apply on visibility change in case the OS theme switch wipes
+    // inline styles (rare on Android, seen once on iOS PWA).
+    document.addEventListener("visibilitychange", apply);
+    return () => document.removeEventListener("visibilitychange", apply);
+  }, []);
+
   if (!fontsLoaded && !fontTimeout) {
     return (
       <View style={{ flex: 1, backgroundColor: '#060E1F' }}>

@@ -93,12 +93,18 @@ export function NetworkBadge({ chain, compact = false, mono = false, dark = fals
       </Text>
       {!compact ? (
         <>
-          <Text style={{ fontSize: 10, color: netColor }}>·</Text>
+          <Text style={{ fontSize: 12, color: netColor }}>·</Text>
           <Text
             style={{
               fontSize: 11,
-              fontFamily: Platform.OS === "web" ? "JetBrainsMono_500Medium, 'JetBrains Mono', monospace" : "JetBrainsMono_500Medium",
-              letterSpacing: 0.5,
+              // 2026-05-09 · was JetBrainsMono_500Medium which is NOT
+              // loaded by `useFonts` in the app root. Result: Android
+              // fell back to the system default which sometimes
+              // rendered as zero-width / invisible (the "empty" the
+              // user saw). DMSans is loaded across the app and reads
+              // similarly enough on a 11-px chip.
+              fontFamily: "DMSans_600SemiBold",
+              letterSpacing: 0.6,
               color: netColor,
             }}
           >

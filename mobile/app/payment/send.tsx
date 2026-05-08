@@ -145,7 +145,12 @@ export default function SendMpesaScreen() {
         style={{ flex: 1 }}
       >
         <ScrollView
-          style={{ flex: 1 }}
+          // 2026-05-09 · backgroundColor on the ScrollView itself so
+          // the over-scroll bounce area paints in our dark color
+          // instead of leaking the browser body's white background
+          // (visible as a white stripe at the bottom of the page on
+          // Chrome mobile when the user scrolls past the last card).
+          style={{ flex: 1, backgroundColor: tc.dark.bg }}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={
             isDesktop
