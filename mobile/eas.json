@@ -1,7 +1,7 @@
 {
   "cli": {
     "version": ">= 13.0.0",
-    "appVersionSource": "remote"
+    "appVersionSource": "local"
   },
   "build": {
     "development": {
@@ -44,7 +44,7 @@
       },
       "env": {
         "APP_ENV": "production",
-        "API_URL": "https://api.cpay.co.ke/api/v1",
+        "API_URL": "https://cpay.co.ke/api/v1",
         "EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID": "34724557aafaf3b437889ff0a053cba9"
       }
     }

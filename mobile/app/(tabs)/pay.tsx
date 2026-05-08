@@ -454,15 +454,24 @@ export default function PayScreen() {
             icon="card-outline"
             iconColor={colors.primary[400]}
           />
+          {/* Responsive grid · 2 cols on phones, 3 on tablets, 4-5 on
+              desktop. Each card uses percentage basis so the row fills
+              the available width regardless of viewport. Icon-only
+              compact layout on the smallest viewports stays touchable
+              while displaying more cards above the fold. */}
+          {(() => {
+            // Pick the column count based on viewport width.
+            const columns =
+              width >= 1200 ? 5 : width >= 900 ? 4 : width >= 600 ? 3 : 2;
+            const gap = isDesktop ? (isLargeDesktop ? 20 : 16) : 12;
+            const colBasis = `${100 / columns}%`;
+            return (
           <View
             style={{
-              ...(isDesktop
-                ? {
-                    flexDirection: "row" as const,
-                    gap: isLargeDesktop ? 20 : 16,
-                    flexWrap: "wrap" as const,
-                  }
-                : { gap: 12 }),
+              flexDirection: "row" as const,
+              flexWrap: "wrap" as const,
+              gap,
+              alignItems: "stretch" as const,
             }}
           >
             {PAYMENT_OPTIONS.map((option) => (
@@ -470,13 +479,18 @@ export default function PayScreen() {
                 key={option.id}
                 onPress={() => router.push(option.route)}
                 style={({ pressed, hovered }: any) => ({
-                  flex: isDesktop ? 1 : undefined,
-                  minWidth: isDesktop ? 0 : undefined,
+                  // Each card claims a fraction of the row width minus
+                  // the gap budget. `flexBasis` gives proportional
+                  // sizing; `flexGrow: 1` lets the last row's cards
+                  // expand to fill if the count doesn't divide evenly.
+                  flexBasis: `calc(${colBasis} - ${(gap * (columns - 1)) / columns}px)` as any,
+                  minWidth: 0,
+                  flexGrow: 1,
                   backgroundColor: hovered ? tc.dark.elevated : tc.dark.card,
                   borderRadius: 20,
-                  padding: isDesktop ? 28 : 20,
-                  alignItems: isDesktop ? ("center" as const) : ("flex-start" as const),
-                  flexDirection: isDesktop ? ("column" as const) : ("row" as const),
+                  padding: isDesktop ? 24 : 18,
+                  alignItems: "center" as const,
+                  flexDirection: "column" as const,
                   borderWidth: 1,
                   borderColor: pressed
                     ? option.accent + "4D"
@@ -507,84 +521,48 @@ export default function PayScreen() {
               >
                 <View
                   style={{
-                    width: isDesktop ? 60 : 52,
-                    height: isDesktop ? 60 : 52,
-                    borderRadius: isDesktop ? 20 : 16,
+                    width: isDesktop ? 56 : 48,
+                    height: isDesktop ? 56 : 48,
+                    borderRadius: isDesktop ? 18 : 14,
                     backgroundColor: option.accentBg,
                     alignItems: "center",
                     justifyContent: "center",
-                    marginBottom: isDesktop ? 14 : 0,
-                    marginRight: isDesktop ? 0 : 16,
+                    marginBottom: 12,
                   }}
                 >
-                  <Ionicons name={option.icon} size={isDesktop ? 28 : 24} color={option.accent} />
+                  <Ionicons name={option.icon} size={isDesktop ? 26 : 22} color={option.accent} />
                 </View>
-                {isDesktop ? (
-                  <View style={{ alignItems: "center" }}>
-                    <Text
-                      style={{
-                        color: textColor,
-                        fontSize: 16,
-                        fontFamily: "DMSans_600SemiBold",
-                        textAlign: "center",
-                      }}
-                    >
-                      {t(option.titleKey)}
-                    </Text>
-                    <Text
-                      style={{
-                        color: tc.textMuted,
-                        fontSize: 12,
-                        fontFamily: "DMSans_400Regular",
-                        marginTop: 4,
-                        textAlign: "center",
-                      }}
-                    >
-                      {t(option.subtitleKey)}
-                    </Text>
-                  </View>
-                ) : (
-                  <View style={{ flex: 1, flexDirection: "row", alignItems: "center" }}>
-                    <View style={{ flex: 1 }}>
-                      <Text
-                        style={{
-                          color: textColor,
-                          fontSize: 16,
-                          fontFamily: "DMSans_600SemiBold",
-                        }}
-                      >
-                        {t(option.titleKey)}
-                      </Text>
-                      <Text
-                        style={{
-                          color: tc.textMuted,
-                          fontSize: 12,
-                          fontFamily: "DMSans_400Regular",
-                          marginTop: 2,
-                        }}
-                      >
-                        {t(option.subtitleKey)}
-                      </Text>
-                    </View>
-                    <View
-                      style={{
-                        width: 34,
-                        height: 34,
-                        borderRadius: 12,
-                        backgroundColor: tc.dark.elevated,
-                        alignItems: "center",
-                        justifyContent: "center",
-                        borderWidth: 1,
-                        borderColor: tc.glass.border,
-                      }}
-                    >
-                      <Ionicons name="chevron-forward" size={18} color={tc.textSecondary} />
-                    </View>
-                  </View>
-                )}
+                <View style={{ alignItems: "center" }}>
+                  <Text
+                    style={{
+                      color: textColor,
+                      fontSize: isDesktop ? 16 : 14,
+                      fontFamily: "DMSans_600SemiBold",
+                      textAlign: "center",
+                    }}
+                    numberOfLines={1}
+                  >
+                    {t(option.titleKey)}
+                  </Text>
+                  <Text
+                    style={{
+                      color: tc.textMuted,
+                      fontSize: isDesktop ? 12 : 11,
+                      fontFamily: "DMSans_400Regular",
+                      marginTop: 4,
+                      textAlign: "center",
+                      lineHeight: isDesktop ? 16 : 14,
+                    }}
+                    numberOfLines={2}
+                  >
+                    {t(option.subtitleKey)}
+                  </Text>
+                </View>
               </Pressable>
             ))}
           </View>
+            );
+          })()}
         </View>
 
         {/* ── Saved Paybills ────────────────────────────────────────── */}
