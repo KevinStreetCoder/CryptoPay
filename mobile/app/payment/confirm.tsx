@@ -389,19 +389,50 @@ export default function ConfirmPaymentScreen() {
           });
         }
       } catch {}
-      router.replace({
-        pathname: "/payment/success",
-        params: {
-          amount_kes: params.amount_kes,
-          crypto_amount: params.crypto_amount,
-          crypto_currency: params.crypto_currency,
-          recipient: params.paybill_number || params.till_number || params.phone || "",
-          merchant_name: merchantName,
-          transaction_id: transactionId,
-          tx_status: finalStatus,
-          payment_type: params.type || "",
-        },
-      });
+      // 2026-05-09 · defensive nav · earlier vc 14/15 reports of the
+      // APK crashing right after "Sending payment…" pointed at the
+      // navigation step (router.replace synchronously unmounts confirm
+      // and mounts success while animations + auto-poll are still in
+      // flight). Wrap in try/catch + a microtask so any synchronous
+      // throw in success-screen mount surfaces as a toast, not a
+      // hard crash that swallows the whole payment context.
+      try {
+        // setTimeout(0) defers the navigation past the current React
+        // commit, letting state updates above flush and giving Animated
+        // a clean unmount path. Mirrors the login.handleOtpComplete
+        // chain we already use for register/totp routes.
+        setTimeout(() => {
+          try {
+            router.replace({
+              pathname: "/payment/success",
+              params: {
+                amount_kes: params.amount_kes,
+                crypto_amount: params.crypto_amount,
+                crypto_currency: params.crypto_currency,
+                recipient: params.paybill_number || params.till_number || params.phone || "",
+                merchant_name: merchantName,
+                transaction_id: transactionId,
+                tx_status: finalStatus,
+                payment_type: params.type || "",
+              },
+            });
+          } catch (navErr) {
+            // Router throws should not crash the app · log + toast,
+            // user can navigate manually from history.
+            console.warn("[confirm] success-nav failed", navErr);
+            toast.success(
+              "Payment complete",
+              "Tap a recent transaction in History to view the receipt.",
+            );
+          }
+        }, 0);
+      } catch (navErr) {
+        console.warn("[confirm] schedule-nav failed", navErr);
+        toast.success(
+          "Payment complete",
+          "Open History to view the receipt.",
+        );
+      }
     } catch (err: unknown) {
       setPinError(true);
       if (Platform.OS !== "web") {

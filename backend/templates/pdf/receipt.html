@@ -263,8 +263,13 @@
           <div class="amt">{{ dest_display }}</div>
         </div>
         <div class="right">
-          <span class="pill {% if tx.status == 'COMPLETED' %}{% elif tx.status == 'FAILED' %}pill-failed{% else %}pill-pending{% endif %}">
-            <span class="dot"></span>{% if tx.status == 'COMPLETED' %}SETTLED{% elif tx.status == 'FAILED' %}FAILED{% else %}PENDING{% endif %}
+          {# 2026-05-09 fix · Status enum values are lowercase
+             ("completed" / "failed" / "pending"), not uppercase.
+             The previous comparison `tx.status == 'COMPLETED'` was
+             ALWAYS false, so every receipt rendered PENDING even
+             on settled transactions. #}
+          <span class="pill {% if tx.status == 'completed' %}{% elif tx.status == 'failed' %}pill-failed{% else %}pill-pending{% endif %}">
+            <span class="dot"></span>{% if tx.status == 'completed' %}SETTLED{% elif tx.status == 'failed' %}FAILED{% else %}PENDING{% endif %}
           </span>
         </div>
       </div>

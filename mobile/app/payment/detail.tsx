@@ -283,13 +283,14 @@ export default function TransactionDetailScreen() {
           opacity: pressed ? 0.7 : 1,
         })}
       >
-        {/* 2026-05-09 overflow fix · the previous layout split the row
-            50/50 between the label View and the value View. Long values
-            (UUIDs, "SANDBOX-1334777-df...") then got numberOfLines:1
-            clipped. Solution: label is shrink-to-fit on the left, the
-            value flexes to fill the remaining space, and uses
-            ellipsizeMode "middle" so a UUID renders as
-            "8c60e1c9...bef4f" instead of cutting off the back half. */}
+        {/* 2026-05-09 overflow fix v2 · the v1 fix kept getting Android
+            RN to wrap UUIDs to a clipped second line because Yoga's
+            flexShrink+numberOfLines combo is unreliable. v2 uses an
+            explicit `overflow: hidden` clip on the value's flex box so
+            the Text is hard-bounded, then `ellipsizeMode="middle"`
+            renders the UUID as `9b3b6d7e...4cf7-a5b8` instead of
+            wrapping. `minWidth: 0` is required for flex shrink to
+            actually shrink past the intrinsic content width on Android. */}
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 0 }}>
           {iconName ? (
             <Ionicons name={iconName as any} size={16} color={tc.textMuted} />
@@ -305,7 +306,16 @@ export default function TransactionDetailScreen() {
             {label}
           </Text>
         </View>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flex: 1, justifyContent: "flex-end", marginLeft: 12 }}>
+        <View style={{
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 6,
+          flex: 1,
+          minWidth: 0,
+          justifyContent: "flex-end",
+          marginLeft: 12,
+          overflow: "hidden",
+        }}>
           <Text
             style={{
               color: tc.textPrimary,
@@ -313,8 +323,8 @@ export default function TransactionDetailScreen() {
               fontFamily: "DMSans_500Medium",
               textAlign: "right",
               flexShrink: 1,
+              minWidth: 0,
             }}
-            selectable
             numberOfLines={1}
             ellipsizeMode="middle"
           >

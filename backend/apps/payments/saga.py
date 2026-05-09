@@ -262,11 +262,32 @@ class PaymentSaga:
         # Sandbox auto-complete: Safaricom sandbox callbacks are unreliable,
         # so auto-complete after successful API submission to test the full flow.
         # In production, the real callback will handle completion.
-        if getattr(django_settings, "MPESA_ENVIRONMENT", "") == "sandbox":
+        #
+        # 2026-05-09 fix · the auto-complete was firing whenever
+        # `MPESA_ENVIRONMENT == "sandbox"` regardless of which provider
+        # was actually live. With `PAYMENT_PROVIDER=sasapay` and
+        # `SASAPAY_ENVIRONMENT=production` the SasaPay client was hitting
+        # the LIVE endpoint (real money to real KPLC), but the saga
+        # would still auto-complete with a fake `SANDBOX-...` receipt.
+        # The real B2B result callback (with KPLC's prepaid token in
+        # ResultDesc) then arrived a few seconds later and hit the
+        # `if tx.status == COMPLETED: return` early-out → token thrown
+        # away, user never got it, receipt stuck on PENDING.
+        #
+        # Guard: ONLY auto-complete when the LIVE provider is actually in
+        # sandbox. For SasaPay we check `SASAPAY_ENVIRONMENT` directly,
+        # for Daraja we keep `MPESA_ENVIRONMENT` (the historical name).
+        provider = (getattr(django_settings, "PAYMENT_PROVIDER", "daraja") or "daraja").lower()
+        if provider == "sasapay":
+            provider_env = getattr(django_settings, "SASAPAY_ENVIRONMENT", "production")
+        else:
+            provider_env = getattr(django_settings, "MPESA_ENVIRONMENT", "")
+        if str(provider_env).lower() == "sandbox":
             conv_id = result.get("ConversationID", "")
             logger.info(
                 f"[SANDBOX] Auto-completing tx {self.tx.id} "
-                f"(ConversationID={conv_id}) — sandbox callbacks unreliable"
+                f"(provider={provider} env={provider_env} "
+                f"ConversationID={conv_id}) — sandbox callbacks unreliable"
             )
             self.complete(mpesa_receipt=f"SANDBOX-{conv_id[:12]}")
 
