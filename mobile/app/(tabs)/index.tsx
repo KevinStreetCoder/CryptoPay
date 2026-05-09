@@ -1185,9 +1185,13 @@ import {
   TourAutoStart,
   registerTourScrollView,
 } from "../../src/components/AppTour";
+import { useCopilot } from "react-native-copilot";
 
 function HomeScreenContent() {
   const router = useRouter();
+  // 2026-05-09 · expand the home ScrollView's bottom padding when
+  // the tour is active so the last-step tooltip has space to render.
+  const { visible: tourVisible } = useCopilot();
   const { user } = useAuth();
   const { t } = useLocale();
   const { width } = useWindowDimensions();
@@ -1349,7 +1353,16 @@ function HomeScreenContent() {
             //
             // Earlier attempts: `100` (too much → visible dead strip),
             // `24` (too little → content hidden under the tabs).
-            paddingBottom: bottomTabBarHeight,
+            //
+            // 2026-05-09 · when the tour is active we add an extra
+            // 240 px gutter so the LAST step's tooltip (Recent
+            // Transactions, the bottom-most target) has room to
+            // render BELOW the highlighted block without clipping
+            // off-screen and triggering the "black screen, can't
+            // scroll" trap.
+            paddingBottom: tourVisible
+              ? bottomTabBarHeight + 240
+              : bottomTabBarHeight,
           }}
           keyboardShouldPersistTaps="handled"
         >

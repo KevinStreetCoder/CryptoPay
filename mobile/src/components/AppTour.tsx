@@ -425,7 +425,14 @@ export function TourStep({
  *   7. Android `BackHandler` · hardware back press during tour exits.
  */
 export function TourAutoStart() {
-  const { start, stop, goToNext, copilotEvents, visible, currentStep } = useCopilot();
+  const { start, stop, goToNext, copilotEvents, visible, currentStep, totalStepsNumber } = useCopilot();
+  // Track total steps in a ref so the auto-scroll handler (which lives
+  // inside a useEffect with a stale closure over copilotEvents) can
+  // detect "this is the last step" without re-subscribing on every
+  // total-step change. Updated by the effect below whenever the
+  // CopilotProvider's count changes.
+  const totalStepsRef = useRef(0);
+  useEffect(() => { totalStepsRef.current = totalStepsNumber || 0; }, [totalStepsNumber]);
   const startedRef = useRef(false);
   const lastStepAtRef = useRef<number>(0);
 
@@ -483,7 +490,26 @@ export function TourAutoStart() {
       // ScrollView so the target sits ~120 px from the top edge.
       const wrapper = step?.wrapper?.current;
       if (!wrapper || typeof wrapper.measureInWindow !== "function") return;
+
+      // 2026-05-09 fix · the LAST step's target (Recent Transactions on
+      // Home) sits at the bottom of a ScrollView whose contentContainer
+      // only pads `bottomTabBarHeight` of dead space. When the tour
+      // tries to scroll the target to y=120 the ScrollView clamps at
+      // its max scroll offset, leaving the tooltip rendered below the
+      // visible viewport · the screen looks "black" because the dim
+      // overlay covers everything and the spotlight cutout is off-
+      // screen. Solution · for the last step, use `scrollToEnd` to
+      // pin the bottom of the ScrollView, then let the tooltip render
+      // ABOVE the target (Copilot picks the side automatically based
+      // on viewport room). For all other steps, the prior y-120 logic
+      // is correct.
+      const isLast = step?.order >= (totalStepsRef.current || 9);
       try {
+        if (isLast && _registeredScrollViewRef &&
+            typeof (_registeredScrollViewRef as any).scrollToEnd === "function") {
+          (_registeredScrollViewRef as any).scrollToEnd({ animated: true });
+          return;
+        }
         wrapper.measureInWindow((_x: number, y: number, _w: number, h: number) => {
           if (
             !_registeredScrollViewRef ||

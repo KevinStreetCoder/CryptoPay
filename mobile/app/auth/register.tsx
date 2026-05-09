@@ -18,6 +18,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { PinInput } from "../../src/components/PinInput";
+import { ResendOTPButton } from "../../src/components/ResendOTPButton";
 import { useToast } from "../../src/components/Toast";
 import { useAuth } from "../../src/stores/auth";
 import { authApi } from "../../src/api/auth";
@@ -901,26 +902,18 @@ export default function RegisterScreen() {
               </Pressable>
 
               <View style={{ marginTop: 24, alignItems: "center", gap: 12 }}>
-                <Pressable
-                  onPress={handleSendOTP}
-                  style={({ pressed }) => ({
-                    paddingVertical: 4,
-                    opacity: pressed ? 0.9 : 1,
-                  })}
-                  accessibilityRole="button"
-                  accessibilityLabel="Resend code"
-                >
-                  <Text
-                    style={{
-                      color: tc.primary[300],
-                      fontSize: 14,
-                      fontFamily: "DMSans_500Medium",
-                    }}
-                    maxFontSizeMultiplier={1.3}
-                  >
-                    Resend Code
-                  </Text>
-                </Pressable>
+                {/* 2026-05-09 · proper resend UX with 30 s cooldown
+                    + brand spinner. The previous "Resend Code" was a
+                    bare text button that fired on every tap with no
+                    rate-limit visibility, which encouraged users to
+                    spam it (which then 429'd the SasaPay SMS rail and
+                    burned OTP delivery budget). */}
+                <ResendOTPButton
+                  onResend={handleSendOTP}
+                  loading={loading}
+                  textColor={tc.primary[300]}
+                  mutedColor={tc.textMuted}
+                />
                 <Pressable
                   onPress={() => animateTransition("phone")}
                   style={({ pressed }) => ({
