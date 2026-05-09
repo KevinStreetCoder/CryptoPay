@@ -16,6 +16,7 @@ import { paymentsApi } from "../../src/api/payments";
 import { normalizeError } from "../../src/utils/apiErrors";
 import { recordBankUse } from "../../src/utils/bankPrefs";
 import { recordRecipientUse } from "../../src/utils/recipientPrefs";
+import { clearPersistedFields } from "../../src/hooks/usePersistedState";
 import { useScreenSecurity } from "../../src/hooks/useScreenSecurity";
 import { useTransactionPoller } from "../../src/hooks/useTransactionPoller";
 import { useBiometricAuth } from "../../src/hooks/useBiometricAuth";
@@ -353,6 +354,25 @@ export default function ConfirmPaymentScreen() {
       if (params.type === "bank" && params.bank_slug) {
         void recordBankUse(params.bank_slug);
       }
+      // 2026-05-09 · clear the persisted form fields so the NEXT
+      // visit to the rail doesn't pre-fill the previous recipient's
+      // details. Fire-and-forget · failure here just leaves stale
+      // data which the user can re-edit (no real harm).
+      try {
+        const keysToWipe: string[] = [];
+        if (params.type === "paybill") {
+          keysToWipe.push("paybill_number", "paybill_account", "paybill_amount", "paybill_label");
+        } else if (params.type === "till") {
+          keysToWipe.push("till_number", "till_amount");
+        } else if (params.type === "send") {
+          keysToWipe.push("send_phone", "send_amount");
+        } else if (params.type === "bank") {
+          keysToWipe.push("bank_account", "bank_amount", "bank_slug_v2");
+        }
+        if (keysToWipe.length > 0) {
+          void clearPersistedFields(keysToWipe);
+        }
+      } catch {}
       // 2026-05-09 · forward the resolved merchant name (set server-side
        // by `_resolve_merchant_name` / `_resolve_phone_holder_name` at
        // quote time, OR by the B2B/B2C result callback's RecipientName)

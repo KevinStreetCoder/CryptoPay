@@ -31,6 +31,7 @@ import { LanguageProvider } from "../src/contexts/LanguageContext";
 import { DisplayCurrencyProvider } from "../src/stores/displayCurrency";
 import { OnboardingModal, ONBOARDING_COMPLETED_KEY } from "./onboarding";
 import { AppTourProvider, triggerAppTour } from "../src/components/AppTour";
+import { useTrackLastRoute, getLastRouteIfFresh } from "../src/hooks/useLastRoute";
 
 // WalletConnect AppKit · initialized LAZILY inside deposit screen only
 // DO NOT import appkit.ts or @reown/appkit-react-native here.
@@ -86,6 +87,44 @@ function RootNavigator() {
   useEffect(() => {
     SplashScreen.hideAsync().catch(() => {});
   }, []);
+
+  // 2026-05-09 · track current route for last-route restoration. Only
+  // active once the user is authenticated (logged-out routes shouldn't
+  // be persisted as "last route" — the auth gate would just re-route
+  // back to login on next launch anyway). The tracker auto-debounces
+  // and excludes /auth/* + /payment/confirm + /payment/success.
+  useTrackLastRoute(!!user && appReady);
+
+  // 2026-05-09 · restore the last-known route on app start (within a
+  // 30 min TTL window). Fires once after auth + appReady · sets a
+  // ref to avoid double-navigation if React Strict Mode double-runs
+  // effects in dev.
+  const lastRouteRestoredRef = (globalThis as any).__cpayLastRouteRestoredRef
+    || ((globalThis as any).__cpayLastRouteRestoredRef = { current: false });
+  useEffect(() => {
+    if (!user || !appReady) return;
+    if (lastRouteRestoredRef.current) return;
+    lastRouteRestoredRef.current = true;
+    (async () => {
+      const last = await getLastRouteIfFresh();
+      if (!last?.pathname) return;
+      // Don't restore if we're already on a non-tab route (user might
+      // have hit a deep link). Tabs root only.
+      const onTabsRoot =
+        segments.length === 0
+        || segments[0] === "(tabs)"
+        || segments[0] === "index";
+      if (!onTabsRoot) return;
+      try {
+        router.replace({
+          pathname: last.pathname as any,
+          params: last.params,
+        });
+      } catch {
+        // Stale route shape · ignore. User stays on tabs.
+      }
+    })();
+  }, [user, appReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const init = async () => {

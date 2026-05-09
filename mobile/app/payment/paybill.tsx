@@ -28,8 +28,19 @@ import { PaymentStepper } from "../../src/components/PaymentStepper";
 import { GlassCard } from "../../src/components/GlassCard";
 import { useLocale } from "../../src/hooks/useLocale";
 import { getFrequent, type RecipientEntry } from "../../src/utils/recipientPrefs";
+import { usePersistedState } from "../../src/hooks/usePersistedState";
 
 const CRYPTO_OPTIONS: CurrencyCode[] = ["USDT", "USDC", "BTC", "ETH", "SOL"];
+
+// 2026-05-09 · keys for usePersistedState. Survives network blip /
+// reload. Cleared after successful payment in confirm.tsx.
+const PERSIST_KEYS = {
+  paybill: "paybill_number",
+  account: "paybill_account",
+  amount: "paybill_amount",
+  label: "paybill_label",
+  crypto: "paybill_crypto",
+};
 
 export default function PayBillScreen() {
   const router = useRouter();
@@ -38,11 +49,24 @@ export default function PayBillScreen() {
   const isWeb = Platform.OS === "web";
   const isDesktop = isWeb && width >= 900;
   const { data: wallets } = useWallets();
-  const [paybillNumber, setPaybillNumber] = useState(prefill || "");
-  const [accountNumber, setAccountNumber] = useState(prefillAccount || "");
-  const [saveLabel, setSaveLabel] = useState(prefillName || "");
-  const [amount, setAmount] = useState("");
-  const [selectedCrypto, setSelectedCrypto] = useState<CurrencyCode>("USDT");
+  // 2026-05-09 · persisted form state. The prefill from URL params
+  // takes precedence over the persisted value (user tapped a saved
+  // bill so they expect that one to load).
+  const [paybillNumber, setPaybillNumber] = usePersistedState(
+    PERSIST_KEYS.paybill, prefill || "",
+  );
+  const [accountNumber, setAccountNumber] = usePersistedState(
+    PERSIST_KEYS.account, prefillAccount || "",
+  );
+  const [saveLabel, setSaveLabel] = usePersistedState(
+    PERSIST_KEYS.label, prefillName || "",
+  );
+  const [amount, setAmount] = usePersistedState(PERSIST_KEYS.amount, "");
+  const [persistedCrypto, setPersistedCrypto] = usePersistedState(
+    PERSIST_KEYS.crypto, "USDT",
+  );
+  const selectedCrypto = (persistedCrypto || "USDT") as CurrencyCode;
+  const setSelectedCrypto = (c: CurrencyCode) => setPersistedCrypto(c);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [loading, setLoading] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);

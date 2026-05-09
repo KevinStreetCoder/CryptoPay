@@ -106,14 +106,20 @@ class PaymentSagaTest(TestCase):
         saga.execute()
 
         self.tx.refresh_from_db()
-        # In sandbox mode, auto-complete fires immediately after M-Pesa API success
-        # In production, status would be CONFIRMING until callback arrives
-        from django.conf import settings as django_settings
-        if getattr(django_settings, "MPESA_ENVIRONMENT", "") == "sandbox":
-            self.assertEqual(self.tx.status, Transaction.Status.COMPLETED)
-        else:
-            self.assertEqual(self.tx.status, Transaction.Status.CONFIRMING)
+        # 2026-05-09 · all sandbox/DEV auto-complete paths removed
+        # from the saga (they masked real provider failures by
+        # stamping fake `SANDBOX-` / `DEV` receipts before the actual
+        # callback arrived). The saga now ALWAYS waits for the real
+        # callback to flip to COMPLETED. In a unit test where we
+        # patch the M-Pesa client but don't simulate the callback,
+        # the expected terminal state of saga.execute() is CONFIRMING.
+        # COMPLETED only happens via _process_successful_payment in
+        # apps.mpesa.sasapay_views (covered separately).
+        self.assertEqual(self.tx.status, Transaction.Status.CONFIRMING)
         self.wallet.refresh_from_db()
+        # The wallet was unlocked-and-debited at lock-time so the
+        # balance is already decremented even before the callback
+        # confirms. 100 KES locked + spent → 80 remaining.
         self.assertEqual(self.wallet.balance, Decimal("80.00000000"))
 
     @override_settings(PAYMENT_PROVIDER="daraja")

@@ -34,8 +34,18 @@ import {
   toggleFavourite,
 } from "../../src/utils/bankPrefs";
 import { getBankBrandColor, getBankLogo } from "../../src/constants/bankLogos";
+import { usePersistedState } from "../../src/hooks/usePersistedState";
 
 const CRYPTO_OPTIONS: CurrencyCode[] = ["USDT", "USDC", "BTC", "ETH", "SOL"];
+
+// 2026-05-09 · keys for usePersistedState. Bank slug is stored as a
+// string so the bank object is reconstructed by lookup on restore.
+const PERSIST_KEYS = {
+  account: "bank_account",
+  amount: "bank_amount",
+  bank_slug: "bank_slug_v2",
+  crypto: "bank_crypto",
+};
 
 /**
  * Display order for the section labels. Anything backend sends that
@@ -244,9 +254,14 @@ export default function SendToBankScreen() {
   const [frequent, setFrequent] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [selectedBank, setSelectedBank] = useState<Bank | null>(null);
-  const [accountNumber, setAccountNumber] = useState("");
-  const [amount, setAmount] = useState("");
-  const [selectedCrypto, setSelectedCrypto] = useState<CurrencyCode>("USDT");
+  // 2026-05-09 · persisted form state. Bank is restored from `slug`
+  // once the bank registry loads (see effect below).
+  const [accountNumber, setAccountNumber] = usePersistedState(PERSIST_KEYS.account, "");
+  const [amount, setAmount] = usePersistedState(PERSIST_KEYS.amount, "");
+  const [persistedBankSlug, setPersistedBankSlug] = usePersistedState(PERSIST_KEYS.bank_slug, "");
+  const [persistedCrypto, setPersistedCrypto] = usePersistedState(PERSIST_KEYS.crypto, "USDT");
+  const selectedCrypto = (persistedCrypto || "USDT") as CurrencyCode;
+  const setSelectedCrypto = (c: CurrencyCode) => setPersistedCrypto(c);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [loading, setLoading] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
@@ -294,6 +309,21 @@ export default function SendToBankScreen() {
       alive = false;
     };
   }, [toast, t]);
+
+  // 2026-05-09 · sync persisted bank-slug with selectedBank object.
+  // When the persisted slug + bank registry are both available, look
+  // up the bank and pre-select it. When the user picks a bank, save
+  // the slug so the next mount restores it.
+  useEffect(() => {
+    if (!persistedBankSlug || banks.length === 0) return;
+    if (selectedBank?.slug === persistedBankSlug) return;
+    const match = banks.find((b) => b.slug === persistedBankSlug);
+    if (match) setSelectedBank(match);
+  }, [persistedBankSlug, banks, selectedBank?.slug]);
+  useEffect(() => {
+    const slug = selectedBank?.slug || "";
+    if (slug !== persistedBankSlug) setPersistedBankSlug(slug);
+  }, [selectedBank?.slug]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load favourites + frequent slugs in parallel. Done once on mount
   // and refreshed whenever the user toggles a pin.

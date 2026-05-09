@@ -27,8 +27,15 @@ import { PaymentStepper } from "../../src/components/PaymentStepper";
 import { GlassCard } from "../../src/components/GlassCard";
 import { useLocale } from "../../src/hooks/useLocale";
 import { getFrequent, type RecipientEntry } from "../../src/utils/recipientPrefs";
+import { usePersistedState } from "../../src/hooks/usePersistedState";
 
 const CRYPTO_OPTIONS: CurrencyCode[] = ["USDT", "USDC", "BTC", "ETH", "SOL"];
+
+const PERSIST_KEYS = {
+  till: "till_number",
+  amount: "till_amount",
+  crypto: "till_crypto",
+};
 
 export default function PayTillScreen() {
   const router = useRouter();
@@ -37,9 +44,14 @@ export default function PayTillScreen() {
   const isWeb = Platform.OS === "web";
   const isDesktop = isWeb && width >= 900;
   const { data: wallets } = useWallets();
-  const [tillNumber, setTillNumber] = useState(prefill || "");
-  const [amount, setAmount] = useState("");
-  const [selectedCrypto, setSelectedCrypto] = useState<CurrencyCode>("USDT");
+  // 2026-05-09 · persisted form state.
+  const [tillNumber, setTillNumber] = usePersistedState(PERSIST_KEYS.till, prefill || "");
+  const [amount, setAmount] = usePersistedState(PERSIST_KEYS.amount, "");
+  const [persistedCrypto, setPersistedCrypto] = usePersistedState(
+    PERSIST_KEYS.crypto, "USDT",
+  );
+  const selectedCrypto = (persistedCrypto || "USDT") as CurrencyCode;
+  const setSelectedCrypto = (c: CurrencyCode) => setPersistedCrypto(c);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [loading, setLoading] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);

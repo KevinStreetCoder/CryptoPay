@@ -27,8 +27,18 @@ import { GlassCard } from "../../src/components/GlassCard";
 import { useLocale } from "../../src/hooks/useLocale";
 import { NetworkBadge, currencyToChain } from "../../src/components/brand/NetworkBadge";
 import { getFrequent, type RecipientEntry } from "../../src/utils/recipientPrefs";
+import { usePersistedState, clearPersistedFields } from "../../src/hooks/usePersistedState";
 
 const CRYPTO_OPTIONS: CurrencyCode[] = ["USDT", "USDC", "BTC", "ETH", "SOL"];
+
+// 2026-05-09 · keys for usePersistedState · stable across mounts.
+// Wiped after a successful payment so the next visit doesn't auto-
+// fill the previous recipient's number.
+const PERSIST_KEYS = {
+  phone: "send_phone",
+  amount: "send_amount",
+  crypto: "send_crypto",
+};
 
 export default function SendMpesaScreen() {
   const router = useRouter();
@@ -42,9 +52,16 @@ export default function SendMpesaScreen() {
   const isWeb = Platform.OS === "web";
   const isDesktop = isWeb && width >= 900;
   const { data: wallets } = useWallets();
-  const [phone, setPhone] = useState("");
-  const [amount, setAmount] = useState("");
-  const [selectedCrypto, setSelectedCrypto] = useState<CurrencyCode>("USDT");
+  // 2026-05-09 · persisted form state · survives network blip /
+  // bundle reload. Cleared in the success path of confirm.tsx via
+  // `clearPersistedFields(["send_phone", "send_amount"])`.
+  const [phone, setPhone] = usePersistedState(PERSIST_KEYS.phone, "");
+  const [amount, setAmount] = usePersistedState(PERSIST_KEYS.amount, "");
+  const [persistedCrypto, setPersistedCrypto] = usePersistedState(
+    PERSIST_KEYS.crypto, "USDT",
+  );
+  const selectedCrypto = (persistedCrypto || "USDT") as CurrencyCode;
+  const setSelectedCrypto = (c: CurrencyCode) => setPersistedCrypto(c);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [loading, setLoading] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);

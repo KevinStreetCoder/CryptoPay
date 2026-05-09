@@ -33,6 +33,12 @@ import { PaymentStepper } from "../../src/components/PaymentStepper";
 import { GlassCard } from "../../src/components/GlassCard";
 import { useLocale } from "../../src/hooks/useLocale";
 import { Spinner } from "../../src/components/brand/Spinner";
+import { usePersistedState } from "../../src/hooks/usePersistedState";
+
+const PERSIST_KEYS = {
+  amount: "buy_amount",
+  crypto: "buy_crypto",
+};
 
 type CryptoOption = "USDT" | "USDC" | "BTC" | "ETH" | "SOL";
 
@@ -106,10 +112,18 @@ export default function BuyCryptoScreen() {
   const { t } = useLocale();
 
   const [step, setStep] = useState<"form" | "preview" | "pin">("form");
-  const [selectedCrypto, setSelectedCrypto] = useState<CryptoOption>(
-    (params.preset_currency as CryptoOption) || "USDT"
+  // 2026-05-09 · persisted form state. URL preset wins over storage
+  // (the user explicitly chose to land here with that preset).
+  const [persistedCrypto, setPersistedCrypto] = usePersistedState(
+    PERSIST_KEYS.crypto,
+    (params.preset_currency as string) || "USDT",
   );
-  const [amountKES, setAmountKES] = useState(params.preset_amount || "");
+  const selectedCrypto = (persistedCrypto || "USDT") as CryptoOption;
+  const setSelectedCrypto = (c: CryptoOption) => setPersistedCrypto(c);
+  const [amountKES, setAmountKES] = usePersistedState(
+    PERSIST_KEYS.amount,
+    params.preset_amount || "",
+  );
   const [phone, setPhone] = useState(user?.phone || "");
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
