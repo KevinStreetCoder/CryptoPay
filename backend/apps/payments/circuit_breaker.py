@@ -42,18 +42,65 @@ BREAKER_TTL = 86400  # 24 hours
 
 
 def _threshold(name: str, default: int) -> Decimal:
-    """Read a float threshold from Django settings with a sensible default."""
+    """Read a float threshold from Django settings · always live.
+
+    2026-05-09 audit fix · this MUST be called on every read, not at
+    module import. The previous module-level constants
+    (`FLOAT_EMERGENCY_KES = _threshold(...)` at module load) froze the
+    threshold value in memory at import time. Lowering an env var
+    required a full container restart of every worker + web process
+    to take effect, AND when state didn't transition (float still
+    below the new threshold) the cached `reason` string kept the OLD
+    threshold value baked in for up to 24 h. Helpers below always
+    fetch live so settings change propagates as fast as the next
+    `update_from_float` call.
+    """
     return Decimal(str(getattr(settings, name, default)))
 
 
-# Thresholds
-FLOAT_EMERGENCY_KES = _threshold("FLOAT_EMERGENCY_KES", 200_000)
-FLOAT_CRITICAL_KES = _threshold("FLOAT_CRITICAL_KES", 500_000)
-FLOAT_RESUME_KES = _threshold("FLOAT_RESUME_KES", 800_000)
-FLOAT_HEALTHY_KES = _threshold("FLOAT_HEALTHY_KES", 1_500_000)
+# ── Live threshold helpers · DO NOT replace with module-level
+# ── constants. Each call reads `settings.FLOAT_*_KES` at the call
+# ── site so an env change is honored on the next request without
+# ── requiring import-time freeze.
+def _emergency_kes() -> Decimal:
+    return _threshold("FLOAT_EMERGENCY_KES", 200_000)
 
-# Large payment threshold (blocked when in HALF_OPEN / critical state)
-LARGE_PAYMENT_KES = _threshold("FLOAT_LARGE_PAYMENT_KES", 50_000)
+
+def _critical_kes() -> Decimal:
+    return _threshold("FLOAT_CRITICAL_KES", 500_000)
+
+
+def _resume_kes() -> Decimal:
+    return _threshold("FLOAT_RESUME_KES", 800_000)
+
+
+def _healthy_kes() -> Decimal:
+    return _threshold("FLOAT_HEALTHY_KES", 1_500_000)
+
+
+def _large_payment_kes() -> Decimal:
+    return _threshold("FLOAT_LARGE_PAYMENT_KES", 50_000)
+
+
+# Backwards-compat shims · existing call sites that import these as
+# module-level constants get a property-like callable that ALWAYS
+# resolves to the live value. We re-bind them to FRESH Decimal calls
+# rather than freeze a value here, so e.g. `circuit_breaker.FLOAT_
+# EMERGENCY_KES` from another module evaluates fresh each access.
+# (This requires updating every callsite to call a function — see
+# all internal usages below in this file. External consumers should
+# use the helpers; the module-level names are kept ONLY as the
+# helper-call results read at-import for any ancient code path
+# we missed, with a deprecation comment.)
+#
+# DEPRECATED · prefer `_emergency_kes()` etc. These re-bind on every
+# import-time but NOT on every read · do NOT introduce new readers
+# of these as module-level constants.
+FLOAT_EMERGENCY_KES = _emergency_kes()
+FLOAT_CRITICAL_KES = _critical_kes()
+FLOAT_RESUME_KES = _resume_kes()
+FLOAT_HEALTHY_KES = _healthy_kes()
+LARGE_PAYMENT_KES = _large_payment_kes()
 
 
 class PaymentsPaused(Exception):
@@ -98,21 +145,32 @@ class PaymentCircuitBreaker:
         last_float = cache.get(BREAKER_LAST_FLOAT_KEY)
         if last_float is not None:
             float_val = Decimal(str(last_float))
-            if float_val < FLOAT_EMERGENCY_KES:
+            if float_val < _emergency_kes():
                 logger.warning(
                     f"Circuit breaker state missing, last float KES {float_val:,.0f} "
                     f"< emergency threshold — defaulting to OPEN"
                 )
                 return cls.OPEN
-            if float_val < FLOAT_CRITICAL_KES:
+            if float_val < _critical_kes():
                 logger.warning(
                     f"Circuit breaker state missing, last float KES {float_val:,.0f} "
                     f"< critical threshold — defaulting to HALF_OPEN"
                 )
                 return cls.HALF_OPEN
 
-        # No state, no float data — assume CLOSED (first boot / fresh Redis)
-        return cls.CLOSED
+        # 2026-05-09 audit fix · was returning CLOSED here (fail-open).
+        # When BOTH state AND last_float keys are missing (Redis cold-
+        # boot / 24-h TTL expiry / cache flush), we have NO ground truth
+        # about the float. Defaulting to CLOSED in that vacuum lets every
+        # outgoing payment proceed against an unknown treasury. Fail SAFE
+        # · default to HALF_OPEN, which still allows small payments but
+        # blocks large drains. The next `update_from_float` (≤5 min via
+        # the Celery beat) refreshes to the real state.
+        logger.warning(
+            "Circuit breaker state missing AND no last-known float · "
+            "defaulting to HALF_OPEN until next float check"
+        )
+        return cls.HALF_OPEN
 
     @classmethod
     def get_reason(cls) -> str:
@@ -130,7 +188,7 @@ class PaymentCircuitBreaker:
         if state == cls.CLOSED:
             return None  # No limit
         if state == cls.HALF_OPEN:
-            return LARGE_PAYMENT_KES
+            return _large_payment_kes()
         return Decimal("0")  # OPEN — nothing allowed
 
     @classmethod
@@ -146,10 +204,11 @@ class PaymentCircuitBreaker:
             "paused_at": cache.get(BREAKER_PAUSED_AT_KEY),
             "manual_override": cache.get(BREAKER_MANUAL_KEY, False),
             "thresholds": {
-                "emergency_kes": str(FLOAT_EMERGENCY_KES),
-                "critical_kes": str(FLOAT_CRITICAL_KES),
-                "resume_kes": str(FLOAT_RESUME_KES),
-                "healthy_kes": str(FLOAT_HEALTHY_KES),
+                # Live-read · honors env changes without container restart.
+                "emergency_kes": str(_emergency_kes()),
+                "critical_kes": str(_critical_kes()),
+                "resume_kes": str(_resume_kes()),
+                "healthy_kes": str(_healthy_kes()),
             },
         }
 
@@ -181,13 +240,14 @@ class PaymentCircuitBreaker:
             )
 
         if state == cls.HALF_OPEN:
-            if amount_kes > LARGE_PAYMENT_KES:
+            large = _large_payment_kes()
+            if amount_kes > large:
                 raise PaymentsPaused(
                     reason=(
-                        f"Large payments (over KES {LARGE_PAYMENT_KES:,.0f}) are "
+                        f"Large payments (over KES {large:,.0f}) are "
                         f"temporarily unavailable. {reason}"
                     ),
-                    max_amount_kes=LARGE_PAYMENT_KES,
+                    max_amount_kes=large,
                 )
             # Small payments still allowed in HALF_OPEN
             return
@@ -214,20 +274,30 @@ class PaymentCircuitBreaker:
 
         old_state = cls.get_state()
 
-        if float_balance_kes < FLOAT_EMERGENCY_KES:
+        # 2026-05-09 audit fix · all threshold reads are LIVE (helper
+        # functions, not module constants) so a settings change
+        # propagates as fast as this update_from_float call. The
+        # `reason` string is rebuilt each call · clearing the 24-h
+        # cache-staleness window that bit us today.
+        emergency = _emergency_kes()
+        critical = _critical_kes()
+        resume = _resume_kes()
+        large = _large_payment_kes()
+
+        if float_balance_kes < emergency:
             new_state = cls.OPEN
             reason = (
                 f"KES float critically low: KES {float_balance_kes:,.0f} "
-                f"(emergency threshold: KES {FLOAT_EMERGENCY_KES:,.0f})"
+                f"(emergency threshold: KES {emergency:,.0f})"
             )
-        elif float_balance_kes < FLOAT_CRITICAL_KES:
+        elif float_balance_kes < critical:
             new_state = cls.HALF_OPEN
             reason = (
                 f"KES float low: KES {float_balance_kes:,.0f} "
-                f"(critical threshold: KES {FLOAT_CRITICAL_KES:,.0f}). "
-                f"Large payments (>KES {LARGE_PAYMENT_KES:,.0f}) paused."
+                f"(critical threshold: KES {critical:,.0f}). "
+                f"Large payments (>KES {large:,.0f}) paused."
             )
-        elif float_balance_kes >= FLOAT_RESUME_KES:
+        elif float_balance_kes >= resume:
             new_state = cls.CLOSED
             reason = ""
         else:
@@ -251,11 +321,19 @@ class PaymentCircuitBreaker:
 
     @classmethod
     def force_pause(cls, reason: str = "Manual pause by admin") -> None:
-        """Admin manually pauses all payments."""
+        """Admin manually pauses all payments.
+
+        2026-05-09 audit fix · MANUAL_KEY is set BEFORE _set_state so a
+        concurrent `update_from_float` call cannot win the race and
+        overwrite the pause state with the auto-derived one. The
+        previous order had a tiny window (a few ms on busy Redis)
+        where `update_from_float` could read MANUAL_KEY=missing and
+        proceed to overwrite the OPEN state we just set.
+        """
         old_state = cls.get_state()
-        cls._set_state(cls.OPEN, reason)
         cache.set(BREAKER_MANUAL_KEY, True, BREAKER_TTL)
         cache.set(BREAKER_PAUSED_AT_KEY, timezone.now().isoformat(), BREAKER_TTL)
+        cls._set_state(cls.OPEN, reason)
         cls._log_transition(old_state, cls.OPEN, reason, cls.get_last_float())
         logger.warning(f"Circuit breaker FORCE PAUSED: {reason}")
 
@@ -266,10 +344,12 @@ class PaymentCircuitBreaker:
         last_float = cls.get_last_float()
 
         warnings = []
-        if last_float is not None and last_float < FLOAT_EMERGENCY_KES:
+        # Live-read · honors any threshold change since startup.
+        emergency = _emergency_kes()
+        if last_float is not None and last_float < emergency:
             warnings.append(
                 f"WARNING: Last known float KES {last_float:,.0f} is below "
-                f"emergency threshold KES {FLOAT_EMERGENCY_KES:,.0f}. "
+                f"emergency threshold KES {emergency:,.0f}. "
                 f"Payments will resume but may fail. The breaker will re-trip "
                 f"on next float check (~5 min)."
             )

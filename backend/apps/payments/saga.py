@@ -454,13 +454,26 @@ class PaymentSaga:
 
         # Record this outflow against the platform-limits sliding windows
         # so the next caller sees an accurate "outgoing in last hour/day"
-        # reading. Outgoing-only · DEPOSIT / BUY / SWAP / KES_DEPOSIT_C2B
-        # are not counted.
+        # reading.
+        #
+        # 2026-05-09 audit fix · WITHDRAWAL was in this list. Withdrawal
+        # transactions have `dest_currency = USDT/BTC/ETH/...`, NOT KES,
+        # and the fallback branch recorded `source_amount` (a CRYPTO
+        # quantity, e.g. `100` for 100 USDT) into a Redis ZSET that the
+        # rest of the system treats as KES. After a few withdrawals the
+        # per-hour / per-day caps in `platform_limits.enforce_outgoing()`
+        # saw massively understated outgoing KES (100 KES for a
+        # ~13,000-KES-equivalent withdrawal) and stopped blocking real
+        # KES drains. Withdrawals are a SEPARATE crypto-egress rail and
+        # already have their own limits (per-currency / address-whitelist
+        # / blockchain-fee bounds). Removing them from this list fixes
+        # the platform-limits accuracy. If we want to enforce a unified
+        # "outgoing value in KES equivalent" limit later, compute
+        # `kes_estimate = source_amount * latest_rate` BEFORE recording.
         if self.tx.type in (
             Transaction.Type.PAYBILL_PAYMENT,
             Transaction.Type.TILL_PAYMENT,
             Transaction.Type.SEND_MPESA,
-            Transaction.Type.WITHDRAWAL,
         ):
             try:
                 from .platform_limits import record_outgoing

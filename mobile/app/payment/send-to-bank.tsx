@@ -149,7 +149,15 @@ function BankTile({
     <Pressable
       onPress={onSelect}
       style={({ pressed, hovered }: any) => ({
-        width: `calc(${100 / gridCols}% - ${(tileGap * (gridCols - 1)) / gridCols}px)` as any,
+        // 2026-05-09 audit fix · the previous `width: calc(...)` was
+        // web-only · RN-native (Android/iOS) silently ignored the
+        // string and fell back to content-width, producing a 1-col
+        // stack of bank tiles on phones. Same bug family as the
+        // CryptoSelector regression earlier today. Use a percentage
+        // basis · padding-agnostic, native-supported, and the parent
+        // gap handles the inter-tile spacing.
+        flexBasis: `${100 / gridCols - 1}%` as any,
+        flexGrow: 0,
         backgroundColor: isSelected ? colors.primary[400] + "20" : tc.dark.card,
         borderRadius: 14,
         padding: 12,
