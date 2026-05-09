@@ -283,7 +283,14 @@ export default function TransactionDetailScreen() {
           opacity: pressed ? 0.7 : 1,
         })}
       >
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
+        {/* 2026-05-09 overflow fix · the previous layout split the row
+            50/50 between the label View and the value View. Long values
+            (UUIDs, "SANDBOX-1334777-df...") then got numberOfLines:1
+            clipped. Solution: label is shrink-to-fit on the left, the
+            value flexes to fill the remaining space, and uses
+            ellipsizeMode "middle" so a UUID renders as
+            "8c60e1c9...bef4f" instead of cutting off the back half. */}
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 0 }}>
           {iconName ? (
             <Ionicons name={iconName as any} size={16} color={tc.textMuted} />
           ) : null}
@@ -293,28 +300,31 @@ export default function TransactionDetailScreen() {
               fontSize: 14,
               fontFamily: "DMSans_400Regular",
             }}
+            numberOfLines={1}
           >
             {label}
           </Text>
         </View>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flex: 1, justifyContent: "flex-end" }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flex: 1, justifyContent: "flex-end", marginLeft: 12 }}>
           <Text
             style={{
               color: tc.textPrimary,
               fontSize: 14,
               fontFamily: "DMSans_500Medium",
               textAlign: "right",
+              flexShrink: 1,
             }}
             selectable
             numberOfLines={1}
+            ellipsizeMode="middle"
           >
             {value}
           </Text>
           {options?.copiable && (
-            <Ionicons name="copy-outline" size={14} color={tc.textMuted} />
+            <Ionicons name="copy-outline" size={14} color={tc.textMuted} style={{ flexShrink: 0 }} />
           )}
           {options?.onPress && (
-            <Ionicons name="open-outline" size={14} color={colors.primary[400]} />
+            <Ionicons name="open-outline" size={14} color={colors.primary[400]} style={{ flexShrink: 0 }} />
           )}
         </View>
       </Pressable>

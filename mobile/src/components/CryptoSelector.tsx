@@ -24,46 +24,53 @@ interface CryptoSelectorProps {
 }
 
 /**
- * Compact responsive crypto picker · 2026-05-09 redesign (v3).
+ * Compact responsive crypto picker · 2026-05-09 redesign (v4).
  *
- *   < 600 px (phones)            · 2 cols → matches Deposit-screen design
+ *   < 600 px (phones)            · 3 cols → matches Deposit-screen layout
+ *                                  so 5 cryptos fit in 2 rows max
+ *                                  (3 + 2-with-spacer) instead of 3 rows
  *   600 – 899 px (small tablets) · 3 cols
  *   ≥ 900 px (tablets / desktop) · 4 cols
  *
- * **Padding-agnostic layout** · v2 used `width: cardW` computed from
- * the viewport with a hard-coded `hPad = 16` assumption. On screens
- * where the parent had `paddingHorizontal: 20` (Send / Buy-Goods /
- * Pay-Bill / Pay-Till), the calc was 4 dp too wide → cards couldn't
- * fit 2-per-row → wrapped to 1-col. v3 uses `flexBasis: 48%` +
- * `flexGrow: 1`, which adapts to whatever the parent gives us.
+ * **v4 layout fix** · v3 used `flexBasis: 49%` + flexWrap which on
+ * some Android RN versions silently fell back to 1-col (Yoga's
+ * percent-flexBasis path is finicky when children have intrinsic
+ * content). v4 switches to fixed-point widths computed from
+ * `useWindowDimensions().width` minus the parent's known padding,
+ * which is rock-solid across all RN targets we ship to. The
+ * `hPad` constant matches the 20-dp horizontal padding every
+ * payment screen wraps the picker in.
  *
  * **Last-row span fallback** · when the orphan count in the last
- * row is exactly 1, that one card takes 100% width so the grid
- * doesn't end with a single half-width card next to empty space.
- * For 5 cryptos in 2 cols: row1 = USDT|USDC, row2 = BTC|ETH,
- * row3 = SOL spanning full width.
+ * row is exactly 1, that one card takes the full row width so the
+ * grid doesn't end with a single half-width card. For 5 cryptos in
+ * 3 cols: row1 = USDT|USDC|BTC, row2 = ETH|SOL (no orphan since
+ * 5%3 = 2). Earlier 2-col layout gave 5%2 = 1 → orphan span.
  *
- * Compact card · 22 px logo, 13 px symbol, 11 px balance, 9 px
+ * Compact card · 20 px logo, 13 px symbol, 11 px balance, 9 px
  * network chip.
  */
 export function CryptoSelector({ options, selected, wallets, onSelect }: CryptoSelectorProps) {
   const isWeb = Platform.OS === "web";
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
-  const { width } = useWindowDimensions();
+  const { width: screenW } = useWindowDimensions();
 
-  // Column count drives the percentage width.
-  const columns = width >= 900 ? 4 : width >= 600 ? 3 : 2;
+  // Column count · phones default to 3 (matches Deposit-screen design).
+  const columns = screenW >= 900 ? 4 : 3;
   const gap = 8;
-  // Each card claims ~`100/columns - 2`% so the gap fits naturally.
-  // Percentage widths in RN are RELATIVE to the parent, so this is
-  // padding-agnostic — works at any hPad the parent chooses.
-  const cardWPct = `${100 / columns - (columns === 2 ? 1 : 1.5)}%`;
+  // 2026-05-09 v4 · compute the card width in DP rather than a percent
+  // so RN/Yoga doesn't fall back to 1-col on the percent-flexBasis
+  // edge cases we hit on Galaxy / Pixel devices in vc 14.
+  // Parent screens wrap the picker in `paddingHorizontal: isDesktop ? 0 : 20`
+  // so we subtract 40 dp on phone (2 × 20). The (columns - 1) gaps
+  // come out of the remaining width, then divide.
+  const HPAD = screenW >= 900 ? 0 : 40;
+  const usable = Math.max(0, screenW - HPAD);
+  const cardW = Math.floor((usable - gap * (columns - 1)) / columns);
 
   // Last-row orphan span · only fires when `length % columns === 1`.
-  // 5 items in 2 cols → 5%2 = 1 leftover → SPAN.
-  // 4 items in 2 cols → 4%2 = 0 → NO span (last row has 2).
-  // 5 items in 3 cols → 5%3 = 2 → NO span (last row has 2).
+  // 5 items in 3 cols → 5%3 = 2 → NO span (last row has 2 already).
   const lastIsOrphan = options.length % columns === 1;
 
   return (
@@ -81,23 +88,22 @@ export function CryptoSelector({ options, selected, wallets, onSelect }: CryptoS
         const wallet = wallets?.find((w) => w.currency === crypto);
         const bal = wallet ? parseFloat(wallet.balance) : 0;
         const isLast = idx === options.length - 1;
-        // Last orphan spans the full row · 100% width.
-        const widthValue = isLast && lastIsOrphan ? "100%" : cardWPct;
+        // Last orphan spans the full row · uses the entire usable width.
+        const cardWidth = isLast && lastIsOrphan ? usable : cardW;
 
         return (
           <Pressable
             key={crypto}
             onPress={() => onSelect(crypto)}
             style={({ pressed, hovered }: any) => ({
-              flexBasis: widthValue as any,
-              flexGrow: 0,
+              width: cardWidth,
               borderRadius: 14,
-              paddingHorizontal: 8,
-              paddingVertical: 12,
+              paddingHorizontal: 6,
+              paddingVertical: 10,
               borderWidth: 1.5,
               alignItems: "center" as const,
               justifyContent: "center" as const,
-              minHeight: 92,
+              minHeight: 84,
               borderColor: isSelected
                 ? colors.primary[500]
                 : isWeb && hovered
