@@ -113,9 +113,16 @@ def get_totp_fernet() -> Optional[Fernet]:
             except Exception as e:
                 # Don't fall through silently · ops needs to know the
                 # KMS-wrapped path is broken before we degrade to env.
+                # 2026-05-09 · `extra={...}` keys collide with reserved
+                # LogRecord attributes (`msg`, `args`, `name`, etc.) and
+                # cause the logger itself to raise. Renamed to
+                # `detail`/`error_type` to dodge the reserved set.
                 logger.error(
                     "totp_keystore.kms_decrypt_failed",
-                    extra={"error": type(e).__name__, "msg": str(e)[:200]},
+                    extra={
+                        "error_type": type(e).__name__,
+                        "detail": str(e)[:200],
+                    },
                 )
 
         # Tier 2 · legacy plain key from env / Secret Manager.
