@@ -27,6 +27,16 @@ import pytest
 # inputs so the suite reproduces every run regardless of host env.
 _TEST_WALLET_SEED_HEX = "0" * 64  # 32 bytes of zero · stable, obviously fake
 _TEST_MPESA_HMAC_KEY = "0" * 64   # 32 bytes of zero · same convention
+# 2026-05-09 · deterministic TOTP encryption key for tests.
+# `apps.core.totp_keystore.get_totp_fernet` accepts either a 44-char
+# Fernet-shape key OR an arbitrary high-entropy string (SHA-256 +
+# urlsafe-b64-wrapped). A 64-char hex of zeros falls into the second
+# path and produces a valid Fernet instance for tests.
+# Required because the Phase-3 PII encryption (recovery_email,
+# recovery_phone, phone_det/fernet, email_det/fernet, normalised_email_det)
+# now goes through this keystore on every User.save() · the suite was
+# turning red on every test that creates a User without this key set.
+_TEST_TOTP_ENCRYPTION_KEY = "0" * 64
 
 
 def _inject_test_env() -> None:
@@ -51,6 +61,10 @@ def _inject_test_env() -> None:
         os.environ["WALLET_MASTER_SEED"] = _TEST_WALLET_SEED_HEX
     if not os.environ.get("MPESA_CALLBACK_HMAC_KEY"):
         os.environ["MPESA_CALLBACK_HMAC_KEY"] = _TEST_MPESA_HMAC_KEY
+    # Phase-3 PII encryption · every User.save() flows through the
+    # TOTP keystore master Fernet, so tests need a valid key set.
+    if not os.environ.get("TOTP_ENCRYPTION_KEY"):
+        os.environ["TOTP_ENCRYPTION_KEY"] = _TEST_TOTP_ENCRYPTION_KEY
 
     # Force KMS off in tests · 2026-04-25 + 2026-05-08 we've been bitten
     # twice when GCP KMS billing flapped and turned the suite red. Unit
@@ -121,6 +135,18 @@ def _force_test_kms_settings() -> None:
             dj_settings.WALLET_MASTER_SEED = _TEST_WALLET_SEED_HEX
         if not getattr(dj_settings, "MPESA_CALLBACK_HMAC_KEY", ""):
             dj_settings.MPESA_CALLBACK_HMAC_KEY = _TEST_MPESA_HMAC_KEY
+        if not getattr(dj_settings, "TOTP_ENCRYPTION_KEY", ""):
+            dj_settings.TOTP_ENCRYPTION_KEY = _TEST_TOTP_ENCRYPTION_KEY
+        # Bust the keystore's module-level cache so a previously cached
+        # "no key configured" None doesn't survive across tests once we
+        # pin the key here.
+        try:
+            from apps.core import totp_keystore as _ts
+            _ts._cached_fernet = None
+            if hasattr(_ts, "_cache_source"):
+                _ts._cache_source = None
+        except Exception:
+            pass
         # Reset the KMS singleton so a previously cached GCP manager
         # doesn't survive across tests · the factory rebuilds with
         # the now-safe settings on the next get_kms_manager() call.
@@ -165,4 +191,17 @@ def _kms_test_safe_settings(settings):
         settings.WALLET_MASTER_SEED = _TEST_WALLET_SEED_HEX
     if not getattr(settings, "MPESA_CALLBACK_HMAC_KEY", "") or settings.MPESA_CALLBACK_HMAC_KEY == "":
         settings.MPESA_CALLBACK_HMAC_KEY = _TEST_MPESA_HMAC_KEY
+    # Phase-3 PII encryption · pin the test TOTP key so User saves
+    # don't crash on "PII encryption is not configured".
+    if not getattr(settings, "TOTP_ENCRYPTION_KEY", "") or settings.TOTP_ENCRYPTION_KEY == "":
+        settings.TOTP_ENCRYPTION_KEY = _TEST_TOTP_ENCRYPTION_KEY
+    # Bust keystore cache for this test invocation so the new key takes
+    # effect even if a previous test cached a None (e.g. when an
+    # override_settings block briefly cleared the key).
+    try:
+        from apps.core import totp_keystore as _ts
+        _ts._cached_fernet = None
+        _ts._cached_token = None
+    except Exception:
+        pass
     yield

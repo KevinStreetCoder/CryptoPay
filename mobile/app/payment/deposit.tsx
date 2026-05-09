@@ -1188,7 +1188,7 @@ export default function DepositScreen() {
                         backgroundColor:
                           currency === opt.id
                             ? colors.primary[500] + "20"
-                            : tc.glass.background,
+                            : tc.glass.bg,
                         borderWidth: 1,
                         borderColor:
                           currency === opt.id
@@ -1235,7 +1235,7 @@ export default function DepositScreen() {
                   style={{
                     flexDirection: "row",
                     alignItems: "center",
-                    backgroundColor: tc.glass.background,
+                    backgroundColor: tc.glass.bg,
                     borderWidth: 1,
                     borderColor: tc.glass.border,
                     borderRadius: 12,
