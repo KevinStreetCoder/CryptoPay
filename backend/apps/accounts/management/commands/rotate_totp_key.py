@@ -77,14 +77,18 @@ class Command(BaseCommand):
             self.stdout.write("Wrapping the existing legacy key (--kms-wrap mode).")
 
         # ── KMS-encrypt the key bytes ────────────────────────────────
+        # The KMS manager's encrypt_seed already returns a base64 string
+        # (it does envelope encryption: random DEK encrypts the data,
+        # KMS wraps the DEK, the blob bundles both). For TOTP we don't
+        # need our own envelope · we pass the raw Fernet key bytes
+        # straight in and store the base64 envelope directly.
         from apps.blockchain.kms import get_kms_manager
 
         manager = get_kms_manager()
         kms = manager._kms  # noqa: SLF001
-        ciphertext = kms.encrypt(key_bytes)
-        ciphertext_b64 = base64.b64encode(ciphertext).decode("ascii")
+        ciphertext_b64 = kms.encrypt_seed(key_bytes)
         self.stdout.write(
-            f"  KMS-encrypted · ciphertext length = {len(ciphertext_b64)} chars"
+            f"  KMS-encrypted · envelope length = {len(ciphertext_b64)} chars"
         )
 
         if opts["dry_run"]:

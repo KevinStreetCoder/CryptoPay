@@ -58,19 +58,20 @@ _cache_source: str = "uninitialised"
 
 
 def _decrypt_via_kms(ciphertext_b64: str) -> bytes:
-    """Decrypt a base64-encoded KMS ciphertext into raw key bytes.
+    """Decrypt a base64 KMS envelope back into raw key bytes.
     Uses the same KMS provider/config that wraps the wallet seed
     (cpay-prod-wallet). Raises on any KMS failure · we'd rather
     crashloop than serve TOTP with a stale or wrong key.
+
+    The KMS manager's encrypt_seed/decrypt_seed pair handles the
+    full envelope (random DEK + AES-GCM data + KMS-wrapped DEK)
+    in one shot · we pass the base64 string straight through.
     """
     from apps.blockchain.kms import get_kms_manager
 
     manager = get_kms_manager()
-    kms = manager._kms  # noqa: SLF001 (the public surface uses cached
-                       # seed-style helpers we don't want here · we
-                       # need the raw decrypt)
-    cipher_bytes = base64.b64decode(ciphertext_b64)
-    return kms.decrypt(cipher_bytes)
+    kms = manager._kms  # noqa: SLF001
+    return kms.decrypt_seed(ciphertext_b64)
 
 
 def get_totp_fernet() -> Optional[Fernet]:
