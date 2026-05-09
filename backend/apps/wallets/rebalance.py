@@ -88,10 +88,18 @@ class ManualExchangeProvider(ExchangeProvider):
     """
 
     def get_sell_quote(self, currency: str, amount: Decimal) -> dict:
-        """Use internal rate engine for estimation."""
-        from apps.rates.services import get_rate
+        """Use internal rate engine for estimation.
 
-        rate_data = get_rate(currency)
+        2026-05-09 fix · was importing the non-existent module-level
+        `get_rate` (a refactor in early 2026 moved this onto
+        `RateService.get_crypto_kes_rate` as a classmethod). The stale
+        import would `ImportError` on every rebalance probe, which
+        Celery beat fires every 5 min · log spam + rebalance silently
+        broken in production.
+        """
+        from apps.rates.services import RateService
+
+        rate_data = RateService.get_crypto_kes_rate(currency)
         raw_rate = Decimal(str(rate_data.get("raw_rate", rate_data.get("final_rate", "0"))))
 
         if raw_rate <= 0:

@@ -584,10 +584,25 @@ def _process_successful_payment(
         logger.info("sasapay callback: tx %s already completed, no-op", tx.id)
         return
 
-    # Amount tamper check. We only enforce it when the Transaction has a
-    # source_amount we can compare to · BUY/DEPOSIT flows always do, but
-    # an old Transaction row missing the field shouldn't crash the path.
-    expected = tx.source_amount or tx.dest_amount
+    # Amount tamper check.
+    #
+    # 2026-05-09 fix · the original `tx.source_amount or tx.dest_amount`
+    # picked the WRONG side for OUTGOING rails (paybill / till / B2C
+    # send-money), where `source_amount` is the CRYPTO amount the user
+    # spent (e.g. 0.79 USDT) and `dest_amount` is the KES the recipient
+    # got (e.g. 100). SasaPay's callback `amount` is always the KES
+    # value · comparing 100 KES against 0.79 USDT would ALWAYS trip the
+    # mismatch and silently reject every legitimate callback. Pick the
+    # KES-denominated side regardless of which rail produced the tx:
+    #   - OUTGOING (paybill/till/send-mpesa): KES is `dest_amount`
+    #   - INCOMING/BUY (STK Push): KES is `source_amount`
+    #   - SWAP / WITHDRAWAL / DEPOSIT: skip · these don't go through
+    #     SasaPay's M-Pesa rails so the callback shouldn't fire.
+    expected = None
+    if tx.dest_currency == "KES":
+        expected = tx.dest_amount
+    elif tx.source_currency == "KES":
+        expected = tx.source_amount
     if expected and not _amount_matches(amount, Decimal(str(expected))):
         logger.error(
             "sasapay callback: amount mismatch tx=%s expected=%s got=%s · refusing to credit",
