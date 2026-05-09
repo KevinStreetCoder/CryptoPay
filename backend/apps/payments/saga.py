@@ -203,20 +203,22 @@ class PaymentSaga:
                 ) from enqueue_err
 
     def step_initiate_mpesa(self):
-        """Step 3: Call M-Pesa API — B2B for paybill/till, B2C for send-to-phone."""
-        from django.conf import settings as django_settings
+        """Step 3: Call M-Pesa API — B2B for paybill/till, B2C for send-to-phone.
 
-        # Dev mode: skip M-Pesa API call and auto-complete
-        if django_settings.DEBUG and not getattr(django_settings, "MPESA_CONSUMER_KEY", ""):
-            logger.info(f"[DEV] Skipping M-Pesa for tx {self.tx.id} — auto-completing")
-            short_id = str(self.tx.id)[:8]
-            self.tx.saga_data["mpesa_conversation_id"] = f"DEV-{short_id}"
-            self.tx.saga_data["mpesa_originator_id"] = f"DEV-ORIG-{short_id}"
-            self.tx.save(update_fields=["saga_data", "updated_at"])
-            # Use complete() to set status + trigger notifications
-            self.complete(mpesa_receipt=f"DEV{short_id}")
-            return
+        2026-05-09 · ALL auto-complete paths removed (DEV-mode + sandbox
+        guard). Removed at user request because they masked real SasaPay
+        failures (SP01002 etc.) by stamping a fake `DEV{id}` /
+        `SANDBOX-{conv}` receipt and firing notifications BEFORE the
+        real callback arrived. Reality: when our SasaPay merchant
+        account doesn't have a product activated, the call fails
+        synchronously OR the callback returns a non-zero ResultCode ·
+        EITHER way the saga must reflect that state, not pretend success.
 
+        Local-dev workflow without a SasaPay account: set
+        `PAYMENT_PROVIDER=stub` (a future provider that mocks the
+        adapter) rather than relying on a code-path inside the real
+        provider's saga.
+        """
         from apps.mpesa.provider import get_payment_client
 
         client = get_payment_client()
@@ -265,7 +267,7 @@ class PaymentSaga:
                     "saga.routing_to_utilities · tx=%s paybill=%s service=%s",
                     self.tx.id, self.tx.mpesa_paybill, utility_service_code,
                 )
-                result = client._client.pay_utility(
+                util_raw = client._client.pay_utility(
                     paybill=self.tx.mpesa_paybill,
                     account_number=self.tx.mpesa_account,
                     amount=int(self.tx.dest_amount),
@@ -273,17 +275,27 @@ class PaymentSaga:
                     service_code=utility_service_code,
                     reference=str(self.tx.id),
                 )
-                # Utilities response shape differs from B2B · keep
-                # the Conv/Originator fields populated where possible
-                # so downstream saga_data tracking still works.
+                # Utilities response shape (per docs.sasapay.app):
+                #   { "status": true, "message": "..." }   on success
+                #   { "status": false, "message": "..." }  on rejection
+                # No ConversationID / B2BRequestID like B2B has · we
+                # use the merchant transaction reference (= tx.id) as
+                # the originator key. The `status` boolean is mapped
+                # to the standard ResponseCode shape so the synchronous
+                # error check below treats it uniformly with B2B/B2C.
+                util_status_ok = bool(util_raw.get("status", True))
                 result = {
-                    "ConversationID": result.get("CheckoutRequestID")
-                                      or result.get("checkoutRequestId")
+                    "ConversationID": util_raw.get("CheckoutRequestID")
+                                      or util_raw.get("checkoutRequestId")
                                       or "",
-                    "OriginatorConversationID": result.get("transactionReference") or str(self.tx.id),
-                    "ResponseCode": result.get("ResponseCode") or result.get("responseCode") or "0",
-                    "ResponseDescription": result.get("detail") or result.get("ResponseDescription") or "",
-                    "_raw": result,  # for debug/audit
+                    "OriginatorConversationID": util_raw.get("transactionReference") or str(self.tx.id),
+                    "ResponseCode": "0" if util_status_ok else "1",
+                    "status": util_status_ok,
+                    "ResponseDescription": util_raw.get("message")
+                                           or util_raw.get("detail")
+                                           or util_raw.get("ResponseDescription")
+                                           or "",
+                    "_raw": util_raw,  # for debug/audit
                 }
             else:
                 result = client.b2b_payment(
@@ -310,42 +322,60 @@ class PaymentSaga:
         else:
             raise SagaError("No payment destination specified")
 
+        # 2026-05-09 · check the SasaPay synchronous response for an
+        # immediate failure. SasaPay returns ResponseCode "0" + a
+        # B2BRequestID/ConversationID when the request was queued for
+        # the biller. Any non-zero ResponseCode means the request was
+        # rejected at the SasaPay gateway BEFORE hitting the biller ·
+        # the user got SP01002 ("not permitted according to product
+        # assignment") this way and we previously shrugged it off as
+        # "CONFIRMING" while the saga waited for a callback that would
+        # never confirm success.
+        sync_code = str(
+            result.get("ResponseCode")
+            or result.get("responseCode")
+            or "0"
+        ).strip()
+        sync_status = result.get("status")
+        # `status: false` is the camelCase failure shape used by some
+        # SasaPay endpoints (Utilities, fund-movement) · treat it as a
+        # synchronous failure regardless of the ResponseCode field.
+        if sync_code != "0" or sync_status is False:
+            sync_desc = (
+                result.get("ResponseDescription")
+                or result.get("detail")
+                or result.get("message")
+                or f"SasaPay rejected with code {sync_code}"
+            )
+            logger.error(
+                "saga.sync_response_failed · tx=%s code=%s desc=%s",
+                self.tx.id, sync_code, sync_desc,
+            )
+            # Mark FAILED + raise so the outer compensation runs (refund
+            # the locked crypto). DO NOT auto-complete · DO NOT pretend
+            # the payment succeeded.
+            self.tx.status = Transaction.Status.FAILED
+            self.tx.failure_reason = (
+                f"SasaPay {sync_code}: {sync_desc}"[:500]
+            )
+            self.tx.save(update_fields=[
+                "status", "failure_reason", "updated_at",
+            ])
+            raise SagaError(
+                f"SasaPay sync rejection · code={sync_code} desc={sync_desc}"
+            )
+
         self.tx.saga_data["mpesa_conversation_id"] = result.get("ConversationID", "")
         self.tx.saga_data["mpesa_originator_id"] = result.get("OriginatorConversationID", "")
         self.tx.status = Transaction.Status.CONFIRMING
         self.tx.save(update_fields=["saga_data", "status", "updated_at"])
 
-        # Sandbox auto-complete: Safaricom sandbox callbacks are unreliable,
-        # so auto-complete after successful API submission to test the full flow.
-        # In production, the real callback will handle completion.
-        #
-        # 2026-05-09 fix · the auto-complete was firing whenever
-        # `MPESA_ENVIRONMENT == "sandbox"` regardless of which provider
-        # was actually live. With `PAYMENT_PROVIDER=sasapay` and
-        # `SASAPAY_ENVIRONMENT=production` the SasaPay client was hitting
-        # the LIVE endpoint (real money to real KPLC), but the saga
-        # would still auto-complete with a fake `SANDBOX-...` receipt.
-        # The real B2B result callback (with KPLC's prepaid token in
-        # ResultDesc) then arrived a few seconds later and hit the
-        # `if tx.status == COMPLETED: return` early-out → token thrown
-        # away, user never got it, receipt stuck on PENDING.
-        #
-        # Guard: ONLY auto-complete when the LIVE provider is actually in
-        # sandbox. For SasaPay we check `SASAPAY_ENVIRONMENT` directly,
-        # for Daraja we keep `MPESA_ENVIRONMENT` (the historical name).
-        provider = (getattr(django_settings, "PAYMENT_PROVIDER", "daraja") or "daraja").lower()
-        if provider == "sasapay":
-            provider_env = getattr(django_settings, "SASAPAY_ENVIRONMENT", "production")
-        else:
-            provider_env = getattr(django_settings, "MPESA_ENVIRONMENT", "")
-        if str(provider_env).lower() == "sandbox":
-            conv_id = result.get("ConversationID", "")
-            logger.info(
-                f"[SANDBOX] Auto-completing tx {self.tx.id} "
-                f"(provider={provider} env={provider_env} "
-                f"ConversationID={conv_id}) — sandbox callbacks unreliable"
-            )
-            self.complete(mpesa_receipt=f"SANDBOX-{conv_id[:12]}")
+        # NOTE · all sandbox / DEV auto-complete paths removed 2026-05-09.
+        # Production payments wait for the real SasaPay callback to flip
+        # status to COMPLETED (or FAILED via _process_failed_payment).
+        # Cleanup cron handles the rare case where a callback never
+        # arrives (transitions stuck-CONFIRMING txs to FAILED after
+        # 3 min via verify_transaction status query).
 
     def compensate_mpesa(self):
         """Reverse Step 3: Request M-Pesa reversal if payment went through.
