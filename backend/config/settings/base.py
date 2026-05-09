@@ -585,6 +585,29 @@ SASAPAY_TRUST_IP_FOR_UNSIGNED_IPN = env.bool(
     "SASAPAY_TRUST_IP_FOR_UNSIGNED_IPN", default=True
 )
 
+# ─── 2026-05-09 · External exchange / wallet integrations ──────────
+# OAuth-app credentials (provisioned at the exchange's developer
+# portal) for letting Cpay users link their account. Per-user API
+# keys (Binance) are stored on ExchangeLink instead.
+#
+# See docs/research/EXCHANGE-OAUTH-INTEGRATION-2026-05-09.md
+COINBASE_OAUTH_CLIENT_ID = env("COINBASE_OAUTH_CLIENT_ID", default="")
+COINBASE_OAUTH_CLIENT_SECRET = env("COINBASE_OAUTH_CLIENT_SECRET", default="")
+NOONES_OAUTH_CLIENT_ID = env("NOONES_OAUTH_CLIENT_ID", default="")
+NOONES_OAUTH_CLIENT_SECRET = env("NOONES_OAUTH_CLIENT_SECRET", default="")
+# Base URL for OAuth redirect-callback URIs · web fallback when a
+# user starts the link flow on a desktop browser. Mobile uses the
+# `cryptopay://oauth/<provider>` deep-link instead.
+EXCHANGE_OAUTH_REDIRECT_BASE = env(
+    "EXCHANGE_OAUTH_REDIRECT_BASE", default="https://cpay.co.ke"
+)
+# Static IP that users paste into the Binance API-key IP-restriction
+# field. Defaults to the VPS direct IP. Set this to a dedicated
+# egress proxy if you front the backend with NAT.
+CPAY_BINANCE_EGRESS_IP = env(
+    "CPAY_BINANCE_EGRESS_IP", default="173.249.4.109"
+)
+
 # --- IntaSend (third payment provider · approved 2026-05-08) ---
 # Set PAYMENT_PROVIDER=intasend to route through IntaSend instead of
 # Daraja or SasaPay. Onboarding at developers.intasend.com · KYB +
