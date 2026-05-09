@@ -296,6 +296,13 @@ class SasaPayClient:
             amount: KES amount to pay
             reference: Unique transaction reference (auto-generated if None)
             callback_url: Override default callback URL
+
+        2026-05-09 NetworkCode fix · was hard-coded to "63902" (M-Pesa
+        source channel) which is the C2B/B2C source-rail selector, NOT
+        valid for B2B. Per docs.sasapay.app the B2B sample uses
+        `NetworkCode: "0"` (SasaPay routes to whichever rail the
+        receiver code resolves to). Sending "63902" was a likely
+        contributor to the SP01002 the user saw on the dashboard.
         """
         return self._request("POST", "/payments/b2b/", {
             "MerchantCode": self.merchant_code,
@@ -305,7 +312,7 @@ class SasaPayClient:
             "ReceiverMerchantCode": receiver_code,
             "AccountReference": account_ref,
             "ReceiverAccountType": "PAYBILL",
-            "NetworkCode": "63902",  # M-Pesa
+            "NetworkCode": "0",  # SasaPay (matches docs.sasapay.app sample)
             "Reason": "Bill payment",
             "CallBackURL": callback_url or self.callback_url,
         })
@@ -318,6 +325,8 @@ class SasaPayClient:
         Args:
             receiver_code: The target Till number (e.g., "5432100")
             amount: KES amount to pay
+
+        2026-05-09 NetworkCode fix · same as pay_paybill above.
         """
         return self._request("POST", "/payments/b2b/", {
             "MerchantCode": self.merchant_code,
@@ -327,7 +336,7 @@ class SasaPayClient:
             "ReceiverMerchantCode": receiver_code,
             "AccountReference": "",
             "ReceiverAccountType": "TILL",
-            "NetworkCode": "63902",
+            "NetworkCode": "0",  # SasaPay (matches docs.sasapay.app sample)
             "Reason": "Payment",
             "CallBackURL": callback_url or self.callback_url,
         })

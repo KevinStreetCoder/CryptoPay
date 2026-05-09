@@ -84,14 +84,32 @@ class PaymentProviderAdapter:
                 amount=float(amount),
                 reference=reference,
             )
+            # 2026-05-09 sync-error pass-through · the saga checks BOTH
+            # `ResponseCode` and `status` to detect synchronous SasaPay
+            # rejection (Utilities API uses `status: false`, B2B/B2C use
+            # `ResponseCode != "0"`). The adapter previously stripped
+            # `status` AND defaulted ResponseCode to "0" when missing,
+            # which masked Utilities-style failures as successes. Now
+            # we pass `status` through and only default ResponseCode
+            # when both are missing (treat as success only if SasaPay
+            # said neither failed).
+            sasapay_status = result.get("status")
+            sasapay_code = result.get("ResponseCode")
             return {
                 "ConversationID": result.get("B2BRequestID", result.get("ConversationID", "")),
                 "OriginatorConversationID": result.get(
                     "OriginatorConversationID",
                     result.get("MerchantTransactionReference", ""),
                 ),
-                "ResponseCode": result.get("ResponseCode", "0"),
-                "ResponseDescription": result.get("detail", ""),
+                "ResponseCode": sasapay_code if sasapay_code is not None else (
+                    "0" if sasapay_status is not False else "1"
+                ),
+                "status": sasapay_status,
+                "ResponseDescription": result.get("detail")
+                                       or result.get("message")
+                                       or result.get("ResponseDescription")
+                                       or "",
+                "_raw": result,
             }
         elif self.is_intasend:
             result = self._client.pay_paybill(
@@ -116,11 +134,20 @@ class PaymentProviderAdapter:
                 amount=float(amount),
                 reference=reference,
             )
+            sasapay_status = result.get("status")
+            sasapay_code = result.get("ResponseCode")
             return {
                 "ConversationID": result.get("B2BRequestID", result.get("ConversationID", "")),
                 "OriginatorConversationID": result.get("OriginatorConversationID", ""),
-                "ResponseCode": result.get("ResponseCode", "0"),
-                "ResponseDescription": result.get("detail", ""),
+                "ResponseCode": sasapay_code if sasapay_code is not None else (
+                    "0" if sasapay_status is not False else "1"
+                ),
+                "status": sasapay_status,
+                "ResponseDescription": result.get("detail")
+                                       or result.get("message")
+                                       or result.get("ResponseDescription")
+                                       or "",
+                "_raw": result,
             }
         elif self.is_intasend:
             return self._client.pay_till(
@@ -142,11 +169,20 @@ class PaymentProviderAdapter:
                 reason=remarks,
                 reference=transaction_id,
             )
+            sasapay_status = result.get("status")
+            sasapay_code = result.get("ResponseCode")
             return {
                 "ConversationID": result.get("B2CRequestID", result.get("ConversationID", "")),
                 "OriginatorConversationID": result.get("OriginatorConversationID", ""),
-                "ResponseCode": result.get("ResponseCode", "0"),
-                "ResponseDescription": result.get("detail", ""),
+                "ResponseCode": sasapay_code if sasapay_code is not None else (
+                    "0" if sasapay_status is not False else "1"
+                ),
+                "status": sasapay_status,
+                "ResponseDescription": result.get("detail")
+                                       or result.get("message")
+                                       or result.get("ResponseDescription")
+                                       or "",
+                "_raw": result,
             }
         elif self.is_intasend:
             return self._client.send_to_mobile(
