@@ -6,6 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import Svg, { Circle } from "react-native-svg";
 import { PinInput } from "../../src/components/PinInput";
+import { Spinner } from "../../src/components/brand/Spinner";
 import { Button } from "../../src/components/Button";
 import { useToast } from "../../src/components/Toast";
 import { GlassCard } from "../../src/components/GlassCard";
@@ -964,42 +965,58 @@ export default function ConfirmPaymentScreen() {
               <PinInput onComplete={handlePinComplete} error={pinError} loading={loading} testID="confirm-pin-input" />
             )}
 
+            {/* 2026-05-09 · matches the spinner-and-spaced-status
+                treatment we use on the Buy Crypto PIN screen. The
+                arc spinner is animated by hardware accel on native
+                and CSS keyframes on web, so it reads as "live"
+                whether the M-Pesa side is still spinning up the
+                STK or we're already waiting for the post-PIN
+                callback. Status headlines and helper line are
+                tied to the backend's poller status. */}
             {loading && (
               <View
                 style={{
                   alignItems: "center",
                   justifyContent: "center",
-                  gap: 10,
-                  marginTop: 32,
+                  marginTop: 36,
+                  gap: 14,
+                  paddingHorizontal: 8,
                 }}
               >
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                  <PulsingDot />
-                  <Text
-                    style={{
-                      color: tc.primary[400],
-                      fontSize: 14,
-                      fontFamily: "DMSans_500Medium",
-                    }}
-                  >
-                    {pollingStatus === "confirming"
+                <Spinner variant="arc" size={36} color={tc.primary[400]} />
+                <Text
+                  style={{
+                    color: tc.textPrimary,
+                    fontSize: 15,
+                    fontFamily: "DMSans_600SemiBold",
+                    textAlign: "center",
+                    lineHeight: 22,
+                  }}
+                  maxFontSizeMultiplier={1.3}
+                >
+                  {pollingStatus === "completed"
+                    ? "Payment confirmed"
+                    : pollingStatus === "confirming"
                       ? t("payment.waitingMpesaConfirmation")
                       : pollingStatus === "processing"
-                        ? t("payment.processingPayment")
+                        ? t("payment.enterMpesaPin")
                         : t("payment.processingPayment")}
-                  </Text>
-                </View>
-                {pollingStatus && (
+                </Text>
+                {pollingStatus && pollingStatus !== "completed" && (
                   <Text
                     style={{
                       color: tc.textMuted,
-                      fontSize: 12,
+                      fontSize: 13,
                       fontFamily: "DMSans_400Regular",
                       textAlign: "center",
-                      marginTop: 4,
+                      lineHeight: 19,
+                      maxWidth: 320,
                     }}
+                    maxFontSizeMultiplier={1.3}
                   >
-                    {t("payment.completeMpesaPrompt")}
+                    {pollingStatus === "confirming"
+                      ? "We're talking to M-Pesa now. This usually takes a few seconds."
+                      : t("payment.completeMpesaPrompt")}
                   </Text>
                 )}
               </View>

@@ -23,6 +23,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as Clipboard from "expo-clipboard";
 import { CryptoLogo } from "../../src/components/CryptoLogo";
+import { Spinner } from "../../src/components/brand/Spinner";
 import { Button } from "../../src/components/Button";
 import { PinInput } from "../../src/components/PinInput";
 import { GlassCard } from "../../src/components/GlassCard";
@@ -316,12 +317,17 @@ export default function WithdrawScreen() {
             </View>
 
             {pollingStatus ? (
-              <View style={{ alignItems: "center", paddingVertical: 40, gap: 16 }}>
-                <Ionicons name="hourglass-outline" size={48} color={colors.primary[400]} />
-                <Text style={{ color: tc.textPrimary, fontSize: 18, fontFamily: "DMSans_700Bold" }}>
-                  {t("payment.withdrawalProcessing")}
+              <View style={{ alignItems: "center", paddingVertical: 40, gap: 14 }}>
+                {/* 2026-05-09 · same Spinner-arc treatment as the
+                    Buy Crypto / Confirm flow · brand-consistent
+                    loading state across every payment surface. */}
+                <Spinner variant="arc" size={44} color={colors.primary[400]} />
+                <Text style={{ color: tc.textPrimary, fontSize: 18, fontFamily: "DMSans_700Bold", textAlign: "center" }}>
+                  {pollingStatus === "completed"
+                    ? "Withdrawal sent"
+                    : t("payment.withdrawalProcessing")}
                 </Text>
-                <Text style={{ color: tc.textMuted, fontSize: 14, fontFamily: "DMSans_400Regular", textAlign: "center" }}>
+                <Text style={{ color: tc.textMuted, fontSize: 14, fontFamily: "DMSans_400Regular", textAlign: "center", maxWidth: 320, lineHeight: 20 }}>
                   {t("payment.withdrawalPendingDesc")}
                 </Text>
               </View>

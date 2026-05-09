@@ -1,13 +1,17 @@
 /**
- * TxStatus · four monochrome 24×24 glyphs for transaction states.
- * Single emerald on `confirmed`. Ink-2 outlines for pending/processing/failed.
+ * TxStatus · four 24×24 glyphs for transaction states.
  *
- * Replaces the emoji / unicode indicators currently used in tx lists and
- * detail screens. Per the brand brief: failed is NOT red · the status
- * colour palette is emerald ∪ ink, nothing else.
+ * 2026-05-09 · re-aligned to the Cpay Landing Assets canvas spec:
+ *   pending     · dashed muted circle (3-3 dasharray)
+ *   processing  · ink track + rotating emerald 1/4 arc
+ *   confirmed   · FILLED emerald circle + white checkmark
+ *   failed      · ink-2 outlined circle + ink-2 X
  *
- * `processing` has a subtle rotating arc; others are static.
- * Respects prefers-reduced-motion.
+ * Single emerald accent on confirmed/processing. Ink-2 elsewhere.
+ * Per the brand brief: failed is NOT red · palette is emerald ∪ ink only.
+ *
+ * `processing` rotates the arc; others are static. Respects
+ * prefers-reduced-motion via media query injected once on web.
  */
 import { useEffect, useRef } from "react";
 import { Animated, Easing, Platform, View } from "react-native";
@@ -15,6 +19,8 @@ import Svg, { Circle, Path, Line } from "react-native-svg";
 
 const INK2 = "#1F2937";
 const EMERALD = "#10B981";
+const LINE = "#E5E7EB";
+const MUTED = "#64748B";
 
 const isWeb = Platform.OS === "web";
 
@@ -55,10 +61,13 @@ export function TxStatus({ status, size = 24 }: TxStatusProps) {
   const spin = rot.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] });
 
   if (status === "confirmed") {
+    // Filled emerald disc with white checkmark · matches the canvas
+    // confirmed glyph (a lift in visual hierarchy compared to the
+    // outlined pending/failed states; reads as "done · go").
     return (
       <Svg width={s} height={s} viewBox="0 0 24 24">
-        <Circle cx="12" cy="12" r="10" fill="none" stroke={EMERALD} strokeWidth="1.6" />
-        <Path d="M 7 12 L 10.5 15.5 L 17 9" fill="none" stroke={EMERALD} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <Circle cx="12" cy="12" r="9" fill={EMERALD} />
+        <Path d="M 8 12 L 11 15 L 16 9" fill="none" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
       </Svg>
     );
   }
@@ -66,29 +75,44 @@ export function TxStatus({ status, size = 24 }: TxStatusProps) {
   if (status === "failed") {
     return (
       <Svg width={s} height={s} viewBox="0 0 24 24">
-        <Circle cx="12" cy="12" r="10" fill="none" stroke={INK2} strokeWidth="1.6" />
-        <Line x1="8.5" y1="8.5" x2="15.5" y2="15.5" stroke={INK2} strokeWidth="1.8" strokeLinecap="round" />
-        <Line x1="15.5" y1="8.5" x2="8.5" y2="15.5" stroke={INK2} strokeWidth="1.8" strokeLinecap="round" />
+        <Circle cx="12" cy="12" r="9" fill="none" stroke={INK2} strokeWidth="2" />
+        <Line x1="9" y1="9" x2="15" y2="15" stroke={INK2} strokeWidth="2" strokeLinecap="round" />
+        <Line x1="15" y1="9" x2="9" y2="15" stroke={INK2} strokeWidth="2" strokeLinecap="round" />
       </Svg>
     );
   }
 
   if (status === "pending") {
-    // Clock face · ink-2, no emerald.
+    // Dashed muted circle · "queued · not yet acted on" · the
+    // canvas spec uses a 3-3 dasharray (12 dashes · "ticking" feel).
     return (
       <Svg width={s} height={s} viewBox="0 0 24 24">
-        <Circle cx="12" cy="12" r="10" fill="none" stroke={INK2} strokeWidth="1.6" />
-        <Line x1="12" y1="12" x2="12" y2="7.5" stroke={INK2} strokeWidth="1.8" strokeLinecap="round" />
-        <Line x1="12" y1="12" x2="15" y2="14" stroke={INK2} strokeWidth="1.8" strokeLinecap="round" />
+        <Circle
+          cx="12"
+          cy="12"
+          r="9"
+          fill="none"
+          stroke={MUTED}
+          strokeWidth="2"
+          strokeDasharray="3 3"
+        />
       </Svg>
     );
   }
 
-  // processing · rotating emerald arc
+  // processing · still ring + rotating 1/4 emerald arc
+  // Track is a subtle line-200 ring (not the 0.2-opacity ink we had
+  // before · the canvas wants paper-on-line, not ghosted ink).
   const arc = (
     <Svg width={s} height={s} viewBox="0 0 24 24">
-      <Circle cx="12" cy="12" r="10" fill="none" stroke={INK2} strokeWidth="1.6" opacity="0.2" />
-      <Circle cx="12" cy="12" r="10" fill="none" stroke={EMERALD} strokeWidth="1.8" strokeLinecap="round" strokeDasharray="18 80" />
+      <Circle cx="12" cy="12" r="9" fill="none" stroke={LINE} strokeWidth="2" />
+      <Path
+        d="M 12 3 A 9 9 0 0 1 21 12"
+        fill="none"
+        stroke={EMERALD}
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
     </Svg>
   );
 
@@ -96,7 +120,7 @@ export function TxStatus({ status, size = 24 }: TxStatusProps) {
     return (
       <View
         {...({ "data-cpay-txstatus-rot": true } as any)}
-        style={{ width: s, height: s, animation: "cpay-txstatus-rot 1.1s linear infinite" } as any}
+        style={{ width: s, height: s, animation: "cpay-txstatus-rot 1.4s linear infinite" } as any}
       >
         {arc}
       </View>

@@ -23,6 +23,7 @@ import { usePhonePrivacy } from "../../src/utils/privacy";
 import { useLocale } from "../../src/hooks/useLocale";
 import { Spinner } from "../../src/components/brand/Spinner";
 import { CryptoLogo } from "../../src/components/CryptoLogo";
+import { TxStatus, type TxStatusValue } from "../../src/components/brand/TxStatus";
 
 const isWeb = Platform.OS === "web";
 
@@ -647,7 +648,12 @@ export default function TransactionDetailScreen() {
                 {typeConfig!.label}
               </Text>
 
-              {/* Status Badge */}
+              {/* Status Badge · 2026-05-09 · upgraded from a flat
+                  coloured dot + capitalised word to the design-canvas
+                  `TxStatus` glyph (24×24 SVG · pending dashed, processing
+                  rotating arc, confirmed filled green check, failed
+                  ink-2 X) inline with the status word. Same pill chrome
+                  (rounded 12 + bg tint) so the page scans the same. */}
               <View
                 style={{
                   backgroundColor: statusConfig!.bg,
@@ -656,16 +662,12 @@ export default function TransactionDetailScreen() {
                   paddingVertical: 6,
                   flexDirection: "row",
                   alignItems: "center",
-                  gap: 6,
+                  gap: 8,
                 }}
               >
-                <View
-                  style={{
-                    width: 7,
-                    height: 7,
-                    borderRadius: 3.5,
-                    backgroundColor: statusConfig!.color,
-                  }}
+                <TxStatus
+                  status={(tx.status === "completed" ? "confirmed" : tx.status) as TxStatusValue}
+                  size={16}
                 />
                 <Text
                   style={{

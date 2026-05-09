@@ -37,9 +37,18 @@ export function useWallets() {
       }
       return sortWallets(wallets);
     },
+    // 2026-05-09 · the Send / Pay screens display the user's
+    // crypto balance on the form. After a successful BUY (callback
+    // arrives, ledger credits the wallet) the user often navigates
+    // straight to Send · staleTime: 0 + refetchOnMount: "always"
+    // guarantees the form sees the post-credit balance instead of
+    // a 10-second-stale cache that would render a misleading
+    // "Insufficient USDT balance" warning. Combined with a 10 s
+    // background interval so the cached view never drifts.
     refetchInterval: 10000,
     staleTime: 0,
     refetchOnWindowFocus: true,
+    refetchOnMount: "always",
   });
 }
 

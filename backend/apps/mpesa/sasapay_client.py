@@ -87,6 +87,8 @@ class SasaPayClient:
         """Make authenticated request with retry/backoff."""
         url = f"{self.base_url}{path}"
         last_error = None
+        last_status = None
+        last_body = None
 
         for attempt in range(retries):
             try:
@@ -95,11 +97,21 @@ class SasaPayClient:
                     json=json_data, timeout=30,
                 )
                 if resp.status_code == 429:
+                    last_status = 429
+                    last_body = resp.text[:200]
                     wait = min(2 ** attempt * 5, 60)
                     logger.warning(f"SasaPay rate limited, waiting {wait}s")
                     time.sleep(wait)
                     continue
                 if resp.status_code == 401:
+                    # 2026-05-09 · capture the 401 body so the surfaced
+                    # error explains WHICH endpoint SasaPay refused, not
+                    # just "after 3 retries: None". A 401 on B2C with a
+                    # working OAuth token means the merchant isn't
+                    # enabled for B2C in production; ops can act on that
+                    # message without tailing logs.
+                    last_status = 401
+                    last_body = resp.text[:200]
                     cache.delete("sasapay_access_token")
                     continue
                 resp.raise_for_status()
@@ -118,6 +130,19 @@ class SasaPayClient:
                     f"SasaPay API error: HTTP {e.response.status_code} — {e.response.text[:200]}"
                 ) from e
 
+        # If we exhausted retries on 401, surface a clear merchant-config
+        # diagnostic instead of "None"; otherwise fall through to the
+        # ConnectionError-style message.
+        if last_status == 401:
+            raise SasaPayError(
+                f"SasaPay refused {path} with HTTP 401 ({last_body or 'Authorization Failure'}). "
+                "If OAuth works but this endpoint 401s, the merchant likely isn't enabled for "
+                "this product yet (e.g. B2C/SendMoney) · contact SasaPay support to enable it."
+            )
+        if last_status == 429:
+            raise SasaPayError(
+                f"SasaPay rate-limited {path} after {retries} attempts. Backoff and retry."
+            )
         raise SasaPayError(f"SasaPay request failed after {retries} retries: {last_error}")
 
     # ── B2B — Pay Paybill / Till ───────────────────────────────────────────
