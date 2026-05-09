@@ -62,6 +62,10 @@ yarn-error.log*
 dist/
 web-build/
 *.jks
+*.keystore
+mobile/credentials/
+# 2026-05-09 · stable APK signing keystore · NEVER commit. Lose this
+# and you can no longer ship in-place upgrades to existing users.
 *.p8
 *.p12
 *.key

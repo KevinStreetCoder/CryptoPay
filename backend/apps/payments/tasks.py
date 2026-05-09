@@ -505,16 +505,18 @@ def _resolve_via_sasapay_status(tx, checkout_request_id: str) -> None:
         or ""
     )
 
-    if not result_code:
-        # SasaPay reports the tx as still PENDING · keep waiting,
-        # cron will recheck on the next tick.
+    if not result_code or _is_sasapay_pending(result_code):
+        # SasaPay reports the tx as still PENDING / PROCESSING / UNDER
+        # REVIEW · keep waiting, cron will recheck on the next tick.
+        # The PENDING set is canonical from the docs · "0 / SP00000"
+        # = success, "SP01001 / SP01004 / PENDING" = still in flight.
         logger.debug(
             "sasapay.status_query.pending",
-            extra={"tx_id": str(tx.id), "raw": str(result)[:200]},
+            extra={"tx_id": str(tx.id), "code": result_code, "raw": str(result)[:200]},
         )
         return
 
-    if result_code == "0":
+    if _is_sasapay_success(result_code):
         try:
             # Order matters · saga.complete flips status=COMPLETED and
             # records the receipt; AFTER that we credit crypto for BUY
@@ -526,6 +528,7 @@ def _resolve_via_sasapay_status(tx, checkout_request_id: str) -> None:
             _credit_buy_crypto_if_needed(tx, receipt)
             logger.info("sasapay.status_query.completed", extra={
                 "tx_id": str(tx.id), "receipt": receipt, "type": tx.type,
+                "code": result_code,
             })
         except Exception:
             logger.exception(
@@ -604,28 +607,93 @@ def _resolve_via_intasend_status(tx, tracking_id: str) -> None:
 # mobile app surfaces verbatim. Generic fallback covers unmapped codes.
 
 _SASAPAY_ERROR_MESSAGES = {
-    "0":     "Payment successful.",
-    "1":     "Insufficient M-Pesa balance · top up and try again.",
-    "1001":  "Another payment is in progress · wait a moment then retry.",
-    "1019":  "Transaction already in progress · please retry shortly.",
-    "1025":  "Daily transaction limit reached · raise your KYC tier or try tomorrow.",
-    "1031":  "M-Pesa is offline · please retry in a minute.",
-    "1032":  "You took too long to enter the PIN · retry the deposit.",
-    "1036":  "M-Pesa system error · please retry.",
-    "1037":  "Payment cancelled · you can retry from the deposit screen.",
-    "2001":  "Wrong M-Pesa PIN · retry and enter the correct PIN.",
-    "9999":  "Payment failed · contact support if KES was deducted.",
+    # 2026-05-09 · synced with the canonical table at
+    # https://developer.sasapay.app/docs/apis/results-codes?country=ke
+    # Categorised in dict-comment for ops triage.
+
+    # ── Success ──
+    "0":          "Payment successful.",
+    "SP00000":    "Payment successful.",
+
+    # ── Pending / processing (caller should keep polling, not fail) ──
+    "PENDING":    "Payment is being processed · we'll confirm in a moment.",
+    "SP01001":    "Payment is being processed · we'll confirm in a moment.",
+    "SP01004":    "Payment is under review · we'll update once the rail confirms.",
+
+    # ── Failed / reversed ──
+    "SP01002":    "Payment failed · please retry. If KES was deducted, contact support with the M-Pesa SMS.",
+    "SP01003":    "Payment was reversed · the KES has been refunded to your M-Pesa.",
+
+    # ── M-Pesa C2B (STK Push) result codes ──
+    "1":          "Insufficient M-Pesa balance · top up and try again.",
+    "1001":       "Another payment is in progress · wait a moment then retry.",
+    "1019":       "Transaction already in progress · please retry shortly.",
+    "1025":       "Daily transaction limit reached · raise your KYC tier or try tomorrow.",
+    "1031":       "M-Pesa is offline · please retry in a minute.",
+    "1032":       "Payment cancelled · please retry to enter your PIN.",
+    "1036":       "M-Pesa system error · please retry.",
+    "1037":       "STK push timed out · please retry to enter your PIN.",
+    "2001":       "Wrong M-Pesa PIN · retry and enter the correct PIN.",
+    "9999":       "Payment failed · contact support if KES was deducted.",
+
+    # ── M-Pesa B2C (Send Money) error codes from SasaPay docs ──
+    "2040":       "Recipient phone is not registered for M-Pesa.",
+    "4001":       "Payment processing error · please retry.",
+    "SFC_IC0003": "Recipient phone number is invalid · check the number and retry.",
+    "2028":       "Payment to this recipient is not allowed · contact support.",
+    "17":         "M-Pesa system error · please retry.",
+
+    # ── Pesalink (bank-transfer) ──
+    # SasaPay uses literal "ERROR" code with a categorical message ·
+    # we keep this entry as a default for any Pesalink failure.
+    "ERROR":      "Bank transfer failed · check the account details and retry.",
+
+    # ── Airtel ──
+    "DP00900001000": "Airtel payment was ambiguous · please retry. If you were charged, contact support.",
+
+    # ── SasaPay HTTP-level response codes ──
+    "404":        "We couldn't find this transaction · contact support.",
+    "SP.400.000": "We sent something invalid to the payments rail · please retry.",
+    "SP.401.000": "Payments rail rejected the request · contact support.",
+    "SP.403.000": "Payments rail blocked the request · contact support.",
+    "SP.404.000": "We couldn't find this transaction · contact support.",
+    "SP.409.000": "Duplicate transaction detected · we won't charge you twice.",
+    "SP.429.000": "Too many requests · wait a moment and try again.",
+    "SP.500.000": "Payments rail is temporarily unavailable · please retry.",
+    "SP.502.000": "Payments rail is temporarily unavailable · please retry.",
+    "SP.503.000": "Payments rail is temporarily unavailable · please retry.",
+    "SP.504.000": "Payments rail timed out · please retry.",
 }
+
+# Codes that should be treated as PENDING (keep waiting) rather than
+# terminal · the cron / status-poll respects this list and avoids
+# compensating prematurely.
+SASAPAY_PENDING_CODES = frozenset(["PENDING", "SP01001", "SP01004"])
+
+# Codes that are terminal SUCCESS · saga.complete on these.
+SASAPAY_SUCCESS_CODES = frozenset(["0", "SP00000"])
 
 
 def _sasapay_friendly_message(result_code: str) -> str:
-    """Map a SasaPay numeric result code to a user-readable sentence.
-    Falls back to a generic message if the code isn't in our dictionary."""
+    """Map a SasaPay numeric / alphanumeric result code to a user-
+    readable sentence. Falls back to a generic message if the code
+    isn't in our dictionary."""
     return _SASAPAY_ERROR_MESSAGES.get(
         str(result_code),
         "Payment did not go through. Please retry · if KES was deducted, "
         "contact support with the M-Pesa SMS receipt.",
     )
+
+
+def _is_sasapay_success(result_code: str) -> bool:
+    """Whether a SasaPay result code means terminal success."""
+    return str(result_code) in SASAPAY_SUCCESS_CODES
+
+
+def _is_sasapay_pending(result_code: str) -> bool:
+    """Whether a SasaPay result code means still-pending (don't fail
+    the saga, keep polling)."""
+    return str(result_code) in SASAPAY_PENDING_CODES
 
 
 @shared_task

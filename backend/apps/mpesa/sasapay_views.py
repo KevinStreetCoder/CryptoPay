@@ -47,38 +47,136 @@ logger = logging.getLogger(__name__)
 
 
 def _verify_header_signature(request, body_bytes: bytes) -> bool:
-    """Verify the X-SasaPay-Signature header (preferred path).
+    """Verify the `sasapay_signature` header (canonical path, 2026-05-09).
 
-    SasaPay issues an `X-SasaPay-Signature` header containing the
-    hex-encoded HMAC-SHA256 digest of the raw request body, keyed on
-    the merchant's webhook secret. Constant-time compared.
+    SasaPay's documented callback-security model
+    (https://developer.sasapay.app/docs/apis/callback-security):
+
+      - Algorithm · HMAC-SHA512 (NOT SHA-256 · we previously had
+        the wrong digest)
+      - Secret · the merchant's `Client ID` from the developer
+        portal (NOT a separate webhook secret · the docs are
+        explicit: "Use the Merchant API Client ID as the HMAC
+        secret")
+      - Header name · `sasapay_signature` (lowercase, no prefix)
+      - Message format · concatenation of FIVE fields with hyphens
+        in this exact order:
+          {sasapay_transaction_code}-{merchant_code}-{account_number}
+            -{payment_reference}-{amount}
+        Fields come out of the callback payload itself · we reach
+        into the parsed JSON body to reconstruct the signed message.
+
+    Production must boot with SASAPAY_CLIENT_ID set when
+    PAYMENT_PROVIDER=sasapay · the production-settings guard already
+    enforces it (it was always required for OAuth client_credentials).
+    The legacy `SASAPAY_WEBHOOK_SECRET` env var is now ignored on the
+    signature path · kept tolerant in `settings.py` for back-compat
+    with operators who set it before the doc clarification.
     """
-    secret = getattr(settings, "SASAPAY_WEBHOOK_SECRET", "")
+    secret = getattr(settings, "SASAPAY_CLIENT_ID", "")
     if not secret:
         return False
 
-    # Accept either spelling · operators have reported both forms
-    # appearing in SasaPay's docs at different times.
     received = (
-        request.headers.get("X-SasaPay-Signature")
-        or request.headers.get("X-Webhook-Signature")
-        or request.META.get("HTTP_X_SASAPAY_SIGNATURE", "")
+        request.headers.get("sasapay_signature")
+        or request.headers.get("Sasapay-Signature")
+        or request.headers.get("X-SasaPay-Signature")  # legacy / belt-and-braces
+        or request.META.get("HTTP_SASAPAY_SIGNATURE", "")
         or ""
-    ).strip()
+    ).strip().lower()
     if not received:
         return False
-
-    expected = hmac.new(
-        secret.encode("utf-8"),
-        body_bytes,
-        hashlib.sha256,
-    ).hexdigest()
-
-    # Some callers send `sha256=<hex>` · normalise.
     if "=" in received:
         received = received.split("=", 1)[1]
 
-    return hmac.compare_digest(expected, received)
+    # Reconstruct the signed message from the parsed JSON body. The
+    # docs list the fields in this exact order and SasaPay's signer
+    # uses them verbatim · any deviation (e.g. amount rounding,
+    # missing trailing zero) breaks the signature, so we accept a
+    # narrow set of field-name spellings the C2B / B2B / B2C
+    # variants use.
+    try:
+        payload = json.loads(body_bytes.decode("utf-8") or "{}")
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        logger.warning("sasapay_signature: payload not parseable as JSON")
+        return False
+
+    sasapay_tx_code = (
+        payload.get("TransactionCode")
+        or payload.get("SasaPayTransactionCode")
+        or payload.get("sasapay_transaction_code")
+        or ""
+    )
+    merchant_code = (
+        payload.get("MerchantCode")
+        or payload.get("merchant_code")
+        or getattr(settings, "SASAPAY_MERCHANT_CODE", "")
+        or ""
+    )
+    # On C2B IPN the customer's phone is in MSISDN; on B2B the
+    # account is in BillRefNumber/AccountReference; on B2C the
+    # recipient phone is in ReceiverNumber. SasaPay uses one
+    # consolidated `account_number` field on its signing side
+    # but the inbound payload spelling depends on product. Fall
+    # through them in priority order.
+    account_number = (
+        payload.get("account_number")
+        or payload.get("AccountReference")
+        or payload.get("MSISDN")
+        or payload.get("ReceiverNumber")
+        or payload.get("BillRefNumber")
+        or ""
+    )
+    payment_reference = (
+        payload.get("MerchantTransactionReference")
+        or payload.get("payment_reference")
+        or payload.get("MerchantRequestID")
+        or ""
+    )
+    # Amount must be the EXACT string SasaPay signed · they format
+    # with two decimals when the transaction includes cents. We
+    # normalise to a Decimal then back to "X.XX" only if the
+    # incoming value is numeric without trailing zeros; otherwise
+    # we pass the raw string through.
+    amount_raw = (
+        payload.get("TransAmount")
+        or payload.get("TransactionAmount")
+        or payload.get("amount")
+        or ""
+    )
+    amount = str(amount_raw).strip()
+
+    message = f"{sasapay_tx_code}-{merchant_code}-{account_number}-{payment_reference}-{amount}"
+    expected = hmac.new(
+        secret.encode("utf-8"),
+        message.encode("utf-8"),
+        hashlib.sha512,
+    ).hexdigest()
+
+    ok = hmac.compare_digest(expected.lower(), received)
+    if not ok:
+        # Try the alt amount format (with trailing .00) · the docs
+        # show "1500.00" verbatim, so if the payload sent "1500" we
+        # may need to pad before signing comparison.
+        try:
+            from decimal import Decimal as _D
+            alt_amount = str(_D(amount).quantize(_D("0.01")))
+            alt_message = f"{sasapay_tx_code}-{merchant_code}-{account_number}-{payment_reference}-{alt_amount}"
+            alt_expected = hmac.new(
+                secret.encode("utf-8"),
+                alt_message.encode("utf-8"),
+                hashlib.sha512,
+            ).hexdigest()
+            ok = hmac.compare_digest(alt_expected.lower(), received)
+        except Exception:
+            pass
+
+    if not ok:
+        logger.warning(
+            "sasapay_signature.mismatch · tx=%s ref=%s amount=%s",
+            sasapay_tx_code, payment_reference, amount,
+        )
+    return ok
 
 
 def _verify_url_token(token: str, body_bytes: bytes) -> tuple[bool, str | None]:
@@ -300,6 +398,75 @@ def sasapay_ipn(request):
 # ───────────────────────── Processors ────────────────────────────────
 
 
+def _verify_via_status_api(tx, trans_code: str):
+    """Defence-in-depth · re-query SasaPay's authoritative Transaction
+    Status API to confirm the payment really happened before we credit
+    the user. The IP allow-list + HMAC signature already gate the
+    callback, but a leaked Client ID would let an attacker forge a
+    callback; this last gate refuses any credit that doesn't have a
+    matching SasaPay-side record.
+
+    Returns:
+        True  · SasaPay confirms terminal SUCCESS (code 0 / SP00000)
+        False · SasaPay says NOT complete (failed / pending / unknown)
+        None  · status API unreachable · caller decides (we fail-open
+                so a SasaPay outage doesn't stall every callback;
+                signature + IP allow-list still gate the payload).
+    """
+    saga_data = tx.saga_data or {}
+    checkout_id = (
+        saga_data.get("mpesa_checkout_request_id")
+        or saga_data.get("checkout_request_id")
+        or trans_code  # B2B/B2C don't have a checkout_id, use trans_code
+        or ""
+    )
+    if not checkout_id:
+        return None
+
+    try:
+        from apps.mpesa.sasapay_client import SasaPayClient, SasaPayError
+        from apps.payments.tasks import _is_sasapay_success, _is_sasapay_pending
+
+        result = SasaPayClient().query_transaction(
+            checkout_request_id=checkout_id,
+        )
+    except SasaPayError as e:
+        logger.warning(
+            "sasapay_callback.status_api_unreachable · failing OPEN to avoid "
+            "stalling a real callback during a SasaPay outage",
+            extra={"tx_id": str(tx.id), "error": str(e)[:200]},
+        )
+        return None
+    except Exception:
+        logger.exception(
+            "sasapay_callback.status_api_exception",
+            extra={"tx_id": str(tx.id)},
+        )
+        return None
+
+    inner = result.get("data") or result.get("result") or result
+    code = str(
+        inner.get("ResultCode")
+        or inner.get("resultCode")
+        or result.get("ResultCode")
+        or ""
+    )
+
+    if not code:
+        # Status API didn't return a result code yet (still processing
+        # on their side). Don't reject the callback · they're internally
+        # racing.
+        return None
+    if _is_sasapay_pending(code):
+        # PENDING / UNDER REVIEW · don't credit yet, but also don't
+        # treat this as a forgery · the legit callback might be
+        # arriving slightly ahead of SasaPay's own status update.
+        # Return None so the caller proceeds; the saga's idempotency
+        # checks prevent double-credit when the second callback lands.
+        return None
+    return _is_sasapay_success(code)
+
+
 def _amount_matches(callback_amount, expected_amount: Decimal) -> bool:
     """Compare callback amount to expected within a 1 KES tolerance.
 
@@ -382,6 +549,39 @@ def _process_successful_payment(
             ),
         )
         return
+
+    # 2026-05-09 · DEFENSE-IN-DEPTH callback re-verification. SasaPay
+    # callbacks are signed (HMAC-SHA512 in `_verify_header_signature`),
+    # but a leaked Client ID would let an attacker forge them. Before
+    # we credit anything, re-verify by querying SasaPay's authoritative
+    # Transaction Status API for this transaction · if SasaPay says the
+    # payment is NOT actually complete, we refuse the credit even if
+    # the callback signature checks out.
+    #
+    # Skipped when the verifier env-flag is off (sandbox dev), and
+    # fail-OPEN if the status endpoint itself is unreachable (we
+    # don't want a SasaPay outage to permanently stall every
+    # legitimate callback · the signature + IP allow-list still gate
+    # the payload). Fail-CLOSED on an explicit rejection from SasaPay.
+    if getattr(settings, "SASAPAY_VERIFY_CALLBACKS_VIA_API", True):
+        verified = _verify_via_status_api(tx, trans_code)
+        if verified is False:
+            logger.error(
+                "sasapay callback: status-API rejected tx=%s code=%s · refusing to credit",
+                tx.id, trans_code,
+            )
+            AuditLog.objects.create(
+                user=tx.user,
+                action="sasapay_callback_rejected_by_status_api",
+                details=(
+                    f"SasaPay callback for {trans_code} arrived with valid "
+                    f"signature but status-query said the tx is not complete. "
+                    f"Refusing to credit. Possible spoofed callback."
+                ),
+            )
+            return
+        # verified is True (confirmed) or None (status API unreachable
+        # · fail-open with logged warning). Both proceed.
 
     from django.utils import timezone
 

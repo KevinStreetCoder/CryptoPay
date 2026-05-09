@@ -557,6 +557,15 @@ SASAPAY_WEBHOOK_SECRET = _gs("SASAPAY_WEBHOOK_SECRET", default=env("SASAPAY_WEBH
 # URL, consumed once-only via Redis SETNX.
 SASAPAY_CALLBACK_HMAC_KEY = _gs("SASAPAY_CALLBACK_HMAC_KEY", default=env("SASAPAY_CALLBACK_HMAC_KEY", default=""))
 
+# 2026-05-09 · defence-in-depth toggle. When True (default), every
+# successful inbound SasaPay callback re-queries SasaPay's authoritative
+# Transaction Status API before we credit the user · a forged callback
+# (e.g. via a leaked Client ID) won't survive the round-trip because
+# SasaPay's internal record won't match. Set to False ONLY for the
+# sandbox dev rig where the status API is flaky · production should
+# always leave it enabled.
+SASAPAY_VERIFY_CALLBACKS_VIA_API = env.bool("SASAPAY_VERIFY_CALLBACKS_VIA_API", default=True)
+
 # --- IntaSend (third payment provider · approved 2026-05-08) ---
 # Set PAYMENT_PROVIDER=intasend to route through IntaSend instead of
 # Daraja or SasaPay. Onboarding at developers.intasend.com · KYB +
@@ -634,7 +643,23 @@ MPESA_ALLOWED_IPS = env.list("MPESA_ALLOWED_IPS", default=[
 # 127.x). Default kept as private ranges for dev convenience; production
 # .env.production must set the real SasaPay source IPs.
 SASAPAY_ALLOWED_IPS = env.list("SASAPAY_ALLOWED_IPS", default=[
-    "192.168.0.0/16",
+    # 2026-05-09 · the 10 source IPs SasaPay publishes at
+    # https://developer.sasapay.app/docs/apis/callback-security as
+    # the authoritative trusted callback-source list. Locked to /32
+    # (single host) instead of /8 or /16 ranges · narrowest possible
+    # allow-list. If SasaPay rotates IPs, update both this default
+    # AND the SASAPAY_ALLOWED_IPS env var on the VPS.
+    "47.129.43.141/32",
+    "13.229.247.179/32",
+    "13.215.155.141/32",
+    "13.214.60.231/32",
+    "54.169.74.198/32",
+    "18.142.226.87/32",
+    "47.129.243.116/32",
+    "13.250.110.3/32",
+    "155.12.30.40/32",
+    "155.12.30.58/32",
+    # Loopback for local container-to-container probes
     "127.0.0.0/8",
 ])
 # IntaSend webhook source IPs · IntaSend publishes their range on

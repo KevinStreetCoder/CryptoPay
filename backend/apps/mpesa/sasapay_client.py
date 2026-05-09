@@ -31,6 +31,63 @@ class SasaPayError(Exception):
     pass
 
 
+# 2026-05-09 · Channel codes per the SasaPay docs at
+# https://developer.sasapay.app/docs/apis/b2c?country=ke
+# Used by B2C (Send Money) to select the destination rail · the same
+# codes appear in NetworkCode for C2B (STK Push) for the mobile-money
+# rails (M-PESA, Airtel, T-Kash) but the bank codes are B2C-only.
+SASAPAY_CHANNELS = {
+    # Mobile money / wallet
+    "0":     "SasaPay",
+    "63902": "M-PESA",
+    "63903": "Airtel Money",
+    "63907": "T-Kash",
+    # Banks (B2C-only · Paybill/Till payments via B2B use a separate
+    # ReceiverMerchantCode lookup, not these channel codes)
+    "01":    "KCB",
+    "02":    "Standard Chartered",
+    "03":    "Absa",
+    "07":    "NCBA",
+    "10":    "Prime Bank",
+    "11":    "Co-operative Bank",
+    "12":    "National Bank",
+    "14":    "M-Oriental",
+    "16":    "Citibank",
+    "18":    "Middle East Bank",
+    "19":    "Bank of Africa",
+    "23":    "Consolidated Bank",
+    "25":    "Credit Bank",
+    "31":    "Stanbic",
+    "35":    "ABC Bank",
+    "36":    "Choice MFB",
+    "43":    "Ecobank",
+    "50":    "Paramount",
+    "51":    "Kingdom Bank",
+    "53":    "Guaranty",
+    "54":    "Victoria",
+    "55":    "Guardian",
+    "57":    "I&M",
+    "61":    "HFC",
+    "63":    "DTB",
+    "65":    "Mayfair",
+    "66":    "Sidian",
+    "68":    "Equity",
+    "70":    "Family Bank",
+    "72":    "Gulf African",
+    "74":    "First Community",
+    "75":    "DIB",
+    "76":    "UBA",
+    "78":    "KWFT",
+    "89":    "Stima Sacco",
+    "97":    "Telkom",
+}
+
+
+def channel_name(code: str) -> str:
+    """Resolve a SasaPay channel code to its human-readable name."""
+    return SASAPAY_CHANNELS.get(str(code), f"Channel {code}")
+
+
 class SasaPayClient:
     SANDBOX_BASE = "https://sandbox.sasapay.app/api/v1"
     PRODUCTION_BASE = "https://api.sasapay.app/api/v1"
@@ -197,22 +254,44 @@ class SasaPayClient:
     # ── B2C — Send Money to Mobile ────────────────────────────────────────
 
     def send_to_mobile(self, phone: str, amount: float, reason: str = "Payment",
-                       reference: str = None, callback_url: str = None) -> dict:
+                       reference: str = None, callback_url: str = None,
+                       channel: str = "63902",
+                       auto_topup_utility: bool = True) -> dict:
         """
-        Send money to an M-Pesa phone number.
-        Funds deducted from Utility Account (must fund it first).
+        Send money to a mobile-money / bank account via SasaPay B2C.
+        Funds deducted from the Utility Account (must be topped up first ·
+        we attempt that automatically when `auto_topup_utility` is True).
 
         Args:
-            phone: Recipient phone (format: 254XXXXXXXXX)
-            amount: KES amount to send
+            phone: Recipient phone OR bank account number (format
+                   `254XXXXXXXXX` for mobile money). For banks, pass
+                   the account number string and set `channel` to the
+                   bank code from SASAPAY_CHANNELS.
+            amount: KES amount to send. Minimum is KES 10 (server-
+                    enforced, undocumented).
+            channel: One of SASAPAY_CHANNELS keys. Default `"63902"`
+                     (M-PESA). Use `"63903"` for Airtel, `"63907"` for
+                     T-Kash, `"68"` for Equity bank, etc.
+            auto_topup_utility: When True (default) and Utility balance
+                                is below `amount`, we move the gap from
+                                Working → Utility before the B2C call.
         """
+        if auto_topup_utility:
+            # Best-effort · don't fail B2C if the topup probe errors,
+            # the actual B2C call's response will surface the real
+            # insufficient-balance error.
+            try:
+                self.ensure_utility_balance(amount)
+            except Exception:
+                logger.exception("send_to_mobile.utility_topup_failed (continuing)")
+
         return self._request("POST", "/payments/b2c/", {
             "MerchantCode": self.merchant_code,
             "Amount": str(amount),
             "Currency": "KES",
             "MerchantTransactionReference": reference or str(uuid.uuid4()),
             "ReceiverNumber": phone,
-            "Channel": "63902",  # M-Pesa
+            "Channel": channel,
             "Reason": reason,
             "CallBackURL": callback_url or self.callback_url,
         })
@@ -221,18 +300,24 @@ class SasaPayClient:
 
     def stk_push(self, phone: str, amount: float, account_ref: str,
                  description: str = "Payment",
-                 callback_url: str = None) -> dict:
+                 callback_url: str = None,
+                 network: str = "63902") -> dict:
         """
-        Initiate M-Pesa STK Push to collect payment from customer.
+        Initiate STK Push to collect payment from customer.
 
         Args:
             phone: Customer phone (format: 254XXXXXXXXX)
             amount: KES amount to collect
-            account_ref: Account reference / invoice number
+            account_ref: Account reference · returned to us as
+                         `BillRefNumber` on the IPN callback so we
+                         can reconcile to the originating Transaction.
+            network: SasaPay network code · `"63902"` M-PESA (default),
+                     `"63903"` Airtel Money, `"63907"` T-Kash, `"0"`
+                     SasaPay wallet (uses OTP flow not STK).
         """
         return self._request("POST", "/payments/request-payment/", {
             "MerchantCode": self.merchant_code,
-            "NetworkCode": "63902",
+            "NetworkCode": network,
             "PhoneNumber": phone,
             "Amount": str(amount),
             "Currency": "KES",
@@ -249,10 +334,122 @@ class SasaPayClient:
         return self._request("GET", f"/payments/check-balance/?MerchantCode={self.merchant_code}")
 
     def move_funds_to_utility(self, amount: float) -> dict:
-        """Move funds from Working Account to Utility Account (required before B2C)."""
+        """Move funds from Working Account to Utility Account.
+
+        REQUIRED before any B2C call · per the SasaPay docs at
+        https://developer.sasapay.app/docs/apis/internal-fund-movement
+        and https://developer.sasapay.app/docs/apis/b2c, B2C debits
+        the Utility Account specifically (not Working). C2B + B2B
+        receipts land in Working. So the merchant MUST move funds
+        Working → Utility before the saga's B2C step or the call
+        will fail with "insufficient utility balance".
+
+        Direction is fixed (always Working → Utility); the endpoint
+        has no source/destination params · just amount + merchant.
+        Synchronous, returns `{status, message}`.
+        """
         return self._request("POST", "/transactions/fund-movement/", {
             "merchantCode": self.merchant_code,
-            "amount": amount,
+            "amount": str(amount),
+        })
+
+    def ensure_utility_balance(self, required_amount) -> bool:
+        """Best-effort top-up · check Utility balance, move funds from
+        Working if Utility < required_amount + a small buffer.
+
+        Returns True if Utility now has enough (either already had it
+        or top-up succeeded), False on any error. Used as a pre-flight
+        before every B2C call so the saga doesn't 401/insufficient-
+        balance after we've already locked the user's crypto.
+        """
+        from decimal import Decimal as _D
+
+        try:
+            balance_resp = self.check_balance()
+        except SasaPayError as e:
+            logger.warning("ensure_utility_balance.check_balance_failed: %s", e)
+            return False
+
+        data = balance_resp.get("data") or {}
+        utility = _D("0")
+        working = _D("0")
+        for entry in data.get("Accounts") or []:
+            label = (entry.get("account_label") or "").lower()
+            if "utility" in label:
+                utility = _D(str(entry.get("account_balance") or 0))
+            elif "working" in label:
+                working = _D(str(entry.get("account_balance") or 0))
+
+        required = _D(str(required_amount))
+        if utility >= required:
+            return True
+
+        # Top up · move just-enough plus a 5% buffer so back-to-back
+        # B2C calls don't bounce on rounding.
+        gap = (required - utility) * _D("1.05")
+        gap = gap.quantize(_D("0.01"))
+        if working < gap:
+            logger.error(
+                "ensure_utility_balance.insufficient_working · need=%s working=%s",
+                gap, working,
+            )
+            return False
+
+        try:
+            self.move_funds_to_utility(float(gap))
+            logger.info("ensure_utility_balance.topped_up · moved KES %s", gap)
+            return True
+        except SasaPayError as e:
+            logger.warning("ensure_utility_balance.move_funds_failed: %s", e)
+            return False
+
+    def checkout_payment(
+        self,
+        amount: float,
+        reference: str,
+        description: str = "Payment",
+        payer_email: str = "",
+        callback_url: str = None,
+        success_url: str = "",
+        failure_url: str = "",
+        enable_card: bool = True,
+        enable_mpesa: bool = True,
+        enable_airtel: bool = True,
+        enable_sasapay_wallet: bool = True,
+    ) -> dict:
+        """Hosted Checkout Payment · returns a CheckoutUrl that the
+        customer is redirected to. The hosted page handles M-PESA STK,
+        Airtel Money, T-KASH, SasaPay wallet, and card input
+        (depending on which `enable_*` flags are True).
+
+        Use this for cases where:
+          - User wants to pay with a method we don't STK-trigger
+            directly (e.g. card, Airtel)
+          - We want SasaPay to handle the customer-facing UI rather
+            than building it ourselves
+          - We need a shareable payment link (the CheckoutUrl)
+
+        Per the SasaPay docs at
+        https://developer.sasapay.app/docs/apis/checkout-payments
+        the response is sync · CheckoutUrl is returned immediately,
+        the user is redirected, and the final result lands at our
+        CallbackUrl (separate from the C2B IPN).
+        """
+        return self._request("POST", "/payments/card-payments/", {
+            "MerchantCode": self.merchant_code,
+            "Amount": str(amount),
+            "Reference": reference,
+            "Description": description,
+            "Currency": "KES",
+            "PayerEmail": payer_email,
+            "CallbackUrl": callback_url or self.callback_url,
+            "SuccessUrl": success_url,
+            "FailureUrl": failure_url,
+            "RedirectEnabled": bool(success_url or failure_url),
+            "SasaPayWalletEnabled": enable_sasapay_wallet,
+            "MpesaEnabled": enable_mpesa,
+            "AirtelEnabled": enable_airtel,
+            "CardEnabled": enable_card,
         })
 
     def query_transaction(self, checkout_request_id: str = None,
