@@ -463,7 +463,15 @@ MPESA_CERT_PATH = env("MPESA_CERT_PATH", default=str(BASE_DIR / "certs" / "sandb
 # leak of SECRET_KEY would let an attacker forge tokens and complete
 # any pending payment without the M-Pesa side ever moving funds. Generate
 # with: python -c "import secrets; print(secrets.token_hex(32))"
-MPESA_CALLBACK_HMAC_KEY = env("MPESA_CALLBACK_HMAC_KEY", default="")
+# 2026-05-09 · Phase-1 Secret Manager migration. The 7 highest-risk
+# values (callback HMAC keys, OAuth secrets, TOTP encryption key) now
+# resolve via `apps.core.secrets.get_secret()` which prefers Google
+# Secret Manager and falls back to env. Disabling Secret Manager (no
+# GOOGLE_CLOUD_PROJECT, or DISABLE_SECRET_MANAGER=True) reverts all 7
+# to plain-env reads with zero code change · safe canary.
+from apps.core.secrets import get_secret as _gs  # noqa: E402
+
+MPESA_CALLBACK_HMAC_KEY = _gs("MPESA_CALLBACK_HMAC_KEY", default=env("MPESA_CALLBACK_HMAC_KEY", default=""))
 
 # Audit HIGH-1 fix · dedicated key for at-rest encryption of TOTP secrets.
 # Previously derived from SECRET_KEY (single point of failure); now an
@@ -471,7 +479,7 @@ MPESA_CALLBACK_HMAC_KEY = env("MPESA_CALLBACK_HMAC_KEY", default="")
 # generate with `Fernet.generate_key()`) or any high-entropy string
 # (we SHA-256 + b64-wrap to derive a Fernet key). Generate with:
 #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-TOTP_ENCRYPTION_KEY = env("TOTP_ENCRYPTION_KEY", default="")
+TOTP_ENCRYPTION_KEY = _gs("TOTP_ENCRYPTION_KEY", default=env("TOTP_ENCRYPTION_KEY", default=""))
 
 # --- Payment provider switch ---
 # Three rails supported, switched purely by env var so we can flip
@@ -483,7 +491,7 @@ TOTP_ENCRYPTION_KEY = env("TOTP_ENCRYPTION_KEY", default="")
 PAYMENT_PROVIDER = env("PAYMENT_PROVIDER", default="daraja")
 SASAPAY_ENVIRONMENT = env("SASAPAY_ENVIRONMENT", default="sandbox")
 SASAPAY_CLIENT_ID = env("SASAPAY_CLIENT_ID", default="")
-SASAPAY_CLIENT_SECRET = env("SASAPAY_CLIENT_SECRET", default="")
+SASAPAY_CLIENT_SECRET = _gs("SASAPAY_CLIENT_SECRET", default=env("SASAPAY_CLIENT_SECRET", default=""))
 SASAPAY_MERCHANT_CODE = env("SASAPAY_MERCHANT_CODE", default="")
 # SasaPay's aggregator paybill that customers enter as the "Business
 # Number" on M-Pesa. The merchant account (SASAPAY_MERCHANT_CODE) is
@@ -499,12 +507,12 @@ SASAPAY_CALLBACK_URL = env("SASAPAY_CALLBACK_URL", default="https://cpay.co.ke/a
 # which is fragile and known-leaky. The production guard refuses to
 # boot when PAYMENT_PROVIDER=sasapay AND SASAPAY_WEBHOOK_SECRET is empty.
 # Configure on the SasaPay merchant dashboard; see docs/SASAPAY-WEBHOOK.md
-SASAPAY_WEBHOOK_SECRET = env("SASAPAY_WEBHOOK_SECRET", default="")
+SASAPAY_WEBHOOK_SECRET = _gs("SASAPAY_WEBHOOK_SECRET", default=env("SASAPAY_WEBHOOK_SECRET", default=""))
 # Per-tx HMAC secret for the URL-token fallback (the same pattern Daraja
 # callbacks use). Lets us verify callbacks even if SasaPay drops their
 # signature header. Generated on initiate(), embedded in the callback
 # URL, consumed once-only via Redis SETNX.
-SASAPAY_CALLBACK_HMAC_KEY = env("SASAPAY_CALLBACK_HMAC_KEY", default="")
+SASAPAY_CALLBACK_HMAC_KEY = _gs("SASAPAY_CALLBACK_HMAC_KEY", default=env("SASAPAY_CALLBACK_HMAC_KEY", default=""))
 
 # --- IntaSend (third payment provider · approved 2026-05-08) ---
 # Set PAYMENT_PROVIDER=intasend to route through IntaSend instead of
@@ -518,7 +526,7 @@ SASAPAY_CALLBACK_HMAC_KEY = env("SASAPAY_CALLBACK_HMAC_KEY", default="")
 # (kept configured for the day the CBK Letter of No Objection lands).
 INTASEND_ENVIRONMENT = env("INTASEND_ENVIRONMENT", default="sandbox")
 INTASEND_PUBLISHABLE_KEY = env("INTASEND_PUBLISHABLE_KEY", default="")
-INTASEND_API_SECRET = env("INTASEND_API_SECRET", default="")
+INTASEND_API_SECRET = _gs("INTASEND_API_SECRET", default=env("INTASEND_API_SECRET", default=""))
 INTASEND_CALLBACK_URL = env(
     "INTASEND_CALLBACK_URL",
     default="https://cpay.co.ke/api/v1/intasend/callback/",
@@ -527,7 +535,25 @@ INTASEND_CALLBACK_URL = env(
 # Verified as HMAC-SHA256(INTASEND_WEBHOOK_SECRET, raw_body) against
 # the X-IntaSend-Signature header. The production guard refuses to
 # boot when PAYMENT_PROVIDER=intasend and this is empty.
-INTASEND_WEBHOOK_SECRET = env("INTASEND_WEBHOOK_SECRET", default="")
+INTASEND_WEBHOOK_SECRET = _gs("INTASEND_WEBHOOK_SECRET", default=env("INTASEND_WEBHOOK_SECRET", default=""))
+
+# --- Swypt · KES ↔ crypto on/off-ramp (BUY + SELL) ---
+# Primary buy/sell-side liquidity provider · winner of the 2026-05-09
+# research (vs Yellow Card / IntaSend / NowPayments / Noones). API
+# docs at github.com/Swypt-io/swypt-api-documentation. Email
+# swypt.io@gmail.com to request keys (turnaround: days).
+#
+# When SWYPT_API_KEY is empty, the saga falls through to the next
+# registered provider (Yellow Card, manual ops). When set, Swypt
+# becomes the primary rail for any asset+chain it supports (USDT/
+# USDC/ETH/CELO on tron/ethereum/polygon/base/celo).
+SWYPT_BASE_URL = env("SWYPT_BASE_URL", default="https://api.swypt.io")
+SWYPT_API_KEY = _gs("SWYPT_API_KEY", default=env("SWYPT_API_KEY", default=""))
+SWYPT_API_SECRET = _gs("SWYPT_API_SECRET", default=env("SWYPT_API_SECRET", default=""))
+SWYPT_CALLBACK_URL = env(
+    "SWYPT_CALLBACK_URL",
+    default="https://cpay.co.ke/api/v1/swypt/callback/",
+)
 # Optional · explicit IntaSend wallet to disburse from. Empty uses
 # the merchant's default wallet on the dashboard.
 INTASEND_WALLET_ID = env("INTASEND_WALLET_ID", default="")

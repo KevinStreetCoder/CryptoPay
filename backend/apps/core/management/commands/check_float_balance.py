@@ -71,33 +71,63 @@ class Command(BaseCommand):
             logger.error("sasapay.balance.error", extra={"error": str(e)})
             return
 
-        # SasaPay's response shape: `data` carries the per-account
-        # tuple. Sum all merchant float pots so the breaker sees the
-        # TOTAL liquid KES.
-        accounts = result.get("data") or result.get("accounts") or result
+        # 2026-05-09 · the live response shape from
+        # GET /payments/check-balance/?MerchantCode=<code> is:
+        #   { "data": {
+        #       "CurrencyCode": "KES",
+        #       "OrgAccountBalance": 22.954,
+        #       "Accounts": [
+        #         {"account_label": "Bulk Payment",   "account_balance": 0.0},
+        #         {"account_label": "Utility Account","account_balance": 0.0},
+        #         {"account_label": "Working Account","account_balance": 22.954}
+        #       ] } }
+        # The previous parser looked for `accounts.WorkingAccount`
+        # (CamelCase keys at top level) which never matched, so the
+        # admin dashboard rendered "unknown" for the float forever.
+        # We now read OrgAccountBalance directly + fall back to summing
+        # the Accounts array if Org isn't present.
+        data = result.get("data") or result.get("accounts") or result
         total_kes = Decimal("0")
-        if isinstance(accounts, dict):
-            for label in (
-                "WorkingAccount", "UtilityAccount", "BulkPaymentAccount",
-                "workingAccount", "utilityAccount", "bulkPaymentAccount",
-            ):
-                raw = accounts.get(label)
-                if raw is None:
-                    continue
+
+        if isinstance(data, dict):
+            org_balance = data.get("OrgAccountBalance") or data.get("orgAccountBalance")
+            if org_balance is not None:
                 try:
-                    total_kes += Decimal(str(raw))
+                    total_kes = Decimal(str(org_balance))
                 except (InvalidOperation, TypeError):
-                    continue
+                    total_kes = Decimal("0")
+
+            # Fallback · sum the Accounts array if Org is missing.
             if total_kes == 0:
-                # Fallback · single-balance shape.
-                for label in ("Balance", "balance", "available_balance"):
-                    raw = accounts.get(label)
-                    if raw is not None:
+                accounts_list = data.get("Accounts") or data.get("accounts") or []
+                if isinstance(accounts_list, list):
+                    for entry in accounts_list:
+                        if not isinstance(entry, dict):
+                            continue
+                        raw = entry.get("account_balance") or entry.get("accountBalance")
+                        if raw is None:
+                            continue
                         try:
-                            total_kes = Decimal(str(raw))
-                            break
+                            total_kes += Decimal(str(raw))
                         except (InvalidOperation, TypeError):
                             continue
+
+            # Belt-and-braces · old CamelCase shape for environments
+            # that still return it. Keeps backward compat if SasaPay
+            # rolls a v2 response shape later.
+            if total_kes == 0:
+                for label in (
+                    "WorkingAccount", "UtilityAccount", "BulkPaymentAccount",
+                    "workingAccount", "utilityAccount", "bulkPaymentAccount",
+                    "Balance", "balance", "available_balance",
+                ):
+                    raw = data.get(label)
+                    if raw is None:
+                        continue
+                    try:
+                        total_kes += Decimal(str(raw))
+                    except (InvalidOperation, TypeError):
+                        continue
 
         new_state = PaymentCircuitBreaker.update_from_float(total_kes)
         self.stdout.write(self.style.SUCCESS(
