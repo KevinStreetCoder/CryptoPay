@@ -1813,8 +1813,15 @@ function HomeScreenContent() {
 
           </TourStep>
 
-          {/* Recent Transactions · tour step 9 (every payment searchable). */}
-          <TourStep nameKey="tour.step9Title" textKey="tour.step9Text" order={9}>
+          {/* Recent Transactions · 2026-05-09 · tour step 9 was here.
+              Removed from the tour because the target sits at the
+              bottom of a long ScrollView and the auto-scroll-to-target
+              logic in AppTour can't reliably bring it into view on
+              small phones. The tour now ends at step 8 (rate-lock
+              ticker) which is mid-screen and tested-stable. The
+              Recent Transactions section still renders unchanged · we
+              just removed the TourStep wrapper so copilot doesn't try
+              to highlight this position. */}
           <View style={{ paddingHorizontal: 16 }}>
             <SectionHeader
               title={t("home.recentActivity")}
@@ -1928,7 +1935,6 @@ function HomeScreenContent() {
               )}
             </View>
           </View>
-          </TourStep>
         </ScrollView>
         <TourAutoStart />
       </SafeAreaView>

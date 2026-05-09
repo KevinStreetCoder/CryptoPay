@@ -355,14 +355,37 @@ class SasaPayClient:
 
     def ensure_utility_balance(self, required_amount) -> bool:
         """Best-effort top-up · check Utility balance, move funds from
-        Working if Utility < required_amount + a small buffer.
+        Working if Utility < required + SMS_COST + buffer.
+
+        2026-05-09 audit fix · the previous calc used `required * 1.05`
+        which on a 10 KES send produced `required = 10.5`. Utility had
+        exactly 10.5 so the topup was SKIPPED · then SasaPay rejected
+        the B2C with "Insufficient balance to send KES 10.00.
+        Transaction cost KES 0.0. SMS cost KES 1." because they need
+        amount + SMS cost (~1 KES) + tx cost. The 5% buffer (0.5 KES)
+        couldn't cover the 1 KES SMS fee.
+
+        Now the formula is `amount + SMS_COST_KES + max(MIN_BUFFER, 10%)`
+        so:
+          - 10 KES send → topup ensures Utility ≥ 10 + 3 + 1 = 14
+          - 100 KES send → ≥ 100 + 3 + 10 = 113
+          - 1000 KES send → ≥ 1000 + 3 + 100 = 1103
+        SMS_COST_KES is the SasaPay-published per-message fee (1 KES
+        as of 2026-05-09); raise if SasaPay raises theirs.
 
         Returns True if Utility now has enough (either already had it
         or top-up succeeded), False on any error. Used as a pre-flight
-        before every B2C call so the saga doesn't 401/insufficient-
+        before every B2C call so the saga doesn't fail with insufficient-
         balance after we've already locked the user's crypto.
         """
         from decimal import Decimal as _D
+
+        # SasaPay published costs · keep these as data, not magic numbers
+        # in the formula. Raise via env if SasaPay's pricing changes.
+        SMS_COST_KES = _D(str(getattr(settings, "SASAPAY_SMS_COST_KES", "1")))
+        TX_COST_KES = _D(str(getattr(settings, "SASAPAY_TX_COST_KES", "0")))
+        MIN_BUFFER_KES = _D(str(getattr(settings, "SASAPAY_MIN_BUFFER_KES", "3")))
+        BUFFER_PCT = _D(str(getattr(settings, "SASAPAY_BUFFER_PCT", "0.10")))
 
         try:
             balance_resp = self.check_balance()
@@ -380,14 +403,23 @@ class SasaPayClient:
             elif "working" in label:
                 working = _D(str(entry.get("account_balance") or 0))
 
-        required = _D(str(required_amount))
+        amount = _D(str(required_amount))
+        # required = amount + SMS + TX + max(MIN_BUFFER, amount * 10%)
+        pct_buffer = (amount * BUFFER_PCT).quantize(_D("0.01"))
+        buffer = max(MIN_BUFFER_KES, pct_buffer)
+        required = amount + SMS_COST_KES + TX_COST_KES + buffer
+
+        logger.info(
+            "ensure_utility_balance.check · amount=%s required=%s utility=%s working=%s "
+            "(SMS=%s TX=%s buffer=%s)",
+            amount, required, utility, working, SMS_COST_KES, TX_COST_KES, buffer,
+        )
+
         if utility >= required:
             return True
 
-        # Top up · move just-enough plus a 5% buffer so back-to-back
-        # B2C calls don't bounce on rounding.
-        gap = (required - utility) * _D("1.05")
-        gap = gap.quantize(_D("0.01"))
+        # Top up · move (required - utility) from Working.
+        gap = (required - utility).quantize(_D("0.01"))
         if working < gap:
             logger.error(
                 "ensure_utility_balance.insufficient_working · need=%s working=%s",

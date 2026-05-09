@@ -201,10 +201,22 @@ def verify_credentials(api_key: str, secret: str) -> dict:
         logger.info("binance.address_list_unavailable code=%s", e.code)
 
     # Step 3 · negative scope check · ensure trading is OFF.
-    # `/sapi/v1/account` requires Spot Trading scope · we EXPECT
-    # it to fail with -2015 ("Invalid API-key, IP, or permissions
-    # for action"). If it succeeds, the keys are over-privileged
-    # and we refuse to link.
+    # `/sapi/v1/account` requires Spot Trading scope · we EXPECT it
+    # to fail with -2015 ("Invalid API-key, IP, or permissions for
+    # action"). If it succeeds, the keys are over-privileged · refuse.
+    #
+    # 2026-05-09 audit fix H2 · the previous `except BinanceError as e:
+    # if e.code != 'scope_too_wide': pass` accepted ANY error code as
+    # "trading off" · network blip / -1003 rate-limit / -1099 server
+    # overload all caused over-privileged keys to be silently linked.
+    # Now we accept ONLY the specific permission-denied codes from
+    # Binance's documented error table; any other code is treated
+    # as "verification inconclusive" → fail closed.
+    PERMISSION_DENIED_CODES = {
+        "-2015",  # Invalid API-key, IP, or permissions for action
+        "-1022",  # Signature for this request is not valid
+        "-2014",  # API-key format invalid (also returned for scope mismatch)
+    }
     try:
         _signed_get(api_key, secret, "/sapi/v1/account", timeout=10)
         # If we got here, trading IS enabled · refuse.
@@ -216,8 +228,17 @@ def verify_credentials(api_key: str, secret: str) -> dict:
     except BinanceError as e:
         if e.code == "scope_too_wide":
             raise
-        # Any other error is the EXPECTED outcome · trading is
-        # disabled, the call was rejected. Continue.
+        if e.code not in PERMISSION_DENIED_CODES:
+            # Anything other than a known permission-denied code
+            # means we don't actually KNOW whether trading is on or
+            # off · refuse to link.
+            raise BinanceError(
+                "verification_inconclusive",
+                f"Could not verify trading scope is disabled "
+                f"(Binance returned {e.code}: {e.message[:120]}). "
+                f"Try again in a moment, or check Binance status.",
+            )
+        # Documented permission-denied · trading is disabled. Continue.
 
     return {
         "ok": True,

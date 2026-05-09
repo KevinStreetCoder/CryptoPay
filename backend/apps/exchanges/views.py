@@ -70,17 +70,41 @@ def _state_key(user_id, provider: str) -> str:
     return f"oauth_state:{user_id}:{provider}"
 
 
-def _put_state(user_id, provider: str, state: str) -> None:
-    cache.set(_state_key(user_id, provider), state, timeout=_OAUTH_STATE_TTL)
+def _put_state(user_id, provider: str, state: str, scheme: str = "app") -> None:
+    """Persist state alongside the scheme so the complete endpoint
+    uses the SAME redirect_uri the start endpoint did. Audit fix H3 ·
+    previously the complete endpoint accepted client-supplied scheme
+    which could mismatch start, breaking OAuth and (worse) opening
+    a future authorization-code-injection vector if a third scheme
+    is ever added without an allow-list."""
+    cache.set(
+        _state_key(user_id, provider),
+        {"state": state, "scheme": scheme},
+        timeout=_OAUTH_STATE_TTL,
+    )
 
 
-def _check_state(user_id, provider: str, state: str) -> bool:
-    expected = cache.get(_state_key(user_id, provider))
-    if not expected or expected != state:
-        return False
+def _check_state(user_id, provider: str, state: str) -> tuple[bool, str]:
+    """Return (ok, scheme) · scheme is the one persisted at start.
+
+    The complete endpoint MUST use the returned scheme to build the
+    redirect_uri for the token-exchange call · ignoring whatever
+    scheme the client passes in the body.
+    """
+    raw = cache.get(_state_key(user_id, provider))
+    if not raw:
+        return (False, "app")
+    # Backwards-compat · old format was just a string
+    if isinstance(raw, str):
+        if raw != state:
+            return (False, "app")
+        cache.delete(_state_key(user_id, provider))
+        return (True, "app")
+    if not isinstance(raw, dict) or raw.get("state") != state:
+        return (False, "app")
     # One-time use · delete after match
     cache.delete(_state_key(user_id, provider))
-    return True
+    return (True, raw.get("scheme", "app"))
 
 
 def _link_for(user, provider: str) -> ExchangeLink | None:
@@ -92,10 +116,37 @@ def _link_for(user, provider: str) -> ExchangeLink | None:
 
 
 def _client_ip(request) -> str:
-    return (
-        request.META.get("HTTP_X_FORWARDED_FOR", "").split(",")[0].strip()
-        or request.META.get("REMOTE_ADDR", "")
+    """Trusted-proxy-aware IP extraction.
+
+    2026-05-09 audit fix · the previous version took the FIRST token
+    of `X-Forwarded-For` whether or not the request came from a
+    trusted proxy · attackers can forge that header. We trust the
+    chain only if the immediate peer (`REMOTE_ADDR`) is one of the
+    operator-configured trusted proxies (Cloudflare CIDRs, the
+    nginx LB IP). Fallback · use `REMOTE_ADDR`.
+    """
+    remote = request.META.get("REMOTE_ADDR", "") or ""
+    trusted = set(
+        getattr(settings, "TRUSTED_PROXY_IPS", [
+            # Default · localhost (for the docker-internal nginx)
+            "127.0.0.1", "::1",
+            # Cloudflare's published IPv4 ranges are on
+            # https://www.cloudflare.com/ips-v4 · we keep this list
+            # tight by trusting only the immediate peer rather than
+            # any header. Operators add more via `TRUSTED_PROXY_IPS`.
+        ])
     )
+    if remote in trusted:
+        # Take the LAST token of XFF (the closest non-trusted client),
+        # not the first (which is the original remote client and most
+        # easily forged). For typical 1-hop CDN setups this is the
+        # ONLY token. For multi-hop (CF → nginx → app), it's the IP
+        # immediately before the trusted chain.
+        xff = request.META.get("HTTP_X_FORWARDED_FOR", "") or ""
+        tokens = [t.strip() for t in xff.split(",") if t.strip()]
+        if tokens:
+            return tokens[-1]
+    return remote
 
 
 def _serialize_link(link: ExchangeLink, balances: dict | None = None) -> dict:
@@ -129,17 +180,120 @@ def _balances_to_json(balances: dict) -> dict:
     return out
 
 
-# Per-provider deposit address resolver · pulls the right Cpay deposit
-# address for the (user, currency) pair. Returns the address that the
-# external exchange should send to.
+# 2026-05-09 audit fix H1 · server-side Cpay deposit-address allow-list.
+# Previously the withdraw flow took the destination from
+# `Wallet.deposit_address` directly · a single bad insert into that
+# table (admin form bug, migration backfill, anything that bypassed
+# the BIP-44 derivation) becomes a treasury exfiltration path because
+# the exchange would send to whatever address sits in that row. The
+# allow-list below is generated from the BIP-44 master seed at startup
+# and asserted on every withdraw · if `Wallet.deposit_address` ever
+# diverges from what the seed produces, the withdraw refuses with a
+# clear error rather than executing.
+_CPAY_DEPOSIT_ADDR_CACHE: dict[tuple[int, str], str] = {}
+
+
 def _cpay_deposit_address(user, currency: str) -> str:
+    """Resolve and VERIFY the Cpay deposit address for (user, currency).
+
+    The Wallet row must exist AND its `deposit_address` must match
+    the BIP-44-derived address for that user. If anything diverges,
+    raise · refuse to send to a destination we can't cryptographically
+    re-derive.
+    """
     w = Wallet.objects.filter(user=user, currency=currency).first()
     if not w or not w.deposit_address:
         raise ValueError(
             f"No Cpay deposit address for {currency}. The wallet "
             "must be provisioned before pulling funds in."
         )
+
+    # Re-derive the expected address from the master seed and assert
+    # it matches what's in the DB. Cpay-managed addresses are
+    # BIP-44 derived from `WALLET_MASTER_SEED` at the user's
+    # `address_index`. If `address_index` is null the wallet was
+    # NOT minted by our generation flow · refuse.
+    if w.address_index is None:
+        logger.error(
+            "exchange.deposit_address_no_index user=%s currency=%s addr=%s",
+            user.id, currency, w.deposit_address,
+        )
+        raise ValueError(
+            "Deposit address provenance unverified · contact support."
+        )
+
+    cache_key = (user.id, currency)
+    expected = _CPAY_DEPOSIT_ADDR_CACHE.get(cache_key)
+    if expected is None:
+        try:
+            from apps.blockchain.services import generate_deposit_address
+            expected = generate_deposit_address(
+                str(user.id), currency, w.address_index,
+            )
+            _CPAY_DEPOSIT_ADDR_CACHE[cache_key] = expected
+        except Exception:
+            logger.exception(
+                "exchange.deposit_address_derivation_failed user=%s currency=%s",
+                user.id, currency,
+            )
+            raise ValueError(
+                "Internal error verifying deposit address. "
+                "Please contact support before retrying.",
+            )
+
+    if w.deposit_address != expected:
+        logger.error(
+            "exchange.deposit_address_mismatch user=%s currency=%s "
+            "db=%s expected=%s",
+            user.id, currency, w.deposit_address, expected,
+        )
+        raise ValueError(
+            "Deposit address verification failed · contact support."
+        )
+
     return w.deposit_address
+
+
+def _audit(action: str, user, *, link=None, withdrawal=None, request=None,
+           extra: dict | None = None) -> None:
+    """Append-only audit log entry for exchange operations.
+
+    2026-05-09 audit fix C3 · we had ZERO audit log on link/unlink/
+    withdraw · post-incident reconstruction was impossible. Now every
+    state-changing exchange action emits an `AuditLog` row keyed on
+    user with the relevant ids, IP, and a short JSON evidence blob.
+    """
+    try:
+        from apps.accounts.models import AuditLog
+        details = {}
+        if link is not None:
+            details["link_id"] = str(link.id)
+            details["provider"] = link.provider
+        if withdrawal is not None:
+            details["withdrawal_id"] = str(withdrawal.id)
+            details["currency"] = withdrawal.currency
+            details["amount"] = str(withdrawal.amount)
+            details["network"] = withdrawal.network
+        if extra:
+            details.update(extra)
+        ip = _client_ip(request) if request is not None else ""
+        ua = (request.META.get("HTTP_USER_AGENT", "")[:255]
+              if request is not None else "")
+        AuditLog.objects.create(
+            user=user,
+            action=action,
+            entity_type="exchange",
+            entity_id=str(link.id) if link else (
+                str(withdrawal.id) if withdrawal else "exchange"
+            ),
+            ip_address=ip or None,
+            user_agent=ua,
+            details=details,
+        )
+    except Exception:
+        # Never block a user-facing action on audit-log failure ·
+        # surface to logs and continue.
+        logger.exception("exchange.audit_log_failed action=%s", action)
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -282,11 +436,20 @@ class BinanceLinkView(APIView):
             linked_from_ip=_client_ip(request),
             linked_user_agent=request.META.get("HTTP_USER_AGENT", "")[:255],
         )
+        _audit("EXCHANGE_LINKED", request.user, link=link, request=request,
+               extra={"method": "api_key"})
+        # 2026-05-09 audit fix L3 · do NOT echo the user's full
+        # address_whitelist (PII-equivalent). Only return a count
+        # and whether the deposit address for the requested currency
+        # was found.
+        addr_whitelist = verify.get("address_whitelist") or {}
         return Response(
             {
                 "link": _serialize_link(link),
                 "supported_coins": verify.get("supported_coins", []),
-                "address_whitelist": verify.get("address_whitelist", {}),
+                "address_whitelist_count": sum(
+                    len(v) for v in addr_whitelist.values()
+                ),
             },
             status=status.HTTP_201_CREATED,
         )
@@ -316,8 +479,10 @@ class CoinbaseOAuthStartView(APIView):
                 status=503,
             )
         scheme = request.query_params.get("scheme", "app")
+        if scheme not in ("app", "web"):
+            return Response({"error": "invalid scheme"}, status=400)
         state = coinbase.mint_state()
-        _put_state(request.user.id, "coinbase", state)
+        _put_state(request.user.id, "coinbase", state, scheme=scheme)
         url = coinbase.build_authorize_url(state, scheme=scheme)
         return Response({"authorize_url": url, "state": state})
 
@@ -336,10 +501,14 @@ class CoinbaseOAuthCompleteView(APIView):
     def post(self, request):
         code = (request.data.get("code") or "").strip()
         state = (request.data.get("state") or "").strip()
-        scheme = request.data.get("scheme", "app")
         if not code or not state:
             return Response({"error": "code and state required"}, status=400)
-        if not _check_state(request.user.id, "coinbase", state):
+        # 2026-05-09 audit fix H3 · scheme is read FROM the persisted
+        # state, NOT from the client body. Prevents scheme-mismatch
+        # attacks where the redirect_uri at exchange time differs
+        # from the one the user authorized against.
+        ok, scheme = _check_state(request.user.id, "coinbase", state)
+        if not ok:
             return Response({"error": "invalid_state"}, status=400)
 
         if _link_for(request.user, ExchangeLink.PROVIDER_COINBASE):
@@ -367,6 +536,8 @@ class CoinbaseOAuthCompleteView(APIView):
             linked_from_ip=_client_ip(request),
             linked_user_agent=request.META.get("HTTP_USER_AGENT", "")[:255],
         )
+        _audit("EXCHANGE_LINKED", request.user, link=link, request=request,
+               extra={"method": "oauth"})
         return Response(
             {"link": _serialize_link(link)},
             status=status.HTTP_201_CREATED,
@@ -387,8 +558,10 @@ class NoonesOAuthStartView(APIView):
                 status=503,
             )
         scheme = request.query_params.get("scheme", "app")
+        if scheme not in ("app", "web"):
+            return Response({"error": "invalid scheme"}, status=400)
         state = noones.mint_state()
-        _put_state(request.user.id, "noones", state)
+        _put_state(request.user.id, "noones", state, scheme=scheme)
         url = noones.build_authorize_url(state, scheme=scheme)
         return Response({"authorize_url": url, "state": state})
 
@@ -402,10 +575,11 @@ class NoonesOAuthCompleteView(APIView):
     def post(self, request):
         code = (request.data.get("code") or "").strip()
         state = (request.data.get("state") or "").strip()
-        scheme = request.data.get("scheme", "app")
         if not code or not state:
             return Response({"error": "code and state required"}, status=400)
-        if not _check_state(request.user.id, "noones", state):
+        # 2026-05-09 audit fix H3 · scheme persisted with state
+        ok, scheme = _check_state(request.user.id, "noones", state)
+        if not ok:
             return Response({"error": "invalid_state"}, status=400)
         if _link_for(request.user, ExchangeLink.PROVIDER_NOONES):
             return Response(
@@ -431,6 +605,8 @@ class NoonesOAuthCompleteView(APIView):
             linked_from_ip=_client_ip(request),
             linked_user_agent=request.META.get("HTTP_USER_AGENT", "")[:255],
         )
+        _audit("EXCHANGE_LINKED", request.user, link=link, request=request,
+               extra={"method": "oauth"})
         return Response(
             {"link": _serialize_link(link)},
             status=status.HTTP_201_CREATED,
@@ -477,6 +653,7 @@ class ExchangeUnlinkView(APIView):
         link.save(update_fields=[
             "revoked_at", "refresh_token", "access_token", "api_secret",
         ])
+        _audit("EXCHANGE_UNLINKED", request.user, link=link, request=request)
         return Response({"unlinked": True}, status=200)
 
 
@@ -522,6 +699,39 @@ class ExchangeWithdrawInitiateView(APIView):
         if amount <= 0:
             return Response({"error": "amount must be > 0"}, status=400)
 
+        # 2026-05-09 audit fix C1 · request_id MUST come from the
+        # client. The previous code minted `uuid4()` server-side per
+        # call, which defeated upstream-exchange idempotency: a
+        # network-retried client request produced a NEW server uuid
+        # → exchange saw two distinct withdraw orders → DOUBLE-PULL.
+        # Now we accept it from the body and dedup on (link, request_id).
+        request_id = (request.data.get("request_id") or "").strip()
+        if not request_id:
+            return Response(
+                {"error": "request_id required (UUID, client-supplied for idempotency)"},
+                status=400,
+            )
+        # Validate UUID shape so we don't store garbage in the DB.
+        try:
+            uuid.UUID(request_id)
+        except ValueError:
+            return Response({"error": "request_id must be a UUID"}, status=400)
+
+        # Idempotency check · if a withdrawal with this (link, request_id)
+        # already exists, return it instead of creating a duplicate.
+        existing = ExchangeWithdrawal.objects.filter(
+            link=link, request_id=request_id,
+        ).first()
+        if existing:
+            logger.info(
+                "exchange.withdraw_idempotent_replay user=%s wd=%s",
+                request.user.id, existing.id,
+            )
+            return Response(
+                _serialize_withdrawal(existing),
+                status=status.HTTP_202_ACCEPTED,
+            )
+
         network = (request.data.get("network") or "").upper().strip()
         if provider == ExchangeLink.PROVIDER_BINANCE and not network:
             network = binance.DEFAULT_NETWORKS.get(currency, currency)
@@ -531,18 +741,65 @@ class ExchangeWithdrawInitiateView(APIView):
         except ValueError as e:
             return Response({"error": str(e)}, status=400)
 
-        # Mint the withdrawal row first so the request_id is the dedup
-        # key on both Cpay and the upstream exchange.
-        request_id = str(uuid.uuid4())
-        wd = ExchangeWithdrawal.objects.create(
-            user=request.user,
-            link=link,
-            request_id=request_id,
-            currency=currency,
-            network=network,
-            amount=amount,
-            destination_address=destination,
-        )
+        # 2026-05-09 audit fix C2 · enforce platform limits + hard_pause
+        # on exchange withdrawals · they were exempt before, opening
+        # a bypass for daily/hourly KES caps. Convert the crypto
+        # amount to KES via the live rate engine before checking. If
+        # the rate fetch fails we fail-CLOSED (refuse) rather than
+        # let a withdrawal sneak through unmetered.
+        from apps.payments.platform_limits import enforce_outgoing, PlatformLimitExceeded
+        try:
+            from apps.rates.services import RateService
+            kes_quote = RateService.get_crypto_kes_rate(currency)
+            kes_per_unit = Decimal(str(kes_quote.get("rate") or kes_quote.get("raw_rate") or "0"))
+            kes_equivalent = (amount * kes_per_unit).quantize(Decimal("0.01"))
+        except Exception as _rate_err:
+            logger.warning(
+                "exchange.rate_lookup_failed user=%s currency=%s err=%s",
+                request.user.id, currency, str(_rate_err)[:200],
+            )
+            return Response(
+                {"error": "rate_unavailable",
+                 "message": "Cannot price withdrawal · try again."},
+                status=503,
+            )
+
+        try:
+            enforce_outgoing(kes_equivalent)
+        except PlatformLimitExceeded as _enf:
+            return Response(
+                {"error": "platform_limit", "message": str(_enf)},
+                status=429,
+            )
+
+        # Mint the withdrawal row · idempotency check above already
+        # ensured we don't dup. Use atomic create to guard against
+        # the race where two concurrent posts get past the .first()
+        # check but only one wins the unique-constraint insert.
+        from django.db import IntegrityError, transaction
+        try:
+            with transaction.atomic():
+                wd = ExchangeWithdrawal.objects.create(
+                    user=request.user,
+                    link=link,
+                    request_id=request_id,
+                    currency=currency,
+                    network=network,
+                    amount=amount,
+                    destination_address=destination,
+                )
+        except IntegrityError:
+            # Another concurrent request won the race · fetch and return.
+            wd = ExchangeWithdrawal.objects.get(
+                link=link, request_id=request_id,
+            )
+            return Response(
+                _serialize_withdrawal(wd),
+                status=status.HTTP_202_ACCEPTED,
+            )
+
+        _audit("EXCHANGE_WITHDRAW_INITIATED", request.user,
+               link=link, withdrawal=wd, request=request)
 
         try:
             if provider == ExchangeLink.PROVIDER_BINANCE:

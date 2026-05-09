@@ -204,4 +204,35 @@ def _kms_test_safe_settings(settings):
         _ts._cached_token = None
     except Exception:
         pass
+
+    # 2026-05-09 audit fix · circuit breaker now fail-safes to
+    # HALF_OPEN when both state + last_float keys are missing
+    # (production-correct · don't open the rail with no ground
+    # truth). But tests that aren't specifically about the breaker
+    # need to assume CLOSED so they can exercise their actual
+    # code path. Pin the breaker to CLOSED by default · tests
+    # that need other states can override via the public API
+    # (`PaymentCircuitBreaker.update_from_float(...)` or
+    # `force_pause(...)`).
+    try:
+        from django.core.cache import cache as _cache
+        from apps.payments.circuit_breaker import (
+            BREAKER_STATE_KEY, BREAKER_REASON_KEY,
+            BREAKER_PAUSED_AT_KEY, BREAKER_LAST_FLOAT_KEY,
+            BREAKER_MANUAL_KEY, PaymentCircuitBreaker,
+        )
+        # Wipe any leaked state from prior tests, then explicitly
+        # seed CLOSED so `get_state()` returns CLOSED without going
+        # through the fail-safe HALF_OPEN default.
+        for _k in (
+            BREAKER_STATE_KEY, BREAKER_REASON_KEY, BREAKER_PAUSED_AT_KEY,
+            BREAKER_LAST_FLOAT_KEY, BREAKER_MANUAL_KEY,
+        ):
+            _cache.delete(_k)
+        _cache.set(BREAKER_STATE_KEY, PaymentCircuitBreaker.CLOSED, 60)
+    except Exception:
+        # Module not yet importable (settings race) · the next test
+        # that touches the breaker will fall through to HALF_OPEN
+        # which is the correct production default.
+        pass
     yield

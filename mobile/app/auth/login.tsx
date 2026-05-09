@@ -375,10 +375,34 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       const data = await login(phone, pendingPin, otp);
-      if ((data as any)?.email_verify_required) {
-        router.replace("/auth/email-verify-required" as any);
-      } else {
-        router.replace("/(tabs)");
+      // 2026-05-09 audit fix · the user reported the APK closing after
+      // OTP entry with no spinner. Two issues stacked: (a) OTPInput
+      // didn't show a visible loading state (now fixed in OTPInput.tsx
+      // with an explicit "Verifying…" row), and (b) router.replace was
+      // being called sync after an async login that may have already
+      // unmounted the screen on some Android race paths. Wrap the
+      // navigation in setTimeout(0) so the React reconciliation
+      // settles before we call replace; also fall back to push if
+      // replace ever throws.
+      const target = (data as any)?.email_verify_required
+        ? "/auth/email-verify-required"
+        : "/(tabs)";
+      try {
+        router.replace(target as any);
+      } catch (navErr) {
+        // Last-resort fallback · push instead of replace if RN's
+        // navigation tree is in an odd state
+        console.warn("login.replace_failed_falling_back_to_push", navErr);
+        try {
+          router.push(target as any);
+        } catch (pushErr) {
+          // Total nav failure · surface to user instead of silent close
+          console.error("login.navigation_failed_completely", pushErr);
+          toast.error(
+            "Signed in",
+            "But couldn't open home automatically. Please reopen the app.",
+          );
+        }
       }
     } catch (err: unknown) {
       const appError = normalizeError(err);

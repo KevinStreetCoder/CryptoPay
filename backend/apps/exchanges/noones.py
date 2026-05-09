@@ -286,6 +286,15 @@ def map_noones_status(s: str) -> str:
 
 
 def access_token_for(link) -> str:
+    """Return a valid Noones access_token, refreshing under row lock.
+
+    2026-05-09 audit fix H5 (mirrors coinbase.access_token_for) ·
+    concurrent callers serialize on `select_for_update` so the
+    refresh_token rotation isn't lost to a race.
+    """
+    from django.db import transaction
+    from .models import ExchangeLink as _ELink
+
     now = timezone.now()
     expires_at = link.access_token_expires_at
     if (
@@ -301,14 +310,30 @@ def access_token_for(link) -> str:
             "Link has no refresh token · user must re-authorize.",
         )
 
-    fresh = refresh_token(link.refresh_token)
-    link.access_token = fresh["access_token"]
-    link.refresh_token = fresh.get("refresh_token", link.refresh_token)
-    expires_in = int(fresh.get("expires_in", 3600))
-    link.access_token_expires_at = now + timedelta(seconds=expires_in - 30)
-    link.last_used_at = now
-    link.save(update_fields=[
-        "access_token", "refresh_token",
-        "access_token_expires_at", "last_used_at",
-    ])
-    return link.access_token
+    with transaction.atomic():
+        locked = _ELink.objects.select_for_update().get(pk=link.pk)
+        if (
+            locked.access_token
+            and locked.access_token_expires_at
+            and locked.access_token_expires_at - timezone.now() > timedelta(seconds=60)
+        ):
+            link.access_token = locked.access_token
+            link.refresh_token = locked.refresh_token
+            link.access_token_expires_at = locked.access_token_expires_at
+            return link.access_token
+
+        fresh = refresh_token(locked.refresh_token)
+        locked.access_token = fresh["access_token"]
+        locked.refresh_token = fresh.get("refresh_token", locked.refresh_token)
+        expires_in = int(fresh.get("expires_in", 3600))
+        locked.access_token_expires_at = timezone.now() + timedelta(seconds=expires_in - 30)
+        locked.last_used_at = timezone.now()
+        locked.save(update_fields=[
+            "access_token", "refresh_token",
+            "access_token_expires_at", "last_used_at",
+        ])
+        link.access_token = locked.access_token
+        link.refresh_token = locked.refresh_token
+        link.access_token_expires_at = locked.access_token_expires_at
+        link.last_used_at = locked.last_used_at
+        return link.access_token

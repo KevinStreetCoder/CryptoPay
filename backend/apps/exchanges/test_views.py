@@ -267,20 +267,65 @@ class ExchangeUnlinkTests(TestCase):
 
 class ExchangeWithdrawTests(TestCase):
     def setUp(self):
+        import uuid as _uuid
         self.user = User.objects.create_user(phone="+254700000015")
         self.client = _auth_client(self.user)
-        # Provision a Cpay deposit address for USDT
+        # Provision a Cpay deposit address for USDT · 2026-05-09 audit fix
+        # H1 needs `address_index` set + the address must match what
+        # `generate_deposit_address` produces. We mock that helper in
+        # each test so the wallet's `deposit_address` value passes.
         self.wallet = Wallet.objects.create(
             user=self.user, currency="USDT",
             deposit_address="TXdummyTronAddress123456789",
+            address_index=0,
             balance=Decimal("0"),
         )
+        # Common request_id helper · audit fix C1 requires it on
+        # every withdraw POST.
+        self.request_id = str(_uuid.uuid4())
+
+    def _withdraw_body(self, **overrides):
+        """Default body that exercises the new contract."""
+        body = {
+            "currency": "USDT",
+            "amount": "10",
+            "request_id": self.request_id,
+        }
+        body.update(overrides)
+        return body
+
+    def _patch_dependencies(self):
+        """Patch the cross-module deps the withdraw view now invokes:
+        deposit-address derivation, rate engine, platform-limits."""
+        from contextlib import ExitStack
+        es = ExitStack()
+        es.enter_context(mock.patch(
+            "apps.exchanges.views.generate_deposit_address",
+            create=True,
+            return_value="TXdummyTronAddress123456789",
+        ))
+        # Make sure generate_deposit_address resolves through the
+        # blockchain.services module path the view actually imports.
+        es.enter_context(mock.patch(
+            "apps.blockchain.services.generate_deposit_address",
+            return_value="TXdummyTronAddress123456789",
+        ))
+        es.enter_context(mock.patch(
+            "apps.rates.services.RateService.get_crypto_kes_rate",
+            return_value={"rate": "130", "raw_rate": "130"},
+        ))
+        es.enter_context(mock.patch(
+            "apps.payments.platform_limits.enforce_outgoing",
+            return_value=None,
+        ))
+        return es
 
     def test_400_when_not_linked(self):
-        r = self.client.post(
-            "/api/v1/exchanges/binance/withdraw/",
-            {"currency": "USDT", "amount": "10"}, format="json",
-        )
+        with self._patch_dependencies():
+            r = self.client.post(
+                "/api/v1/exchanges/binance/withdraw/",
+                self._withdraw_body(), format="json",
+            )
         self.assertEqual(r.status_code, 400)
         self.assertEqual(r.json()["error"], "not_linked")
 
@@ -289,10 +334,12 @@ class ExchangeWithdrawTests(TestCase):
             user=self.user, provider=ExchangeLink.PROVIDER_BINANCE,
             api_key="k", api_secret="s",
         )
-        r = self.client.post(
-            "/api/v1/exchanges/binance/withdraw/",
-            {"amount": "10"}, format="json",
-        )
+        with self._patch_dependencies():
+            r = self.client.post(
+                "/api/v1/exchanges/binance/withdraw/",
+                {"amount": "10", "request_id": self.request_id},
+                format="json",
+            )
         self.assertEqual(r.status_code, 400)
 
     def test_400_when_amount_zero_or_negative(self):
@@ -300,25 +347,72 @@ class ExchangeWithdrawTests(TestCase):
             user=self.user, provider=ExchangeLink.PROVIDER_BINANCE,
             api_key="k", api_secret="s",
         )
-        r = self.client.post(
-            "/api/v1/exchanges/binance/withdraw/",
-            {"currency": "USDT", "amount": "0"}, format="json",
-        )
+        with self._patch_dependencies():
+            r = self.client.post(
+                "/api/v1/exchanges/binance/withdraw/",
+                self._withdraw_body(amount="0"), format="json",
+            )
         self.assertEqual(r.status_code, 400)
+
+    def test_400_when_request_id_missing(self):
+        """Audit fix C1 · request_id is now mandatory."""
+        ExchangeLink.objects.create(
+            user=self.user, provider=ExchangeLink.PROVIDER_BINANCE,
+            api_key="k", api_secret="s",
+        )
+        with self._patch_dependencies():
+            r = self.client.post(
+                "/api/v1/exchanges/binance/withdraw/",
+                {"currency": "USDT", "amount": "10"},  # no request_id
+                format="json",
+            )
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("request_id", r.json()["error"])
+
+    def test_idempotent_replay_returns_existing_record(self):
+        """Audit fix C1 · same request_id returns the original
+        withdrawal · NEVER triggers a second exchange call."""
+        ExchangeLink.objects.create(
+            user=self.user, provider=ExchangeLink.PROVIDER_BINANCE,
+            api_key="K", api_secret="S",
+        )
+        with self._patch_dependencies():
+            with mock.patch(
+                "apps.exchanges.views.binance.withdraw",
+                return_value={"id": "binance_wd_123"},
+            ) as mwithdraw:
+                r1 = self.client.post(
+                    "/api/v1/exchanges/binance/withdraw/",
+                    self._withdraw_body(), format="json",
+                )
+                r2 = self.client.post(
+                    "/api/v1/exchanges/binance/withdraw/",
+                    self._withdraw_body(), format="json",  # same request_id
+                )
+        self.assertEqual(r1.status_code, 202)
+        self.assertEqual(r2.status_code, 202)
+        self.assertEqual(r1.json()["id"], r2.json()["id"])
+        # Binance was called EXACTLY ONCE despite two POSTs.
+        self.assertEqual(mwithdraw.call_count, 1)
+        # Only ONE row exists.
+        self.assertEqual(
+            ExchangeWithdrawal.objects.filter(user=self.user).count(), 1,
+        )
 
     def test_202_records_withdrawal_and_calls_binance(self):
         ExchangeLink.objects.create(
             user=self.user, provider=ExchangeLink.PROVIDER_BINANCE,
             api_key="K", api_secret="S",
         )
-        with mock.patch(
-            "apps.exchanges.views.binance.withdraw",
-            return_value={"id": "binance_wd_123"},
-        ) as mwithdraw:
-            r = self.client.post(
-                "/api/v1/exchanges/binance/withdraw/",
-                {"currency": "USDT", "amount": "10"}, format="json",
-            )
+        with self._patch_dependencies():
+            with mock.patch(
+                "apps.exchanges.views.binance.withdraw",
+                return_value={"id": "binance_wd_123"},
+            ) as mwithdraw:
+                r = self.client.post(
+                    "/api/v1/exchanges/binance/withdraw/",
+                    self._withdraw_body(), format="json",
+                )
         self.assertEqual(r.status_code, 202)
         self.assertEqual(r.json()["exchange_tx_id"], "binance_wd_123")
         wd = ExchangeWithdrawal.objects.get(user=self.user)
@@ -338,14 +432,15 @@ class ExchangeWithdrawTests(TestCase):
             api_key="K", api_secret="S",
         )
         from apps.exchanges import binance as bn
-        with mock.patch(
-            "apps.exchanges.views.binance.withdraw",
-            side_effect=bn.BinanceError("-4067", "Address not in whitelist"),
-        ):
-            r = self.client.post(
-                "/api/v1/exchanges/binance/withdraw/",
-                {"currency": "USDT", "amount": "10"}, format="json",
-            )
+        with self._patch_dependencies():
+            with mock.patch(
+                "apps.exchanges.views.binance.withdraw",
+                side_effect=bn.BinanceError("-4067", "Address not in whitelist"),
+            ):
+                r = self.client.post(
+                    "/api/v1/exchanges/binance/withdraw/",
+                    self._withdraw_body(), format="json",
+                )
         self.assertEqual(r.status_code, 400)
         self.assertEqual(r.json()["error"], "-4067")
         # Withdrawal row exists but marked failed

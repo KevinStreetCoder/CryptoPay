@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from "react";
-import { View, Text, TextInput, Pressable, Platform, useWindowDimensions, Keyboard, Image } from "react-native";
+import { View, Text, TextInput, Pressable, Platform, useWindowDimensions, Keyboard, Image, ActivityIndicator } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, getThemeColors } from "../constants/theme";
 import { useThemeMode } from "../stores/theme";
@@ -309,11 +309,43 @@ export function OTPInput({
         </View>
       ) : null}
 
-      {/* Loading affordance handled by the cell-dim above (opacity 0.55
-          + editable={!loading} on every TextInput). The screen-level
-          "Signing in..." / "Verifying..." copy lives on the consumer
-          (login.tsx, register.tsx, forgot-pin.tsx, etc.) so we don't
-          stack two spinners · 2026-04-26 user feedback. */}
+      {/* Loading state · 2026-05-09 audit fix · the previous
+          "dim cells only" treatment was too subtle on devices with
+          high contrast · users typed the OTP, watched the cells dim
+          for a fraction of a second, then the screen flipped without
+          any feedback that login was in progress. Now show an
+          explicit row with the brand spinner + "Verifying..." copy
+          so the user has a clear "request in flight" signal between
+          OTP submit and route transition. */}
+      {loading ? (
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 10,
+            paddingVertical: 12,
+            paddingHorizontal: 16,
+            marginBottom: 8,
+            borderRadius: 12,
+            backgroundColor: colors.primary[500] + "12",
+            borderWidth: 1,
+            borderColor: colors.primary[500] + "30",
+          }}
+        >
+          <ActivityIndicator size="small" color={colors.primary[400]} />
+          <Text
+            style={{
+              color: colors.primary[400],
+              fontSize: 13,
+              fontFamily: "DMSans_700Bold",
+              letterSpacing: 0.3,
+            }}
+          >
+            Verifying…
+          </Text>
+        </View>
+      ) : null}
 
       {onResend && (
         <Pressable

@@ -398,7 +398,21 @@ def access_token_for(link) -> str:
 
     Persists the (potentially rotated) refresh_token + new access_token
     back onto the ExchangeLink so subsequent calls don't refresh again.
+
+    2026-05-09 audit fix H5 · the previous implementation had a race
+    where two concurrent withdraw / status-poll requests both observed
+    an expired access_token, both called `refresh_token()` on Coinbase
+    (which ROTATES refresh tokens), and the second `save()` overwrote
+    the first thread's already-stored `refresh_token`. The losing
+    thread persists a STALE refresh_token · subsequent calls 401 with
+    `invalid_grant` and the link is bricked. Fix · wrap the refresh
+    in a `select_for_update` row lock inside an atomic block so only
+    one thread can refresh at a time; the second thread re-reads the
+    row after acquiring and uses the now-fresh token.
     """
+    from django.db import transaction
+    from .models import ExchangeLink as _ELink
+
     now = timezone.now()
     expires_at = link.access_token_expires_at
     if (
@@ -414,14 +428,37 @@ def access_token_for(link) -> str:
             "Link has no refresh token · user must re-authorize.",
         )
 
-    fresh = refresh_token(link.refresh_token)
-    link.access_token = fresh["access_token"]
-    link.refresh_token = fresh.get("refresh_token", link.refresh_token)
-    expires_in = int(fresh.get("expires_in", 7200))
-    link.access_token_expires_at = now + timedelta(seconds=expires_in - 30)
-    link.last_used_at = now
-    link.save(update_fields=[
-        "access_token", "refresh_token",
-        "access_token_expires_at", "last_used_at",
-    ])
-    return link.access_token
+    with transaction.atomic():
+        # Re-read the row with row-level lock · concurrent callers
+        # serialize here.
+        locked = _ELink.objects.select_for_update().get(pk=link.pk)
+        # Did another thread refresh while we waited for the lock?
+        if (
+            locked.access_token
+            and locked.access_token_expires_at
+            and locked.access_token_expires_at - timezone.now() > timedelta(seconds=60)
+        ):
+            # Yes · just sync the in-memory `link` and return.
+            link.access_token = locked.access_token
+            link.refresh_token = locked.refresh_token
+            link.access_token_expires_at = locked.access_token_expires_at
+            return link.access_token
+
+        # Still expired · do the refresh ourselves.
+        fresh = refresh_token(locked.refresh_token)
+        locked.access_token = fresh["access_token"]
+        locked.refresh_token = fresh.get("refresh_token", locked.refresh_token)
+        expires_in = int(fresh.get("expires_in", 7200))
+        locked.access_token_expires_at = timezone.now() + timedelta(seconds=expires_in - 30)
+        locked.last_used_at = timezone.now()
+        locked.save(update_fields=[
+            "access_token", "refresh_token",
+            "access_token_expires_at", "last_used_at",
+        ])
+        # Sync caller's in-memory `link` so subsequent attribute
+        # access reflects the new tokens.
+        link.access_token = locked.access_token
+        link.refresh_token = locked.refresh_token
+        link.access_token_expires_at = locked.access_token_expires_at
+        link.last_used_at = locked.last_used_at
+        return link.access_token
