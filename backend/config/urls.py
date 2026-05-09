@@ -61,6 +61,8 @@ urlpatterns = [
     path("api/v1/rates/", include("apps.rates.urls")),
     path("api/v1/notifications/", include("apps.notifications.urls")),
     path("api/v1/referrals/", include("apps.referrals.urls")),
+    # 2026-05-09 · external-exchange linking (Binance / Coinbase / Noones)
+    path("api/v1/exchanges/", include("apps.exchanges.urls")),
     # Public referral landing JSON — consumed by the mobile /r/[code]
     # screen and any server-rendered OG card. Top-level (not under
     # /api/v1) so the shareable URL cpay.co.ke/r/{code} resolves cleanly.
