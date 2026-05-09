@@ -422,6 +422,29 @@ CORS_ALLOWED_ORIGINS = env.list(
     ],
 )
 CORS_ALLOW_CREDENTIALS = True
+# 2026-05-09 fix · the Expo web bundle stamps every request with
+# `X-Cpay-Web: 1` so the backend knows to mint HttpOnly cookies on
+# /auth/login/ instead of returning the bearer pair in JSON. That
+# header is custom (non-CORS-safelisted) so the browser fires a
+# preflight OPTIONS asking the server to whitelist it. The default
+# `CORS_ALLOW_HEADERS` from django-cors-headers does NOT include it,
+# which made the preflight return a 200 without `x-cpay-web` in
+# `Access-Control-Allow-Headers` · the browser then silently aborted
+# the POST and the user saw "No connection" on every login attempt
+# from app.cpay.co.ke. Override the list to add `x-cpay-web` (kept
+# alongside the default safelist so nothing else regresses).
+CORS_ALLOW_HEADERS = (
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
+    "x-cpay-web",
+)
 
 # --- M-Pesa ---
 MPESA_ENVIRONMENT = env("MPESA_ENVIRONMENT", default="sandbox")
