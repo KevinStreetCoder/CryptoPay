@@ -22,6 +22,7 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { CryptoLogo } from "../../src/components/CryptoLogo";
+import { CryptoSelector } from "../../src/components/CryptoSelector";
 import { Button } from "../../src/components/Button";
 import { PinInput } from "../../src/components/PinInput";
 import { GlassCard } from "../../src/components/GlassCard";
@@ -226,72 +227,8 @@ export default function SwapScreen() {
       ? ({ boxShadow: `0 0 0 3px ${colors.primary[500]}15` } as any)
       : {};
 
-  // Currency selector pill
-  const CurrencyPill = ({
-    currency,
-    selected,
-    onPress,
-    showBalance,
-  }: {
-    currency: SwapCurrency;
-    selected: boolean;
-    onPress: () => void;
-    showBalance?: boolean;
-  }) => {
-    const w = wallets?.find((wl) => wl.currency === currency);
-    const bal = w ? parseFloat(w.balance) : 0;
-    return (
-      <Pressable
-        onPress={onPress}
-        style={({ hovered }: any) => ({
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 8,
-          paddingVertical: 10,
-          paddingHorizontal: 14,
-          borderRadius: 14,
-          backgroundColor: selected
-            ? colors.crypto[currency] + "18"
-            : hovered
-              ? tc.dark.elevated
-              : tc.dark.card,
-          borderWidth: 1.5,
-          borderColor: selected
-            ? colors.crypto[currency] + "40"
-            : tc.glass.border,
-          ...(isWeb
-            ? ({ cursor: "pointer", transition: "all 0.2s ease" } as any)
-            : {}),
-        })}
-      >
-        <CryptoLogo currency={currency} size={24} />
-        <View>
-          <Text
-            style={{
-              color: selected ? tc.textPrimary : tc.textSecondary,
-              fontSize: 14,
-              fontFamily: selected ? "DMSans_700Bold" : "DMSans_500Medium",
-            }}
-          >
-            {currency}
-          </Text>
-          {showBalance && (
-            <Text
-              style={{
-                color: tc.textMuted,
-                fontSize: 11,
-                fontFamily: "DMSans_400Regular",
-              }}
-            >
-              {bal.toFixed(
-                CURRENCIES[currency as CurrencyCode]?.decimals || 2
-              )}
-            </Text>
-          )}
-        </View>
-      </Pressable>
-    );
-  };
+  // CurrencyPill removed 2026-05-09 · replaced by <CryptoSelector>
+  // wrap-grid (matches Deposit-screen design across all payment screens).
 
   // ── PIN Entry Step ──
   if (step === "pin") {
@@ -905,24 +842,17 @@ export default function SwapScreen() {
                 icon="arrow-up-circle-outline"
                 iconColor={colors.primary[400]}
               />
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ gap: 8, marginBottom: 16 }}
-              >
-                {CRYPTO_OPTIONS.filter((c) => c !== toCurrency).map((opt) => (
-                  <CurrencyPill
-                    key={`from-${opt}`}
-                    currency={opt}
-                    selected={fromCurrency === opt}
-                    onPress={() => {
-                      setFromCurrency(opt);
-                      setAmount("");
-                    }}
-                    showBalance
-                  />
-                ))}
-              </ScrollView>
+              <View style={{ marginBottom: 16 }}>
+                <CryptoSelector
+                  options={CRYPTO_OPTIONS.filter((c) => c !== toCurrency) as any}
+                  selected={fromCurrency as any}
+                  wallets={wallets}
+                  onSelect={(c) => {
+                    setFromCurrency(c as SwapCurrency);
+                    setAmount("");
+                  }}
+                />
+              </View>
 
               {/* Balance display */}
               <View
@@ -1055,22 +985,14 @@ export default function SwapScreen() {
                 icon="arrow-down-circle-outline"
                 iconColor={colors.success}
               />
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ gap: 8, marginBottom: 16 }}
-              >
-                {CRYPTO_OPTIONS.filter((c) => c !== fromCurrency).map(
-                  (opt) => (
-                    <CurrencyPill
-                      key={`to-${opt}`}
-                      currency={opt}
-                      selected={toCurrency === opt}
-                      onPress={() => setToCurrency(opt)}
-                    />
-                  )
-                )}
-              </ScrollView>
+              <View style={{ marginBottom: 16 }}>
+                <CryptoSelector
+                  options={CRYPTO_OPTIONS.filter((c) => c !== fromCurrency) as any}
+                  selected={toCurrency as any}
+                  wallets={wallets}
+                  onSelect={(c) => setToCurrency(c as SwapCurrency)}
+                />
+              </View>
 
               {/* ── Conversion Preview ── */}
               <GlassCard

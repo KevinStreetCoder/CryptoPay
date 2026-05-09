@@ -187,7 +187,11 @@ class CoinbaseOAuthFlowTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertIn("authorize_url", r.json())
         state = r.json()["state"]
-        self.assertEqual(cache.get(f"oauth_state:{self.user.id}:coinbase"), state)
+        # 2026-05-09 H3 audit · state is now stored as
+        # {state, scheme} so the complete endpoint binds the
+        # redirect_uri the start endpoint derived. Assert new shape.
+        cached = cache.get(f"oauth_state:{self.user.id}:coinbase")
+        self.assertEqual(cached, {"state": state, "scheme": "app"})
 
     @override_settings(
         COINBASE_OAUTH_CLIENT_ID="", COINBASE_OAUTH_CLIENT_SECRET="",

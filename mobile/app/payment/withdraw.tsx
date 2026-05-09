@@ -23,6 +23,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as Clipboard from "expo-clipboard";
 import { CryptoLogo } from "../../src/components/CryptoLogo";
+import { CryptoSelector } from "../../src/components/CryptoSelector";
 import { Spinner } from "../../src/components/brand/Spinner";
 import { Button } from "../../src/components/Button";
 import { PinInput } from "../../src/components/PinInput";
@@ -642,61 +643,14 @@ export default function WithdrawScreen() {
           <View style={{ paddingHorizontal: isDesktop ? 0 : 20, marginTop: isDesktop ? 0 : 8 }}>
             {/* Currency Selector */}
             <SectionHeader title={t("wallet.withdraw")} icon="wallet-outline" iconColor={colors.primary[400]} />
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ gap: 8, marginBottom: 20 }}
-            >
-              {CRYPTO_OPTIONS.map((opt) => {
-                const w = wallets?.find((wl) => wl.currency === opt);
-                const bal = w ? parseFloat(w.balance) : 0;
-                const isSelected = currency === opt;
-                return (
-                  <Pressable
-                    key={opt}
-                    onPress={() => setCurrency(opt)}
-                    style={({ hovered }: any) => ({
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 8,
-                      paddingVertical: 10,
-                      paddingHorizontal: 14,
-                      borderRadius: 14,
-                      backgroundColor: isSelected
-                        ? colors.crypto[opt] + "18"
-                        : hovered
-                          ? tc.dark.elevated
-                          : tc.dark.card,
-                      borderWidth: 1.5,
-                      borderColor: isSelected ? colors.crypto[opt] + "40" : tc.glass.border,
-                      ...(isWeb ? { cursor: "pointer", transition: "all 0.2s ease" } as any : {}),
-                    })}
-                  >
-                    <CryptoLogo currency={opt} size={24} />
-                    <View>
-                      <Text
-                        style={{
-                          color: isSelected ? tc.textPrimary : tc.textSecondary,
-                          fontSize: 14,
-                          fontFamily: isSelected ? "DMSans_700Bold" : "DMSans_500Medium",
-                        }}
-                      >
-                        {opt}
-                      </Text>
-                      <Text
-                        style={{
-                          color: tc.textMuted,
-                          fontSize: 10,
-                          fontFamily: "DMSans_400Regular",
-                        }}
-                      >
-                        {bal > 0 ? bal.toLocaleString(undefined, { maximumFractionDigits: 6 }) : "0"}
-                      </Text>
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
+            <View style={{ marginBottom: 20 }}>
+              <CryptoSelector
+                options={CRYPTO_OPTIONS as any}
+                selected={currency as any}
+                wallets={wallets}
+                onSelect={(c) => setCurrency(c as WithdrawCurrency)}
+              />
+            </View>
 
             {/* Available Balance */}
             <View

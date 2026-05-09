@@ -127,7 +127,7 @@ def _client_ip(request) -> str:
     """
     remote = request.META.get("REMOTE_ADDR", "") or ""
     trusted = set(
-        getattr(settings, "TRUSTED_PROXY_IPS", [
+        getattr(app_settings, "TRUSTED_PROXY_IPS", [
             # Default · localhost (for the docker-internal nginx)
             "127.0.0.1", "::1",
             # Cloudflare's published IPv4 ranges are on

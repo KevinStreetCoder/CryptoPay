@@ -270,12 +270,25 @@ export default function PayBillScreen() {
               {savedBills.length > 0 && (
                 <View style={{ marginBottom: 20 }}>
                   <SectionHeader title="Saved Bills" icon="bookmark-outline" iconColor={colors.primary[400]} />
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={{ gap: 10, paddingBottom: 4 }}
+                  {/* 2026-05-09 design audit · was horizontal-scroll
+                      pill row · now 2-col flex-wrap grid (matches Deposit
+                      design across all payment screens). 1 orphan in last
+                      row spans full width. */}
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      flexWrap: "wrap",
+                      gap: 10,
+                      paddingBottom: 4,
+                    }}
                   >
-                    {savedBills.map((bill) => (
+                    {savedBills.map((bill, idx) => {
+                      const cols = width >= 900 ? 4 : width >= 600 ? 3 : 2;
+                      const isOrphan =
+                        savedBills.length % cols === 1 &&
+                        idx === savedBills.length - 1;
+                      const wPct = isOrphan ? "100%" : `${100 / cols - 2}%`;
+                      return (
                       <Pressable
                         key={bill.id}
                         onPress={() => handleSelectSavedBill(bill)}
@@ -288,8 +301,9 @@ export default function PayBillScreen() {
                               ? colors.primary[400] + "60"
                               : tc.glass.border,
                           paddingVertical: 12,
-                          paddingHorizontal: 16,
-                          minWidth: 140,
+                          paddingHorizontal: 14,
+                          flexBasis: wPct as any,
+                          flexGrow: 0,
                           opacity: pressed ? 0.85 : 1,
                           ...(isWeb ? { cursor: "pointer", transition: "all 0.15s ease" } as any : {}),
                         })}
@@ -332,8 +346,9 @@ export default function PayBillScreen() {
                           {bill.paybill_number} / {bill.account_number}
                         </Text>
                       </Pressable>
-                    ))}
-                  </ScrollView>
+                      );
+                    })}
+                  </View>
                 </View>
               )}
 
