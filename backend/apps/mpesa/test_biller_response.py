@@ -83,12 +83,20 @@ class BillerResponseCaptureTests(TestCase):
         assert "1234 5678 9012 3456 7890" in tx.biller_response
         assert "5.20 KWh" in tx.biller_response
 
-        # SMS should have been forwarded to the user's phone with the
-        # token preserved in the body.
-        assert send_sms_mock.called
-        called_phone, called_body = send_sms_mock.call_args[0][:2]
-        assert called_phone == self.user.phone
-        assert "1234 5678 9012 3456 7890" in called_body
+        # send_sms is called twice · once by our biller-response forward
+        # (rendered as "Cpay · KSh ... paid to KPLC PREPAID. <token>")
+        # and once by `send_transaction_notifications` (the standard
+        # i18n success SMS). Verify that AT LEAST ONE call carried the
+        # token to the user's phone.
+        forwarded = [
+            c for c in send_sms_mock.call_args_list
+            if c.args and c.args[0] == self.user.phone
+            and "1234 5678 9012 3456 7890" in (c.args[1] if len(c.args) > 1 else "")
+        ]
+        assert forwarded, (
+            f"expected at least one biller-response SMS containing the "
+            f"KPLC token; got {[c.args for c in send_sms_mock.call_args_list]}"
+        )
 
     @mock.patch("apps.mpesa.sasapay_views._verify_via_status_api", return_value=True)
     @mock.patch("apps.core.email.send_sms")
@@ -155,10 +163,11 @@ class BillerResponseCaptureTests(TestCase):
 
     @mock.patch("apps.mpesa.sasapay_views._verify_via_status_api", return_value=True)
     @mock.patch("apps.core.email.send_sms")
-    def test_b2c_does_not_relay_sms_to_sender(self, send_sms_mock, _):
+    def test_b2c_does_not_relay_biller_sms_to_sender(self, send_sms_mock, _):
         """B2C send-money · the recipient gets M-Pesa SMS direct from
-        Safaricom. We MUST NOT spam the sender with a relay too · they
-        already see the in-app receipt + email."""
+        Safaricom. The standard transaction-success SMS still fires
+        (that's a different channel), but we MUST NOT also send the
+        biller-response forward · which is paybill/till-only."""
         tx = self._make_tx(
             mpesa_paybill="",
             mpesa_account="",
@@ -177,10 +186,22 @@ class BillerResponseCaptureTests(TestCase):
         _process_successful_payment(callback, str(tx.id), "SWXX", "100.00")
 
         tx.refresh_from_db()
-        # biller_response IS captured (so receipt + detail screen show
-        # the synthesised confirmation), but no SMS to the sender.
-        assert tx.biller_response  # captured for receipt
-        assert not send_sms_mock.called  # no relay to sender
+        # biller_response IS captured (receipt + detail screen show
+        # the synthesised confirmation).
+        assert tx.biller_response
+
+        # The biller-forward SMS body always starts with "Cpay · KSh".
+        # Verify NO such message was queued for B2C · only the
+        # standard `sms.payment.success` line is allowed.
+        biller_forwards = [
+            c for c in send_sms_mock.call_args_list
+            if c.args and len(c.args) > 1
+            and c.args[1].startswith("Cpay · KSh")
+        ]
+        assert not biller_forwards, (
+            f"B2C must not produce a biller-response SMS; got "
+            f"{[c.args for c in biller_forwards]}"
+        )
 
     @mock.patch("apps.mpesa.sasapay_views._verify_via_status_api", return_value=True)
     @mock.patch("apps.core.email.send_sms")
@@ -199,9 +220,9 @@ class BillerResponseCaptureTests(TestCase):
             "SasaPayTransactionCode": "SWXX",
             "ThirdPartyTransactionCode": "UE9C03JV6G",
             "RecipientName": "KPLC PREPAID",
-            "TransactionAmount": "200.00",
+            "TransactionAmount": "100.00",  # matches default dest_amount
         }
-        _process_successful_payment(callback, str(tx.id), "SWXX", "200.00")
+        _process_successful_payment(callback, str(tx.id), "SWXX", "100.00")
 
         tx.refresh_from_db()
         assert "9999 8888 7777 6666 5555" in tx.biller_response

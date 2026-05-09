@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -26,6 +26,7 @@ import { PaymentStepper } from "../../src/components/PaymentStepper";
 import { GlassCard } from "../../src/components/GlassCard";
 import { useLocale } from "../../src/hooks/useLocale";
 import { NetworkBadge, currencyToChain } from "../../src/components/brand/NetworkBadge";
+import { getFrequent, type RecipientEntry } from "../../src/utils/recipientPrefs";
 
 const CRYPTO_OPTIONS: CurrencyCode[] = ["USDT", "USDC", "BTC", "ETH", "SOL"];
 
@@ -47,6 +48,16 @@ export default function SendMpesaScreen() {
   const [quote, setQuote] = useState<Quote | null>(null);
   const [loading, setLoading] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
+  // 2026-05-09 · top-3 frequent phone recipients · recipientPrefs.
+  const [frequentPhones, setFrequentPhones] = useState<RecipientEntry[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const list = await getFrequent("phone");
+      if (!cancelled) setFrequentPhones(list);
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
@@ -269,6 +280,60 @@ export default function SendMpesaScreen() {
                 marginTop: isDesktop ? 0 : 8,
               }}
             >
+              {/* 2026-05-09 · "Frequent" recipients · top-3 phones the
+                  user has paid most often (90-day half-life decay).
+                  Hidden on fresh devices. Tap to prefill the phone
+                  field with the masked number + resolved holder name. */}
+              {frequentPhones.length > 0 && (
+                <View style={{ marginBottom: 20 }}>
+                  <SectionHeader title="Frequent" icon="time-outline" iconColor={colors.primary[400]} />
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, paddingBottom: 4 }}>
+                    {frequentPhones.map((entry, idx) => {
+                      const cols = width >= 900 ? 4 : width >= 600 ? 3 : 2;
+                      const isOrphan = frequentPhones.length % cols === 1 && idx === frequentPhones.length - 1;
+                      const wPct = isOrphan ? "100%" : `${100 / cols - 2}%`;
+                      const isSelected = phone === entry.id;
+                      const masked = entry.id.length > 6
+                        ? `${entry.id.slice(0, 6)}${"•".repeat(Math.max(0, entry.id.length - 6))}`
+                        : entry.id;
+                      return (
+                        <Pressable
+                          key={`freq-phone-${entry.id}`}
+                          onPress={() => setPhone(entry.id)}
+                          style={({ pressed, hovered }: any) => ({
+                            backgroundColor: isWeb && hovered ? tc.dark.elevated : tc.glass.bg,
+                            borderRadius: 14,
+                            borderWidth: 1,
+                            borderColor: isSelected ? colors.primary[400] + "60" : tc.glass.border,
+                            paddingVertical: 12,
+                            paddingHorizontal: 14,
+                            flexBasis: wPct as any,
+                            flexGrow: 0,
+                            opacity: pressed ? 0.85 : 1,
+                            ...(isWeb ? { cursor: "pointer", transition: "all 0.15s ease" } as any : {}),
+                          })}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Frequent recipient ${entry.label || masked}`}
+                        >
+                          <Text
+                            style={{ color: tc.textPrimary, fontSize: 13, fontFamily: "DMSans_600SemiBold" }}
+                            numberOfLines={1}
+                          >
+                            {entry.label || "M-Pesa"}
+                          </Text>
+                          <Text
+                            style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_400Regular", marginTop: 4 }}
+                            numberOfLines={1}
+                          >
+                            {masked}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
+
               {/* Phone Number */}
               <SectionHeader
                 title={isPochi ? "Trader's phone number (Pochi)" : t("payment.phoneNumber")}

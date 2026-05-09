@@ -15,6 +15,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { paymentsApi } from "../../src/api/payments";
 import { normalizeError } from "../../src/utils/apiErrors";
 import { recordBankUse } from "../../src/utils/bankPrefs";
+import { recordRecipientUse } from "../../src/utils/recipientPrefs";
 import { useScreenSecurity } from "../../src/hooks/useScreenSecurity";
 import { useTransactionPoller } from "../../src/hooks/useTransactionPoller";
 import { useBiometricAuth } from "../../src/hooks/useBiometricAuth";
@@ -359,6 +360,35 @@ export default function ConfirmPaymentScreen() {
        // of just the raw paybill number. Falls back to the rail-specific
        // identifier when name lookup misses.
       const merchantName = (txData?.merchant_name || "").trim();
+
+      // 2026-05-09 · record the recipient against the per-rail
+      // frequency store so the next visit to paybill / till / send
+      // surfaces it under the "Frequent" section. Fire-and-forget ·
+      // storage failures never block the success transition.
+      try {
+        if (params.type === "paybill" && params.paybill_number) {
+          void recordRecipientUse("paybill", {
+            id: params.paybill_number,
+            account: params.account_number,
+            label: merchantName || undefined,
+          });
+        } else if (params.type === "till" && params.till_number) {
+          void recordRecipientUse("till", {
+            id: params.till_number,
+            label: merchantName || undefined,
+          });
+        } else if (params.type === "send" && params.phone) {
+          void recordRecipientUse("phone", {
+            id: params.phone,
+            label: merchantName || undefined,
+          });
+        } else if (params.type === "bank" && params.account_number) {
+          void recordRecipientUse("bank", {
+            id: params.account_number,
+            label: params.bank_name || params.bank_slug,
+          });
+        }
+      } catch {}
       router.replace({
         pathname: "/payment/success",
         params: {

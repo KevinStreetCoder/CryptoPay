@@ -27,6 +27,7 @@ import { CryptoSelector } from "../../src/components/CryptoSelector";
 import { PaymentStepper } from "../../src/components/PaymentStepper";
 import { GlassCard } from "../../src/components/GlassCard";
 import { useLocale } from "../../src/hooks/useLocale";
+import { getFrequent, type RecipientEntry } from "../../src/utils/recipientPrefs";
 
 const CRYPTO_OPTIONS: CurrencyCode[] = ["USDT", "USDC", "BTC", "ETH", "SOL"];
 
@@ -47,6 +48,20 @@ export default function PayBillScreen() {
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const [savedBills, setSavedBills] = useState<SavedPaybill[]>([]);
   const [loadingSaved, setLoadingSaved] = useState(false);
+  // 2026-05-09 · top-3 paybills the user has paid most recently /
+  // frequently. Read from recipientPrefs (90-day half-life decay) so
+  // a one-off burst doesn't pin a bill forever. Fresh devices start
+  // empty · the section is hidden when the list is empty.
+  const [frequentBills, setFrequentBills] = useState<RecipientEntry[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const list = await getFrequent("paybill");
+      if (!cancelled) setFrequentBills(list);
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Fetch saved paybills on mount
   const fetchSavedBills = useCallback(async () => {
@@ -266,6 +281,67 @@ export default function PayBillScreen() {
                 marginTop: isDesktop ? 0 : 8,
               }}
             >
+              {/* 2026-05-09 · "Frequent" paybills · top-3 by use count
+                  with 90-day half-life decay (recipientPrefs). Hidden on
+                  fresh devices · doesn't conflict with Saved Bills which
+                  are explicit user pins kept server-side. Tap to prefill
+                  the form. Same wrap-grid card design as Saved. */}
+              {frequentBills.length > 0 && (
+                <View style={{ marginBottom: 20 }}>
+                  <SectionHeader title="Frequent" icon="time-outline" iconColor={colors.primary[400]} />
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, paddingBottom: 4 }}>
+                    {frequentBills.map((entry, idx) => {
+                      const cols = width >= 900 ? 4 : width >= 600 ? 3 : 2;
+                      const isOrphan = frequentBills.length % cols === 1 && idx === frequentBills.length - 1;
+                      const wPct = isOrphan ? "100%" : `${100 / cols - 2}%`;
+                      const isSelected = paybillNumber === entry.id && accountNumber === (entry.account || "");
+                      return (
+                        <Pressable
+                          key={`freq-${entry.id}-${entry.account || "_"}`}
+                          onPress={() => {
+                            setPaybillNumber(entry.id);
+                            if (entry.account) setAccountNumber(entry.account);
+                            if (entry.label) setSaveLabel(entry.label);
+                          }}
+                          style={({ pressed, hovered }: any) => ({
+                            backgroundColor: isWeb && hovered ? tc.dark.elevated : tc.glass.bg,
+                            borderRadius: 14,
+                            borderWidth: 1,
+                            borderColor: isSelected ? colors.primary[400] + "60" : tc.glass.border,
+                            paddingVertical: 12,
+                            paddingHorizontal: 14,
+                            flexBasis: wPct as any,
+                            flexGrow: 0,
+                            opacity: pressed ? 0.85 : 1,
+                            ...(isWeb ? { cursor: "pointer", transition: "all 0.15s ease" } as any : {}),
+                          })}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Frequent paybill ${entry.label || entry.id}`}
+                        >
+                          <Text
+                            style={{ color: tc.textPrimary, fontSize: 13, fontFamily: "DMSans_600SemiBold" }}
+                            numberOfLines={1}
+                          >
+                            {entry.label || `Paybill ${entry.id}`}
+                          </Text>
+                          <Text
+                            style={{
+                              color: tc.textMuted,
+                              fontSize: 12,
+                              fontFamily: "DMSans_400Regular",
+                              marginTop: 4,
+                            }}
+                            numberOfLines={1}
+                          >
+                            {entry.id}{entry.account ? ` · ${entry.account}` : ""}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
+
               {/* Saved Bills */}
               {savedBills.length > 0 && (
                 <View style={{ marginBottom: 20 }}>

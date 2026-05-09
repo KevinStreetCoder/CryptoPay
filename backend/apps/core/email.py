@@ -425,6 +425,11 @@ def send_transaction_receipt(user, transaction):
         "tx_type_label": tx_type_label,
         "status": str(transaction.status),
         "reference": ref,
+        # 2026-05-09 · full UUID for the universal-link deep-link
+        # (`https://app.cpay.co.ke/payment/detail?id=<full-uuid>`).
+        # `reference` is the truncated short code shown in the table;
+        # the URL needs the canonical UUID Expo Router routes by.
+        "transaction_id": str(transaction.id),
         "timestamp": transaction.created_at.isoformat(),
         "crypto_amount": crypto_amount,
         "crypto_currency": crypto_currency,
