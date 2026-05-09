@@ -156,6 +156,43 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
+# --- Cloudflare R2 (object storage for KYC docs + receipts) ---
+# 2026-05-09 · the local-filesystem MEDIA_ROOT doesn't survive a
+# container rebuild and isn't audit-trail-grade. R2 is S3-compatible,
+# free tier covers our scale, and zero egress fees on Cloudflare.
+#
+# When R2_BUCKET is set, Django uploads land in R2 instead of the
+# local FS. Empty values fall back to the local FS path above (dev
+# default, no credentials needed).
+#
+# Path layout in R2 · `kyc/<user_id>/<kind>.<ext>` for KYC docs,
+# `receipts/<tx_id>.pdf` for receipts. The object keys never contain
+# user phone or email · those would leak via bucket-listing
+# enumeration if R2 access is ever misconfigured.
+R2_ACCESS_KEY_ID = _gs("R2_ACCESS_KEY_ID", default=env("R2_ACCESS_KEY_ID", default=""))
+R2_SECRET_ACCESS_KEY = _gs("R2_SECRET_ACCESS_KEY", default=env("R2_SECRET_ACCESS_KEY", default=""))
+R2_ACCOUNT_ID = env("R2_ACCOUNT_ID", default="")
+R2_BUCKET = env("R2_BUCKET", default="")
+R2_CUSTOM_DOMAIN = env("R2_CUSTOM_DOMAIN", default="")  # e.g. files.cpay.co.ke
+
+if R2_BUCKET and R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY and R2_ACCOUNT_ID:
+    # django-storages' S3 backend works against R2's S3-compatible API.
+    # The endpoint URL is per-account.
+    INSTALLED_APPS_EXTRA = ["storages"]
+    DEFAULT_FILE_STORAGE = "apps.core.storage.R2MediaStorage"
+    AWS_S3_ENDPOINT_URL = f"https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+    AWS_S3_REGION_NAME = "auto"  # R2 ignores region, "auto" works
+    AWS_S3_SIGNATURE_VERSION = "s3v4"
+    AWS_STORAGE_BUCKET_NAME = R2_BUCKET
+    AWS_ACCESS_KEY_ID = R2_ACCESS_KEY_ID
+    AWS_SECRET_ACCESS_KEY = R2_SECRET_ACCESS_KEY
+    AWS_S3_ADDRESSING_STYLE = "virtual"
+    AWS_DEFAULT_ACL = None  # R2 doesn't support ACLs
+    AWS_QUERYSTRING_AUTH = True  # signed URLs by default · no public bucket
+    AWS_QUERYSTRING_EXPIRE = 3600  # 1 hour signed URL lifetime
+    if R2_CUSTOM_DOMAIN:
+        AWS_S3_CUSTOM_DOMAIN = R2_CUSTOM_DOMAIN
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # --- Redis ---
@@ -480,6 +517,12 @@ MPESA_CALLBACK_HMAC_KEY = _gs("MPESA_CALLBACK_HMAC_KEY", default=env("MPESA_CALL
 # (we SHA-256 + b64-wrap to derive a Fernet key). Generate with:
 #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 TOTP_ENCRYPTION_KEY = _gs("TOTP_ENCRYPTION_KEY", default=env("TOTP_ENCRYPTION_KEY", default=""))
+# Phase-2 (2026-05-09) · KMS-wrapped Fernet key for TOTP at-rest
+# encryption. Stored as a base64 ciphertext in Secret Manager (encrypted
+# by cpay-prod-wallet KMS). When set, takes precedence over the legacy
+# plain TOTP_ENCRYPTION_KEY · empty until the operator runs
+# `manage.py rotate_totp_key --kms-wrap`. See apps/core/totp_keystore.py.
+TOTP_FERNET_KEY_CIPHERTEXT = _gs("TOTP_FERNET_KEY_CIPHERTEXT", default="")
 
 # --- Payment provider switch ---
 # Three rails supported, switched purely by env var so we can flip

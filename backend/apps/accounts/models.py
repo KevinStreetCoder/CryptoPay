@@ -25,26 +25,47 @@ def _fernet_from_legacy_key() -> Fernet:
 
 
 def _fernet_from_primary_key() -> Fernet:
-    """Build a Fernet instance from the dedicated TOTP_ENCRYPTION_KEY.
+    """Build a Fernet instance for TOTP at-rest encryption.
 
-    Audit HIGH-1 fix · TOTP secrets used to be encrypted under a Fernet
-    key derived from SECRET_KEY. Reusing SECRET_KEY for at-rest
-    encryption means a single secret leak (Sentry capture, log line,
-    repo blob) decrypts every user's TOTP seed and bypasses 2FA on the
-    entire user base. The dedicated `TOTP_ENCRYPTION_KEY` env var has a
-    separate rotation lifecycle and is never used as a Django framework
-    key.
+    Phase-2 (2026-05-09) · the canonical path is now the KMS-wrapped
+    `TOTP_FERNET_KEY_CIPHERTEXT` from Secret Manager, decrypted on
+    boot via apps.core.totp_keystore.get_totp_fernet(). When that
+    returns None (operator hasn't migrated yet) we fall through to
+    the legacy `TOTP_ENCRYPTION_KEY` env path that originally fixed
+    audit HIGH-1.
 
-    Format: either a Fernet-shape key (base64-urlsafe, 44 chars, ends
-    with '=') OR any high-entropy string we'll SHA-256 + b64-wrap to
-    derive a Fernet key from. Hex generated with
-    `python -c "import secrets; print(secrets.token_hex(32))"` works.
+    Audit HIGH-1 (the original fix): TOTP secrets used to be encrypted
+    under a Fernet key derived from SECRET_KEY. Reusing SECRET_KEY for
+    at-rest encryption means a single secret leak decrypts every user's
+    TOTP seed. The dedicated key has a separate rotation lifecycle.
+
+    Phase-2 (this update): wrapping the Fernet key in KMS lifts the
+    threat model again · even if Secret Manager is compromised, the
+    KMS key is needed to decrypt. Rotating the master KMS key
+    invalidates all prior TOTP encryptions (re-encryption via
+    `manage.py rotate_totp_key`).
+
+    Format: when not KMS-wrapped, accepts either a Fernet-shape key
+    (base64-urlsafe, 44 chars, ends with '=') OR any high-entropy
+    string we'll SHA-256 + b64-wrap.
     """
+    # Phase-2 path · KMS-wrapped Fernet key from Secret Manager.
+    try:
+        from apps.core.totp_keystore import get_totp_fernet
+        kms_wrapped = get_totp_fernet()
+        if kms_wrapped is not None:
+            return kms_wrapped
+    except Exception:
+        # Don't fail-open · the legacy path below covers the dev case
+        # AND the migration window. If KMS is broken in prod we fall
+        # through to the env key which is still better than crashing
+        # every TOTP read · users can still log in.
+        pass
+
+    # Legacy path · plain TOTP_ENCRYPTION_KEY.
     primary = getattr(settings, "TOTP_ENCRYPTION_KEY", "")
     if not primary:
         if settings.DEBUG:
-            # Dev fallback so existing test fixtures work without
-            # operators having to set the env. Production refuses.
             return _fernet_from_legacy_key()
         raise RuntimeError(
             "TOTP_ENCRYPTION_KEY is not set. Refusing to fall back to "
