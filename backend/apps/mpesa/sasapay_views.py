@@ -252,6 +252,46 @@ def _authenticated(request, body_bytes: bytes) -> tuple[bool, str | None]:
         if ok:
             return True, tx_id
 
+    # ── IP-allowlist + status-API verify path ──
+    # SasaPay's documented HMAC-SHA512 callback signing applies to
+    # OUTBOUND B2B / B2C transaction-result notifications, not to the
+    # INBOUND C2B IPN (Pay Bill / Till deposit notification). Production
+    # traffic from `47.129.43.141` (a documented SasaPay host) hits us
+    # WITHOUT any signature header. The IP-allowlist middleware
+    # (`MpesaIPWhitelistMiddleware` for the `/api/v1/sasapay/` prefix)
+    # has already gated the request before it reached this view, so by
+    # this point we know the source IP is one of the documented SasaPay
+    # `/32` hosts. Combined with the mandatory status-API re-verification
+    # in `_process_successful_payment` (gated on
+    # SASAPAY_VERIFY_CALLBACKS_VIA_API, default True), this gives us:
+    #   1. Pre-view IP allowlist  (this stops random internet traffic)
+    #   2. Idempotency dedup     (stops replay)
+    #   3. Status-API confirm    (cryptographic trust anchor · SasaPay's
+    #                             own server is the source of truth before
+    #                             any wallet credit happens)
+    # so we accept the unsigned IPN here. If the operator wants to be
+    # stricter (e.g. once SasaPay turns on signed C2B in a future API
+    # version), set SASAPAY_TRUST_IP_FOR_UNSIGNED_IPN=False.
+    if (
+        getattr(settings, "SASAPAY_VERIFY_CALLBACKS_VIA_API", True)
+        and getattr(settings, "SASAPAY_TRUST_IP_FOR_UNSIGNED_IPN", True)
+    ):
+        client_ip = request.META.get("REMOTE_ADDR", "?")
+        # Log the headers we DID receive · helps if SasaPay later starts
+        # sending a signature header under a different name.
+        sig_headers = {
+            k: v[:32] + "..." if len(v) > 32 else v
+            for k, v in request.headers.items()
+            if "sign" in k.lower() or "sasapay" in k.lower() or "auth" in k.lower()
+        }
+        logger.info(
+            "sasapay_callback: accepting unsigned IPN from allowlisted IP %s "
+            "· will re-verify via status API before credit (sig_headers=%s)",
+            client_ip,
+            sig_headers or "none",
+        )
+        return True, None
+
     # Dev escape hatch · never fires in production. The production
     # guard refuses to boot if SASAPAY_WEBHOOK_SECRET is empty when
     # PAYMENT_PROVIDER=sasapay, so we won't get here unless DEBUG is on.

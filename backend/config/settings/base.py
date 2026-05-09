@@ -566,6 +566,21 @@ SASAPAY_CALLBACK_HMAC_KEY = _gs("SASAPAY_CALLBACK_HMAC_KEY", default=env("SASAPA
 # always leave it enabled.
 SASAPAY_VERIFY_CALLBACKS_VIA_API = env.bool("SASAPAY_VERIFY_CALLBACKS_VIA_API", default=True)
 
+# 2026-05-09 · SasaPay's documented HMAC-SHA512 callback signing applies
+# to OUTBOUND B2B / B2C transaction-result notifications, but inbound
+# C2B IPN (Pay Bill / Till deposit notifications) do NOT carry a
+# signature header in current production traffic. Real-world test:
+# callbacks from `47.129.43.141` (a documented SasaPay /32) arrive
+# without `sasapay_signature`. When True (default), the callback view
+# accepts unsigned IPN if the source IP is in `SASAPAY_ALLOWED_IPS`
+# AND `SASAPAY_VERIFY_CALLBACKS_VIA_API` is True (so we cross-check
+# with the Transaction Status API before any wallet credit). Flip
+# this off only if SasaPay turns on signed C2B in a future API version
+# and you want to enforce signature presence.
+SASAPAY_TRUST_IP_FOR_UNSIGNED_IPN = env.bool(
+    "SASAPAY_TRUST_IP_FOR_UNSIGNED_IPN", default=True
+)
+
 # --- IntaSend (third payment provider · approved 2026-05-08) ---
 # Set PAYMENT_PROVIDER=intasend to route through IntaSend instead of
 # Daraja or SasaPay. Onboarding at developers.intasend.com · KYB +
