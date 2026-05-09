@@ -317,9 +317,15 @@
         </div>
         {% endif %}
         {% if mpesa_receipt %}
-        <div class="row last">
+        <div class="row{% if not biller_response %} last{% endif %}">
           <div class="k">M-Pesa ref</div>
           <div class="v">{{ mpesa_receipt }}</div>
+        </div>
+        {% endif %}
+        {% if biller_response %}
+        <div class="row last" style="display:block;padding-top:14px;">
+          <div class="k" style="margin-bottom:6px;">Biller response</div>
+          <div class="v" style="white-space:pre-wrap;font-family:'Courier New',monospace;font-size:11px;line-height:1.5;color:#0B1220;background:#F5F7FB;padding:10px 12px;border-radius:8px;border:1px solid #E5E9F2;text-align:left;">{{ biller_response }}</div>
         </div>
         {% endif %}
       </div>

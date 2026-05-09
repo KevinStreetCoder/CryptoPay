@@ -769,14 +769,17 @@ export default function TransactionDetailScreen() {
             >
               {/* Common fields */}
               {/* 2026-05-09 · merchant_name leads when present
-                  ("Paid To: KPLC PREPAID") so the customer sees who
-                  they actually paid before the raw paybill number.
-                  Falls through to phone/paybill/till for older txns
-                  that pre-date the SasaPay merchant lookup. */}
-              {tx.merchant_name && (tx.mpesa_paybill || tx.mpesa_till) ? renderDetailRow(
-                "Paid To",
+                  ("Paid To: KPLC PREPAID" / "Paid To: Kevin Kareithi")
+                  so the customer sees who they actually paid before the
+                  raw identifier. Now covers all three M-Pesa rails ·
+                  paybill, till, AND B2C phone (was missing for phone
+                  before · users saw only the masked number). Falls
+                  through to phone/paybill/till for older txns that
+                  pre-date the SasaPay merchant / phone-holder lookup. */}
+              {tx.merchant_name && (tx.mpesa_paybill || tx.mpesa_till || tx.mpesa_phone) ? renderDetailRow(
+                tx.mpesa_paybill ? "Paid To" : tx.mpesa_till ? "Bought From" : "Sent To",
                 tx.merchant_name,
-                "business-outline"
+                tx.mpesa_paybill ? "business-outline" : tx.mpesa_till ? "cart-outline" : "person-outline"
               ) : null}
 
               {isMpesaPayment && renderDetailRow(
@@ -819,6 +822,61 @@ export default function TransactionDetailScreen() {
                     "receipt-outline",
                     { copiable: true }
                   )
+                : null}
+
+              {/* 2026-05-09 · biller response · KPLC prepaid token,
+                  DSTV confirmation, Nairobi Water units, etc. Rendered
+                  as a copiable monospace block so the user can paste
+                  the token into the meter without re-typing. Hidden
+                  when the field is empty (older txns + B2C send-money
+                  rails that have no biller response). */}
+              {tx.biller_response
+                ? (
+                  <View style={{
+                    paddingVertical: 14,
+                    borderBottomWidth: 1,
+                    borderBottomColor: tc.glass.border,
+                  }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                      <Ionicons name="key-outline" size={16} color={tc.textMuted} />
+                      <Text style={{ color: tc.textMuted, fontSize: 14, fontFamily: "DMSans_400Regular" }}>
+                        Biller Response
+                      </Text>
+                    </View>
+                    <Pressable
+                      onPress={async () => {
+                        if (Platform.OS === "web") {
+                          try { await navigator.clipboard.writeText(tx.biller_response || ""); } catch {}
+                        } else {
+                          await Clipboard.setStringAsync(tx.biller_response || "");
+                        }
+                        toast.success("Copied", "Biller response copied to clipboard");
+                      }}
+                      style={{
+                        backgroundColor: tc.dark.elevated,
+                        borderWidth: 1,
+                        borderColor: tc.glass.border,
+                        borderRadius: 10,
+                        padding: 12,
+                      }}
+                    >
+                      <Text
+                        selectable
+                        style={{
+                          color: tc.textPrimary,
+                          fontSize: 12,
+                          fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+                          lineHeight: 18,
+                        }}
+                      >
+                        {tx.biller_response}
+                      </Text>
+                      <Text style={{ color: tc.textMuted, fontSize: 11, marginTop: 6, fontFamily: "DMSans_400Regular" }}>
+                        Tap to copy · also forwarded via SMS to your phone.
+                      </Text>
+                    </Pressable>
+                  </View>
+                )
                 : null}
 
               {renderDetailRow(

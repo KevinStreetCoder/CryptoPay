@@ -254,6 +254,10 @@ def generate_receipt_pdf(transaction):
         # 2026-05-09 · real, scannable QR (replaces the CSS dot pattern).
         "verify_url": verify_url,
         "qr_data_uri": qr_data_uri,
+        # 2026-05-09 · KPLC / utility token relay. Shown as a literal
+        # block at the bottom of the receipt so the user can read the
+        # prepaid token from the printed PDF if the SMS forward fails.
+        "biller_response": (getattr(transaction, "biller_response", "") or "").strip(),
     }
 
     html_content = render_to_string("pdf/receipt.html", context)

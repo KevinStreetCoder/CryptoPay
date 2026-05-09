@@ -435,6 +435,11 @@ def send_transaction_receipt(user, transaction):
         "merchant_name": merchant_name or None,
         "recipient_label": recipient_label or None,
         "recipient_sub": recipient_sub or None,
+        # 2026-05-09 · KPLC / utility token relay (e.g. prepaid token
+        # SMS that the biller would have sent to Cpay's B2B sender).
+        "biller_response": (
+            getattr(transaction, "biller_response", "") or ""
+        ).strip() or None,
     }
 
     try:
@@ -550,9 +555,24 @@ def send_transaction_notifications(user, transaction):
     # PDF receipt generation (keep as Celery — heavy IO). PDF itself is
     # emailed when the user chooses to receive it, so we always generate
     # so the UI can link to it.
+    #
+    # 2026-05-09 STALE-STATUS race fix · the saga's `complete()` is
+    # almost always called inside `transaction.atomic()` (every DRF
+    # request when ATOMIC_REQUESTS is on, plus the explicit atomic
+    # blocks in saga + sasapay_views). Calling `.delay()` directly
+    # would queue the task immediately · the worker can pick it up
+    # BEFORE Postgres commits the COMPLETED status update, rendering
+    # a "PENDING" PDF for an already-settled tx. `transaction.on_commit`
+    # defers the queueing until AFTER the outer commit lands. Outside
+    # an atomic block it executes synchronously, so non-atomic callers
+    # behave identically to the old `.delay()` line.
     try:
+        from django.db import transaction as db_transaction
         from apps.core.tasks import generate_pdf_receipt_task
-        generate_pdf_receipt_task.delay(transaction_id=str(transaction.id))
+        tx_id = str(transaction.id)
+        db_transaction.on_commit(
+            lambda: generate_pdf_receipt_task.delay(transaction_id=tx_id)
+        )
         logger.info(f"Queued PDF receipt for transaction {transaction.id}")
     except Exception as e:
         logger.error(f"Failed to queue PDF receipt: {e}")

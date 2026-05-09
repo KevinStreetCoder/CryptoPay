@@ -23,6 +23,12 @@ export interface Transaction {
   // (Daraja path or transient SasaPay outage); UI falls through to
   // the generic "Paybill <number>" rendering.
   merchant_name?: string;
+  // 2026-05-09 · KPLC / utility token relay. Biller's M-Pesa response
+  // captured from the SasaPay B2B callback's ResultDesc · contains
+  // the prepaid token / receipt the biller would have sent to Cpay's
+  // sender phone. Surfaced on the Transaction Details screen so
+  // utility-paybill users can read their token directly in-app.
+  biller_response?: string;
   excise_duty_amount: string;
   chain: string;
   tx_hash: string;

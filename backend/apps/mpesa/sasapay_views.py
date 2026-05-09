@@ -654,7 +654,69 @@ def _process_successful_payment(
     if callback_recipient and not tx.merchant_name:
         tx.merchant_name = callback_recipient[:120]
         update_fields.append("merchant_name")
+
+    # 2026-05-09 · KPLC / utility-token relay. SasaPay's B2B result
+    # callback for utility paybills (KPLC 888880, DSTV, Zuku, Nairobi
+    # Water, etc.) returns the biller's M-Pesa response in `ResultDesc`
+    # — for KPLC prepaid that's the literal SMS the user would have
+    # received if they'd paid from their own M-Pesa: e.g.
+    #   "Confirmed. KSH 100.00 sent to KPLC PREPAID for account
+    #    37123456789. Token: 1234 5678 9012 3456 7890. Units: 5.20
+    #    KWh."
+    # Capture it on the tx so the receipt + success screen + email +
+    # SMS can render it. Cpay's B2B sender phone receives the actual
+    # SMS too, but we forward to the real user further down so they
+    # get the token where they expect it.
+    biller_resp = (data.get("ResultDesc") or data.get("resultDesc") or "").strip()
+    # SasaPay sometimes nests the biller text inside a structured
+    # `ResultParameter` array · pull a `BillReferenceNumber` or
+    # `ReceiptNumber` style field if the flat ResultDesc is generic.
+    if not biller_resp or biller_resp.lower() in ("transaction processed successfully", "success", "the service request is processed successfully."):
+        params_block = data.get("ResultParameter") or data.get("ResultParameters") or []
+        if isinstance(params_block, dict):
+            params_block = (params_block.get("ResultParameter") or [])
+        if isinstance(params_block, list):
+            chunks = []
+            for item in params_block:
+                if not isinstance(item, dict):
+                    continue
+                key = (item.get("Key") or item.get("key") or "").lower()
+                value = item.get("Value") if "Value" in item else item.get("value")
+                if value is None:
+                    continue
+                if any(t in key for t in ("token", "receipt", "billref", "transaction", "units", "kplc", "amount")):
+                    chunks.append(f"{item.get('Key') or item.get('key')}: {value}")
+            if chunks:
+                biller_resp = "\n".join(chunks)
+    if biller_resp and not tx.biller_response:
+        tx.biller_response = biller_resp[:1000]
+        update_fields.append("biller_response")
+
     tx.save(update_fields=update_fields)
+
+    # 2026-05-09 · forward the captured biller response (KPLC token /
+    # utility receipt) to the user's phone via SMS so it actually
+    # reaches the meter / set-top owner. Best-effort · the receipt
+    # + success screen + email already carry the same text. Skip for
+    # B2C send-money rail · those have no biller response.
+    if tx.biller_response and tx.user.phone and (tx.mpesa_paybill or tx.mpesa_till):
+        try:
+            from apps.core.email import send_sms
+            preview = tx.biller_response[:280]
+            sms_body = (
+                f"Cpay · {tx.merchant_name or 'Bill payment'} · "
+                f"KSh {tx.dest_amount}\n{preview}"
+            )[:480]  # 3-segment SMS cap to keep cost predictable
+            send_sms(tx.user.phone, sms_body)
+            logger.info(
+                "biller_token_forwarded · tx=%s phone=%s***",
+                tx.id, str(tx.user.phone)[:6],
+            )
+        except Exception:
+            logger.exception(
+                "biller_token_forward_failed",
+                extra={"tx_id": str(tx.id)},
+            )
 
     # For Buy Crypto (BUY type with STK Push): credit the crypto wallet.
     if tx.type in ("BUY", "DEPOSIT") and tx.saga_data and tx.saga_data.get("quote"):

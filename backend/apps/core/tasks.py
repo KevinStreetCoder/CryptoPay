@@ -299,7 +299,22 @@ def send_sms_task(self, phone, message):
     retry_backoff_max=300,
 )
 def generate_pdf_receipt_task(self, transaction_id):
-    """Generate a branded PDF receipt for a completed transaction."""
+    """Generate a branded PDF receipt for a completed transaction.
+
+    2026-05-09 STALE-STATUS race fix · the saga's `complete()` calls
+    `tx.save()` and then `send_transaction_notifications` which calls
+    `generate_pdf_receipt_task.delay()`. When that runs inside an
+    enclosing `transaction.atomic()` (every DRF request when
+    ATOMIC_REQUESTS is on), the Celery worker can pick up the task
+    BEFORE the outer commit · reading a stale row that still says
+    `processing`. The user then sees a "PENDING" pill on the printed
+    PDF for a transaction that's actually completed.
+
+    Two-layer defence: (1) the queueing site uses
+    `transaction.on_commit`, (2) this task additionally retries when it
+    sees a non-terminal status, in case the on_commit layer is bypassed
+    by direct callers / tests.
+    """
     from apps.payments.models import Transaction
 
     try:
@@ -307,6 +322,21 @@ def generate_pdf_receipt_task(self, transaction_id):
     except Transaction.DoesNotExist:
         logger.error(f"Transaction {transaction_id} not found for PDF generation")
         return None
+
+    # If the row is still mid-flight, retry with backoff · we only want
+    # to render a receipt once the saga has its terminal state. Cap the
+    # retries at 3 so a stuck "processing" row doesn't cycle forever.
+    if str(tx.status).lower() not in ("completed", "failed"):
+        logger.info(
+            "pdf_receipt.deferred · tx %s status=%s · retrying after commit lands",
+            transaction_id, tx.status,
+        )
+        try:
+            self.retry(countdown=2, max_retries=3)
+        except Exception:
+            # Out of retries · render anyway against whatever state the
+            # row is in; the user can re-download later if status flips.
+            pass
 
     from apps.core.pdf_receipt import generate_receipt_pdf
 

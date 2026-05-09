@@ -66,6 +66,22 @@ class Transaction(models.Model):
     # validate the value beyond a length cap.
     merchant_name = models.CharField(max_length=120, blank=True)
 
+    # 2026-05-09 · KPLC / utility-token relay. When the user pays a
+    # utility paybill (KPLC prepaid 888880, DSTV, Zuku, etc.) the biller
+    # SMS-sends the prepaid token / receipt to the M-Pesa account that
+    # made the payment · which is Cpay's B2B sender, NOT the user's
+    # phone. SasaPay's B2B result callback returns the biller's response
+    # description (which contains the token for utility paybills) in
+    # `ResultDesc` / `ResultParameter`. We capture it here, surface it
+    # on the receipt + success screen, AND forward an SMS to the user's
+    # phone so the payment delivers end-to-end without ops-side relay.
+    # Free-form because tokens vary by biller (KPLC: 20-char numeric
+    # block; Nairobi Water: receipt + units; DSTV: confirmation ID).
+    biller_response = models.TextField(
+        blank=True,
+        help_text="Biller's M-Pesa response (e.g. KPLC prepaid token).",
+    )
+
     # Blockchain fields
     chain = models.CharField(max_length=20, blank=True)
     tx_hash = models.CharField(max_length=100, blank=True)
