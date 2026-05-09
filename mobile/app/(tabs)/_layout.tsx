@@ -123,9 +123,13 @@ function TabIconOnly({
           borderRadius: 15,
           alignItems: "center",
           justifyContent: "center",
-          backgroundColor: focused ? "rgba(16, 185, 129, 0.16)" : "transparent",
+          // 2026-05-09 · slight pop on the active pill · fill 0.16→0.22,
+          // border 0.30→0.48 so the active state reads stronger from a
+          // glance. Hue stays primary[500] for the pill (depth) while
+          // the icon + label use primary[300] (vibrancy).
+          backgroundColor: focused ? "rgba(16, 185, 129, 0.22)" : "transparent",
           borderWidth: 1,
-          borderColor: focused ? "rgba(16, 185, 129, 0.30)" : "transparent",
+          borderColor: focused ? "rgba(16, 185, 129, 0.48)" : "transparent",
           opacity: scaleAnim.interpolate({
             inputRange: [0, 1],
             outputRange: [1, 1], // never animate opacity · just background/border
@@ -140,7 +144,7 @@ function TabIconOnly({
           ],
           ...(isWeb && focused
             ? ({
-                boxShadow: "0 0 14px rgba(16, 185, 129, 0.20)",
+                boxShadow: "0 0 16px rgba(16, 185, 129, 0.30)",
                 transition: "all 0.2s ease",
               } as any)
             : {}),
@@ -234,8 +238,17 @@ export default function TabLayout() {
   //   it reads as empty space.
   // safeBottom unchanged (max insets.bottom or 8 floor on Android
   // 3-button, web 10 for breathing room).
+  // 2026-05-09 (5th iter) · user wants the bar tighter still after
+  // the 70 → 62 dial-back. Gain 2 more px without re-introducing the
+  // descender clip by also tightening the label paddingBottom 4 → 2
+  // (kept the includeFontPadding: true so descenders still get the
+  // Android font-metric pad). Math at 60:
+  //   60 - paddingTop (6) - pill (30) - label marginTop (4) -
+  //   lineHeight (16) - paddingBottom (2) = 2 px slack
+  // Same 2 px breathing room as the previous 62-px setup, just with
+  // the slack moved from below-the-label to inside-the-label box.
   const safeBottom = isWeb ? 10 : Math.max(insets.bottom, 8);
-  const contentHeight = isSmallPhone ? 58 : 62;
+  const contentHeight = isSmallPhone ? 56 : 60;
   const tabBarHeight = contentHeight + safeBottom;
   const tabBarPaddingBottom = safeBottom;
 
@@ -281,7 +294,11 @@ export default function TabLayout() {
                     elevation: 16,
                   }) as any,
             },
-        tabBarActiveTintColor: colors.primary[400],
+        // 2026-05-09 · brighter, more vibrant active-tab green ·
+        // primary[400] (#34D399) → primary[300] (#6EE7B7). The
+        // mint-green pops more against the deep navy bar and reads
+        // as "active" from the corner of the eye on a glance.
+        tabBarActiveTintColor: colors.primary[300],
         tabBarInactiveTintColor: isDark ? "#7A8FA5" : "#94A3B8",
         tabBarShowLabel: true,
         tabBarLabelStyle: {
@@ -303,11 +320,11 @@ export default function TabLayout() {
           letterSpacing: 0.15,
           marginTop: 4,
           marginBottom: 0,
-          // 2026-05-09 · paddingBottom 6 → 4 to match the tighter
-          // contentHeight (62 px) we settled on after the earlier
-          // 70 px overcorrection that left a visible navy band
-          // below the labels.
-          paddingBottom: 4,
+          // 2026-05-09 (5th iter) · paddingBottom 4 → 2 to gain 2 px
+          // for the contentHeight tighten. includeFontPadding: true
+          // (Android) keeps descenders safe because the Android paint
+          // layer adds its own font-metric pad below the line-box.
+          paddingBottom: 2,
           includeFontPadding: true,
           ...(isWeb ? ({ textDecorationLine: "none" } as any) : {}),
         },
