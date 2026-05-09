@@ -21,6 +21,11 @@ urlpatterns = [
     # account format because it doesn't depend on SasaPay forwarding
     # the customer-entered string verbatim in BillRefNumber.
     path("deposit/intent/", views.DepositIntentView.as_view(), name="deposit-intent"),
+    # 2026-05-09 · Hosted checkout · returns a SasaPay-hosted page URL
+    # supporting Card / Airtel / M-Pesa / SasaPay-Wallet in one form.
+    # Mobile clients open this URL via expo-web-browser and SasaPay
+    # IPNs back to /api/v1/sasapay/callback/ on completion.
+    path("checkout/", views.HostedCheckoutView.as_view(), name="hosted-checkout"),
     path("withdraw/", views.WithdrawView.as_view(), name="withdraw"),
     path("withdraw/<uuid:transaction_id>/status/", views.WithdrawStatusView.as_view(), name="withdraw-status"),
     path("withdraw/fee/", views.WithdrawFeeView.as_view(), name="withdraw-fee"),

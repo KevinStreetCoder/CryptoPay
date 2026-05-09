@@ -9,6 +9,7 @@ The core flow:
 
 import csv
 import io
+import json
 import logging
 from decimal import Decimal
 
@@ -1774,6 +1775,127 @@ class DepositIntentView(APIView):
                 "Enter your M-Pesa PIN to confirm",
                 f"Your {intent.currency} is credited within 30 seconds at the live rate",
             ],
+        })
+
+
+class HostedCheckoutView(APIView):
+    """Mint a SasaPay hosted-checkout URL for KES → crypto deposits via
+    Card / Airtel Money / SasaPay Wallet (anything we don't STK-trigger
+    on M-Pesa directly).
+
+    POST /api/v1/payments/checkout/
+        body · {
+            "amount": "1000",                  # KES, integer or decimal
+            "currency": "USDT",                # crypto to credit
+            "rails": ["card", "airtel"],       # optional · default all
+        }
+        returns · {
+            "checkout_url": "https://sasapay.app/.../<token>",
+            "reference":    "<uuid>",
+            "expires_in":   900,
+        }
+
+    Wraps `apps.mpesa.sasapay_client.checkout_payment()` · the customer
+    is redirected to SasaPay's hosted page, picks a rail, completes the
+    payment, and SasaPay sends an IPN to our existing
+    `/api/v1/sasapay/callback/` endpoint. The MerchantTransactionReference
+    we mint here is the deposit-intent code, so the existing crediting
+    flow can resolve which user / currency to credit without changes.
+    """
+
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [PaymentRateThrottle]
+
+    def post(self, request):
+        from .deposit_intent import create_intent
+
+        provider = getattr(app_settings, "PAYMENT_PROVIDER", "daraja").lower()
+        if provider != "sasapay":
+            return Response(
+                {"error": "Hosted checkout requires PAYMENT_PROVIDER=sasapay"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # ── Validate amount ──
+        try:
+            amount = Decimal(str(request.data.get("amount", "0")))
+        except (ValueError, TypeError):
+            return Response({"error": "Invalid amount"}, status=400)
+        min_amount = Decimal(str(app_settings.DEPOSIT_MIN_KES))
+        max_amount = Decimal(str(app_settings.DEPOSIT_MAX_KES))
+        if amount < min_amount:
+            return Response({"error": f"Amount below minimum ({min_amount} KES)"}, status=400)
+        if amount > max_amount:
+            return Response({"error": f"Amount above maximum ({max_amount} KES)"}, status=400)
+
+        # ── Validate currency ──
+        currency = (request.data.get("currency") or "").strip().upper()
+        if not currency:
+            return Response({"error": "currency is required"}, status=400)
+
+        # ── Optional rail filter ──
+        rails_in = request.data.get("rails") or []
+        if isinstance(rails_in, str):
+            rails_in = [r.strip() for r in rails_in.split(",") if r.strip()]
+        rails = {r.lower() for r in rails_in}
+        # Default · enable everything except SasaPay wallet (only useful
+        # for SasaPay merchants; rare in our user base).
+        enable_card = (not rails) or "card" in rails
+        enable_mpesa = (not rails) or "mpesa" in rails or "m-pesa" in rails
+        enable_airtel = (not rails) or "airtel" in rails
+        enable_wallet = "wallet" in rails or "sasapay" in rails
+
+        # ── Mint a deposit intent so the callback knows where to credit ──
+        try:
+            intent = create_intent(request.user, currency)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=400)
+
+        # ── Build callback URL · same path as C2B IPN, the handler
+        #    resolves the user/currency from the intent code. ──
+        callback_path = "/api/v1/sasapay/callback/"
+        callback_url = f"{request.scheme}://{request.get_host()}{callback_path}"
+
+        # ── Trigger the hosted checkout ──
+        from apps.mpesa.sasapay_client import SasaPayClient
+        client = SasaPayClient()
+        try:
+            resp = client.checkout_payment(
+                amount=float(amount),
+                reference=intent.code,
+                description=f"Cpay deposit · {currency}",
+                payer_email=getattr(request.user, "email", "") or "",
+                callback_url=callback_url,
+                enable_card=enable_card,
+                enable_mpesa=enable_mpesa,
+                enable_airtel=enable_airtel,
+                enable_sasapay_wallet=enable_wallet,
+            )
+        except Exception as e:
+            logger.exception("checkout_payment failed for user=%s amount=%s: %s",
+                             request.user.id, amount, e)
+            return Response(
+                {"error": "Payment provider unavailable. Try again."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        # SasaPay's response shape per the docs:
+        #   { "status": True, "CheckoutUrl": "...", "CheckoutRequestID": "..." }
+        checkout_url = resp.get("CheckoutUrl") or resp.get("checkout_url")
+        if not checkout_url:
+            logger.warning("checkout_payment returned no CheckoutUrl: %s",
+                           json.dumps(resp)[:300] if isinstance(resp, dict) else str(resp)[:300])
+            return Response(
+                {"error": "Provider did not return a checkout URL"},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        return Response({
+            "checkout_url": checkout_url,
+            "reference": intent.code,
+            "expires_in": int((intent.expires_at - timezone.now()).total_seconds()),
+            "currency": currency,
+            "amount_kes": str(amount),
         })
 
 
