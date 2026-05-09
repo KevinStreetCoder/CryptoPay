@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Multiple receipts match · Cpay</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<link rel="icon" href="https://cpay.co.ke/favicon.ico">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #F6F3EC; min-height: 100vh; font-family: 'DM Sans', system-ui, sans-serif; color: #0B1220; display: flex; align-items: center; justify-content: center; padding: 24px; }
+  .card { max-width: 420px; width: 100%; background: #fff; border: 1px solid #E5E7EB; border-radius: 18px; padding: 36px 28px 30px; text-align: center; box-sizing: border-box; }
+  h1 { margin: 18px 0 8px; font-size: 22px; letter-spacing: -0.4px; }
+  p { color: #64748B; line-height: 1.55; font-size: 14px; }
+  .code { font-family: 'JetBrains Mono', monospace; color: #1F2937; }
+  a { color: #059669; text-decoration: none; } a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="card">
+  <svg width="56" height="56" viewBox="0 0 24 24" fill="none">
+    <circle cx="12" cy="12" r="10" stroke="#F59E0B" stroke-width="1.6"/>
+    <text x="12" y="17" text-anchor="middle" font-family="DM Sans" font-weight="700" font-size="14" fill="#F59E0B">!</text>
+  </svg>
+  <h1>Multiple receipts match this short code</h1>
+  <p>The reference <span class="code">{{ code }}</span> is ambiguous · two receipts share the same prefix.</p>
+  <p style="margin-top: 16px;">Send the full reference printed on your receipt (the longer <code class="code">CP-XXXXXX-KE</code> code) to <a href="mailto:support@cpay.co.ke">support@cpay.co.ke</a> and we'll verify it manually.</p>
+</div>
+</body>
+</html>

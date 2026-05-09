@@ -4,8 +4,15 @@ Uses weasyprint to generate branded, well-designed PDF receipts
 that match the ReceiptTemplate design spec — paper bg, emerald
 gradient stripe, Coin-C watermark, hero amount card with SETTLED
 pill, detail rows with dashed dividers, QR + verify footer.
+
+2026-05-09 · the QR was a CSS dot pattern (decorative, not scannable).
+Replaced with a real qrcode-encoded `https://cpay.co.ke/r/<short_id>`
+that resolves to the verify-receipt page · phones can scan it from
+print or PDF and land on the public verification view.
 """
 
+import base64
+import io
 import logging
 import os
 
@@ -16,6 +23,36 @@ logger = logging.getLogger(__name__)
 
 # Directory for storing generated receipts
 RECEIPTS_DIR = os.path.join(settings.MEDIA_ROOT, "receipts")
+
+# Public origin for receipt verify links · `cpay.co.ke/r/<short_id>`.
+# Anonymous landing page, no auth required · the short_id alone doesn't
+# leak PII because it's just the first 8 chars of the tx UUID.
+_VERIFY_BASE_URL = "https://cpay.co.ke/r"
+
+
+def _qr_data_uri(payload: str) -> str:
+    """Return a base64 PNG data URI for the given payload, sized for the
+    receipt footer (≈72×72 print, but we render at 256 px so the QR has
+    enough error-correction headroom and stays sharp when zoomed).
+
+    Uses qrcode + Pillow (both already in requirements.txt). Box size is
+    bumped past the default so the dots are scannable from a phone held
+    20 cm away · QR error correction Q (25 %) lets the centre Coin-C
+    overlay sit on top later if we ever inline the brand mark.
+    """
+    import qrcode
+    qr = qrcode.QRCode(
+        version=None,
+        error_correction=qrcode.constants.ERROR_CORRECT_Q,
+        box_size=10,
+        border=1,
+    )
+    qr.add_data(payload)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="#0B1220", back_color="#FFFFFF").convert("RGB")
+    buf = io.BytesIO()
+    img.save(buf, format="PNG", optimize=True)
+    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
 
 
 def generate_receipt_pdf(transaction):
@@ -161,6 +198,17 @@ def generate_receipt_pdf(transaction):
     elif transaction.exchange_rate:
         rate_display = f"1 {source_cur} = KSh {fmt_fiat(transaction.exchange_rate)}"
 
+    reference_short = str(transaction.id)[:8].upper()
+    verify_url = f"{_VERIFY_BASE_URL}/{reference_short}"
+    try:
+        qr_data_uri = _qr_data_uri(verify_url)
+    except Exception as e:
+        # Fail-soft · if QR generation hits a Pillow/font edge case the
+        # receipt still ships (without a scannable QR). The verify URL
+        # text below the QR remains the human fallback.
+        logger.warning(f"QR generation failed for tx {transaction.id}: {e}")
+        qr_data_uri = ""
+
     context = {
         "tx": transaction,
         "user": transaction.user,
@@ -168,7 +216,7 @@ def generate_receipt_pdf(transaction):
         "recipient": recipient,
         "recipient_sub": recipient_sub,
         "reference": f"CP-{str(transaction.id)[:6].upper()}-KE",
-        "reference_short": str(transaction.id)[:8].upper(),
+        "reference_short": reference_short,
         "mpesa_receipt": transaction.mpesa_receipt or "",
         "date": transaction.created_at.strftime("%d %b %Y · %H:%M EAT"),
         "source_display": fmt_amount(transaction.source_amount, source_cur),
@@ -180,6 +228,9 @@ def generate_receipt_pdf(transaction):
         "network_fee_display": "KES 0.00 · sponsored",
         "excise_display": f"KES {fmt_fiat(transaction.excise_duty_amount)}" if transaction.excise_duty_amount else "",
         "rate_display": rate_display,
+        # 2026-05-09 · real, scannable QR (replaces the CSS dot pattern).
+        "verify_url": verify_url,
+        "qr_data_uri": qr_data_uri,
     }
 
     html_content = render_to_string("pdf/receipt.html", context)

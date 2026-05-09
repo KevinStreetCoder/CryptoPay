@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Verify receipt {{ code }} · Cpay</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="theme-color" content="#10B981">
+<meta name="robots" content="noindex,nofollow">
+<link rel="icon" href="https://cpay.co.ke/favicon.ico">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --emerald: #10B981;
+    --emerald-dark: #059669;
+    --emerald-soft: #D1FAE5;
+    --ink: #0B1220;
+    --ink-2: #1F2937;
+    --muted: #64748B;
+    --line: #E5E7EB;
+    --paper: #FFFFFF;
+    --bg: #F6F3EC;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 480px; margin: 0 auto; padding: 32px 20px 60px; }
+  .brand {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 28px; color: var(--ink);
+  }
+  .brand-mark {
+    width: 32px; height: 32px; border-radius: 8px;
+    background: var(--emerald); display: inline-flex;
+    align-items: center; justify-content: center;
+    color: #fff; font-weight: 800; font-size: 18px;
+    letter-spacing: -1px;
+  }
+  .brand-name {
+    font-weight: 700; font-size: 17px; letter-spacing: -0.3px;
+  }
+  .card {
+    background: var(--paper); border-radius: 18px;
+    border: 1px solid var(--line);
+    box-shadow: 0 1px 3px rgba(11,18,32,0.04), 0 8px 24px rgba(11,18,32,0.06);
+    overflow: hidden;
+  }
+  .stripe {
+    height: 6px;
+    background: linear-gradient(90deg, var(--emerald) 0%, var(--emerald-dark) 100%);
+  }
+  .header {
+    padding: 22px 24px 16px;
+    border-bottom: 1px solid var(--line);
+    display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;
+  }
+  .header .label {
+    font-size: 10px; letter-spacing: 2px; color: var(--muted);
+    font-weight: 600; text-transform: uppercase;
+  }
+  .header .ref {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-weight: 700; font-size: 15px; color: var(--ink); margin-top: 4px;
+  }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 11px; border-radius: 999px;
+    font-size: 11px; font-weight: 700; letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .pill.settled {
+    background: var(--emerald); color: #fff;
+  }
+  .pill.settled::before {
+    content: ''; width: 6px; height: 6px; border-radius: 3px; background: #fff;
+  }
+  .pill.pending {
+    background: rgba(245,158,11,0.12); color: #B45309;
+    border: 1px solid rgba(245,158,11,0.3);
+  }
+  .pill.failed {
+    background: rgba(11,18,32,0.06); color: var(--ink-2);
+    border: 1px solid var(--line);
+  }
+  .amount-block {
+    padding: 20px 24px 22px;
+    background: linear-gradient(180deg, var(--emerald-soft) 0%, rgba(16,185,129,0.04) 100%);
+  }
+  .amount-block .kicker {
+    font-size: 10px; color: var(--emerald-dark);
+    letter-spacing: 1.5px; font-weight: 600; text-transform: uppercase;
+  }
+  .amount-block .amount {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 38px; font-weight: 700; letter-spacing: -1px;
+    margin-top: 4px; line-height: 1.05; color: var(--ink);
+  }
+  .amount-block .amount .cents { font-size: 22px; color: var(--muted); }
+  .meta {
+    padding: 18px 24px 22px;
+  }
+  .meta-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 10px 0; font-size: 13px;
+    border-bottom: 1px dashed var(--line);
+  }
+  .meta-row:last-child { border-bottom: none; }
+  .meta-row .k { color: var(--muted); }
+  .meta-row .v {
+    color: var(--ink); font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-weight: 500; text-align: right;
+  }
+  .footer-note {
+    margin-top: 18px; font-size: 11px; color: var(--muted);
+    line-height: 1.6; text-align: center;
+  }
+  .footer-note a { color: var(--emerald-dark); text-decoration: none; }
+  .footer-note a:hover { text-decoration: underline; }
+  .auth-banner {
+    margin-top: 16px; padding: 14px 16px;
+    background: rgba(16,185,129,0.08);
+    border: 1px solid rgba(16,185,129,0.25);
+    border-radius: 12px;
+    display: flex; align-items: center; gap: 10px;
+    font-size: 13px; color: var(--ink);
+  }
+  .auth-banner.failed {
+    background: rgba(11,18,32,0.04);
+    border-color: var(--line);
+  }
+  .auth-banner svg { flex-shrink: 0; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="brand">
+    <span class="brand-mark">C</span>
+    <span class="brand-name">Cpay</span>
+  </div>
+
+  <div class="auth-banner {% if not is_settled %}failed{% endif %}">
+    {% if is_settled %}
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="12" r="9" fill="#10B981"/>
+        <path d="M 8 12 L 11 15 L 16 9" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <div><strong>Verified.</strong> This receipt corresponds to a real settled transaction on Cpay.</div>
+    {% else %}
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="12" r="9" stroke="#1F2937" stroke-width="1.6"/>
+        <path d="M 12 7 L 12 12 L 15 14" stroke="#1F2937" stroke-width="1.6" stroke-linecap="round"/>
+      </svg>
+      <div>This receipt was issued by Cpay but the transaction is not yet settled.</div>
+    {% endif %}
+  </div>
+
+  <div class="card" style="margin-top: 18px;">
+    <div class="stripe"></div>
+    <div class="header">
+      <div>
+        <div class="label">Payment receipt</div>
+        <div class="ref">{{ reference }}</div>
+        <div style="font-size: 11px; color: var(--muted); margin-top: 4px;">{{ tx.created_at|date:"d M Y · H:i" }} EAT</div>
+      </div>
+      <div>
+        {% if tx.status == "completed" %}
+          <span class="pill settled">Settled</span>
+        {% elif tx.status == "failed" or tx.status == "reversed" %}
+          <span class="pill failed">{{ tx.status|title }}</span>
+        {% else %}
+          <span class="pill pending">{{ tx.status|title }}</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="amount-block">
+      <div class="kicker">Amount</div>
+      <div class="amount">
+        {% if tx.dest_currency == "KES" %}
+          KES {{ tx.dest_amount|floatformat:"0g" }}.<span class="cents">00</span>
+        {% else %}
+          {{ tx.source_amount|floatformat:"0g" }} <span class="cents">{{ tx.source_currency }}</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="meta">
+      <div class="meta-row">
+        <span class="k">Type</span>
+        <span class="v">{{ type_label }}</span>
+      </div>
+      {% if masked_recipient %}
+        <div class="meta-row">
+          <span class="k">Recipient</span>
+          <span class="v">{{ masked_recipient }}</span>
+        </div>
+      {% endif %}
+      {% if tx.mpesa_receipt %}
+        <div class="meta-row">
+          <span class="k">M-Pesa receipt</span>
+          <span class="v">{{ tx.mpesa_receipt }}</span>
+        </div>
+      {% endif %}
+      <div class="meta-row">
+        <span class="k">Reference</span>
+        <span class="v">{{ reference }}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer-note">
+    Verified at cpay.co.ke/r/{{ code }}<br>
+    Questions? <a href="mailto:support@cpay.co.ke">support@cpay.co.ke</a>
+  </div>
+</div>
+</body>
+</html>

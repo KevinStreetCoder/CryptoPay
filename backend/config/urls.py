@@ -69,6 +69,16 @@ urlpatterns = [
         __import__("apps.referrals.views", fromlist=["PublicReferrerLandingView"]).PublicReferrerLandingView.as_view(),
         name="referral-public-landing",
     ),
+    # 2026-05-09 · public receipt-verify · resolves the QR on every
+    # PDF receipt (cpay.co.ke/r/<short>) to a server-rendered HTML
+    # page confirming amount/status/type. Disambiguates from the
+    # referral path via the code shape (8 hex uppercase = receipt;
+    # anything else 302s to the SPA referral landing).
+    path(
+        "r/<str:code>/",
+        __import__("apps.core.receipt_verify", fromlist=["verify_receipt"]).verify_receipt,
+        name="receipt-verify",
+    ),
     # ── SasaPay callbacks · LIVE 2026-04-30 ──
     # Re-enabled because Safaricom Daraja onboarding hit the CBK
     # Letter-of-No-Objection blocker (see

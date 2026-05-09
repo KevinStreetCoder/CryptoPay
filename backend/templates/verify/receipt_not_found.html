@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Receipt not found · Cpay</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="theme-color" content="#10B981">
+<meta name="robots" content="noindex,nofollow">
+<link rel="icon" href="https://cpay.co.ke/favicon.ico">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #F6F3EC; min-height: 100vh;
+    font-family: 'DM Sans', system-ui, sans-serif; color: #0B1220;
+    display: flex; align-items: center; justify-content: center; padding: 24px;
+  }
+  .card {
+    max-width: 420px; width: 100%; background: #fff;
+    border: 1px solid #E5E7EB; border-radius: 18px;
+    padding: 36px 28px 30px; text-align: center;
+  }
+  h1 { margin: 18px 0 8px; font-size: 22px; letter-spacing: -0.4px; }
+  p { color: #64748B; line-height: 1.55; font-size: 14px; }
+  .code { font-family: 'JetBrains Mono', ui-monospace, monospace; color: #1F2937; }
+  a { color: #059669; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="card">
+  <svg width="56" height="56" viewBox="0 0 24 24" fill="none">
+    <circle cx="12" cy="12" r="10" stroke="#1F2937" stroke-width="1.6"/>
+    <line x1="9" y1="9" x2="15" y2="15" stroke="#1F2937" stroke-width="1.8" stroke-linecap="round"/>
+    <line x1="15" y1="9" x2="9" y2="15" stroke="#1F2937" stroke-width="1.8" stroke-linecap="round"/>
+  </svg>
+  <h1>We can't find this receipt</h1>
+  <p>The reference <span class="code">{{ code }}</span> doesn't match any transaction on Cpay.</p>
+  <p style="margin-top: 16px;">If you scanned this from a printed receipt, please contact <a href="mailto:support@cpay.co.ke">support@cpay.co.ke</a> with a clear photo.</p>
+</div>
+</body>
+</html>
