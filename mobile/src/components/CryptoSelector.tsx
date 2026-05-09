@@ -1,4 +1,4 @@
-import { View, Text, Pressable, ScrollView, Platform } from "react-native";
+import { View, Text, Pressable, Platform, useWindowDimensions } from "react-native";
 import { CryptoLogo } from "./CryptoLogo";
 import { Wallet } from "../api/wallets";
 import { CURRENCIES, CurrencyCode, colors, getThemeColors } from "../constants/theme";
@@ -30,12 +30,33 @@ export function CryptoSelector({ options, selected, wallets, onSelect }: CryptoS
   const isWeb = Platform.OS === "web";
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
+  const { width } = useWindowDimensions();
+
+  // 2026-05-09 · responsive flex-wrap grid · 2 cols phone, 3 small
+  // tablet, 4 desktop. CryptoSelector renders inside parent screens
+  // that have varying horizontal padding · we compute card width
+  // from the viewport AND let the consumer's parent container
+  // constrain us via flex layout. The `width` we compute assumes
+  // the parent gives us the full content area minus its own
+  // horizontal padding (most callers use hPad = 16 on mobile).
+  // Native RN does NOT support `flexBasis: calc(...)` so we use
+  // a pixel value · works on both web and native.
+  const columns = width >= 900 ? 4 : width >= 600 ? 3 : 2;
+  const gap = 10;
+  // Estimate parent's available width · phones use 16 px h-padding
+  // around the deposit/send/swap content area, desktop uses more
+  // but viewport-relative pixel math still gets us close.
+  const hPadGuess = width >= 900 ? 48 : 16;
+  const cardW = (width - 2 * hPadGuess - gap * (columns - 1)) / columns;
 
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={{ gap: 8, paddingVertical: 2 }}
+    <View
+      style={{
+        flexDirection: "row" as const,
+        flexWrap: "wrap" as const,
+        gap,
+        marginTop: 4,
+      }}
     >
       {options.map((crypto) => {
         const info = CURRENCIES[crypto];
@@ -48,12 +69,12 @@ export function CryptoSelector({ options, selected, wallets, onSelect }: CryptoS
             key={crypto}
             onPress={() => onSelect(crypto)}
             style={({ pressed, hovered }: any) => ({
+              width: cardW,
               borderRadius: 16,
-              paddingHorizontal: 12,
-              paddingVertical: 10,
+              paddingHorizontal: 14,
+              paddingVertical: 14,
               borderWidth: 1,
-              minWidth: 72,
-              alignItems: "center",
+              alignItems: "center" as const,
               borderColor: isSelected
                 ? colors.primary[500]
                 : isWeb && hovered
@@ -65,6 +86,7 @@ export function CryptoSelector({ options, selected, wallets, onSelect }: CryptoS
                   ? tc.dark.elevated
                   : tc.dark.card,
               opacity: pressed ? 0.85 : 1,
+              transform: [{ scale: pressed ? 0.98 : 1 }],
               ...(isWeb ? { cursor: "pointer", transition: "all 0.15s ease" } as any : {}),
             })}
             accessibilityRole="button"
@@ -75,16 +97,16 @@ export function CryptoSelector({ options, selected, wallets, onSelect }: CryptoS
               style={{
                 flexDirection: "row",
                 alignItems: "center",
-                marginBottom: 4,
+                marginBottom: 6,
               }}
             >
-              <View style={{ marginRight: 5 }}>
-                <CryptoLogo currency={crypto} size={20} />
+              <View style={{ marginRight: 6 }}>
+                <CryptoLogo currency={crypto} size={22} />
               </View>
               <Text
                 style={{
-                  fontSize: 13,
-                  fontFamily: "DMSans_600SemiBold",
+                  fontSize: 14,
+                  fontFamily: "DMSans_700Bold",
                   color: isSelected ? colors.primary[400] : tc.textPrimary,
                 }}
                 numberOfLines={1}
@@ -96,8 +118,9 @@ export function CryptoSelector({ options, selected, wallets, onSelect }: CryptoS
             <Text
               style={{
                 color: tc.dark.muted,
-                fontSize: 11,
+                fontSize: 12,
                 fontFamily: "DMSans_500Medium",
+                marginBottom: 2,
               }}
               numberOfLines={1}
               maxFontSizeMultiplier={1.3}
@@ -105,18 +128,16 @@ export function CryptoSelector({ options, selected, wallets, onSelect }: CryptoS
               {bal.toFixed(info.decimals > 4 ? 4 : info.decimals)}
             </Text>
             {/* Network chip · stamps every coin card with its
-                settlement network so the row is internally consistent
-                ("USDT TRON" alongside "BTC BITCOIN" alongside "ETH
-                ERC-20" etc.) instead of only the active one being
-                annotated below. */}
+                settlement network so the grid is internally consistent
+                ("USDT TRON" alongside "BTC BITCOIN") without forcing
+                the user to read a separate badge below. */}
             {COIN_NETWORK[crypto] ? (
               <Text
                 style={{
                   color: isSelected ? colors.primary[400] : tc.dark.muted,
-                  fontSize: 9,
+                  fontSize: 10,
                   fontFamily: "DMSans_600SemiBold",
                   letterSpacing: 0.5,
-                  marginTop: 2,
                   opacity: isSelected ? 1 : 0.7,
                 }}
                 numberOfLines={1}
@@ -128,6 +149,6 @@ export function CryptoSelector({ options, selected, wallets, onSelect }: CryptoS
           </Pressable>
         );
       })}
-    </ScrollView>
+    </View>
   );
 }

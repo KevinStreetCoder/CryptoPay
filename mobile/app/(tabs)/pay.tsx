@@ -464,7 +464,14 @@ export default function PayScreen() {
             const columns =
               width >= 1200 ? 5 : width >= 900 ? 4 : width >= 600 ? 3 : 2;
             const gap = isDesktop ? (isLargeDesktop ? 20 : 16) : 12;
-            const colBasis = `${100 / columns}%`;
+            // 2026-05-09 · React Native (native) does NOT support
+            // `flexBasis: "calc(50% - 6px)"` · the previous code only
+            // worked on web · on Android the calc() string was
+            // ignored and every card fell back to its content width
+            // → single column on mobile. Compute the pixel width
+            // explicitly from the viewport so it works on both
+            // platforms identically.
+            const cardW = (width - 2 * hPad - gap * (columns - 1)) / columns;
             return (
           <View
             style={{
@@ -479,13 +486,7 @@ export default function PayScreen() {
                 key={option.id}
                 onPress={() => router.push(option.route)}
                 style={({ pressed, hovered }: any) => ({
-                  // Each card claims a fraction of the row width minus
-                  // the gap budget. `flexBasis` gives proportional
-                  // sizing; `flexGrow: 1` lets the last row's cards
-                  // expand to fill if the count doesn't divide evenly.
-                  flexBasis: `calc(${colBasis} - ${(gap * (columns - 1)) / columns}px)` as any,
-                  minWidth: 0,
-                  flexGrow: 1,
+                  width: cardW,
                   backgroundColor: hovered ? tc.dark.elevated : tc.dark.card,
                   borderRadius: 20,
                   padding: isDesktop ? 24 : 18,
@@ -601,12 +602,21 @@ export default function PayScreen() {
                 No saved paybills yet. They'll appear here after your first payment.
               </Text>
             </View>
-          ) : (
+          ) : (() => {
+            // 2026-05-09 · always-wrap grid · 2 cols on phones, 3 cols
+            // on tablets, 4 cols on desktop. Compute pixel width from
+            // viewport so it works on both web AND native (calc() is
+            // web-only and silently ignored by RN-Android, which was
+            // the root cause of the 1-col-on-phone bug).
+            const cols = width >= 1200 ? 4 : width >= 600 ? 3 : 2;
+            const gap = isDesktop ? 14 : 10;
+            const cardW = (width - 2 * hPad - gap * (cols - 1)) / cols;
+            return (
             <View
               style={{
-                flexDirection: isDesktop ? "row" : "column",
-                flexWrap: isDesktop ? "wrap" : undefined,
-                gap: isDesktop ? 14 : 10,
+                flexDirection: "row",
+                flexWrap: "wrap",
+                gap,
               }}
             >
               {savedPaybills.map((bill) => (
@@ -626,12 +636,7 @@ export default function PayScreen() {
                     borderColor: hovered ? colors.primary[400] + "40" : tc.glass.border,
                     opacity: pressed ? 0.85 : deletingId === bill.id ? 0.5 : 1,
                     transform: [{ scale: pressed ? 0.97 : hovered ? 1.01 : 1 }],
-                    ...(isDesktop
-                      ? {
-                          width: `calc(33.333% - ${(14 * 2) / 3}px)` as any,
-                          minWidth: 200,
-                        }
-                      : {}),
+                    width: cardW,
                     ...(isWeb
                       ? ({
                           cursor: "pointer",
@@ -734,7 +739,8 @@ export default function PayScreen() {
                 </Pressable>
               ))}
             </View>
-          )}
+            );
+          })()}
         </View>
 
         {/* ── Popular Services ───────────────────────────────────────── */}
@@ -745,11 +751,20 @@ export default function PayScreen() {
             iconColor="#F59E0B"
             count={POPULAR_SERVICES.length}
           />
+          {/* 2026-05-09 · always-wrap grid (matches saved-paybills above)
+              · 2 cols mobile / 3 small-tablet / 4 desktop · uses
+              computed pixel width (calc() is web-only and silently
+              ignored by RN-Android). */}
+          {(() => {
+            const cols = width >= 1200 ? 4 : width >= 600 ? 3 : 2;
+            const gap = isDesktop ? 14 : 10;
+            const cardW = (width - 2 * hPad - gap * (cols - 1)) / cols;
+            return (
           <View
             style={{
-              flexDirection: isDesktop ? "row" : "column",
-              flexWrap: isDesktop ? "wrap" : undefined,
-              gap: isDesktop ? 14 : 10,
+              flexDirection: "row",
+              flexWrap: "wrap",
+              gap,
             }}
           >
             {POPULAR_SERVICES.map((service) => (
@@ -768,12 +783,7 @@ export default function PayScreen() {
                   borderColor: hovered ? service.color + "40" : tc.glass.border,
                   opacity: pressed ? 0.85 : 1,
                   transform: [{ scale: pressed ? 0.97 : hovered ? 1.01 : 1 }],
-                  ...(isDesktop
-                    ? {
-                        width: `calc(33.333% - ${14 * 2 / 3}px)` as any,
-                        minWidth: 200,
-                      }
-                    : {}),
+                  width: cardW,
                   ...(isWeb
                     ? ({
                         cursor: "pointer",
@@ -841,6 +851,8 @@ export default function PayScreen() {
               </Pressable>
             ))}
           </View>
+            );
+          })()}
         </View>
 
         {/* ── How It Works ───────────────────────────────────────────── */}

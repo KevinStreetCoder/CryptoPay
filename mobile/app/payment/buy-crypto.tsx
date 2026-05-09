@@ -359,10 +359,16 @@ export default function BuyCryptoScreen() {
           style={{ flex: 1 }}
           contentContainerStyle={{
             paddingHorizontal: isDesktop ? 28 : 20,
+            paddingBottom: 32,
             maxWidth: isDesktop ? 640 : undefined,
             alignSelf: isDesktop ? "center" : undefined,
             width: isDesktop ? "100%" : undefined,
-            flexGrow: 1,
+            // 2026-05-09 · removed `flexGrow: 1` · it forced the
+            // ScrollView content to fill the viewport vertically,
+            // creating the huge empty gap between crypto picker and
+            // amount input on phones (v1.1.4 Buy-Crypto screenshot).
+            // Without it, content flows naturally · the bottom-sheet
+            // / button stays where it should.
           }}
           keyboardShouldPersistTaps="handled"
         >
@@ -394,7 +400,16 @@ export default function BuyCryptoScreen() {
           {(() => {
             const cryptoCols = width >= 1100 ? 5 : width >= 700 ? 3 : 2;
             const cryptoGap = 10;
-            const itemBasis = `${100 / cryptoCols}%`;
+            // 2026-05-09 · pixel width works on RN-native; the previous
+            // calc()-based flexBasis was ignored on Android, causing
+            // BTC/USDT/USDC/ETH to render at content-width and SOL to
+            // wrap onto its own row with the price text truncating to
+            // "K..." (reported in v1.1.4 Buy-Crypto screenshot).
+            // Page padding is `paddingHorizontal: isDesktop ? 28 : 20`
+            // on the ScrollView · grid has no extra wrapper card.
+            const pagePad = isDesktop ? 28 : 20;
+            const cardW =
+              (width - 2 * pagePad - cryptoGap * (cryptoCols - 1)) / cryptoCols;
             return (
           <View
             style={{
@@ -414,13 +429,7 @@ export default function BuyCryptoScreen() {
                   key={crypto.id}
                   onPress={() => handleCryptoSelect(crypto.id)}
                   style={({ pressed }) => ({
-                    // Uniform basis · each card claims the same row
-                    // fraction. flexGrow:1 lets a half-orphan in the
-                    // last row expand to fill its column slot rather
-                    // than render half-width.
-                    flexBasis: `calc(${itemBasis} - ${(cryptoGap * (cryptoCols - 1)) / cryptoCols}px)` as any,
-                    flexGrow: 1,
-                    minWidth: 0,
+                    width: cardW,
                     minHeight: 70,
                     flexDirection: "row" as const,
                     alignItems: "center" as const,

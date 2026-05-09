@@ -19,6 +19,7 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { PinInput } from "../../src/components/PinInput";
 import { OTPInput } from "../../src/components/OTPInput";
+import { ResendOTPButton } from "../../src/components/ResendOTPButton";
 import { useToast } from "../../src/components/Toast";
 import { useAuth } from "../../src/stores/auth";
 import { authApi } from "../../src/api/auth";
@@ -922,6 +923,33 @@ export default function LoginScreen() {
                   ? "We detected a login from a new device or location. Enter the 6-digit code sent to your phone or email."
                   : "Too many failed attempts. Enter the 6-digit code sent to your phone or email."}
               />
+
+              {/* 2026-05-09 · resend OTP with 30 s cooldown · same UX
+                  as register / forgot-pin so the user can recover from
+                  a delayed SMS without abandoning the login. The
+                  endpoint is /auth/otp/ which sends a fresh code to
+                  the same phone (and email-fallback if configured). */}
+              <View style={{ marginTop: 16, alignItems: "center" }}>
+                <ResendOTPButton
+                  onResend={async () => {
+                    try {
+                      await authApi.requestOTP(phone);
+                      toast.success(
+                        "Code resent",
+                        "Check your phone or email for a fresh 6-digit code.",
+                      );
+                    } catch (err) {
+                      const e = normalizeError(err);
+                      toast.error(e.title, e.message);
+                    }
+                  }}
+                  loading={false}
+                  cooldownSec={30}
+                  startedExternally
+                  textColor={tc.textPrimary}
+                  mutedColor={tc.textMuted}
+                />
+              </View>
 
               <Pressable
                 onPress={() => {

@@ -118,14 +118,18 @@ export function WalletConnectDeposit(props: Props) {
   return <WalletConnectFallback />;
 }
 
-/** Fallback when AppKit isn't available or not initialized */
+/** Fallback when AppKit isn't available or not initialized.
+ *
+ * 2026-05-09 · copy fix · the previous "Requires an EAS build" message
+ * was misleading for users on the production EAS APK · they ARE on an
+ * EAS build, the init can simply fail for other reasons (PROJECT_ID
+ * env not baked, peer dep mismatch, network fetch on first launch).
+ * New copy points the user at the always-working manual flow without
+ * blaming the platform.
+ */
 function WalletConnectFallback() {
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
-
-  // On web, AppKit uses a web modal that works without native modules
-  // However if AppKit was not initialized (no PROJECT_ID), show guidance
-  const isWebPlatform = Platform.OS === "web";
 
   return (
     <View
@@ -149,7 +153,7 @@ function WalletConnectFallback() {
           textAlign: "center",
         }}
       >
-        {isWebPlatform ? "External Wallet" : "WalletConnect Not Available"}
+        Use Manual Deposit
       </Text>
       <Text
         style={{
@@ -161,9 +165,9 @@ function WalletConnectFallback() {
           maxWidth: 300,
         }}
       >
-        {isWebPlatform
-          ? "To deposit from MetaMask or other wallets, copy your deposit address from the Wallet tab and paste it in your wallet app."
-          : "Requires an EAS build (not Expo Go) to connect external wallets. Use the manual deposit option below instead."}
+        To deposit from MetaMask, Trust Wallet, Phantom, or any
+        exchange, copy your deposit address from the Wallet tab and
+        paste it into your wallet's Send screen.
       </Text>
     </View>
   );

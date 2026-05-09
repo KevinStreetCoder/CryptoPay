@@ -251,7 +251,12 @@ export default function DepositScreen() {
           </View>
         )}
 
-        {/* Deposit Method Tabs */}
+        {/* Deposit Method Tabs · 2026-05-09 redesign · vertical
+            stack (icon over label) + 4 px gap between tabs + always-1
+            borderWidth (transparent on inactive) so the active state
+            doesn't shift sibling layout · fixes the visible overlap
+            where the green active outline bled into the neighbouring
+            tab on mobile reported in the v1.1.4 screenshots. */}
         <View
           style={{
             flexDirection: "row",
@@ -261,13 +266,14 @@ export default function DepositScreen() {
             marginTop: 16,
             borderWidth: 1,
             borderColor: tc.glass.border,
+            gap: 4,
           }}
         >
           {(
             [
               { id: "stk" as DepositMethod, label: "M-Pesa", icon: "phone-portrait-outline" as const },
               { id: "c2b" as DepositMethod, label: "Paybill", icon: "receipt-outline" as const },
-              { id: "checkout" as DepositMethod, label: "Card / Airtel", icon: "card-outline" as const },
+              { id: "checkout" as DepositMethod, label: "Card", icon: "card-outline" as const },
               { id: "crypto" as DepositMethod, label: "Crypto", icon: "wallet-outline" as const },
             ] as const
           ).map((tab) => (
@@ -276,30 +282,38 @@ export default function DepositScreen() {
               onPress={() => setMethod(tab.id)}
               style={{
                 flex: 1,
-                flexDirection: "row",
+                flexDirection: "column" as const,
                 alignItems: "center",
                 justifyContent: "center",
-                gap: 6,
-                paddingVertical: 12,
+                gap: 4,
+                paddingVertical: 10,
+                paddingHorizontal: 4,
                 borderRadius: 12,
                 backgroundColor:
                   method === tab.id ? colors.primary[500] + "20" : "transparent",
-                borderWidth: method === tab.id ? 1 : 0,
-                borderColor: colors.primary[500] + "40",
+                // Always render a 1 px border · transparent on inactive ·
+                // so the layout doesn't shift when active. Prevents the
+                // 1 px overlap into neighbouring tabs on mobile.
+                borderWidth: 1,
+                borderColor:
+                  method === tab.id
+                    ? colors.primary[500] + "40"
+                    : "transparent",
               }}
             >
               <Ionicons
                 name={tab.icon}
-                size={16}
+                size={18}
                 color={
                   method === tab.id ? colors.primary[400] : tc.textMuted
                 }
               />
               <Text
+                numberOfLines={1}
                 style={{
                   color:
                     method === tab.id ? colors.primary[400] : tc.textMuted,
-                  fontSize: 13,
+                  fontSize: 11,
                   fontFamily:
                     method === tab.id
                       ? "DMSans_700Bold"
@@ -329,11 +343,11 @@ export default function DepositScreen() {
               >
                 Receive as
               </Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ gap: 8 }}
-              >
+              {/* 2026-05-09 · 2-cards-per-row wrap grid · matches the
+                  pattern across pay/paybill/send screens. Replaces the
+                  previous horizontal ScrollView so users on small phones
+                  see every option at a glance. */}
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
                 {CRYPTO_OPTIONS.map((opt) => (
                   <Pressable
                     key={opt.id}
@@ -345,6 +359,11 @@ export default function DepositScreen() {
                       paddingVertical: 10,
                       paddingHorizontal: 14,
                       borderRadius: 14,
+                      // 2026-05-09 · pixel width works on RN-native;
+                      // calc() was ignored on Android causing the cards
+                      // to overflow off-screen ("Ethereum cut off"
+                      // reported in v1.1.4 deposit screenshot).
+                      width: (width - 2 * (isDesktop ? 48 : 16) - 8) / 2,
                       backgroundColor:
                         currency === opt.id
                           ? opt.color + "18"
@@ -380,7 +399,7 @@ export default function DepositScreen() {
                     </Text>
                   </Pressable>
                 ))}
-              </ScrollView>
+              </View>
             </View>
 
             {/* Amount Input */}
@@ -707,11 +726,8 @@ export default function DepositScreen() {
                     >
                       Receive As
                     </Text>
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={{ gap: 8 }}
-                    >
+                    {/* 2026-05-09 · 2-cards-per-row wrap grid */}
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
                       {CRYPTO_OPTIONS.map((opt) => (
                         <Pressable
                           key={opt.id}
@@ -723,6 +739,9 @@ export default function DepositScreen() {
                             paddingVertical: 10,
                             paddingHorizontal: 14,
                             borderRadius: 14,
+                            // 2026-05-09 · pixel width works on RN-native;
+                            // calc() was ignored on Android.
+                            width: (width - 2 * (isDesktop ? 48 : 16) - 8) / 2,
                             backgroundColor:
                               currency === opt.id
                                 ? opt.color + "18"
@@ -755,7 +774,7 @@ export default function DepositScreen() {
                           </Text>
                         </Pressable>
                       ))}
-                    </ScrollView>
+                    </View>
                   </View>
                 )}
 
@@ -1257,12 +1276,9 @@ export default function DepositScreen() {
                 onPress={handleHostedCheckout}
                 disabled={checkoutLoading || !amount}
                 loading={checkoutLoading}
+                title={checkoutLoading ? "Opening SasaPay…" : "Continue to SasaPay"}
                 style={{ marginTop: 8 }}
-              >
-                {checkoutLoading
-                  ? "Opening SasaPay…"
-                  : "Continue to SasaPay"}
-              </Button>
+              />
 
               <Text
                 style={{

@@ -533,7 +533,11 @@ export function TourAutoStart() {
   // Step-target validation · 800 ms after every step change, verify
   // the target rendered with non-zero size. If it didn't (target
   // unmounted, conditional render hid it, etc.) auto-advance so the
-  // user isn't pinned to an invisible tooltip.
+  // user isn't pinned to an invisible tooltip. On the LAST step,
+  // calling goToNext() is a no-op in react-native-copilot · we must
+  // explicitly stop() so the user isn't trapped on a black-screen
+  // backdrop with no escape (the bug reported 2026-05-09 where the
+  // entire Home screen stays dimmed and users have to kill the APK).
   useEffect(() => {
     if (!visible || !currentStep) return;
     const timer = setTimeout(() => {
@@ -541,7 +545,15 @@ export function TourAutoStart() {
       if (!wrapper || typeof wrapper.measureInWindow !== "function") return;
       wrapper.measureInWindow((_x: number, _y: number, w: number, h: number) => {
         if (!w || !h) {
-          try { goToNext(); } catch { try { stop(); } catch {} }
+          // Last step? stop. Earlier step? advance (loop will catch
+          // bad target on next cycle).
+          const order = (currentStep as any)?.order ?? 0;
+          const total = totalStepsRef.current || 0;
+          if (order >= total) {
+            try { stop(); } catch {}
+          } else {
+            try { goToNext(); } catch { try { stop(); } catch {} }
+          }
         }
       });
     }, 800);
@@ -558,14 +570,17 @@ export function TourAutoStart() {
   }, [copilotEvents]);
 
   // Watchdog · if the tour stays visible without a `stepChange` for
-  // 15 s, force-stop. Catches edge cases where the tooltip clips off-
-  // screen, the Skip pill is hidden behind a status bar, etc.
+  // 8 s, force-stop. Reduced from 15 s after 2026-05-09 user report
+  // of the LAST step pinning the home screen black. Earlier steps
+  // are interactive and `lastStepAtRef` resets on each transition,
+  // so 8 s won't false-positive on a user thoughtfully reading a
+  // tooltip · only fires when the tour genuinely got stuck.
   useEffect(() => {
     if (!visible) return;
     lastStepAtRef.current = Date.now();
     const interval = setInterval(() => {
       const idleMs = Date.now() - lastStepAtRef.current;
-      if (idleMs > 15000) {
+      if (idleMs > 8000) {
         try { stop(); } catch {}
       }
     }, 2000);
@@ -587,6 +602,88 @@ export function TourAutoStart() {
   }, [visible, stop]);
 
   return null;
+}
+
+/**
+ * Floating emergency-exit pill · ALWAYS rendered above the tour
+ * backdrop while the tour is visible. Independent of the tooltip,
+ * which may be off-screen on devices with awkward viewports. The
+ * "kill the APK to recover" failure mode (reported 2026-05-09) only
+ * happened because there was no element above the dim overlay that
+ * the user could tap to escape. This pill is the safety net.
+ *
+ * Renders only when `visible` is true · doesn't add weight to normal
+ * navigation. Sits at top-right with a high z-index so the Copilot
+ * backdrop can't cover it.
+ */
+function TourEmergencyExit() {
+  const { visible, stop } = useCopilot();
+  if (!visible) return null;
+  return (
+    <View
+      pointerEvents="box-none"
+      style={{
+        position: "absolute" as const,
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 10000,
+        // Web · sits above the Copilot Modal portal too. On native
+        // it sits inside the host View above the React tree's
+        // bottom sibling but the Copilot Modal renders ABOVE us.
+        // For native we rely on the watchdog + step-validator;
+        // this pill is primarily a web safety net.
+        ...(isWeb ? ({ pointerEvents: "box-none" } as any) : {}),
+      }}
+    >
+      <Pressable
+        onPress={() => { try { stop(); } catch {} }}
+        style={({ pressed, hovered }: any) => ({
+          position: "absolute" as const,
+          top: Platform.OS === "ios" ? 56 : 36,
+          right: 16,
+          paddingVertical: 10,
+          paddingHorizontal: 16,
+          borderRadius: 999,
+          backgroundColor: pressed
+            ? "rgba(249, 115, 22, 0.45)"
+            : hovered
+            ? "rgba(249, 115, 22, 0.32)"
+            : "rgba(249, 115, 22, 0.22)",
+          borderWidth: 1.5,
+          borderColor: "rgba(249, 115, 22, 0.7)",
+          flexDirection: "row" as const,
+          alignItems: "center" as const,
+          gap: 6,
+          ...(isWeb
+            ? ({
+                cursor: "pointer",
+                backdropFilter: "blur(12px)",
+                WebkitBackdropFilter: "blur(12px)",
+                boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
+              } as any)
+            : {}),
+        })}
+        accessibilityRole="button"
+        accessibilityLabel="Exit tour"
+        hitSlop={12}
+        testID="tour-emergency-exit"
+      >
+        <Ionicons name="close" size={14} color="#F97316" />
+        <Text
+          style={{
+            color: "#F97316",
+            fontSize: 13,
+            fontFamily: "DMSans_700Bold",
+            letterSpacing: 0.3,
+          }}
+        >
+          Exit Tour
+        </Text>
+      </Pressable>
+    </View>
+  );
 }
 
 /**
@@ -614,6 +711,7 @@ export function AppTourProvider({ children }: { children: React.ReactNode }) {
       androidStatusBarVisible={false}
     >
       {children}
+      <TourEmergencyExit />
     </CopilotProvider>
   );
 }
