@@ -49,6 +49,10 @@ LOCAL_APPS = [
     "apps.rates",
     "apps.notifications",
     "apps.referrals",
+    # 2026-05-09 · external exchange / wallet integrations
+    # (Binance / Coinbase / Noones). See docs/research/
+    # EXCHANGE-OAUTH-INTEGRATION-2026-05-09.md for the design.
+    "apps.exchanges",
 ]
 
 # Referral program — tunables consumed by apps.referrals.constants.
