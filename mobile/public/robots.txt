@@ -1,0 +1,8 @@
+# https://cpay.co.ke · robots.txt
+# 2026-05-09 · written to override Cloudflare's auto-managed robots.txt.
+
+User-agent: *
+Allow: /
+Disallow: /corporate
+
+Sitemap: https://cpay.co.ke/sitemap.xml

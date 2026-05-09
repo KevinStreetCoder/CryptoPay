@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  cpay.co.ke · sitemap
+  2026-05-09 · keep this static for the marketing landing only. The
+  app proper (everything behind /login) is intentionally excluded
+  because Google can't index auth-walled state and crawl budget is
+  better spent on the public surface. /corporate is hidden by its
+  own meta-noindex AND by robots.txt Disallow · do not list it here.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://cpay.co.ke/</loc>
+    <lastmod>2026-05-09</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>
