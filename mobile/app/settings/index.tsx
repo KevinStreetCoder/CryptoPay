@@ -588,6 +588,16 @@ export default function SettingsScreen() {
           badge: "EN",
         },
         {
+          key: "linked-accounts",
+          icon: "git-network-outline",
+          iconColor: "#F0B90B",
+          iconBg: "rgba(240, 185, 11, 0.15)",
+          label: "Linked Exchanges",
+          description: "Pay with crypto from Binance, Coinbase, Noones",
+          route: "/settings/linked-accounts",
+          badge: "NEW",
+        },
+        {
           key: "currency",
           icon: "cash-outline",
           iconColor: colors.success,
