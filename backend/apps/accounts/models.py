@@ -176,6 +176,36 @@ class User(AbstractBaseUser, PermissionsMixin):
     recovery_email_verified = models.BooleanField(default=False)
     recovery_phone = _pii.PIIEncryptedField(blank=True, null=True, default="")
 
+    # ── 2026-05-09 · Phase-3 Deploy-1 · primary phone + email encryption ──
+    #
+    # Adds parallel encrypted columns to the primary login fields. Reads
+    # still hit `phone` / `email` / `normalised_email` (plaintext); we
+    # dual-write here in `User.save()` so the new columns stay in sync.
+    # Deploy-2 (separate session, irreversible) flips reads to the
+    # encrypted columns and drops the plaintext.
+    #
+    #   *_det     · HMAC-SHA256-derived ciphertext, deterministic, used
+    #               for queries (login by phone, email uniqueness).
+    #               Same plaintext → same ciphertext.
+    #   *_fernet  · Non-deterministic Fernet ciphertext, used for
+    #               retrieval ("show this user's phone in the admin").
+    #               Each encrypt emits a different ciphertext, so this
+    #               column cannot be queried by value.
+    #
+    # Both share the same KMS-wrapped Fernet master key as TOTP /
+    # recovery_*; rotating the master rotates everything.
+    phone_det = _pii.PIIDeterministicField(
+        field_name="phone", max_length=70, blank=True, null=True, db_index=True,
+    )
+    phone_fernet = _pii.PIIEncryptedField(blank=True, null=True)
+    email_det = _pii.PIIDeterministicField(
+        field_name="email", max_length=70, blank=True, null=True, db_index=True,
+    )
+    email_fernet = _pii.PIIEncryptedField(blank=True, null=True)
+    normalised_email_det = _pii.PIIDeterministicField(
+        field_name="normalised_email", max_length=70, blank=True, default="", db_index=True,
+    )
+
     # Login tracking for device/IP change detection
     last_login_ip = models.GenericIPAddressField(null=True, blank=True)
     last_login_country = models.CharField(max_length=2, blank=True, default="")
@@ -300,6 +330,37 @@ class User(AbstractBaseUser, PermissionsMixin):
                 if update_fields is not None:
                     # Cast to list so frozensets / tuples work.
                     kwargs["update_fields"] = list(update_fields) + ["normalised_email"]
+
+        # ── Phase-3 Deploy-1 · dual-write encrypted columns ──
+        # Mirror plaintext → encrypted (det + fernet) on every write
+        # whose update_fields scope touches the source plaintext.
+        # The PII fields' get_prep_value() detects already-encrypted
+        # input and returns it unchanged, so writing the plaintext
+        # to the encrypted column is safe.
+        phone_in_scope = (
+            update_fields is None or "phone" in (update_fields or [])
+        )
+        if phone_in_scope and self.phone:
+            self.phone_det = self.phone
+            self.phone_fernet = self.phone
+            if update_fields is not None and "phone_det" not in update_fields:
+                kwargs["update_fields"] = list(kwargs.get("update_fields") or update_fields) + [
+                    "phone_det", "phone_fernet"
+                ]
+        if email_in_scope and self.email:
+            self.email_det = self.email
+            self.email_fernet = self.email
+            if update_fields is not None and "email_det" not in update_fields:
+                kwargs["update_fields"] = list(kwargs.get("update_fields") or update_fields) + [
+                    "email_det", "email_fernet"
+                ]
+        if email_in_scope:  # normalised_email tracks email
+            self.normalised_email_det = self.normalised_email or ""
+            if update_fields is not None and "normalised_email_det" not in update_fields:
+                kwargs["update_fields"] = list(kwargs.get("update_fields") or update_fields) + [
+                    "normalised_email_det"
+                ]
+
         return super().save(*args, **kwargs)
 
     def set_pin(self, raw_pin: str):
