@@ -116,10 +116,19 @@ def generate_receipt_pdf(transaction):
             recipient = "M-Pesa Till"
             recipient_sub = f"Till {transaction.mpesa_till}"
     elif transaction.mpesa_phone:
-        recipient = "M-Pesa transfer"
+        # 2026-05-09 · prefer the M-Pesa RecipientName captured from
+        # SasaPay's B2C result callback so the receipt shows e.g.
+        # "Kevin Isaac Kareithi" + "+254712••••••" instead of a generic
+        # "M-Pesa transfer" headline. The callback stores it onto
+        # `merchant_name` even for B2C rails (see sasapay_views).
         phone = str(transaction.mpesa_phone)
         masked_phone = f"{phone[:6]}{'•' * max(0, len(phone) - 6)}" if len(phone) > 6 else phone
-        recipient_sub = masked_phone
+        if merchant_name:
+            recipient = merchant_name
+            recipient_sub = f"M-Pesa · {masked_phone}"
+        else:
+            recipient = "M-Pesa transfer"
+            recipient_sub = masked_phone
     elif transaction.type == "SWAP":
         # "Swap · USDT → USDC" / "Swap · BTC → ETH"
         src = (transaction.source_currency or "").upper()

@@ -388,6 +388,35 @@ def send_transaction_receipt(user, transaction):
         crypto_amount = str(transaction.dest_amount)
         crypto_currency = transaction.dest_currency
 
+    # 2026-05-09 receipt-recipient-name fix · derive a "Paid To" headline
+    # from the resolved merchant_name (SasaPay account-validation pre-flight
+    # OR the B2B/B2C result callback's RecipientName, whichever landed
+    # first). Mirrors the PDF receipt logic. Falls back to "M-Pesa Paybill",
+    # "M-Pesa Till", "M-Pesa transfer" when nothing was resolved.
+    merchant_name = (getattr(transaction, "merchant_name", "") or "").strip()
+    recipient_label = ""
+    recipient_sub = ""
+    if transaction.mpesa_paybill:
+        masked_acc = ""
+        if transaction.mpesa_account:
+            acc = str(transaction.mpesa_account)
+            masked_acc = f" · Acc {acc[:4]}{'•' * max(0, len(acc) - 4)}"
+        recipient_label = merchant_name or "M-Pesa Paybill"
+        recipient_sub = f"Paybill {transaction.mpesa_paybill}{masked_acc}"
+    elif transaction.mpesa_till:
+        recipient_label = merchant_name or "M-Pesa Till"
+        recipient_sub = f"Till {transaction.mpesa_till}"
+    elif transaction.mpesa_phone:
+        phone = str(transaction.mpesa_phone)
+        masked_phone = (
+            f"{phone[:6]}{'•' * max(0, len(phone) - 6)}"
+            if len(phone) > 6 else phone
+        )
+        recipient_label = merchant_name or "M-Pesa transfer"
+        recipient_sub = (
+            f"M-Pesa · {masked_phone}" if merchant_name else masked_phone
+        )
+
     context = {
         "full_name": user.full_name or user.phone,
         "amount": str(transaction.dest_amount),
@@ -403,6 +432,9 @@ def send_transaction_receipt(user, transaction):
         "fee_amount": str(transaction.fee_amount) if transaction.fee_amount else None,
         "fee_currency": transaction.fee_currency or "KES",
         "mpesa_receipt": transaction.mpesa_receipt or None,
+        "merchant_name": merchant_name or None,
+        "recipient_label": recipient_label or None,
+        "recipient_sub": recipient_sub or None,
     }
 
     try:

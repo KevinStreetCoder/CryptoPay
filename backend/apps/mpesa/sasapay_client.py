@@ -513,6 +513,44 @@ class SasaPayClient:
             "account_number": phone,
         })
 
+    def lookup_phone_holder_name(self, phone: str, channel: str = "63902") -> str:
+        """Resolve an M-Pesa phone (or Airtel/T-Kash) to its registered
+        holder name via account-validation. Used pre-flight on the SEND
+        MONEY rail so the receipt + status screen can render
+        "Paid to Kevin Kareithi" instead of "Paid to M-Pesa transfer".
+
+        Cached in Redis (1 h on hits, 5 min on misses · phone holders
+        change far more often than paybill ownership). Empty string on
+        any error so callers fall through to the masked-phone fallback.
+        """
+        from django.core.cache import cache
+
+        if not phone:
+            return ""
+        key = f"sasapay_phone_name:{channel}:{phone}"
+        cached = cache.get(key)
+        if cached is not None:
+            return cached or ""
+
+        try:
+            result = self._request("POST", "/accounts/account-validation/", {
+                "merchant_code": self.merchant_code,
+                "channel_code": str(channel),
+                "account_number": str(phone),
+            })
+        except Exception as e:
+            logger.warning(
+                "sasapay.lookup_phone_holder_name.failed",
+                extra={"phone": phone, "error": str(e)[:200]},
+            )
+            cache.set(key, "", timeout=300)
+            return ""
+
+        details = result.get("account_details") or {}
+        name = (details.get("account_name") or "").strip()
+        cache.set(key, name, timeout=3600)
+        return name
+
     def lookup_merchant_name(self, paybill_or_till: str, channel_code: str = "0") -> str:
         """Resolve a Paybill/Till number to its registered merchant name.
 

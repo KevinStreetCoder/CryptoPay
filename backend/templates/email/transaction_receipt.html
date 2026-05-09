@@ -17,6 +17,15 @@
       <td class="label">Type</td>
       <td class="value">{{ tx_type_label|default:tx_type|title }}</td>
     </tr>
+    {% if recipient_label %}
+    <tr>
+      <td class="label">Paid To</td>
+      <td class="value">
+        <strong>{{ recipient_label }}</strong>
+        {% if recipient_sub %}<br><span style="color:#94a3b8;font-size:13px;">{{ recipient_sub }}</span>{% endif %}
+      </td>
+    </tr>
+    {% endif %}
     <tr>
       <td class="label">Amount</td>
       <td class="value">{{ amount }} {{ currency }}</td>

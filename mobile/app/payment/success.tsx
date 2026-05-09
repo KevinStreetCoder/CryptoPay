@@ -172,6 +172,12 @@ export default function PaymentSuccessScreen() {
     status?: string; // "failed" for failure state
     error_message?: string;
     tx_status?: string; // backend status: "completed", "processing", "confirming"
+    // 2026-05-09 · resolved business / phone-holder name forwarded from
+    // confirm.tsx · used for the headline on the "Sent To" row.
+    merchant_name?: string;
+    // 2026-05-09 · "paybill" | "till" | "send" | "bank" · drives label
+    // copy on the "Sent To" / "Paid To" row.
+    payment_type?: string;
   }>();
 
   const { isDark } = useThemeMode();
@@ -180,6 +186,12 @@ export default function PaymentSuccessScreen() {
   const { t } = useLocale();
   const [downloadingReceipt, setDownloadingReceipt] = useState(false);
   const [liveStatus, setLiveStatus] = useState(params.tx_status || "processing");
+  // 2026-05-09 · live merchant_name · seeded from confirm.tsx route
+  // params (set by the backend's pre-flight name lookup) and refreshed
+  // when the result callback's RecipientName lands during polling.
+  const [liveMerchantName, setLiveMerchantName] = useState(
+    (params.merchant_name || "").trim()
+  );
 
   const { width } = useWindowDimensions();
   const isDesktop = isWeb && width >= 900;
@@ -199,6 +211,14 @@ export default function PaymentSuccessScreen() {
         const { paymentsApi } = require("../../src/api/payments");
         const { data } = await paymentsApi.transactionStatus(params.transaction_id);
         const newStatus = data.status || "processing";
+        // 2026-05-09 · pick up `merchant_name` once the result callback
+        // populates it (RecipientName captured from SasaPay) so the row
+        // flips from "M-Pesa transfer · 254712••••••" to
+        // "Kevin Kareithi · 254712••••••" without needing a refresh.
+        const cbName = (data.merchant_name || "").trim();
+        if (cbName && cbName !== liveMerchantName) {
+          setLiveMerchantName(cbName);
+        }
         if (newStatus !== liveStatus) {
           setLiveStatus(newStatus);
           queryClient.invalidateQueries({ queryKey: ["wallets"] });
@@ -414,12 +434,85 @@ export default function PaymentSuccessScreen() {
                 tc={tc}
               />
               <View style={{ height: 1, backgroundColor: tc.glass.border }} />
-              <DetailRow
-                label={isSwap ? "Conversion" : isBuyFlow ? "M-Pesa Phone" : "Sent To"}
-                value={params.recipient || "\u2014"}
-                icon={isSwap ? "repeat-outline" : isBuyFlow ? "phone-portrait-outline" : "person-outline"}
-                tc={tc}
-              />
+              {/* 2026-05-09 \u00b7 prefer the resolved merchant_name as the
+                  primary value with the rail-specific identifier (paybill
+                  number / till number / phone) shown beneath in muted text.
+                  Falls back to just the raw identifier when name lookup
+                  hasn't returned (Daraja path, transient SasaPay miss). */}
+              {(() => {
+                const railLabel = isSwap
+                  ? "Conversion"
+                  : isBuyFlow
+                    ? "M-Pesa Phone"
+                    : params.payment_type === "paybill"
+                      ? "Paid to"
+                      : params.payment_type === "till"
+                        ? "Bought from"
+                        : params.payment_type === "bank"
+                          ? "Sent to bank"
+                          : "Sent to";
+                const railIcon = isSwap
+                  ? "repeat-outline"
+                  : isBuyFlow
+                    ? "phone-portrait-outline"
+                    : params.payment_type === "paybill"
+                      ? "receipt-outline"
+                      : params.payment_type === "till"
+                        ? "cart-outline"
+                        : params.payment_type === "bank"
+                          ? "business-outline"
+                          : "person-outline";
+                const headline = liveMerchantName || params.recipient || "\u2014";
+                const sub =
+                  liveMerchantName && params.recipient && !isSwap && !isBuyFlow
+                    ? params.recipient
+                    : "";
+                return (
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      alignItems: "flex-start",
+                      paddingVertical: 14,
+                      gap: 12,
+                    }}
+                  >
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                      <Ionicons name={railIcon as any} size={16} color={tc.textMuted} />
+                      <Text style={{ color: tc.textMuted, fontSize: 14, fontFamily: "DMSans_400Regular" }}>
+                        {railLabel}
+                      </Text>
+                    </View>
+                    <View style={{ flex: 1, alignItems: "flex-end" }}>
+                      <Text
+                        style={{
+                          color: tc.textPrimary,
+                          fontSize: 14,
+                          fontFamily: "DMSans_600SemiBold",
+                          textAlign: "right",
+                        }}
+                        numberOfLines={2}
+                      >
+                        {headline}
+                      </Text>
+                      {sub ? (
+                        <Text
+                          style={{
+                            color: tc.textMuted,
+                            fontSize: 12,
+                            fontFamily: "DMSans_400Regular",
+                            marginTop: 2,
+                            textAlign: "right",
+                          }}
+                          numberOfLines={1}
+                        >
+                          {sub}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </View>
+                );
+              })()}
               <View style={{ height: 1, backgroundColor: tc.glass.border }} />
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 14 }}>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>

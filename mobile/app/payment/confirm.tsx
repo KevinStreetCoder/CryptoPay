@@ -352,6 +352,13 @@ export default function ConfirmPaymentScreen() {
       if (params.type === "bank" && params.bank_slug) {
         void recordBankUse(params.bank_slug);
       }
+      // 2026-05-09 · forward the resolved merchant name (set server-side
+       // by `_resolve_merchant_name` / `_resolve_phone_holder_name` at
+       // quote time, OR by the B2B/B2C result callback's RecipientName)
+       // so the success screen can render "Paid to KPLC PREPAID" instead
+       // of just the raw paybill number. Falls back to the rail-specific
+       // identifier when name lookup misses.
+      const merchantName = (txData?.merchant_name || "").trim();
       router.replace({
         pathname: "/payment/success",
         params: {
@@ -359,8 +366,10 @@ export default function ConfirmPaymentScreen() {
           crypto_amount: params.crypto_amount,
           crypto_currency: params.crypto_currency,
           recipient: params.paybill_number || params.till_number || params.phone || "",
+          merchant_name: merchantName,
           transaction_id: transactionId,
           tx_status: finalStatus,
+          payment_type: params.type || "",
         },
       });
     } catch (err: unknown) {
@@ -994,12 +1003,19 @@ export default function ConfirmPaymentScreen() {
                   }}
                   maxFontSizeMultiplier={1.3}
                 >
+                  {/* 2026-05-09 fix · confirm.tsx is for OUTGOING flows
+                       (paybill / till / send-mpesa / send-to-bank) · the
+                       user has NO M-Pesa PIN to enter; we're paying out
+                       FROM Cpay's float to the recipient's wallet. The
+                       previous wording leaked the buy-crypto STK-Push
+                       label here, confusing users (and tempting them to
+                       wait for an M-Pesa prompt that never came). */}
                   {pollingStatus === "completed"
                     ? "Payment confirmed"
                     : pollingStatus === "confirming"
-                      ? t("payment.waitingMpesaConfirmation")
+                      ? "Confirming with M-Pesa…"
                       : pollingStatus === "processing"
-                        ? t("payment.enterMpesaPin")
+                        ? "Sending payment…"
                         : t("payment.processingPayment")}
                 </Text>
                 {pollingStatus && pollingStatus !== "completed" && (
@@ -1016,7 +1032,7 @@ export default function ConfirmPaymentScreen() {
                   >
                     {pollingStatus === "confirming"
                       ? "We're talking to M-Pesa now. This usually takes a few seconds."
-                      : t("payment.completeMpesaPrompt")}
+                      : "Hang tight · payment is on the way to the recipient."}
                   </Text>
                 )}
               </View>

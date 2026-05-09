@@ -186,6 +186,33 @@ def _resolve_merchant_name(paybill_or_till: str, channel: str = "0") -> str:
         return ""
 
 
+def _resolve_phone_holder_name(phone: str, channel: str = "63902") -> str:
+    """Best-effort pre-flight lookup of an M-Pesa phone holder's name.
+
+    2026-05-09 · mirrors `_resolve_merchant_name` but for the B2C SEND
+    MONEY rail · so the SUCCESS screen + receipt can render the
+    recipient's actual name ("Kevin Kareithi") instead of just a
+    masked phone. Provider-aware · SasaPay-only. Silent fall-through
+    on any error.
+    """
+    from django.conf import settings as app_settings
+
+    provider = (getattr(app_settings, "PAYMENT_PROVIDER", "daraja") or "daraja").lower()
+    if provider != "sasapay":
+        return ""
+    if not phone:
+        return ""
+    try:
+        from apps.mpesa.sasapay_client import SasaPayClient
+        return SasaPayClient().lookup_phone_holder_name(phone, channel=channel)
+    except Exception as e:
+        logger.warning(
+            "phone_holder_name.lookup_failed",
+            extra={"phone": phone, "error": str(e)[:200]},
+        )
+        return ""
+
+
 def _check_rate_slippage(quote: dict) -> str | None:
     """
     Compare the quote's locked rate against the current live rate.
@@ -921,6 +948,12 @@ class SendMpesaView(APIView):
         # history can render "Business" next to the recipient.
         recipient_kind = data.get("context") or "personal"
 
+        # 2026-05-09 · pre-flight name lookup so the receipt + status
+        # screen render "Paid to Kevin Kareithi" instead of just a
+        # masked phone. Cached 1 h on hits / 5 min on misses · adds at
+        # most a single ~150 ms HTTP call to the cold path.
+        phone_holder_name = _resolve_phone_holder_name(data["phone"])
+
         try:
             tx = Transaction.objects.create(
                 idempotency_key=idem_key,
@@ -935,6 +968,7 @@ class SendMpesaView(APIView):
                 fee_currency="KES",
                 excise_duty_amount=Decimal(quote.get("excise_duty_kes", "0")),
                 mpesa_phone=data["phone"],
+                merchant_name=phone_holder_name,
                 ip_address=self._get_client_ip(request),
                 saga_data={"recipient_kind": recipient_kind} if recipient_kind != "personal" else {},
             )

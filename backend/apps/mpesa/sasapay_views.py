@@ -34,6 +34,7 @@ from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
 from django.core.cache import cache
+from django.core.exceptions import ValidationError
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
@@ -540,9 +541,21 @@ def _process_successful_payment(
     if url_tx_id:
         tx = Transaction.objects.filter(id=url_tx_id).first()
 
-    # Strategy 1: by idempotency_key (B2B / B2C payments).
+    # Strategy 1: by idempotency_key (legacy · pre-2026-05-09).
     if not tx and ref:
         tx = Transaction.objects.filter(idempotency_key=ref).first()
+
+    # Strategy 1b: by transaction.id · 2026-05-09 callback-match fix.
+    # The saga now passes `reference=str(tx.id)` on every rail (B2B
+    # paybill/till + B2C send-mobile) so the result callback's
+    # `MerchantTransactionReference` IS the tx PK. Try that before
+    # falling back to checkout/merchant-request lookups.
+    if not tx and ref:
+        try:
+            tx = Transaction.objects.filter(id=ref).first()
+        except (ValueError, ValidationError):
+            # ref isn't a UUID · skip
+            pass
 
     # Strategy 2: by CheckoutRequestID in saga_data (STK Push).
     if not tx:

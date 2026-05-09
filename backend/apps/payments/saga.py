@@ -221,18 +221,28 @@ class PaymentSaga:
 
         client = get_payment_client()
 
+        # 2026-05-09 callback-match fix · pass `reference=tx.id` on
+        # EVERY rail. The SasaPay adapter previously generated a random
+        # UUID for B2B paybill/till when no reference was supplied · the
+        # eventual result callback then carried that random UUID and our
+        # `_process_successful_payment` couldn't match it back to the
+        # transaction (Strategy 1 looks up by idempotency_key=ref).
+        # That swallowed the `RecipientName` field SasaPay returns,
+        # leaving the receipt blank.
         if self.tx.mpesa_paybill:
             result = client.b2b_payment(
                 paybill=self.tx.mpesa_paybill,
                 account=self.tx.mpesa_account,
                 amount=int(self.tx.dest_amount),
                 remarks=f"CryptoPay-{self.tx.id}",
+                reference=str(self.tx.id),
             )
         elif self.tx.mpesa_till:
             result = client.buy_goods(
                 till=self.tx.mpesa_till,
                 amount=int(self.tx.dest_amount),
                 remarks=f"CryptoPay-{self.tx.id}",
+                reference=str(self.tx.id),
             )
         elif self.tx.mpesa_phone:
             result = client.b2c_payment(
