@@ -473,7 +473,7 @@ export default function ExchangePullScreen() {
       withdrawal.status === "done"
         ? "#10B981"
         : withdrawal.status === "failed"
-          ? colors.danger
+          ? colors.error
           : colors.warning;
 
     return (
@@ -529,16 +529,16 @@ export default function ExchangePullScreen() {
           <View
             style={{
               width: "100%",
-              backgroundColor: colors.danger + "10",
+              backgroundColor: colors.error + "10",
               borderRadius: 12,
               padding: 12,
               borderWidth: 1,
-              borderColor: colors.danger + "40",
+              borderColor: colors.error + "40",
             }}
           >
             <Text
               style={{
-                color: colors.danger,
+                color: colors.error,
                 fontSize: 12,
                 fontFamily: "DMSans_700Bold",
                 marginBottom: 4,

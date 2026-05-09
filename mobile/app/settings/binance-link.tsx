@@ -276,11 +276,11 @@ export default function BinanceLinkScreen() {
       {error && (
         <View
           style={{
-            backgroundColor: colors.danger + "10",
+            backgroundColor: colors.error + "10",
             borderRadius: 12,
             padding: 12,
             borderWidth: 1,
-            borderColor: colors.danger + "40",
+            borderColor: colors.error + "40",
             flexDirection: "row",
             gap: 10,
           }}
@@ -288,13 +288,13 @@ export default function BinanceLinkScreen() {
           <Ionicons
             name="alert-circle"
             size={18}
-            color={colors.danger}
+            color={colors.error}
             style={{ marginTop: 1 }}
           />
           <View style={{ flex: 1 }}>
             <Text
               style={{
-                color: colors.danger,
+                color: colors.error,
                 fontSize: 13,
                 fontFamily: "DMSans_700Bold",
                 marginBottom: 4,
