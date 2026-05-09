@@ -332,6 +332,61 @@ def sweep_reconciliation_cases():
     return {"escalated": escalated_count, "checked_at": now.isoformat()}
 
 
+def _credit_buy_crypto_if_needed(tx, receipt: str) -> None:
+    """Mirror the BUY-crypto credit step in `sasapay_views._process_
+    successful_payment`. The callback handler does this inline; the
+    active-poll path (this module) needs to do the same when it
+    resolves a stuck BUY/DEPOSIT tx, otherwise we'd flip the status
+    to COMPLETED but the user's crypto wallet stays empty.
+
+    Idempotent · `WalletService.credit` is keyed on `transaction_id`,
+    so a duplicate call (e.g. callback arrives just after this) no-ops.
+    """
+    from decimal import Decimal
+
+    if tx.type not in ("BUY", "DEPOSIT"):
+        return
+    saga_data = tx.saga_data or {}
+    quote = saga_data.get("quote") or {}
+    if not quote:
+        return
+    crypto_currency = quote.get("currency") or tx.dest_currency
+    crypto_amount_raw = quote.get("crypto_amount") or tx.dest_amount or "0"
+    try:
+        crypto_amount = Decimal(str(crypto_amount_raw))
+    except Exception:
+        logger.exception(
+            "sasapay.status_query.credit_amount_parse_failed",
+            extra={"tx_id": str(tx.id), "raw": crypto_amount_raw},
+        )
+        return
+    if crypto_amount <= 0:
+        return
+    try:
+        from apps.wallets.models import Wallet
+        from apps.wallets.services import WalletService
+        wallet = Wallet.objects.get(user=tx.user, currency=crypto_currency)
+        WalletService.credit(
+            wallet_id=wallet.id,
+            amount=crypto_amount,
+            transaction_id=str(tx.id),
+            description=f"Buy crypto via SasaPay {receipt or 'status-poll'}",
+        )
+        logger.info(
+            "sasapay.status_query.credited",
+            extra={
+                "tx_id": str(tx.id),
+                "amount": str(crypto_amount),
+                "currency": crypto_currency,
+            },
+        )
+    except Exception:
+        logger.exception(
+            "sasapay.status_query.credit_failed",
+            extra={"tx_id": str(tx.id)},
+        )
+
+
 def _resolve_via_sasapay_status(tx, checkout_request_id: str) -> None:
     """Active-poll SasaPay's transaction-status endpoint and resolve
     the saga · either complete (success) or compensate (failure).
@@ -388,9 +443,16 @@ def _resolve_via_sasapay_status(tx, checkout_request_id: str) -> None:
 
     if result_code == "0":
         try:
+            # Order matters · saga.complete flips status=COMPLETED and
+            # records the receipt; AFTER that we credit crypto for BUY
+            # so the wallet write is keyed against the now-completed tx.
+            # Both ops are idempotent, so a callback arriving moments
+            # later finds the tx already COMPLETED + the wallet credit
+            # already keyed on tx.id and no-ops.
             PaymentSaga(tx).complete(mpesa_receipt=receipt or "")
+            _credit_buy_crypto_if_needed(tx, receipt)
             logger.info("sasapay.status_query.completed", extra={
-                "tx_id": str(tx.id), "receipt": receipt,
+                "tx_id": str(tx.id), "receipt": receipt, "type": tx.type,
             })
         except Exception:
             logger.exception(
@@ -496,25 +558,51 @@ def _sasapay_friendly_message(result_code: str) -> str:
 @shared_task
 def check_pending_mpesa_payments():
     """
-    Check for M-Pesa payments stuck in 'confirming' status.
-    If no callback received within 60s, query Transaction Status API.
-    After 10 minutes, auto-compensate to return user funds.
+    Active-poll the M-Pesa rail for stuck transactions, both directions.
+
+    Outgoing (PAYBILL/TILL/SEND_MPESA · CONFIRMING) · the legacy path:
+    after the user signs off and we fire the B2B/B2C, we move the tx to
+    CONFIRMING and wait for the result callback. If it drops, we resolve
+    via Transaction Status API; after 10 minutes with no resolution we
+    compensate (return crypto) and mark FAILED.
+
+    Incoming (BUY/DEPOSIT · PROCESSING) · 2026-05-09 fix:
+    after we trigger an STK Push the tx sits in PROCESSING until the
+    customer enters their M-Pesa PIN and the IPN/callback arrives. The
+    callback occasionally drops on transient SasaPay/Cloudflare blips,
+    leaving the tx stuck in PROCESSING forever (the 10-min compensate
+    branch was CONFIRMING-only and never fired for BUY). Frontend
+    polling sees `processing` for 2 min, then renders a generic
+    "processing" success screen while the customer's KES has already
+    been deducted. We now actively poll SasaPay for these too · on
+    SUCCESS we credit crypto (mirroring the callback handler), on
+    FAILURE we compensate just like the outgoing path.
+
     Run every 30 seconds via Celery Beat.
     """
     from datetime import timedelta
 
     from django.conf import settings as app_settings
+    from django.db.models import Q
     from django.utils import timezone
 
     cutoff = timezone.now() - timedelta(seconds=60)
     stuck = Transaction.objects.filter(
-        status=Transaction.Status.CONFIRMING,
+        Q(
+            status=Transaction.Status.CONFIRMING,
+            type__in=[
+                Transaction.Type.PAYBILL_PAYMENT,
+                Transaction.Type.TILL_PAYMENT,
+                Transaction.Type.SEND_MPESA,
+            ],
+        ) | Q(
+            status=Transaction.Status.PROCESSING,
+            type__in=[
+                Transaction.Type.BUY,
+                Transaction.Type.DEPOSIT,
+            ],
+        ),
         updated_at__lt=cutoff,
-        type__in=[
-            Transaction.Type.PAYBILL_PAYMENT,
-            Transaction.Type.TILL_PAYMENT,
-            Transaction.Type.SEND_MPESA,
-        ],
     )
 
     provider = getattr(app_settings, "PAYMENT_PROVIDER", "daraja").lower()
@@ -553,7 +641,15 @@ def check_pending_mpesa_payments():
                 "tx_id": str(tx.id), "provider": provider, "error": str(e),
             })
 
-        # After 10 minutes with no resolution, compensate and mark FAILED
+        # 10-minute compensate · OUTGOING ONLY (CONFIRMING). For BUY/
+        # DEPOSIT in PROCESSING we deliberately do NOT auto-FAIL after
+        # 10 min: an STK Push that the active poll still reports as
+        # "still pending" usually just means SasaPay's status query is
+        # lagging behind the actual M-Pesa state, and the legitimate
+        # follow-up callback is pending. Marking FAILED here would
+        # leave the user thinking their KES was lost. Instead the
+        # active poll will eventually resolve it, OR a
+        # ReconciliationCase will be opened by ops on stuck-tx alerts.
         ten_min_cutoff = timezone.now() - timedelta(minutes=10)
         if tx.updated_at < ten_min_cutoff and tx.status == Transaction.Status.CONFIRMING:
             logger.warning(

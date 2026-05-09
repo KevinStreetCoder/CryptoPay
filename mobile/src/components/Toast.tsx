@@ -117,13 +117,32 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
     ]).start(() => onDismiss(toast.id));
   };
 
+  // 2026-05-09 fix · width control lives on the OUTER Animated.View
+  // (the layout box), NOT on the Pressable child. With alignItems:
+  // "center" on the parent container, RN web computes the parent's
+  // width = content width, so `width: 100%` on the inner Pressable
+  // resolved to 100% of an unsized parent and the toast spilled past
+  // the viewport on narrow screens. By moving width / maxWidth /
+  // marginHorizontal onto the Animated.View we get a real layout box,
+  // and the Pressable inside just stretches normally with `flex: 1`.
   return (
     <Animated.View
       style={{
         transform: [{ translateY }],
         opacity,
         marginBottom: 8,
+        // Layout box · constrains width on web, leaves native to flex
+        // naturally inside the alignItems: "stretch" container.
+        ...(Platform.OS === "web"
+          ? ({
+              width: "100%",
+              maxWidth: 460,
+              marginHorizontal: 12,
+              alignSelf: "center",
+            } as any)
+          : { marginHorizontal: 12 }),
       }}
+      pointerEvents="auto"
     >
       <Pressable
         onPress={dismiss}
@@ -136,31 +155,34 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
           borderRadius: 16,
           paddingHorizontal: 18,
           paddingVertical: 14,
-          marginHorizontal: 10,
           gap: 12,
-          ...(Platform.OS === "web" ? {
-            maxWidth: 460,
-            width: "100%",
-            boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
-          } as any : {
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.4,
-            shadowRadius: 12,
-            elevation: 10,
-          }),
+          ...(Platform.OS === "web"
+            ? ({
+                boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+              } as any)
+            : {
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.4,
+                shadowRadius: 12,
+                elevation: 10,
+              }),
         }}
         accessibilityRole="alert"
         accessibilityLabel={`${toast.type}: ${toast.title}${toast.message ? `. ${toast.message}` : ""}`}
       >
         <Ionicons name={config.icon as any} size={24} color={config.color} />
-        <View style={{ flex: 1 }}>
+        <View style={{ flex: 1, minWidth: 0 }}>
           <Text
             style={{
               color: "#F1F5F9",
               fontSize: 15,
               fontFamily: "DMSans_600SemiBold",
               lineHeight: 20,
+              // flexShrink + word-break stop a long single-word title
+              // from forcing horizontal overflow on web.
+              flexShrink: 1,
+              ...(Platform.OS === "web" ? ({ wordBreak: "break-word" } as any) : {}),
             }}
             maxFontSizeMultiplier={1.3}
           >
@@ -174,6 +196,8 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
                 fontFamily: "DMSans_400Regular",
                 marginTop: 3,
                 lineHeight: 18,
+                flexShrink: 1,
+                ...(Platform.OS === "web" ? ({ wordBreak: "break-word" } as any) : {}),
               }}
               maxFontSizeMultiplier={1.3}
             >
@@ -215,6 +239,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <ToastContext.Provider value={contextValue()}>
       {children}
       <View
+        // 2026-05-09 · padding on the wrapper guarantees a gutter on
+        // narrow phones / iPhone SE-class viewports even when the
+        // child has alignSelf: "center". `paddingHorizontal: 0` on
+        // web because the child's marginHorizontal handles it.
         style={{
           position: "absolute",
           top: Platform.OS === "web" ? 16 : insets.top + 8,
