@@ -16,6 +16,13 @@ export interface Transaction {
   mpesa_account: string;
   mpesa_phone: string;
   mpesa_receipt: string;
+  // 2026-05-09 · resolved business name (e.g. "KPLC PREPAID") for the
+  // paybill/till the user paid · sourced from SasaPay's account-
+  // validation lookup at quote time, falling back to RecipientName
+  // captured from the B2B callback. Empty string when unresolved
+  // (Daraja path or transient SasaPay outage); UI falls through to
+  // the generic "Paybill <number>" rendering.
+  merchant_name?: string;
   excise_duty_amount: string;
   chain: string;
   tx_hash: string;

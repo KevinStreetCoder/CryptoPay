@@ -89,18 +89,32 @@ def generate_receipt_pdf(transaction):
     # For non-M-Pesa transaction types (swap / buy / sell / deposit /
     # withdrawal) we derive a crypto-flow header so the receipt isn't
     # blank — previously only M-Pesa tx types got any "Paid To" content.
+    # 2026-05-09 · prefer `merchant_name` (resolved at quote time via
+    # SasaPay account-validation, or captured from the B2B callback's
+    # RecipientName) for the headline; the paybill/till + masked account
+    # drops to the sub-line. Mirrors the "KPLC PREPAID · Paybill 888880"
+    # treatment from the design canvas.
     recipient = ""
     recipient_sub = ""
+    merchant_name = (getattr(transaction, "merchant_name", "") or "").strip()
     if transaction.mpesa_paybill:
-        recipient = "M-Pesa Paybill"
         masked_acc = ""
         if transaction.mpesa_account:
             acc = str(transaction.mpesa_account)
             masked_acc = f" · Acc {acc[:4]}{'•' * max(0, len(acc) - 4)}"
-        recipient_sub = f"Paybill {transaction.mpesa_paybill}{masked_acc}"
+        if merchant_name:
+            recipient = merchant_name
+            recipient_sub = f"Paybill {transaction.mpesa_paybill}{masked_acc}"
+        else:
+            recipient = "M-Pesa Paybill"
+            recipient_sub = f"Paybill {transaction.mpesa_paybill}{masked_acc}"
     elif transaction.mpesa_till:
-        recipient = "M-Pesa Till"
-        recipient_sub = f"Till {transaction.mpesa_till}"
+        if merchant_name:
+            recipient = merchant_name
+            recipient_sub = f"Till {transaction.mpesa_till}"
+        else:
+            recipient = "M-Pesa Till"
+            recipient_sub = f"Till {transaction.mpesa_till}"
     elif transaction.mpesa_phone:
         recipient = "M-Pesa transfer"
         phone = str(transaction.mpesa_phone)

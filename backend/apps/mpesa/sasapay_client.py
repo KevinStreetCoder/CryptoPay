@@ -283,3 +283,52 @@ class SasaPayClient:
             "channel_code": channel,
             "account_number": phone,
         })
+
+    def lookup_merchant_name(self, paybill_or_till: str, channel_code: str = "0") -> str:
+        """Resolve a Paybill/Till number to its registered merchant name.
+
+        2026-05-09 · the same `account-validation` endpoint that we use
+        for phone validation also returns the registered business name
+        when given a Paybill (channel_code=0) or Buy-Goods Till (
+        channel_code=2). Keying our receipts to this means we can
+        print "Paid to KPLC PREPAID" instead of just "Paybill 888880".
+
+        Cached in Redis with a 24 h TTL · Kenyan paybills change owners
+        rarely (months between such transitions) so the cache mostly
+        eliminates the network hop on the hot quote path.
+
+        Returns the human-readable merchant name, or an empty string
+        if the lookup fails for any reason · callers fall through to
+        the original "Paybill <number>" rendering.
+        """
+        from django.core.cache import cache
+
+        if not paybill_or_till:
+            return ""
+        key = f"sasapay_merchant_name:{channel_code}:{paybill_or_till}"
+        cached = cache.get(key)
+        if cached is not None:
+            # We deliberately cache empty-string misses too · if SasaPay
+            # said "no such merchant" we don't want to retry every quote.
+            return cached or ""
+
+        try:
+            result = self._request("POST", "/accounts/account-validation/", {
+                "merchant_code": self.merchant_code,
+                "channel_code": str(channel_code),
+                "account_number": str(paybill_or_till),
+            })
+        except Exception as e:
+            logger.warning(
+                "sasapay.lookup_merchant_name.failed",
+                extra={"paybill": paybill_or_till, "error": str(e)[:200]},
+            )
+            cache.set(key, "", timeout=600)  # 10 min on errors · retry sooner
+            return ""
+
+        details = result.get("account_details") or {}
+        name = (details.get("account_name") or "").strip()
+        # 24 h on success · paybill→name is effectively static for our
+        # purposes. Caches the empty value too to suppress retries.
+        cache.set(key, name, timeout=86400)
+        return name

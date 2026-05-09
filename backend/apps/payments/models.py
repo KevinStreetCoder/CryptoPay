@@ -57,6 +57,14 @@ class Transaction(models.Model):
     mpesa_account = models.CharField(max_length=50, blank=True)
     mpesa_phone = models.CharField(max_length=15, blank=True)
     mpesa_receipt = models.CharField(max_length=30, blank=True)
+    # 2026-05-09 · resolved business name for the paybill/till the user
+    # paid · sourced from SasaPay's `account-validation` endpoint at
+    # quote time and/or `RecipientName` from the B2B result callback.
+    # Surfaced on receipt + tx detail so users see "Paid to KPLC PREPAID"
+    # not just "Paybill 888880". Free-form (some Kenyan paybills carry
+    # the trade name only, others carry the legal-entity name); we don't
+    # validate the value beyond a length cap.
+    merchant_name = models.CharField(max_length=120, blank=True)
 
     # Blockchain fields
     chain = models.CharField(max_length=20, blank=True)

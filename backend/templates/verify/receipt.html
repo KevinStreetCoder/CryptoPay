@@ -190,17 +190,21 @@
       </div>
     </div>
 
+    {% if recipient_label %}
+      <div style="padding: 16px 24px 4px;">
+        <div style="font-size: 10px; color: #64748B; letter-spacing: 1.5px; font-weight: 600; text-transform: uppercase;">Paid to</div>
+        <div style="font-size: 18px; font-weight: 700; margin-top: 2px; color: #0B1220;">{{ recipient_label }}</div>
+        {% if recipient_detail %}
+          <div style="font-size: 12px; color: #64748B; font-family: 'JetBrains Mono', monospace; margin-top: 2px;">{{ recipient_detail }}</div>
+        {% endif %}
+      </div>
+    {% endif %}
+
     <div class="meta">
       <div class="meta-row">
         <span class="k">Type</span>
         <span class="v">{{ type_label }}</span>
       </div>
-      {% if masked_recipient %}
-        <div class="meta-row">
-          <span class="k">Recipient</span>
-          <span class="v">{{ masked_recipient }}</span>
-        </div>
-      {% endif %}
       {% if tx.mpesa_receipt %}
         <div class="meta-row">
           <span class="k">M-Pesa receipt</span>

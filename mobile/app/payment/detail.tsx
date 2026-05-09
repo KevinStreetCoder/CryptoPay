@@ -768,6 +768,17 @@ export default function TransactionDetailScreen() {
               }}
             >
               {/* Common fields */}
+              {/* 2026-05-09 · merchant_name leads when present
+                  ("Paid To: KPLC PREPAID") so the customer sees who
+                  they actually paid before the raw paybill number.
+                  Falls through to phone/paybill/till for older txns
+                  that pre-date the SasaPay merchant lookup. */}
+              {tx.merchant_name && (tx.mpesa_paybill || tx.mpesa_till) ? renderDetailRow(
+                "Paid To",
+                tx.merchant_name,
+                "business-outline"
+              ) : null}
+
               {isMpesaPayment && renderDetailRow(
                 "Recipient",
                 getRecipient(tx),

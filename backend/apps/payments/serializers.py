@@ -295,7 +295,7 @@ class TransactionSerializer(serializers.ModelSerializer):
             "dest_currency", "dest_amount",
             "exchange_rate", "fee_amount", "fee_currency", "excise_duty_amount",
             "mpesa_paybill", "mpesa_till", "mpesa_account",
-            "mpesa_phone", "mpesa_receipt",
+            "mpesa_phone", "mpesa_receipt", "merchant_name",
             "chain", "tx_hash", "confirmations",
             "destination_address", "failure_reason",
             "recipient_kind", "bank",

@@ -79,6 +79,27 @@ def verify_receipt(request, code: str):
         )
 
     tx = matches[0]
+    # 2026-05-09 · resolved business name takes the headline slot ·
+    # paybill/till + masked account drops to the sub-line. Same
+    # treatment as the PDF receipt for consistency between the printed
+    # receipt and the publicly-verifiable web view.
+    merchant_name = (getattr(tx, "merchant_name", "") or "").strip()
+    if tx.mpesa_paybill:
+        recipient_label = merchant_name or "M-Pesa Paybill"
+        recipient_detail = f"Paybill {tx.mpesa_paybill}"
+        if tx.mpesa_account:
+            acc = str(tx.mpesa_account)
+            recipient_detail += f" · Acc {acc[:4]}{'•' * max(0, len(acc) - 4)}"
+    elif tx.mpesa_till:
+        recipient_label = merchant_name or "M-Pesa Till"
+        recipient_detail = f"Till {tx.mpesa_till}"
+    elif tx.mpesa_phone:
+        recipient_label = "M-Pesa transfer"
+        recipient_detail = _mask_phone(tx.mpesa_phone)
+    else:
+        recipient_label = ""
+        recipient_detail = ""
+
     return render(request, "verify/receipt.html", {
         "tx": tx,
         "code": code,
@@ -98,5 +119,7 @@ def verify_receipt(request, code: str):
             "INTERNAL_TRANSFER":"Internal Transfer",
             "FEE":              "Platform Fee",
         }.get(tx.type, tx.type),
+        "recipient_label": recipient_label,
+        "recipient_detail": recipient_detail,
         "masked_recipient": _mask_phone(tx.mpesa_phone) or tx.mpesa_paybill or tx.mpesa_till or "",
     })

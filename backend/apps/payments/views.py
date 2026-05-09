@@ -155,6 +155,36 @@ def _apply_referral_credit(tx) -> Decimal:
         return Decimal("0.00")
 
 
+def _resolve_merchant_name(paybill_or_till: str, channel: str = "0") -> str:
+    """Best-effort lookup of the registered business name for a paybill
+    or till number, used to enrich receipts ("Paid to KPLC PREPAID"
+    instead of "Paybill 888880").
+
+    Provider-aware · only SasaPay exposes this today (Daraja's Account
+    Balance is for OUR shortcode, not third-party paybills). Falls
+    through to an empty string for daraja/intasend or on any error;
+    callers render the generic "Paybill <num>" treatment in that case.
+
+    Channel codes are SasaPay's: "0" paybill, "2" buy-goods till.
+    """
+    from django.conf import settings as app_settings
+
+    provider = (getattr(app_settings, "PAYMENT_PROVIDER", "daraja") or "daraja").lower()
+    if provider != "sasapay":
+        return ""
+    if not paybill_or_till:
+        return ""
+    try:
+        from apps.mpesa.sasapay_client import SasaPayClient
+        return SasaPayClient().lookup_merchant_name(paybill_or_till, channel_code=channel)
+    except Exception as e:
+        logger.warning(
+            "merchant_name.lookup_failed",
+            extra={"paybill": paybill_or_till, "error": str(e)[:200]},
+        )
+        return ""
+
+
 def _check_rate_slippage(quote: dict) -> str | None:
     """
     Compare the quote's locked rate against the current live rate.
@@ -312,6 +342,15 @@ class PayBillView(APIView):
 
         # Create the transaction — Layer 3 (PostgreSQL unique constraint)
         try:
+            # 2026-05-09 · resolve the merchant name now (before saga
+            # fires the actual B2B) so the receipt + status screens
+            # can render "Paid to KPLC PREPAID" the moment the saga
+            # completes. SasaPay-only path · Daraja's Account Balance
+            # API has no per-paybill name lookup. Cached 24 h in Redis
+            # by the client wrapper, so the hot quote path adds at most
+            # one ~150 ms HTTP call on a cache miss.
+            merchant_name = _resolve_merchant_name(data["paybill"], channel="0")
+
             tx = Transaction.objects.create(
                 idempotency_key=idem_key,
                 user=user,
@@ -326,6 +365,7 @@ class PayBillView(APIView):
                 excise_duty_amount=Decimal(quote.get("excise_duty_kes", "0")),
                 mpesa_paybill=data["paybill"],
                 mpesa_account=data["account"],
+                merchant_name=merchant_name,
                 ip_address=self._get_client_ip(request),
             )
         except IntegrityError:
@@ -743,6 +783,11 @@ class PayTillView(APIView):
             return Response({"error": slippage_err}, status=status.HTTP_409_CONFLICT)
 
         try:
+            # 2026-05-09 · resolve the till's registered name. SasaPay
+            # channel code "2" = Buy Goods Till. Same 24-h Redis cache
+            # as paybill side.
+            merchant_name = _resolve_merchant_name(data["till"], channel="2")
+
             tx = Transaction.objects.create(
                 idempotency_key=idem_key,
                 user=user,
@@ -756,6 +801,7 @@ class PayTillView(APIView):
                 fee_currency="KES",
                 excise_duty_amount=Decimal(quote.get("excise_duty_kes", "0")),
                 mpesa_till=data["till"],
+                merchant_name=merchant_name,
                 ip_address=self._get_client_ip(request),
             )
         except IntegrityError:

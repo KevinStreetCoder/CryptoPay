@@ -388,7 +388,20 @@ def _process_successful_payment(
     tx.mpesa_receipt = trans_code
     tx.status = Transaction.Status.COMPLETED
     tx.completed_at = timezone.now()
-    tx.save(update_fields=["mpesa_receipt", "status", "completed_at", "updated_at"])
+    # 2026-05-09 · the B2B/B2C result callback carries `RecipientName`
+    # · the actual business / phone holder name as recorded by M-Pesa.
+    # If our pre-flight `account-validation` lookup missed (e.g. SasaPay
+    # was rate-limited, paybill new and not yet cached), use this as
+    # the authoritative fallback so the receipt isn't blank. Don't
+    # overwrite a value we already resolved · the pre-flight name is
+    # often more recognisable to the customer (trade name vs the legal
+    # entity name M-Pesa registered).
+    update_fields = ["mpesa_receipt", "status", "completed_at", "updated_at"]
+    callback_recipient = (data.get("RecipientName") or "").strip()
+    if callback_recipient and not tx.merchant_name:
+        tx.merchant_name = callback_recipient[:120]
+        update_fields.append("merchant_name")
+    tx.save(update_fields=update_fields)
 
     # For Buy Crypto (BUY type with STK Push): credit the crypto wallet.
     if tx.type in ("BUY", "DEPOSIT") and tx.saga_data and tx.saga_data.get("quote"):
