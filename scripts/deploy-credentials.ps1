@@ -78,9 +78,10 @@ $PROVIDERS = [ordered]@{
     sasapay = @{
         Title = "SasaPay (production · CBK-licensed PSP)"
         Fields = @(
-            @{ Name = "SASAPAY_CLIENT_ID";     Label = "Client ID";     Masked = $false; ExpectedLen = @(20, 60);  Required = $true }
-            @{ Name = "SASAPAY_CLIENT_SECRET"; Label = "Client Secret"; Masked = $true;  ExpectedLen = @(40, 200); Required = $true }
-            @{ Name = "SASAPAY_MERCHANT_CODE"; Label = "Merchant Code"; Masked = $false; ExpectedLen = @(4, 12);   Required = $false }
+            @{ Name = "SASAPAY_CLIENT_ID";       Label = "Client ID";       Masked = $false; ExpectedLen = @(20, 60);  Required = $true }
+            @{ Name = "SASAPAY_CLIENT_SECRET";   Label = "Client Secret";   Masked = $true;  ExpectedLen = @(40, 200); Required = $true }
+            @{ Name = "SASAPAY_MERCHANT_CODE";   Label = "Merchant Code";   Masked = $false; ExpectedLen = @(4, 12);   Required = $false }
+            @{ Name = "SASAPAY_WEBHOOK_SECRET";  Label = "Webhook Signing Secret (from dashboard)"; Masked = $true;  ExpectedLen = @(20, 200); Required = $false }
         )
         EnvDefaults = @{ SASAPAY_ENVIRONMENT = "production" }
         Verify = @'

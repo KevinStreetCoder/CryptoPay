@@ -169,8 +169,8 @@ MEDIA_ROOT = BASE_DIR / "media"
 # `receipts/<tx_id>.pdf` for receipts. The object keys never contain
 # user phone or email · those would leak via bucket-listing
 # enumeration if R2 access is ever misconfigured.
-R2_ACCESS_KEY_ID = _gs("R2_ACCESS_KEY_ID", default=env("R2_ACCESS_KEY_ID", default=""))
-R2_SECRET_ACCESS_KEY = _gs("R2_SECRET_ACCESS_KEY", default=env("R2_SECRET_ACCESS_KEY", default=""))
+R2_ACCESS_KEY_ID = env("R2_ACCESS_KEY_ID", default="")
+R2_SECRET_ACCESS_KEY = env("R2_SECRET_ACCESS_KEY", default="")
 R2_ACCOUNT_ID = env("R2_ACCOUNT_ID", default="")
 R2_BUCKET = env("R2_BUCKET", default="")
 R2_CUSTOM_DOMAIN = env("R2_CUSTOM_DOMAIN", default="")  # e.g. files.cpay.co.ke

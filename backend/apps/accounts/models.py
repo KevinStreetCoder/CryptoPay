@@ -10,6 +10,7 @@ from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from django.db import models
 
 from .managers import UserManager
+from apps.core import pii as _pii  # 2026-05-09 Phase-3 PII column encryption
 
 
 def _fernet_from_legacy_key() -> Fernet:
@@ -159,10 +160,21 @@ class User(AbstractBaseUser, PermissionsMixin):
     # Email verification
     email_verified = models.BooleanField(default=False)
 
-    # Recovery contacts
-    recovery_email = models.EmailField(blank=True, null=True)
+    # Recovery contacts · 2026-05-09 Phase-3 PII encryption
+    # Column-encrypted at rest via PIIEncryptedField (Fernet,
+    # non-deterministic). Recovery contacts are LOW-traffic (touched
+    # only at signup + on account-recovery flow) so transparent
+    # encrypt-on-save / decrypt-on-load is safe · phone + email on
+    # the primary login surface stay plaintext for now until the
+    # dedicated 2-deploy migration lands.
+    # Existing rows return their plaintext unchanged (the field's
+    # from_db_value detects the Fernet `gAAAAA` prefix and only
+    # decrypts when present); the next save() encrypts. To force
+    # immediate backfill after deploy, run:
+    #     manage.py backfill_pii_encryption recovery_email recovery_phone
+    recovery_email = _pii.PIIEncryptedField(blank=True, null=True)
     recovery_email_verified = models.BooleanField(default=False)
-    recovery_phone = models.CharField(max_length=15, blank=True, default="")
+    recovery_phone = _pii.PIIEncryptedField(blank=True, null=True, default="")
 
     # Login tracking for device/IP change detection
     last_login_ip = models.GenericIPAddressField(null=True, blank=True)
