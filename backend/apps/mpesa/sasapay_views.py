@@ -655,66 +655,187 @@ def _process_successful_payment(
         tx.merchant_name = callback_recipient[:120]
         update_fields.append("merchant_name")
 
-    # 2026-05-09 · KPLC / utility-token relay. SasaPay's B2B result
-    # callback for utility paybills (KPLC 888880, DSTV, Zuku, Nairobi
-    # Water, etc.) returns the biller's M-Pesa response in `ResultDesc`
-    # — for KPLC prepaid that's the literal SMS the user would have
-    # received if they'd paid from their own M-Pesa: e.g.
-    #   "Confirmed. KSH 100.00 sent to KPLC PREPAID for account
-    #    37123456789. Token: 1234 5678 9012 3456 7890. Units: 5.20
-    #    KWh."
-    # Capture it on the tx so the receipt + success screen + email +
-    # SMS can render it. Cpay's B2B sender phone receives the actual
-    # SMS too, but we forward to the real user further down so they
-    # get the token where they expect it.
-    biller_resp = (data.get("ResultDesc") or data.get("resultDesc") or "").strip()
-    # SasaPay sometimes nests the biller text inside a structured
-    # `ResultParameter` array · pull a `BillReferenceNumber` or
-    # `ReceiptNumber` style field if the flat ResultDesc is generic.
-    if not biller_resp or biller_resp.lower() in ("transaction processed successfully", "success", "the service request is processed successfully."):
-        params_block = data.get("ResultParameter") or data.get("ResultParameters") or []
-        if isinstance(params_block, dict):
-            params_block = (params_block.get("ResultParameter") or [])
-        if isinstance(params_block, list):
-            chunks = []
-            for item in params_block:
-                if not isinstance(item, dict):
-                    continue
-                key = (item.get("Key") or item.get("key") or "").lower()
-                value = item.get("Value") if "Value" in item else item.get("value")
-                if value is None:
-                    continue
-                if any(t in key for t in ("token", "receipt", "billref", "transaction", "units", "kplc", "amount")):
-                    chunks.append(f"{item.get('Key') or item.get('key')}: {value}")
-            if chunks:
-                biller_resp = "\n".join(chunks)
+    # 2026-05-09 · biller-response capture · used by KPLC token relay
+    # AND as a generic "what did the recipient see" line on the
+    # receipt + Transaction Details for ALL outgoing rails.
+    #
+    # SasaPay's B2B/B2C callback shape (from real production payloads):
+    #   FLAT keys · NOT a Daraja-style nested ResultParameters[]:
+    #     ResultCode, ResultDesc, MerchantTransactionReference,
+    #     SasaPayTransactionCode, ThirdPartyTransactionCode,
+    #     RecipientAccountNumber, RecipientName,
+    #     MerchantAccountBalance, TransactionAmount, TransactionCharge,
+    #     TransactionDate, SourceChannel, DestinationChannel
+    #
+    # Per-rail behaviour we observe:
+    #   - PAYBILL utilities (KPLC prepaid, Nairobi Water, Zuku):
+    #       ResultDesc = "Confirmed. KSH X sent to KPLC PREPAID for
+    #       account NNN. Token: NNNN NNNN NNNN NNNN. Units: X.XX KWh"
+    #     → carries the prepaid token. Relay verbatim to user phone.
+    #
+    #   - PAYBILL postpaid (KPLC postpaid 888888, DSTV 444900):
+    #       ResultDesc = "Transaction processed successfully" (generic).
+    #     → fall back to a constructed receipt line so the user still
+    #       gets a useful SMS / on-screen confirmation.
+    #
+    #   - TILL (Buy Goods, e.g. Naivas 5500000):
+    #       ResultDesc = generic.
+    #     → constructed receipt line; no biller token to relay.
+    #
+    #   - BANK (paybill alias for Equity, KCB, etc.):
+    #       Same as paybill · ResultDesc may carry the bank's
+    #       confirmation text.
+    #
+    #   - B2C send-money (mpesa_phone):
+    #       ResultDesc = "Transaction processed successfully".
+    #     → recipient already gets M-Pesa SMS directly from Safaricom;
+    #       no need to relay to sender. We DO surface the constructed
+    #       summary on the sender's receipt for their records.
+    raw_desc = (data.get("ResultDesc") or data.get("resultDesc") or "").strip()
+    third_party_code = (
+        data.get("ThirdPartyTransactionCode")
+        or data.get("third_party_transaction_code")
+        or ""
+    ).strip()
+    sasapay_code = (
+        data.get("SasaPayTransactionCode")
+        or data.get("sasapay_transaction_code")
+        or trans_code
+        or ""
+    ).strip()
+    cb_amount = data.get("TransactionAmount", data.get("TransAmount", amount))
+
+    # Treat any of these (exact / near-exact, case-insensitive) as a
+    # "generic-success" placeholder · construct our own summary instead.
+    # Use exact-match (under 60 chars) so we don't accidentally classify
+    # a biller text that happens to PREFIX with the placeholder
+    # ("Transaction processed successfully. Token: 1234...") as generic
+    # and discard the token.
+    GENERIC_DESC_PHRASES = {
+        "transaction processed successfully",
+        "transaction processed successfully.",
+        "the service request is processed successfully.",
+        "service request is processed successfully",
+        "success",
+    }
+    rd_lower = raw_desc.lower().strip()
+    desc_is_generic = (
+        not rd_lower
+        or rd_lower in GENERIC_DESC_PHRASES
+        or (len(rd_lower) < 60 and "successfully" in rd_lower and "token" not in rd_lower and "kwh" not in rd_lower)
+    )
+
+    # Walk a nested ResultParameter[] (Daraja-shape) when SasaPay
+    # routes us a passthrough payload from the biller. Extract the
+    # interesting keys (token / units / receipt / ref) so utility
+    # billers that DO use nested params still surface their tokens.
+    params_chunks: list[str] = []
+    params_block = data.get("ResultParameter") or data.get("ResultParameters") or []
+    if isinstance(params_block, dict):
+        params_block = params_block.get("ResultParameter") or []
+    if isinstance(params_block, list):
+        for item in params_block:
+            if not isinstance(item, dict):
+                continue
+            key = (item.get("Key") or item.get("key") or "").strip()
+            value = item.get("Value") if "Value" in item else item.get("value")
+            if not key or value is None:
+                continue
+            kl = key.lower()
+            if any(t in kl for t in (
+                "token", "receipt", "billref", "kplc", "units",
+                "transactionid", "transcode", "reference", "amount",
+            )):
+                params_chunks.append(f"{key}: {value}")
+
+    biller_resp = ""
+    if not desc_is_generic:
+        # Real biller text · use it verbatim. Append params-block
+        # chunks (if any) for additional structured fields.
+        biller_resp = raw_desc
+        if params_chunks:
+            biller_resp = biller_resp + "\n" + "\n".join(params_chunks)
+    elif params_chunks:
+        # Generic ResultDesc but params have substantive content.
+        biller_resp = "\n".join(params_chunks)
+    else:
+        # Construct a Cpay-formatted receipt line from the flat fields
+        # so the user's SMS / detail screen / receipt always shows a
+        # useful confirmation, even when SasaPay returns the generic
+        # "successfully" placeholder. Mirrors the M-Pesa SMS shape so
+        # it reads natively on a phone:
+        #   "Confirmed. KSH 100.00 paid to NAIVAS LIMITED · Till 549999.
+        #    M-Pesa receipt: UE9C03JV6G. 2026-05-09 21:57:09."
+        rail_label = ""
+        rail_id = ""
+        if tx.mpesa_paybill:
+            rail_label = "Paybill"
+            rail_id = (
+                f"{tx.mpesa_paybill}"
+                + (f" · Acc {tx.mpesa_account}" if tx.mpesa_account else "")
+            )
+        elif tx.mpesa_till:
+            rail_label = "Till"
+            rail_id = str(tx.mpesa_till)
+        elif tx.mpesa_phone:
+            rail_label = "M-Pesa"
+            rail_id = str(tx.mpesa_phone)
+        recipient_label = (
+            tx.merchant_name
+            or callback_recipient
+            or rail_label
+            or "recipient"
+        )
+        receipt_part = ""
+        if third_party_code:
+            receipt_part = f" M-Pesa receipt: {third_party_code}."
+        elif sasapay_code:
+            receipt_part = f" SasaPay ref: {sasapay_code}."
+        rail_line = f" via {rail_label} {rail_id}." if rail_id else "."
+        biller_resp = (
+            f"Confirmed. KSH {cb_amount} paid to {recipient_label}"
+            f"{rail_line}{receipt_part}"
+        ).strip()
+
     if biller_resp and not tx.biller_response:
         tx.biller_response = biller_resp[:1000]
         update_fields.append("biller_response")
 
     tx.save(update_fields=update_fields)
 
-    # 2026-05-09 · forward the captured biller response (KPLC token /
-    # utility receipt) to the user's phone via SMS so it actually
-    # reaches the meter / set-top owner. Best-effort · the receipt
-    # + success screen + email already carry the same text. Skip for
-    # B2C send-money rail · those have no biller response.
-    if tx.biller_response and tx.user.phone and (tx.mpesa_paybill or tx.mpesa_till):
+    # 2026-05-09 · forward the captured biller response to the user
+    # via SMS · the sender's phone is the only channel that reliably
+    # reaches them (no in-app push needed). Three rules:
+    #   1) Skip B2C send-money · the recipient (NOT sender) already
+    #      gets M-Pesa SMS directly from Safaricom. The sender just
+    #      needs the in-app receipt, which is rendered separately.
+    #   2) Always relay for paybill/till · whether or not the biller
+    #      returned a token, the user gets the constructed confirmation
+    #      so their PHONE has a record without opening the app.
+    #   3) Cap at 480 chars (3 SMS segments) · keeps cost bounded.
+    if (
+        tx.biller_response
+        and tx.user.phone
+        and (tx.mpesa_paybill or tx.mpesa_till)
+    ):
         try:
             from apps.core.email import send_sms
-            preview = tx.biller_response[:280]
+            sms_preview = tx.biller_response[:380]
             sms_body = (
-                f"Cpay · {tx.merchant_name or 'Bill payment'} · "
-                f"KSh {tx.dest_amount}\n{preview}"
-            )[:480]  # 3-segment SMS cap to keep cost predictable
+                f"Cpay · KSh {tx.dest_amount} paid"
+                + (f" to {tx.merchant_name}" if tx.merchant_name else "")
+                + ".\n"
+                + sms_preview
+            )[:480]
             send_sms(tx.user.phone, sms_body)
             logger.info(
-                "biller_token_forwarded · tx=%s phone=%s***",
-                tx.id, str(tx.user.phone)[:6],
+                "biller_response_forwarded · tx=%s rail=%s",
+                tx.id,
+                "paybill" if tx.mpesa_paybill else "till",
             )
         except Exception:
             logger.exception(
-                "biller_token_forward_failed",
+                "biller_response_forward_failed",
                 extra={"tx_id": str(tx.id)},
             )
 
