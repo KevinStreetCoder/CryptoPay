@@ -410,6 +410,18 @@ def _process_successful_payment(
                     "Credited %s %s to %s",
                     crypto_amount, crypto_currency, tx.user.phone,
                 )
+                # 2026-05-09 · check the platform's hot wallet can
+                # cover what we now owe in this currency. Logs a
+                # CRITICAL `liquidity_short.alert` + opens a recon
+                # case if ops need to top up the on-chain wallet.
+                try:
+                    from apps.payments.tasks import _check_hot_wallet_solvency
+                    _check_hot_wallet_solvency(crypto_currency)
+                except Exception:
+                    logger.exception(
+                        "sasapay.callback.solvency_check_failed",
+                        extra={"tx_id": str(tx.id)},
+                    )
         except Exception:
             logger.exception("Failed to credit crypto for tx %s", tx.id)
 

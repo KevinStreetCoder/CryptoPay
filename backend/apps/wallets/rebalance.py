@@ -843,10 +843,28 @@ def get_rebalance_status() -> dict:
         days_coverage = float(current_float / daily_outflow)
 
     # ── Hot wallet balances (SystemWallet HOT) ────────────────────────
+    # Annotated with the corresponding "owed-to-users" total and
+    # short-position flag so the admin dashboard can render a red
+    # banner when ops needs to top up. The owed total is the SUM of
+    # all user wallet balances per currency · what we'd have to pay
+    # out if every user withdrew right now.
+    from django.db.models import Sum as _Sum
+    from apps.wallets.models import Wallet as _UserWallet
+
+    user_owed_by_currency = {
+        row["currency"]: row["total"] or Decimal("0")
+        for row in _UserWallet.objects.values("currency").annotate(total=_Sum("balance"))
+    }
+
     crypto_balances = {}
     for sw in SystemWallet.objects.filter(wallet_type="hot").exclude(currency="KES"):
+        owed = user_owed_by_currency.get(sw.currency, Decimal("0"))
+        shortfall = owed - sw.balance if owed > sw.balance else Decimal("0")
         crypto_balances[sw.currency] = {
             "balance": str(sw.balance),
+            "user_owed": str(owed),
+            "shortfall": str(shortfall),
+            "is_short": shortfall > 0,
             "updated_at": sw.updated_at.isoformat() if sw.updated_at else None,
         }
 

@@ -259,9 +259,13 @@ export default function TabLayout() {
         tabBarStyle: isDesktop
           ? { display: "none" }
           : {
-              backgroundColor: isDark
-                ? "rgba(10, 18, 40, 0.94)"
-                : "rgba(255, 255, 255, 0.94)",
+              // 2026-05-09 · bumped alpha from 0.94 → 1 (solid)
+              // because the previous translucent bar let the page
+              // content underneath bleed through · screenshots showed
+              // a section header ("SECURITY") faintly readable above
+              // the tab icons on the Me page. The bar is now opaque;
+              // the lift-shadow above keeps it visually floating.
+              backgroundColor: isDark ? "#0A1228" : "#FFFFFF",
               borderTopWidth: 0,
               height: tabBarHeight,
               paddingBottom: tabBarPaddingBottom,

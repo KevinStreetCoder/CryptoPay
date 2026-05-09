@@ -22,6 +22,7 @@ import { useThemeMode } from "../../src/stores/theme";
 import { usePhonePrivacy } from "../../src/utils/privacy";
 import { useLocale } from "../../src/hooks/useLocale";
 import { Spinner } from "../../src/components/brand/Spinner";
+import { CryptoLogo } from "../../src/components/CryptoLogo";
 
 const isWeb = Platform.OS === "web";
 
@@ -153,7 +154,41 @@ export default function TransactionDetailScreen() {
   });
 
   const tx = txData as Transaction | null;
-  const typeConfig = tx ? TYPE_CONFIG[tx.type] || { icon: "ellipsis-horizontal", label: tx.type, color: tc.dark.muted } : null;
+  const baseTypeConfig = tx ? TYPE_CONFIG[tx.type] || { icon: "ellipsis-horizontal", label: tx.type, color: tc.dark.muted } : null;
+  // 2026-05-09 · for crypto-touching tx types (BUY, DEPOSIT, SELL,
+  // WITHDRAWAL, SWAP, CRYPTO_DEPOSIT) substitute the specific
+  // currency into the title so the customer sees "Buy USDT" not
+  // generic "Buy Crypto" · same for "Withdraw BTC", "Crypto
+  // Deposit · ETH", etc. The crypto symbol comes from dest_currency
+  // for BUY/DEPOSIT (what they received) and source_currency for
+  // SELL/WITHDRAWAL (what they spent).
+  const cryptoForTx = tx
+    ? (
+      tx.type === "BUY" || tx.type === "DEPOSIT" || tx.type === "CRYPTO_DEPOSIT"
+        ? tx.dest_currency
+        : tx.type === "SELL" || tx.type === "WITHDRAWAL" || tx.type === "SWAP"
+          ? tx.source_currency
+          : null
+    )
+    : null;
+  const typeConfig = baseTypeConfig && tx
+    ? (() => {
+      const currency = cryptoForTx && cryptoForTx !== "KES" ? cryptoForTx : null;
+      if (!currency) return baseTypeConfig;
+      const labelByType: Record<string, string> = {
+        BUY: `Buy ${currency}`,
+        DEPOSIT: `Deposit ${currency}`,
+        CRYPTO_DEPOSIT: `${currency} Deposit`,
+        WITHDRAWAL: `Withdraw ${currency}`,
+        SELL: `Sell ${currency}`,
+        SWAP: `Swap ${currency}`,
+      };
+      return {
+        ...baseTypeConfig,
+        label: labelByType[tx.type] || baseTypeConfig.label,
+      };
+    })()
+    : baseTypeConfig;
   const statusConfig = tx ? STATUS_CONFIG[tx.status] || { color: tc.dark.muted, bg: tc.dark.muted + "1F" } : null;
 
   const formatDate = (dateStr: string) => {
@@ -575,7 +610,12 @@ export default function TransactionDetailScreen() {
               paddingTop: 24,
             }}
           >
-            {/* Type Icon + Label */}
+            {/* Type Icon + Label · for crypto-touching tx types we
+                show the actual coin logo (USDT/BTC/ETH/SOL/USDC) on
+                a tinted disc instead of a generic plus/arrow icon.
+                This matches the "crypto card" treatment the user
+                asked for · transactions are now visually identifiable
+                at a glance ("oh this is my USDT buy"). */}
             <View style={{ alignItems: "center", marginBottom: 8 }}>
               <View
                 style={{
@@ -586,9 +626,15 @@ export default function TransactionDetailScreen() {
                   alignItems: "center",
                   justifyContent: "center",
                   marginBottom: 12,
+                  borderWidth: 1,
+                  borderColor: typeConfig!.color + "2E",
                 }}
               >
-                <Ionicons name={typeConfig!.icon as any} size={30} color={typeConfig!.color} />
+                {cryptoForTx && cryptoForTx !== "KES" ? (
+                  <CryptoLogo currency={cryptoForTx as any} size={36} />
+                ) : (
+                  <Ionicons name={typeConfig!.icon as any} size={30} color={typeConfig!.color} />
+                )}
               </View>
               <Text
                 style={{

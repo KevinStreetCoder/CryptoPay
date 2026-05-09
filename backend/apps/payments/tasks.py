@@ -341,6 +341,16 @@ def _credit_buy_crypto_if_needed(tx, receipt: str) -> None:
 
     Idempotent · `WalletService.credit` is keyed on `transaction_id`,
     so a duplicate call (e.g. callback arrives just after this) no-ops.
+
+    Audit · we ALSO check the platform's hot-wallet position after
+    the credit and page ops if we've gone net-short on the currency.
+    The current ledger model credits the user a numerical USDT
+    balance without any on-chain crypto transfer, so if ops haven't
+    seeded the hot wallet, we owe the user crypto we don't hold. The
+    `liquidity_short.alert` log line is what ops watches for · their
+    runbook is to top up the hot wallet via an OTC desk or exchange
+    (Yellow Card on-ramp / IntaSend / Binance Africa) before the
+    user withdraws.
     """
     from decimal import Decimal
 
@@ -380,11 +390,74 @@ def _credit_buy_crypto_if_needed(tx, receipt: str) -> None:
                 "currency": crypto_currency,
             },
         )
+        _check_hot_wallet_solvency(crypto_currency)
     except Exception:
         logger.exception(
             "sasapay.status_query.credit_failed",
             extra={"tx_id": str(tx.id)},
         )
+
+
+def _check_hot_wallet_solvency(currency: str) -> None:
+    """Compare the platform's hot-wallet balance for `currency`
+    against the SUM of user-wallet balances · if the hot wallet
+    can't cover what we owe customers, log a CRITICAL alert and
+    open a ReconciliationCase so ops tops up before any withdrawal
+    drains the wallet to zero on-chain.
+
+    Cheap (two SUM queries + one row lookup) so we can call it from
+    the hot path of every BUY completion · the queries are bounded
+    by the wallet table size.
+    """
+    from decimal import Decimal as _D
+    from django.db.models import Sum
+    from apps.wallets.models import SystemWallet, Wallet
+
+    try:
+        hot = SystemWallet.objects.filter(
+            wallet_type="hot", currency=currency
+        ).first()
+        hot_balance = (hot.balance if hot else _D("0")) or _D("0")
+
+        owed = Wallet.objects.filter(currency=currency).aggregate(
+            total=Sum("balance")
+        )["total"] or _D("0")
+
+        if owed > hot_balance:
+            shortfall = owed - hot_balance
+            logger.critical(
+                "liquidity_short.alert",
+                extra={
+                    "currency": currency,
+                    "hot_balance": str(hot_balance),
+                    "user_owed": str(owed),
+                    "shortfall": str(shortfall),
+                    "runbook": (
+                        "Top up hot wallet via Yellow Card on-ramp / "
+                        "IntaSend / Binance Africa OTC. Required to "
+                        "honour user withdrawals."
+                    ),
+                },
+            )
+            # Persist the snapshot in Redis with a 1-hour TTL so the
+            # admin dashboard's `/admin/rebalance/status/` endpoint
+            # can surface a short-position banner without tailing logs.
+            try:
+                from django.core.cache import cache
+                cache.set(
+                    f"liquidity_short:{currency}",
+                    {
+                        "hot_balance": str(hot_balance),
+                        "user_owed": str(owed),
+                        "shortfall": str(shortfall),
+                    },
+                    timeout=3600,
+                )
+            except Exception:
+                # Cache failures must not crash the completion path.
+                pass
+    except Exception:
+        logger.exception("liquidity_short.check_failed", extra={"currency": currency})
 
 
 def _resolve_via_sasapay_status(tx, checkout_request_id: str) -> None:
@@ -691,12 +764,27 @@ def check_pending_mpesa_payments():
             except Exception:
                 pass
 
-        # Between 3-10 minutes, just flag for review
+        # Between 3-10 minutes, log a diagnostic note BUT do NOT stamp
+        # it on `failure_reason` · the customer detail screen renders
+        # any non-empty failure_reason as a red "Failure Reason" block,
+        # which contradicts the still-PROCESSING status badge. We
+        # surface the warning via structured logging + ops dashboards
+        # instead. The diagnostic lives in `saga_data["pending_note"]`
+        # so support tooling can pick it up without leaking to the
+        # customer UI.
         elif tx.updated_at < (timezone.now() - timedelta(minutes=3)):
-            if not tx.failure_reason:
-                tx.failure_reason = "Pending: awaiting M-Pesa callback (>3 min)."
-                tx.save(update_fields=["failure_reason", "updated_at"])
-                logger.warning(f"Transaction {tx.id} flagged — no M-Pesa callback after 3 min")
+            sd = tx.saga_data or {}
+            if "pending_note" not in sd:
+                sd["pending_note"] = (
+                    f"Awaiting M-Pesa callback >3 min · flagged at "
+                    f"{timezone.now().isoformat()}"
+                )
+                tx.saga_data = sd
+                tx.save(update_fields=["saga_data", "updated_at"])
+                logger.warning(
+                    "tx.pending.callback_late",
+                    extra={"tx_id": str(tx.id), "type": tx.type, "age_seconds": (timezone.now() - tx.updated_at).total_seconds()},
+                )
 
 
 @shared_task

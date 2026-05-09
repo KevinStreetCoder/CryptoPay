@@ -432,7 +432,24 @@ class PaymentSaga:
         self.tx.mpesa_receipt = mpesa_receipt
         self.tx.status = Transaction.Status.COMPLETED
         self.tx.completed_at = timezone.now()
-        self.tx.save(update_fields=["mpesa_receipt", "status", "completed_at", "updated_at"])
+        # 2026-05-09 · clear any in-flight diagnostic note on
+        # `failure_reason` (e.g. "Pending: awaiting M-Pesa callback
+        # (>3 min)" stamped by the cleanup cron at the 3-min mark).
+        # The field is meant for terminal FAILED state · leaving the
+        # stale text on a COMPLETED tx made the customer's
+        # transaction-detail screen render a red "Failure Reason"
+        # block alongside the green "Completed" badge, which read as
+        # contradictory.
+        if self.tx.failure_reason:
+            self.tx.failure_reason = ""
+            self.tx.save(update_fields=[
+                "mpesa_receipt", "status", "completed_at",
+                "failure_reason", "updated_at",
+            ])
+        else:
+            self.tx.save(update_fields=[
+                "mpesa_receipt", "status", "completed_at", "updated_at",
+            ])
         logger.info(f"Payment completed: tx {self.tx.id}, receipt {mpesa_receipt}")
 
         # Record this outflow against the platform-limits sliding windows
