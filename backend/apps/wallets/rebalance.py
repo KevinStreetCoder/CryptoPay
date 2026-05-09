@@ -308,6 +308,27 @@ def get_exchange_provider() -> ExchangeProvider:
     return ManualExchangeProvider()
 
 
+def _float_source_label() -> str:
+    """Human-readable label for the rail currently providing the KES float.
+
+    Driven by `PAYMENT_PROVIDER` so the admin dashboard reflects the
+    real rail · not a hardcoded "Daraja" that lies after we flip to
+    SasaPay or IntaSend.
+    """
+    provider = (getattr(settings, "PAYMENT_PROVIDER", "daraja") or "daraja").lower()
+    if provider == "sasapay":
+        merchant = getattr(settings, "SASAPAY_MERCHANT_CODE", "") or ""
+        suffix = f" · merchant {merchant}" if merchant else ""
+        return f"M-Pesa via SasaPay (CBK-licensed PSP){suffix}"
+    if provider == "intasend":
+        return "M-Pesa via IntaSend (CBK-licensed PSP)"
+    if provider == "daraja":
+        shortcode = getattr(settings, "MPESA_SHORTCODE", "") or ""
+        suffix = f" · shortcode {shortcode}" if shortcode else ""
+        return f"M-Pesa Business Account (Safaricom Daraja){suffix}"
+    return f"M-Pesa via {provider}"
+
+
 def get_current_float_kes() -> Optional[Decimal]:
     """
     Get the current M-Pesa float balance.
@@ -879,7 +900,12 @@ def get_rebalance_status() -> dict:
         "needs_rebalance": current_float is not None and current_float < TRIGGER_FLOAT_KES,
         "daily_outflow_kes": str(daily_outflow),
         "days_of_coverage": round(days_coverage, 1) if days_coverage else None,
-        "float_source": "M-Pesa Business Account (Safaricom Daraja)",
+        # 2026-05-09 · provider-aware label. The float_source string is
+        # what the admin dashboard prints under "KES Float Balance" so
+        # ops can see at a glance which rail is currently funding payouts.
+        # Was hardcoded to "Safaricom Daraja" even when PAYMENT_PROVIDER
+        # had been flipped to sasapay or intasend.
+        "float_source": _float_source_label(),
         "float_last_synced": float_wallet_updated,
         "execution_mode": getattr(settings, "REBALANCE_EXECUTION_MODE", "manual"),
         # Hot wallet

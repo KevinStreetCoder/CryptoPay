@@ -1287,42 +1287,56 @@ export default function BuyCryptoScreen() {
 
           <PinInput onComplete={handlePinComplete} error={pinError} loading={loading} testID="buy-crypto-pin-input" />
 
+          {/* 2026-05-09 · proper progress block · brand spinner +
+              spaced headline + helper text wired to backend
+              pollingStatus. Three discrete phases the user sees
+              (initiating → enter PIN → confirming → completed).
+              Each line gets its own visual rest space (gap 14)
+              so it doesn't feel cramped on the tiny PIN page. */}
           {loading && (
             <View
               style={{
                 alignItems: "center",
                 justifyContent: "center",
-                gap: 10,
-                marginTop: 32,
+                marginTop: 36,
+                gap: 14,
+                paddingHorizontal: 8,
               }}
             >
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                <PulsingDot />
-                <Text
-                  style={{
-                    color: tc.primary[400],
-                    fontSize: 14,
-                    fontFamily: "DMSans_500Medium",
-                  }}
-                >
-                  {pollingStatus === "confirming"
+              <Spinner variant="arc" size={36} color={tc.primary[400]} />
+              <Text
+                style={{
+                  color: tc.textPrimary,
+                  fontSize: 15,
+                  fontFamily: "DMSans_600SemiBold",
+                  textAlign: "center",
+                  lineHeight: 22,
+                }}
+                maxFontSizeMultiplier={1.3}
+              >
+                {pollingStatus === "completed"
+                  ? "Payment confirmed"
+                  : pollingStatus === "confirming"
                     ? t("payment.waitingMpesaConfirmation")
                     : pollingStatus === "processing"
                       ? t("payment.enterMpesaPin")
                       : t("payment.processingPayment")}
-                </Text>
-              </View>
-              {pollingStatus && (
+              </Text>
+              {pollingStatus && pollingStatus !== "completed" && (
                 <Text
                   style={{
                     color: tc.textMuted,
-                    fontSize: 12,
+                    fontSize: 13,
                     fontFamily: "DMSans_400Regular",
                     textAlign: "center",
-                    marginTop: 4,
+                    lineHeight: 19,
+                    maxWidth: 320,
                   }}
+                  maxFontSizeMultiplier={1.3}
                 >
-                  {t("payment.completeMpesaPrompt")}
+                  {pollingStatus === "confirming"
+                    ? "We're talking to M-Pesa now. This usually takes a few seconds."
+                    : t("payment.completeMpesaPrompt")}
                 </Text>
               )}
             </View>

@@ -1427,7 +1427,22 @@ class DepositQuoteView(APIView):
 
 
 class DepositStatusView(APIView):
-    """Check the status of a deposit transaction."""
+    """Check the status of a deposit transaction.
+
+    2026-05-09 · the frontend polls this endpoint every 3s while the
+    user waits on the post-PIN screen. To shave seconds off the
+    happy path (and unstick the user when SasaPay's IPN drops on a
+    transient blip), we kick off an active SasaPay status query
+    inline whenever the tx has been PROCESSING longer than 5 s and
+    we have a checkout request id to query against. The query is
+    fire-and-forget · SasaPay processes async and pushes the result
+    back via the per-tx callback URL · so the call here just
+    *triggers* the resolution; the caller's next 3 s poll will see
+    the COMPLETED state.
+
+    We also rate-limit the poke to one per 8 s per tx (tracked in
+    Redis) so a chatty client doesn't hammer SasaPay's status API.
+    """
 
     permission_classes = [IsAuthenticated]
 
@@ -1439,6 +1454,16 @@ class DepositStatusView(APIView):
                 {"error": "Transaction not found"},
                 status=status.HTTP_404_NOT_FOUND,
             )
+
+        # Active SasaPay status nudge · only for BUY/DEPOSIT in
+        # PROCESSING with a checkout id. Cheap (one HTTP call,
+        # ~150 ms) and idempotent (SasaPay just re-pushes the
+        # callback). Skipped for terminal statuses.
+        if (
+            tx.status == Transaction.Status.PROCESSING
+            and tx.type in (Transaction.Type.BUY, Transaction.Type.DEPOSIT)
+        ):
+            self._maybe_nudge_sasapay(tx)
 
         data = TransactionSerializer(tx).data
 
@@ -1452,6 +1477,49 @@ class DepositStatusView(APIView):
                 data["summary"] = tx.failure_reason or "Deposit failed"
 
         return Response(data)
+
+    @staticmethod
+    def _maybe_nudge_sasapay(tx):
+        """Trigger a SasaPay status query for a stuck PROCESSING tx,
+        rate-limited to ≥8 s between pokes per tx-id."""
+        from django.conf import settings as app_settings
+        from django.core.cache import cache
+        from django.utils import timezone
+        from datetime import timedelta
+
+        provider = getattr(app_settings, "PAYMENT_PROVIDER", "daraja").lower()
+        if provider != "sasapay":
+            return
+
+        # Don't nudge in the first 5 s · SasaPay's own STK Push flow
+        # needs a moment to register the customer's PIN entry. Nudging
+        # too early is just noise.
+        if (timezone.now() - tx.updated_at) < timedelta(seconds=5):
+            return
+
+        cache_key = f"sasapay_status_nudge:{tx.id}"
+        if cache.get(cache_key):
+            return
+        # 8-second cooldown · faster than the 30 s cron, slow enough
+        # not to flood SasaPay even if the client polls aggressively.
+        cache.set(cache_key, "1", timeout=8)
+
+        sd = tx.saga_data or {}
+        checkout_id = sd.get("mpesa_checkout_request_id") or sd.get("checkout_request_id") or ""
+        if not checkout_id:
+            return
+
+        # Fire-and-forget · run sync since it's a single HTTP call,
+        # but never let an exception propagate to the user-facing GET.
+        try:
+            from apps.payments.tasks import _resolve_via_sasapay_status
+            _resolve_via_sasapay_status(tx, checkout_id)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                "deposit_status.sasapay_nudge_failed",
+                extra={"tx_id": str(tx.id)},
+            )
 
 
 class C2BInstructionsView(APIView):

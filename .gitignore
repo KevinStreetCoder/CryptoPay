@@ -131,3 +131,6 @@ gcp-key*.json
 # audit / planning artefacts kept out of public history
 tmp/
 docs/PRODUCTION-READINESS-*.md
+
+# Local-only WSL build helpers (don't ship to repo)
+mobile/_wsl_build_*.sh
