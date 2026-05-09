@@ -14,6 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
+import * as WebBrowser from "expo-web-browser";
 import { CryptoLogo } from "../../src/components/CryptoLogo";
 import { Button } from "../../src/components/Button";
 import { useToast } from "../../src/components/Toast";
@@ -48,7 +49,7 @@ const CRYPTO_OPTIONS: { id: CryptoOption; name: string; color: string }[] = [
   { id: "SOL", name: "Solana", color: colors.crypto.SOL },
 ];
 
-type DepositMethod = "stk" | "c2b" | "crypto";
+type DepositMethod = "stk" | "c2b" | "checkout" | "crypto";
 
 export default function DepositScreen() {
   const router = useRouter();
@@ -164,6 +165,48 @@ export default function DepositScreen() {
     router.push("/(tabs)/wallet" as any);
   }, [router]);
 
+  // 2026-05-09 · hosted-checkout (Card / Airtel / wallet) flow
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const handleHostedCheckout = useCallback(async () => {
+    const kesAmount = parseFloat(amount);
+    if (!kesAmount || kesAmount < 10) {
+      toast.error(t("payment.invalidAmount"), t("payment.minimumAmount"));
+      return;
+    }
+    setCheckoutLoading(true);
+    try {
+      const res = await paymentsApi.hostedCheckout({
+        amount: String(Math.round(kesAmount)),
+        currency,
+        // Default · let the user pick a rail on the hosted page.
+        // Pass an empty rails array → backend enables Card+M-Pesa+Airtel.
+      });
+      const url = res.data.checkout_url;
+      if (!url) {
+        toast.error("Checkout error", "No checkout URL returned");
+        return;
+      }
+      // Open in an in-app browser so the deep-link return works.
+      // On completion, SasaPay IPNs back to our /sasapay/callback/
+      // which credits the user automatically · no client-side polling.
+      await WebBrowser.openBrowserAsync(url, {
+        showTitle: true,
+        toolbarColor: tc.dark.card,
+        controlsColor: colors.primary[400],
+        dismissButtonStyle: "close",
+      });
+      toast.success(
+        "Payment started",
+        "Once SasaPay confirms, your wallet credits automatically.",
+      );
+    } catch (err) {
+      const e = normalizeError(err);
+      toast.error(e.title, e.message);
+    } finally {
+      setCheckoutLoading(false);
+    }
+  }, [amount, currency, t, toast, tc.dark.card]);
+
   const contentMaxWidth = isDesktop ? 720 : undefined;
 
   const content = (
@@ -224,6 +267,7 @@ export default function DepositScreen() {
             [
               { id: "stk" as DepositMethod, label: "M-Pesa", icon: "phone-portrait-outline" as const },
               { id: "c2b" as DepositMethod, label: "Paybill", icon: "receipt-outline" as const },
+              { id: "checkout" as DepositMethod, label: "Card / Airtel", icon: "card-outline" as const },
               { id: "crypto" as DepositMethod, label: "Crypto", icon: "wallet-outline" as const },
             ] as const
           ).map((tab) => (
@@ -1056,6 +1100,183 @@ export default function DepositScreen() {
                 </Pressable>
               </View>
             )}
+          </View>
+        )}
+
+        {/* Hosted Checkout · Card / Airtel / SasaPay-Wallet */}
+        {method === "checkout" && (
+          <View style={{ marginTop: 20, gap: 16 }}>
+            <View
+              style={{
+                backgroundColor: tc.dark.card,
+                borderRadius: 18,
+                padding: 20,
+                borderWidth: 1,
+                borderColor: tc.glass.border,
+              }}
+            >
+              <Text
+                style={{
+                  color: tc.textPrimary,
+                  fontSize: 16,
+                  fontFamily: "DMSans_700Bold",
+                  marginBottom: 8,
+                }}
+              >
+                Pay with Card or Airtel Money
+              </Text>
+              <Text
+                style={{
+                  color: tc.textMuted,
+                  fontSize: 13,
+                  fontFamily: "DMSans_400Regular",
+                  lineHeight: 19,
+                  marginBottom: 16,
+                }}
+              >
+                You'll be redirected to SasaPay's secure page where you can pay
+                with Visa / Mastercard, Airtel Money, T-Kash, M-Pesa or your
+                SasaPay wallet. Your {currency} credits automatically once
+                SasaPay confirms the payment.
+              </Text>
+
+              {/* Currency selector · reuse existing component */}
+              <View style={{ marginBottom: 12 }}>
+                <Text
+                  style={{
+                    color: tc.textMuted,
+                    fontSize: 11,
+                    fontFamily: "DMSans_500Medium",
+                    textTransform: "uppercase",
+                    letterSpacing: 0.6,
+                    marginBottom: 6,
+                  }}
+                >
+                  You receive
+                </Text>
+                <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
+                  {CRYPTO_OPTIONS.map((opt) => (
+                    <Pressable
+                      key={opt.id}
+                      onPress={() => setCurrency(opt.id)}
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 6,
+                        paddingVertical: 8,
+                        paddingHorizontal: 14,
+                        borderRadius: 999,
+                        backgroundColor:
+                          currency === opt.id
+                            ? colors.primary[500] + "20"
+                            : tc.glass.background,
+                        borderWidth: 1,
+                        borderColor:
+                          currency === opt.id
+                            ? colors.primary[500] + "60"
+                            : tc.glass.border,
+                      }}
+                    >
+                      <CryptoLogo currency={opt.id} size={18} />
+                      <Text
+                        style={{
+                          color:
+                            currency === opt.id
+                              ? colors.primary[400]
+                              : tc.textPrimary,
+                          fontSize: 13,
+                          fontFamily:
+                            currency === opt.id
+                              ? "DMSans_700Bold"
+                              : "DMSans_500Medium",
+                        }}
+                      >
+                        {opt.name}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+
+              {/* Amount input */}
+              <View style={{ marginBottom: 12 }}>
+                <Text
+                  style={{
+                    color: tc.textMuted,
+                    fontSize: 11,
+                    fontFamily: "DMSans_500Medium",
+                    textTransform: "uppercase",
+                    letterSpacing: 0.6,
+                    marginBottom: 6,
+                  }}
+                >
+                  Amount in KES
+                </Text>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    backgroundColor: tc.glass.background,
+                    borderWidth: 1,
+                    borderColor: tc.glass.border,
+                    borderRadius: 12,
+                    paddingHorizontal: 14,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: tc.textMuted,
+                      fontSize: 16,
+                      fontFamily: "DMSans_500Medium",
+                      marginRight: 8,
+                    }}
+                  >
+                    KES
+                  </Text>
+                  <TextInput
+                    value={amount}
+                    onChangeText={setAmount}
+                    keyboardType="numeric"
+                    placeholder="1,000"
+                    placeholderTextColor={tc.textMuted}
+                    style={{
+                      flex: 1,
+                      color: tc.textPrimary,
+                      fontSize: 16,
+                      fontFamily: "DMSans_500Medium",
+                      paddingVertical: 12,
+                      ...(Platform.OS === "web"
+                        ? ({ outlineStyle: "none" } as any)
+                        : {}),
+                    }}
+                  />
+                </View>
+              </View>
+
+              <Button
+                onPress={handleHostedCheckout}
+                disabled={checkoutLoading || !amount}
+                loading={checkoutLoading}
+                style={{ marginTop: 8 }}
+              >
+                {checkoutLoading
+                  ? "Opening SasaPay…"
+                  : "Continue to SasaPay"}
+              </Button>
+
+              <Text
+                style={{
+                  color: tc.textMuted,
+                  fontSize: 11,
+                  fontFamily: "DMSans_400Regular",
+                  marginTop: 12,
+                  textAlign: "center",
+                  lineHeight: 16,
+                }}
+              >
+                Secured by SasaPay · CBK-licensed PSP
+              </Text>
+            </View>
           </View>
         )}
 

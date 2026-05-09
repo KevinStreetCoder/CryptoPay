@@ -238,6 +238,18 @@ export const paymentsApi = {
   // 2026-05-08 · short-code SasaPay deposit-intent flow
   depositIntent: (currency: string) =>
     api.post<DepositIntentResponse>("/payments/deposit/intent/", { currency }),
+  // 2026-05-09 · hosted checkout (Card / Airtel / M-Pesa / SasaPay-Wallet)
+  // Returns a CheckoutUrl that the client opens via expo-web-browser.
+  // On completion, SasaPay IPNs back to /sasapay/callback/, which uses
+  // the deposit-intent code (`reference`) to credit the right user/currency.
+  hostedCheckout: (data: { amount: string; currency: string; rails?: string[] }) =>
+    api.post<{
+      checkout_url: string;
+      reference: string;
+      expires_in: number;
+      currency: string;
+      amount_kes: string;
+    }>("/payments/checkout/", data),
   depositStatus: (transactionId: string) => api.get<Transaction>(`/payments/deposit/${transactionId}/status/`),
   transactionStatus: (transactionId: string) => api.get<Transaction>(`/payments/${transactionId}/status/`),
   c2bInstructions: (currency?: string) =>

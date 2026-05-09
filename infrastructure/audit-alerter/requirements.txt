@@ -1,0 +1,2 @@
+# No third-party deps · we use stdlib only (urllib for Slack, base64
+# + json for Pub/Sub event decode). This keeps cold-start time low.
