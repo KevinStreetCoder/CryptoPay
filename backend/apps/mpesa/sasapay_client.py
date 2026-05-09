@@ -202,6 +202,87 @@ class SasaPayClient:
             )
         raise SasaPayError(f"SasaPay request failed after {retries} retries: {last_error}")
 
+    # ── Utility paybills · routed through /utilities/ not /payments/b2b/ ──
+    #
+    # 2026-05-09 · per docs.sasapay.app, KPLC / DSTV / GOTV / Nairobi
+    # Water etc. use a SEPARATE Utilities API endpoint that returns the
+    # prepaid token in a dedicated `Pin` field on the callback. The
+    # generic /payments/b2b/ endpoint requires the merchant to have a
+    # "B2B Paybill" product enabled (sandbox accounts and most prod
+    # merchants don't have this · it returns ResultCode SP01002 with
+    # "request not permitted according to product assignment").
+    #
+    # For utility paybills we MUST route to /utilities/ instead.
+    # Mapping below covers the common Kenyan utilities. Anything not
+    # in this map falls through to the regular B2B path.
+    #
+    # The serviceCode values come from the SasaPay docs · operators
+    # who roll out new utilities can extend this map without code
+    # changes via the `SASAPAY_UTILITY_SERVICE_CODES` Django setting.
+    UTILITY_PAYBILL_SERVICE_CODES = {
+        "888880": "SP-KPLC",            # KPLC Prepaid
+        "888888": "SP-KPLC-POSTPAID",   # KPLC Postpaid
+        "444900": "SP-DSTV",            # DSTV
+        "423655": "SP-GOTV",            # GOTV (Multichoice)
+        "320320": "SP-ZUKU",            # Zuku Internet/TV
+        "888888-water": "SP-NRB-WATER", # Nairobi Water (sentinel)
+    }
+
+    def _utility_service_code_for_paybill(self, paybill: str) -> str | None:
+        """Return the SasaPay utility serviceCode for a paybill, or None."""
+        # Operator override · settings can extend / override the map
+        # without a deploy when SasaPay onboards new utilities.
+        override = getattr(settings, "SASAPAY_UTILITY_SERVICE_CODES", {}) or {}
+        if paybill in override:
+            return override[paybill]
+        return self.UTILITY_PAYBILL_SERVICE_CODES.get(str(paybill))
+
+    def pay_utility(
+        self,
+        paybill: str,
+        account_number: str,
+        amount: float,
+        contact_phone: str,
+        service_code: str,
+        reference: str | None = None,
+        callback_url: str | None = None,
+    ) -> dict:
+        """Pay a utility bill (KPLC, DSTV, GOTV, Zuku, Nairobi Water).
+
+        Routes through `/utilities/` which is the ONLY SasaPay endpoint
+        that returns the biller's prepaid token in the callback `Pin`
+        field. The generic /payments/b2b/ endpoint will not work for
+        these paybills (returns SP01002 unless the merchant has
+        explicitly been granted the B2B Paybill product, which most
+        accounts don't have).
+
+        Args:
+            paybill: Biller paybill number (e.g. "888880" for KPLC).
+            account_number: Customer account at the biller (meter,
+                            smartcard, water account number).
+            amount: KES amount to pay (integer; the API expects whole
+                    KES, not decimals).
+            contact_phone: Phone to receive the biller's notification
+                           SMS (with the prepaid token for KPLC etc.).
+                           Normalise to 254XXXXXXXXX before passing.
+            service_code: SasaPay serviceCode like "SP-KPLC",
+                          "SP-DSTV", etc. Use
+                          `_utility_service_code_for_paybill()` to
+                          resolve from a paybill number.
+            reference: Unique merchant tx ref · auto-uuid if not given.
+            callback_url: Override default callback URL.
+        """
+        return self._request("POST", "/utilities/", {
+            "transactionReference": reference or str(uuid.uuid4()),
+            "merchantCode": self.merchant_code,
+            "serviceCode": service_code,
+            "contactNumber": contact_phone,
+            "accountNumber": account_number,
+            "currencyCode": "KES",
+            "amount": int(round(float(amount))),
+            "callbackUrl": callback_url or self.callback_url,
+        })
+
     # ── B2B — Pay Paybill / Till ───────────────────────────────────────────
 
     def pay_paybill(self, receiver_code: str, account_ref: str, amount: float,

@@ -352,11 +352,29 @@ def sasapay_callback(request, token: str | None = None):
 
     logger.debug("SasaPay callback payload (auth ok): %s", json.dumps(data)[:500])
 
+    # 2026-05-09 · the Utilities API callback shape (KPLC, DSTV, etc.)
+    # uses `MerchantReference` (B2B uses `MerchantTransactionReference`),
+    # `CheckoutRequestId` with lowercase 'd' (B2B uses uppercase 'ID'),
+    # and `Amount` (B2B uses `TransactionAmount`). Read both shapes.
     result_code = str(data.get("ResultCode", data.get("resultCode", "")))
-    checkout_id = data.get("CheckoutRequestID", data.get("checkoutRequestId", ""))
+    checkout_id = (
+        data.get("CheckoutRequestID")
+        or data.get("CheckoutRequestId")
+        or data.get("checkoutRequestId")
+        or ""
+    )
     trans_code = data.get("TransactionCode", data.get("SasaPayTransactionCode", ""))
-    trans_ref = data.get("MerchantTransactionReference", "")
-    amount = data.get("TransAmount", data.get("TransactionAmount", "0"))
+    trans_ref = (
+        data.get("MerchantTransactionReference")
+        or data.get("MerchantReference")
+        or ""
+    )
+    amount = (
+        data.get("TransAmount")
+        or data.get("TransactionAmount")
+        or data.get("Amount")
+        or "0"
+    )
     recipient_name = data.get("RecipientName", "")
 
     # Dedup BEFORE any DB write.
@@ -720,6 +738,15 @@ def _process_successful_payment(
     ).strip()
     cb_amount = data.get("TransactionAmount", data.get("TransAmount", amount))
 
+    # 2026-05-09 · Utilities API callback fields (KPLC, DSTV, GOTV,
+    # Nairobi Water etc.). Per docs.sasapay.app, the prepaid token
+    # arrives in a dedicated `Pin` field, with `Units` for kWh
+    # billers. These are the AUTHORITATIVE token source · much
+    # more reliable than parsing ResultDesc text.
+    utility_pin = (data.get("Pin") or data.get("pin") or "").strip()
+    utility_units = (data.get("Units") or data.get("units") or "").strip()
+    utility_service = (data.get("ServiceCode") or data.get("serviceCode") or "").strip()
+
     # Treat any of these (exact / near-exact, case-insensitive) as a
     # "generic-success" placeholder · construct our own summary instead.
     # Use exact-match (under 60 chars) so we don't accidentally classify
@@ -764,7 +791,31 @@ def _process_successful_payment(
                 params_chunks.append(f"{key}: {value}")
 
     biller_resp = ""
-    if not desc_is_generic:
+
+    # PRIORITY 1 · Utilities API callback with a Pin field. This is
+    # the canonical KPLC token / airtime PIN delivery channel and we
+    # render it in a clean, scannable format that's also good for SMS.
+    # Example output:
+    #   KPLC PREPAID · KSH 100.00 paid for account 37123456789.
+    #   Token: 1234 5678 9012 3456 7890
+    #   Units: 5.20 kWh
+    #   SasaPay ref: SWEJ7RDEBTHT0XY
+    if utility_pin:
+        lines = []
+        rail_name = tx.merchant_name or utility_service or "Utility"
+        acc_part = f" for account {tx.mpesa_account}" if tx.mpesa_account else ""
+        lines.append(
+            f"{rail_name} · KSH {cb_amount} paid{acc_part}."
+        )
+        lines.append(f"Token: {utility_pin}")
+        if utility_units:
+            lines.append(f"Units: {utility_units}")
+        if third_party_code:
+            lines.append(f"M-Pesa ref: {third_party_code}")
+        elif sasapay_code:
+            lines.append(f"SasaPay ref: {sasapay_code}")
+        biller_resp = "\n".join(lines)
+    elif not desc_is_generic:
         # Real biller text · use it verbatim. Append params-block
         # chunks (if any) for additional structured fields.
         biller_resp = raw_desc

@@ -230,13 +230,69 @@ class PaymentSaga:
         # That swallowed the `RecipientName` field SasaPay returns,
         # leaving the receipt blank.
         if self.tx.mpesa_paybill:
-            result = client.b2b_payment(
-                paybill=self.tx.mpesa_paybill,
-                account=self.tx.mpesa_account,
-                amount=int(self.tx.dest_amount),
-                remarks=f"CryptoPay-{self.tx.id}",
-                reference=str(self.tx.id),
-            )
+            # 2026-05-09 utility-routing fix · per docs.sasapay.app,
+            # KPLC / DSTV / GOTV / Zuku / Nairobi Water etc. MUST go
+            # through the dedicated `/utilities/` endpoint, NOT
+            # `/payments/b2b/`. The B2B endpoint requires a separate
+            # "B2B Paybill" product activation that the user reported
+            # was failing with SP01002 ("not permitted according to
+            # product assignment"). The Utilities endpoint also returns
+            # the biller's prepaid token in a dedicated `Pin` field
+            # (plus `Units` for KPLC kWh) on the callback. Route here
+            # whenever we know the serviceCode for the paybill.
+            utility_service_code = None
+            if getattr(client, "is_sasapay", False):
+                # Reach through the adapter to the underlying SasaPay
+                # client for the utility map. Only SasaPay supports
+                # the Utilities API.
+                try:
+                    utility_service_code = (
+                        client._client._utility_service_code_for_paybill(
+                            self.tx.mpesa_paybill
+                        )
+                    )
+                except Exception:
+                    utility_service_code = None
+
+            if utility_service_code:
+                # Normalise the user's phone to 254XXXXXXXXX so the
+                # biller SMS reaches them (not Cpay's sender phone).
+                user_phone = self.tx.user.phone or ""
+                user_phone_e164 = user_phone.lstrip("+")
+                if user_phone_e164.startswith("0"):
+                    user_phone_e164 = "254" + user_phone_e164[1:]
+                logger.info(
+                    "saga.routing_to_utilities · tx=%s paybill=%s service=%s",
+                    self.tx.id, self.tx.mpesa_paybill, utility_service_code,
+                )
+                result = client._client.pay_utility(
+                    paybill=self.tx.mpesa_paybill,
+                    account_number=self.tx.mpesa_account,
+                    amount=int(self.tx.dest_amount),
+                    contact_phone=user_phone_e164,
+                    service_code=utility_service_code,
+                    reference=str(self.tx.id),
+                )
+                # Utilities response shape differs from B2B · keep
+                # the Conv/Originator fields populated where possible
+                # so downstream saga_data tracking still works.
+                result = {
+                    "ConversationID": result.get("CheckoutRequestID")
+                                      or result.get("checkoutRequestId")
+                                      or "",
+                    "OriginatorConversationID": result.get("transactionReference") or str(self.tx.id),
+                    "ResponseCode": result.get("ResponseCode") or result.get("responseCode") or "0",
+                    "ResponseDescription": result.get("detail") or result.get("ResponseDescription") or "",
+                    "_raw": result,  # for debug/audit
+                }
+            else:
+                result = client.b2b_payment(
+                    paybill=self.tx.mpesa_paybill,
+                    account=self.tx.mpesa_account,
+                    amount=int(self.tx.dest_amount),
+                    remarks=f"CryptoPay-{self.tx.id}",
+                    reference=str(self.tx.id),
+                )
         elif self.tx.mpesa_till:
             result = client.buy_goods(
                 till=self.tx.mpesa_till,
