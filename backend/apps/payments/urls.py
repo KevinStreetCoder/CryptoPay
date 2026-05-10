@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import admin_views, views
+from . import admin_views, views, sasapay_admin_views, internal_transfer
 
 app_name = "payments"
 
@@ -88,5 +88,44 @@ urlpatterns = [
         "admin/limits/",
         admin_views.AdminPlatformLimitsView.as_view(),
         name="admin-platform-limits",
+    ),
+    # ── 2026-05-10 · SasaPay management endpoints (full docs audit) ───
+    # Admin (is_staff): live float, manual rebalance, sync verify
+    path(
+        "admin/sasapay/balance/",
+        sasapay_admin_views.SasaPayBalanceView.as_view(),
+        name="admin-sasapay-balance",
+    ),
+    path(
+        "admin/sasapay/rebalance/",
+        sasapay_admin_views.SasaPayRebalanceView.as_view(),
+        name="admin-sasapay-rebalance",
+    ),
+    path(
+        "admin/sasapay/verify/<str:trans_code>/",
+        sasapay_admin_views.SasaPayVerifyTransactionView.as_view(),
+        name="admin-sasapay-verify",
+    ),
+    # Mobile-callable · pre-flight UX
+    path(
+        "utilities/bill-query/",
+        sasapay_admin_views.BillQueryView.as_view(),
+        name="bill-query",
+    ),
+    path(
+        "account/validate/",
+        sasapay_admin_views.AccountValidateView.as_view(),
+        name="account-validate",
+    ),
+    path(
+        "banks-live/",
+        sasapay_admin_views.BanksListView.as_view(),
+        name="banks-live",
+    ),
+    # ── 2026-05-10 · Cpay-to-Cpay internal transfer (no SasaPay hop) ──
+    path(
+        "send-to-cpay/",
+        internal_transfer.SendToCpayView.as_view(),
+        name="send-to-cpay",
     ),
 ]

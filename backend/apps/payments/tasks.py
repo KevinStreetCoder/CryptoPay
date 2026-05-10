@@ -696,6 +696,72 @@ def _is_sasapay_pending(result_code: str) -> bool:
     return str(result_code) in SASAPAY_PENDING_CODES
 
 
+# ── Failure classification · ops triage ──────────────────────────────
+#
+# 2026-05-10 · classify failure codes into operational categories so
+# the admin failed-tx feed can filter "needs ops attention" vs "user
+# self-resolves". Keep this aligned with `_SASAPAY_ERROR_MESSAGES` ·
+# every code that ever appears in the failure path should land in
+# exactly one bucket below.
+#
+# Categories (returned as a string · stored on Transaction.failure_category):
+#   "user"        · user error, no ops action needed
+#   "rail"        · SasaPay/M-Pesa/biller side · ops investigates
+#   "permission"  · product activation issue · escalate to SasaPay support
+#   "unknown"     · anything not classified · default · ops glance
+
+_FAILURE_BUCKETS = {
+    # User-side · cancelled, wrong PIN, timeouts, insufficient balance
+    "1":          "user",   # Insufficient M-Pesa balance
+    "1032":       "user",   # User cancelled
+    "1037":       "user",   # STK timeout
+    "2001":       "user",   # Wrong M-Pesa PIN
+    "1025":       "user",   # Daily limit reached
+    "1019":       "user",   # In-progress duplicate
+    "1001":       "user",
+    "2040":       "user",   # Unregistered M-Pesa recipient
+    "SFC_IC0003": "user",   # Invalid recipient phone
+
+    # Rail-side · system errors, retry storms, gateway failures
+    "1031":       "rail",   # M-Pesa offline
+    "1036":       "rail",
+    "9999":       "rail",
+    "17":         "rail",
+    "4001":       "rail",
+    "SP01002":    "rail",
+    "SP01003":    "rail",
+    "DP00900001000": "rail",
+    "ERROR":      "rail",
+    "SP.500.000": "rail",
+    "SP.502.000": "rail",
+    "SP.503.000": "rail",
+    "SP.504.000": "rail",
+    "SP.429.000": "rail",
+
+    # Permission · product activation / scope issues · escalate to SasaPay
+    "2028":       "permission",  # "Not permitted according to product assignment"
+    "SP.401.000": "permission",
+    "SP.403.000": "permission",
+    "SP.400.000": "permission",
+    "SP4072":     "permission",  # Invalid SasaPay scope
+    "SP4041":     "permission",  # Merchant code not a SasaPay merchant
+}
+
+FAILURE_CATEGORIES = ("user", "rail", "permission", "unknown")
+
+
+def classify_failure_code(result_code: str) -> str:
+    """Return one of FAILURE_CATEGORIES for a given SasaPay/M-Pesa code.
+
+    Used by:
+      - Transaction.failure_category column · ops dashboard filter
+      - The failed-tx alert email subject line · "[USER] Failed Tx ..."
+        vs "[RAIL] Failed Tx ..." vs "[PERMISSION] Failed Tx ..." so
+        ops sees the actionable ones first.
+    """
+    return _FAILURE_BUCKETS.get(str(result_code), "unknown")
+
+
 @shared_task
 def check_pending_mpesa_payments():
     """
