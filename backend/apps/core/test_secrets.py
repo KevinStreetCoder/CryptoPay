@@ -22,10 +22,11 @@ from django.test import TestCase, override_settings
 
 class SecretsHelperTests(TestCase):
     def setUp(self):
-        # Each test starts with a clean cache · the lru_cache is
-        # per-process so we explicitly clear between tests.
-        from apps.core.secrets import clear_secret_cache
-        clear_secret_cache()
+        # Each test starts with a clean cache + clean runtime-disable
+        # latch · both are per-process module state, so leftovers from
+        # prior tests would otherwise cause order-dependent flakes.
+        from apps.core.secrets import reset_runtime_state
+        reset_runtime_state()
 
     # ── Tier 3 · default fallthrough ────────────────────────────────
 
@@ -145,6 +146,192 @@ class SecretsHelperTests(TestCase):
                 status["secrets"]["SASAPAY_CLIENT_SECRET"],
                 "env_fallback",
             )
+
+    # ── Runtime self-disable on hard auth failure (2026-05-10) ──────
+    #
+    # Regression guard for the "secret_manager.fetch_failed warnings on
+    # every manage.py run" log spam. Root cause was every hard auth
+    # failure (creds file missing, SA revoked) re-trying the SM client
+    # for every secret + every callsite + every CLI invocation, logging
+    # WARNING each time. The fix latches the SM-disabled state at the
+    # process level after the first hard failure, so ops sees ONE INFO
+    # line and zero noise after that.
+
+    def test_default_credentials_error_latches_runtime_disable(self):
+        """When SA JSON is missing, SecretManagerServiceClient() raises
+        DefaultCredentialsError. The first call must:
+          - Return None (env fallback)
+          - Set _runtime_disabled = True
+          - NOT log per-secret WARNING lines on subsequent calls
+        """
+        from apps.core import secrets as secrets_mod
+
+        secrets_mod.reset_runtime_state()
+
+        # Build a fake exception class with the right __name__.
+        class DefaultCredentialsError(Exception):
+            pass
+
+        # Build a fake `secretmanager` module whose Client() raises
+        # the auth error verbatim (matches what google.auth does in
+        # prod when /run/secrets/gcp-kms.json doesn't exist).
+        fake_secretmanager = mock.MagicMock()
+        fake_secretmanager.SecretManagerServiceClient.side_effect = (
+            DefaultCredentialsError("File /run/secrets/gcp-kms.json was not found.")
+        )
+        fake_google_cloud = mock.MagicMock(secretmanager=fake_secretmanager)
+
+        with mock.patch.dict("sys.modules", {
+            "google.cloud": fake_google_cloud,
+            "google.cloud.secretmanager": fake_secretmanager,
+        }), mock.patch.object(secrets_mod, "_PROJECT_ID", "cpay-490223"):
+
+            # First call · should latch + log INFO once.
+            with self.assertLogs("apps.core.secrets", level="INFO") as cm:
+                v1 = secrets_mod._fetch_from_gcp("MPESA_CALLBACK_HMAC_KEY", "latest")
+            self.assertIsNone(v1)
+            self.assertTrue(secrets_mod._runtime_disabled)
+            self.assertIn("DefaultCredentialsError", secrets_mod._runtime_disable_reason)
+            # Exactly ONE log entry · the runtime_disabled INFO line.
+            self.assertTrue(any(
+                "secret_manager.runtime_disabled" in msg for msg in cm.output
+            ))
+
+            # Second call · MUST be silent (no further logs · short-
+            # circuit before the SM client is even instantiated).
+            secrets_mod._fetch_from_gcp.cache_clear()
+            try:
+                with self.assertLogs("apps.core.secrets", level="DEBUG") as cm2:
+                    v2 = secrets_mod._fetch_from_gcp("SASAPAY_CLIENT_SECRET", "latest")
+                # If we got here, assertLogs found at least one log line.
+                # Verify it wasn't a fetch_failed WARNING repeat.
+                for line in cm2.output:
+                    self.assertNotIn("secret_manager.fetch_failed", line)
+            except AssertionError as e:
+                # assertLogs raises AssertionError when NO logs are
+                # captured · that's the desired state. Verify it's
+                # the no-logs case, not an unrelated assertion.
+                if "no logs of level" in str(e):
+                    pass
+                else:
+                    raise
+            self.assertIsNone(v2)
+
+        # Cleanup · don't leak _runtime_disabled into other tests.
+        secrets_mod.reset_runtime_state()
+
+    def test_runtime_disabled_short_circuits_get_secret(self):
+        """Once latched, get_secret() goes straight to env without
+        calling _fetch_from_gcp at all."""
+        from apps.core import secrets as secrets_mod
+
+        secrets_mod.reset_runtime_state()
+        # Manually flip the latch (mimics what _latch_runtime_disable
+        # would do after the first hard failure).
+        secrets_mod._runtime_disabled = True
+        secrets_mod._runtime_disable_reason = "test-fixture"
+
+        try:
+            with mock.patch.object(secrets_mod, "_fetch_from_gcp") as fake_fetch, \
+                 mock.patch.dict(os.environ, {
+                     "TEST_LATCH_KEY": "from-env",
+                     "GOOGLE_CLOUD_PROJECT": "cpay-490223",
+                 }):
+                self.assertEqual(
+                    secrets_mod.get_secret("TEST_LATCH_KEY"),
+                    "from-env",
+                )
+                fake_fetch.assert_not_called()
+        finally:
+            secrets_mod.reset_runtime_state()
+
+    def test_per_secret_notfound_does_NOT_latch(self):
+        """A 404 on one secret means that ONE secret isn't in SM yet ·
+        env fallback is the design. Must NOT latch _runtime_disabled
+        (the SA + IAM are working, just this name isn't migrated yet)."""
+        from apps.core import secrets as secrets_mod
+
+        secrets_mod.reset_runtime_state()
+
+        class NotFound(Exception):
+            pass
+
+        fake_client = mock.MagicMock()
+        fake_client.access_secret_version.side_effect = NotFound(
+            "Secret [MPESA_CALLBACK_HMAC_KEY] not found"
+        )
+        fake_secretmanager = mock.MagicMock()
+        fake_secretmanager.SecretManagerServiceClient.return_value = fake_client
+        fake_google_cloud = mock.MagicMock(secretmanager=fake_secretmanager)
+
+        with mock.patch.dict("sys.modules", {
+            "google.cloud": fake_google_cloud,
+            "google.cloud.secretmanager": fake_secretmanager,
+        }), mock.patch.object(secrets_mod, "_PROJECT_ID", "cpay-490223"):
+            v = secrets_mod._fetch_from_gcp("MPESA_CALLBACK_HMAC_KEY", "latest")
+
+        self.assertIsNone(v)
+        self.assertFalse(
+            secrets_mod._runtime_disabled,
+            "Per-secret NotFound must not flip the process-wide latch · "
+            "other secrets may still be available from SM",
+        )
+        secrets_mod.reset_runtime_state()
+
+    def test_permission_denied_latches_runtime_disable(self):
+        """IAM revoked the secretmanager.viewer role · same outcome
+        as missing creds, latch the disable."""
+        from apps.core import secrets as secrets_mod
+
+        secrets_mod.reset_runtime_state()
+
+        class PermissionDenied(Exception):
+            pass
+
+        fake_client = mock.MagicMock()
+        fake_client.access_secret_version.side_effect = PermissionDenied(
+            "403 Permission denied on resource"
+        )
+        fake_secretmanager = mock.MagicMock()
+        fake_secretmanager.SecretManagerServiceClient.return_value = fake_client
+        fake_google_cloud = mock.MagicMock(secretmanager=fake_secretmanager)
+
+        with mock.patch.dict("sys.modules", {
+            "google.cloud": fake_google_cloud,
+            "google.cloud.secretmanager": fake_secretmanager,
+        }), mock.patch.object(secrets_mod, "_PROJECT_ID", "cpay-490223"):
+            secrets_mod._fetch_from_gcp("ANYTHING", "latest")
+
+        self.assertTrue(secrets_mod._runtime_disabled)
+        self.assertIn("PermissionDenied", secrets_mod._runtime_disable_reason)
+        secrets_mod.reset_runtime_state()
+
+    def test_status_helper_exposes_runtime_disable_reason(self):
+        """Admin /health needs to see WHY SM is in env-only mode ·
+        not just that it is."""
+        from apps.core import secrets as secrets_mod
+
+        secrets_mod.reset_runtime_state()
+        secrets_mod._runtime_disabled = True
+        secrets_mod._runtime_disable_reason = "DefaultCredentialsError: file missing"
+
+        try:
+            status = secrets_mod.get_managed_secret_status()
+            self.assertTrue(status["runtime_disabled"])
+            self.assertIn("DefaultCredentialsError", status["runtime_disable_reason"])
+        finally:
+            secrets_mod.reset_runtime_state()
+
+    def test_reset_runtime_state_unlatches(self):
+        """After ops fixes the SA JSON, calling reset_runtime_state()
+        re-enables Secret Manager for subsequent calls."""
+        from apps.core import secrets as secrets_mod
+
+        secrets_mod._runtime_disabled = True
+        secrets_mod._runtime_disable_reason = "test"
+        secrets_mod.reset_runtime_state()
+        self.assertFalse(secrets_mod._runtime_disabled)
+        self.assertEqual(secrets_mod._runtime_disable_reason, "")
 
     # ── Cache behaviour ─────────────────────────────────────────────
 

@@ -20,6 +20,17 @@ Design choices:
     Manager throws (network blip, IAM revoke, project mismatch), fall
     back to `os.environ[NAME]`. Zero-downtime migration · we can move
     secrets into Secret Manager one at a time.
+  - **Self-disable on hard auth failure** · 2026-05-10. When the SA
+    JSON file is missing / IAM is revoked / the project doesn't have
+    Secret Manager API enabled, every fetch hits the same hard wall.
+    Logging WARNING per secret per `manage.py` invocation produced
+    log spam · 7 Phase-1 secrets × N callers × N CLI runs. We now
+    detect hard auth failures (DefaultCredentialsError, RefreshError,
+    Forbidden, NotFound on the project) and flip a process-level
+    `_runtime_disabled` flag · subsequent fetches skip the SM client
+    entirely and log NOTHING. One INFO line on first failure tells
+    ops "running env-only this process". Clear via `reset_runtime_state()`
+    after fixing creds.
   - **Refresh on signal** · `clear_secret_cache()` flushes the
     lru_cache so a SIGHUP-style reload picks up rotated values without
     a container restart. Wire into a Celery beat task if/when we
@@ -46,6 +57,39 @@ _PROJECT_ID = os.environ.get("GOOGLE_CLOUD_PROJECT", "").strip()
 # normal rotation; pin to "5" etc. for canary rollouts.
 _DEFAULT_VERSION = os.environ.get("GCP_SECRET_VERSION", "latest")
 
+# 2026-05-10 · process-level latch · once we hit a hard auth failure
+# (creds file missing, SA revoked, API disabled) we stop calling the
+# SM client for the lifetime of this process. Avoids the per-secret,
+# per-invocation log spam we were seeing in prod (one
+# `secret_manager.fetch_failed` line per `manage.py` command, 10 of
+# them per `inspect_tx` run · all redundant since the underlying
+# DefaultCredentialsError is the same on every call).
+_runtime_disabled: bool = False
+_runtime_disable_reason: str = ""
+
+# Hard-auth-failure exception class NAMES · we match by class name
+# rather than importing the GCP exception types (`google.api_core.exceptions`)
+# to keep this module importable when the google-cloud library isn't
+# installed (CI / local dev without the optional dep). These mean
+# "no SA in scope · don't bother retrying":
+#   DefaultCredentialsError · the SA JSON file isn't where ADC can
+#                              find it (most common · this is the bug
+#                              we shipped today's fix for)
+#   RefreshError            · the cached credential failed to refresh
+#                              (rotated out of band, revoked)
+#   PermissionDenied        · IAM has the SA but the secretmanager.viewer
+#                              role isn't bound (configuration drift)
+#   Forbidden               · alias of PermissionDenied via google-api-core
+# Per-secret NotFound is INTENTIONALLY excluded · it's the expected
+# state for secrets we haven't migrated to SM yet, and we want the env
+# fallback to stay invisible (no log spam).
+_HARD_AUTH_FAIL_NAMES = frozenset({
+    "DefaultCredentialsError",
+    "RefreshError",
+    "PermissionDenied",
+    "Forbidden",
+})
+
 
 def _disabled() -> bool:
     """Return True when Secret Manager is intentionally turned off.
@@ -55,12 +99,50 @@ def _disabled() -> bool:
       - `DISABLE_SECRET_MANAGER=True` is set (operator escape hatch
         for the case where the SA key got revoked and we need to
         ship a fix that boots from env-only)
+      - We've already hit a hard auth failure in this process (latched
+        via `_runtime_disabled`).
     """
     if not _PROJECT_ID:
         return True
     if os.environ.get("DISABLE_SECRET_MANAGER", "").lower() in {"1", "true", "yes"}:
         return True
+    if _runtime_disabled:
+        return True
     return False
+
+
+def _latch_runtime_disable(error: BaseException) -> None:
+    """Mark Secret Manager unusable for the rest of this process.
+
+    Logs ONCE at INFO level so ops sees that we've fallen back to env
+    without burying the signal in 7×N WARNING lines. The reason string
+    is also exposed on `get_managed_secret_status()` for the admin
+    /health endpoint.
+    """
+    global _runtime_disabled, _runtime_disable_reason
+    if _runtime_disabled:
+        return
+    _runtime_disabled = True
+    _runtime_disable_reason = f"{type(error).__name__}: {str(error)[:200]}"
+    logger.info(
+        "secret_manager.runtime_disabled · falling back to env for the rest of "
+        "this process · reason=%s",
+        _runtime_disable_reason,
+    )
+
+
+def reset_runtime_state() -> None:
+    """Clear the runtime-disable latch + cache.
+
+    Use after fixing the SA credentials in prod (e.g. mounting the JSON
+    file the container expected) so the next call probes Secret Manager
+    again instead of staying latched in env-only mode for the rest of
+    the process.
+    """
+    global _runtime_disabled, _runtime_disable_reason
+    _runtime_disabled = False
+    _runtime_disable_reason = ""
+    _fetch_from_gcp.cache_clear()
 
 
 @lru_cache(maxsize=64)
@@ -69,14 +151,31 @@ def _fetch_from_gcp(name: str, version: str) -> Optional[str]:
     lifetime; clear via `clear_secret_cache()`.
 
     Returns None on any failure so the caller can fall back to env.
-    Logs the failure so ops can see whether SM is the bottleneck.
+
+    Hard auth failures (creds file missing, SA revoked, IAM denied)
+    flip the process-level latch via `_latch_runtime_disable` so we
+    stop retrying. Per-secret NotFound is silent (env fallback is
+    the design while migration is in progress). Other unexpected
+    exceptions log at debug level so ops can find them without log
+    spam.
     """
+    if _runtime_disabled:
+        # Belt-and-braces · _disabled() already short-circuited the
+        # caller, but if someone calls _fetch_from_gcp directly (e.g.
+        # the diagnostic helper) honour the latch.
+        return None
+
     try:
         from google.cloud import secretmanager
     except ImportError:
-        logger.warning(
-            "secret_manager.import_failed · `pip install google-cloud-secret-manager`"
-        )
+        # Library not installed · log ONCE and latch.
+        if not _runtime_disabled:
+            logger.info(
+                "secret_manager.runtime_disabled · "
+                "google-cloud-secret-manager not installed · using env fallback"
+            )
+            globals()["_runtime_disabled"] = True
+            globals()["_runtime_disable_reason"] = "ImportError: google-cloud-secret-manager"
         return None
 
     try:
@@ -85,12 +184,23 @@ def _fetch_from_gcp(name: str, version: str) -> Optional[str]:
         response = client.access_secret_version(request={"name": path})
         return response.payload.data.decode("utf-8")
     except Exception as e:
-        # Catch-all · IAM denied, network, project mismatch, secret
-        # not found. We don't distinguish · ops checks the log, the
-        # caller falls through to env.
-        logger.warning(
+        err_name = type(e).__name__
+        if err_name in _HARD_AUTH_FAIL_NAMES:
+            # No SA available / IAM not bound · stop calling SM for
+            # the rest of this process.
+            _latch_runtime_disable(e)
+            return None
+        if err_name == "NotFound":
+            # Per-secret 404 · expected during the env→SM migration.
+            # Silent fallback to env.
+            return None
+        # Anything else · transient (network blip, quota, server
+        # error). Debug-level so it's discoverable but not spammy.
+        # If we're seeing these in volume, ops can flip the log
+        # level to WARNING via Django's LOGGING config.
+        logger.debug(
             "secret_manager.fetch_failed",
-            extra={"secret_name": name, "version": version, "error": type(e).__name__},
+            extra={"secret_name": name, "version": version, "error": err_name},
         )
         return None
 
@@ -151,8 +261,19 @@ def get_managed_secret_status() -> dict:
     """Diagnostic helper · for each Phase-1 secret, report whether
     it's currently being served from Secret Manager or env. Used
     by the admin /admin/health endpoint so ops can confirm the
-    migration progress at a glance."""
-    out = {"project": _PROJECT_ID, "disabled": _disabled(), "secrets": {}}
+    migration progress at a glance.
+
+    `runtime_disabled` is True after a hard auth failure has latched
+    Secret Manager off for this process · `runtime_disable_reason`
+    carries the originating exception so ops doesn't have to dig
+    through logs to find out WHY SM stopped working."""
+    out = {
+        "project": _PROJECT_ID,
+        "disabled": _disabled(),
+        "runtime_disabled": _runtime_disabled,
+        "runtime_disable_reason": _runtime_disable_reason,
+        "secrets": {},
+    }
     for name in PHASE_1_SECRETS:
         if _disabled():
             source = "env" if os.environ.get(name) else "missing"
