@@ -54,9 +54,13 @@ class Command(BaseCommand):
             raise CommandError("short_ref must be at least 4 hex chars")
 
         # Postgres UUID match works on the dashless lowercase prefix.
-        # Convert to canonical UUID form for the LIKE.
+        # `id` must be table-qualified · select_related("user") joins
+        # the users table which also has an `id` column, so a bare
+        # `id::text` fails with `AmbiguousColumn`. Use Transaction's
+        # own table name from _meta to stay model-rename-safe.
+        tx_table = Transaction._meta.db_table
         qs = Transaction.objects.select_related("user").extra(
-            where=["replace(id::text, '-', '') ILIKE %s"],
+            where=[f'replace({tx_table}."id"::text, \'-\', \'\') ILIKE %s'],
             params=[f"{raw}%"],
         ).order_by("-created_at")[:25]
 
