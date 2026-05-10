@@ -38,7 +38,16 @@ const DESCRIPTION =
 // 2026-05-10 · replaced with the design-locked 1200×675 poster
 // (matches Twitter's summary_large_image dim, accepted as og:image
 // by Facebook / WhatsApp / Slack / LinkedIn / iMessage / Discord).
-const OG_IMAGE = `${SITE_URL}/og-image.png`;
+//
+// `?v=YYYYMMDD` is a cache-buster · Cloudflare's default cache key
+// includes query strings, so a fresh URL = fresh CF fetch even when
+// the operator can't run `purge_cache` (R2/Workers token doesn't have
+// that scope). Social platforms (FB / WhatsApp / Slack / Twitter)
+// also key their og:image cache by URL · changing the version string
+// forces them to re-scrape the new poster instead of serving the
+// previous one for hours/days.
+const OG_IMAGE_VERSION = "20260510";
+const OG_IMAGE = `${SITE_URL}/og-image.png?v=${OG_IMAGE_VERSION}`;
 const OG_IMAGE_W = 1200;
 const OG_IMAGE_H = 675;
 const OG_IMAGE_ALT = "Cpay · pay any Paybill with crypto · KES 1,450 paid with 11.03 USDT";
