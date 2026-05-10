@@ -393,12 +393,20 @@ def sasapay_callback(request, token: str | None = None):
                 data, trans_ref, trans_code, amount, url_tx_id=url_tx_id,
             )
         else:
-            result_desc = data.get("ResultDesc", data.get("resultDesc", "Unknown"))
+            result_desc, reason_with_code = _extract_failure_reason(
+                data, result_code,
+            )
             logger.warning(
                 "sasapay FAILED: code=%s desc=%s ref=%s checkout=%s",
                 result_code, result_desc, trans_ref, checkout_id,
             )
-            _process_failed_payment(data, trans_ref, result_desc, url_tx_id=url_tx_id)
+            _process_failed_payment(
+                data,
+                trans_ref,
+                reason_with_code,
+                url_tx_id=url_tx_id,
+                result_code=result_code,
+            )
     except Exception:
         # Process exceptions should never propagate · SasaPay would retry
         # forever. Log and acknowledge.
@@ -955,11 +963,70 @@ def _process_successful_payment(
     logger.info("sasapay payment completed: tx=%s receipt=%s", tx.id, trans_code)
 
 
+# 2026-05-10 · drag the failure description out of every field SasaPay
+# has been observed to use across product tiers. Falling back to bare
+# "Unknown" left ops staring at "SasaPay: Unknown" in the failed-tx
+# alert (see Kevin Kareithi tx 9291FB4E, 2026-05-09 16:11 UTC · STK
+# Push cancel/timeout returned no ResultDesc and we lost the signal).
+# Always prefix with the numeric ResultCode so the reason is actionable
+# even when the description is blank · "[1037] no description" tells
+# ops "STK timeout" at a glance, "SasaPay: Unknown" tells them nothing.
+_FAILURE_REASON_FIELDS = (
+    "ResultDesc", "resultDesc",
+    "ResponseDescription", "responseDescription",
+    "Description", "description",
+    "Message", "message",
+    "detail",
+)
+
+
+def _extract_failure_reason(data: dict, result_code: str | None) -> tuple[str, str]:
+    """Pull the most informative human-readable failure description out
+    of `data`, then stamp it with `result_code` for the audit trail.
+
+    Returns:
+        (raw_description, reason_with_code)
+    """
+    raw = ""
+    for key in _FAILURE_REASON_FIELDS:
+        v = data.get(key)
+        if isinstance(v, str) and v.strip():
+            raw = v.strip()
+            break
+    if not raw:
+        raw = "no description"
+    code = (result_code or "").strip()
+    if code:
+        return raw, f"[{code}] {raw}"
+    return raw, raw
+
+
+# 2026-05-10 · M-Pesa-rail denial codes that mean "Safaricom told
+# SasaPay no" rather than "the user's payment failed". When we see
+# one of these against an outgoing rail (paybill / till / send-mobile)
+# and IntaSend is configured, we silently retry through IntaSend
+# instead of marking the tx FAILED · IntaSend's own M-Pesa B2B has
+# no per-paybill product-assignment restriction and routinely pays
+# rails SasaPay refuses (KPLC 888880, NHIF 200222, etc.).
+#
+# Codes:
+#   SP01002 · SasaPay's wrapper around any M-Pesa-side rejection.
+#             Message body usually carries the inner code (2028 etc.).
+#   SP01003 · "Insufficient funds in receiver" · sometimes returned
+#             when the M-Pesa product assignment is missing rather
+#             than a real liquidity issue.
+#   2028    · Direct M-Pesa code · "Receiver account not assigned
+#             to product" · the smoking gun for product-assignment
+#             denials.
+_MPESA_RAIL_DENIAL_CODES = {"SP01002", "SP01003", "2028"}
+
+
 def _process_failed_payment(
     data: dict,
     ref: str,
     reason: str,
     url_tx_id: str | None = None,
+    result_code: str | None = None,
 ):
     """Process a failed B2B / B2C payment · compensate.
 
@@ -973,6 +1040,13 @@ def _process_failed_payment(
     assignment'); failure callback arrived but couldn't find the tx.
 
     Mirror the success-path strategies here.
+
+    2026-05-10 IntaSend auto-fallback · if SasaPay rejects an outgoing
+    M-Pesa rail with a "product-assignment" code (SP01002 / 2028 /
+    SP01003), we retry the SAME logical payment through IntaSend
+    before marking the tx FAILED. SasaPay continues to handle our
+    inbound C2B deposits as today; IntaSend only takes over the
+    outgoing leg when SasaPay refuses.
     """
     from apps.payments.models import Transaction
     from django.core.exceptions import ValidationError
@@ -1024,6 +1098,131 @@ def _process_failed_payment(
             tx.id, tx.status,
         )
         return
+
+    # ───────────────── IntaSend auto-fallback (2026-05-10) ─────────────
+    #
+    # When SasaPay returns an M-Pesa product-assignment denial against
+    # an outgoing rail, retry through IntaSend instead of marking the tx
+    # FAILED. IntaSend's MPESA-B2B has no per-paybill agreement
+    # restriction · it routinely pays rails SasaPay's account refuses
+    # (KPLC 888880, NHIF 200222, etc.).
+    #
+    # Side-effects on success:
+    #   - tx stays in CONFIRMING; user's locked crypto stays locked.
+    #   - saga_data gets `intasend_tracking_id` so the IntaSend callback
+    #     handler (`apps/mpesa/intasend_views._find_pending_tx`) resolves
+    #     this tx via path #2 and routes through `saga.complete()` /
+    #     `saga.fail()` exactly as it would for an IntaSend-primary tx.
+    #   - saga_data.fallback_history gets an audit entry (provider,
+    #     reason, timestamp) so ops can see the rail-flip without
+    #     stitching together logs.
+    #
+    # If IntaSend fails synchronously OR is not configured, we fall
+    # through to the original FAILED + compensate path so the user
+    # gets their crypto back.
+    code_str = str(result_code or "").strip().upper()
+    if (
+        code_str in _MPESA_RAIL_DENIAL_CODES
+        and getattr(settings, "INTASEND_API_SECRET", "")
+        and (tx.mpesa_paybill or tx.mpesa_till or tx.mpesa_phone)
+        and tx.dest_amount
+        and Decimal(str(tx.dest_amount)) > 0
+    ):
+        try:
+            from apps.mpesa.intasend_client import IntaSendClient, IntaSendError
+            from django.utils import timezone
+
+            client = IntaSendClient()
+            # Use a derived api_ref so it cannot collide with a prior
+            # idempotency_key reuse on IntaSend's side. The IntaSend
+            # callback resolves the tx via saga_data.intasend_tracking_id
+            # (path #2 in _find_pending_tx), so the api_ref doesn't have
+            # to match the tx idempotency_key for lookup to work.
+            api_ref = f"sasapay-fb-{tx.id}"
+            kes_amount = Decimal(str(tx.dest_amount))
+
+            if tx.mpesa_paybill:
+                resp = client.pay_paybill(
+                    paybill=str(tx.mpesa_paybill),
+                    account=str(tx.mpesa_account or ""),
+                    amount=float(kes_amount),
+                    reference=api_ref,
+                    narrative="Cpay paybill",
+                )
+            elif tx.mpesa_till:
+                resp = client.pay_till(
+                    till=str(tx.mpesa_till),
+                    amount=float(kes_amount),
+                    reference=api_ref,
+                    narrative="Cpay buy goods",
+                )
+            else:
+                resp = client.send_to_mobile(
+                    phone=str(tx.mpesa_phone),
+                    amount=float(kes_amount),
+                    reason="Cpay send money",
+                    reference=api_ref,
+                )
+
+            tracking_id = resp.get("ConversationID", "")
+            response_code = str(resp.get("ResponseCode", ""))
+            if response_code == "0" and tracking_id:
+                sd = dict(tx.saga_data or {})
+                sd["intasend_tracking_id"] = tracking_id
+                sd["intasend_api_ref"] = api_ref
+                sd["fallback_provider"] = "intasend"
+                history = list(sd.get("fallback_history") or [])
+                history.append({
+                    "from": "sasapay",
+                    "to": "intasend",
+                    "reason_code": code_str,
+                    "reason_desc": str(reason)[:200],
+                    "tracking_id": tracking_id,
+                    "at": timezone.now().isoformat(),
+                })
+                sd["fallback_history"] = history
+                tx.saga_data = sd
+                tx.save(update_fields=["saga_data", "updated_at"])
+
+                AuditLog.objects.create(
+                    user=tx.user,
+                    action="sasapay_to_intasend_fallback",
+                    details=(
+                        f"SasaPay rejected {code_str} ({str(reason)[:120]}). "
+                        f"Retrying via IntaSend tracking_id={tracking_id} "
+                        f"api_ref={api_ref}. Tx {tx.id} stays CONFIRMING; "
+                        f"locked crypto remains locked pending IntaSend callback."
+                    ),
+                )
+                logger.warning(
+                    "sasapay_to_intasend_fallback · tx=%s code=%s "
+                    "tracking_id=%s api_ref=%s",
+                    tx.id, code_str, tracking_id, api_ref,
+                )
+                return
+
+            # IntaSend accepted the request but didn't return a usable
+            # tracking_id · treat as fallback-failed and let the
+            # original compensate path run so the user gets refunded.
+            logger.error(
+                "sasapay_to_intasend_fallback · IntaSend returned "
+                "ResponseCode=%s tracking=%s · falling through to FAILED "
+                "(tx=%s)",
+                response_code, tracking_id, tx.id,
+            )
+        except IntaSendError as e:
+            logger.error(
+                "sasapay_to_intasend_fallback · IntaSend API error: %s "
+                "· falling through to FAILED (tx=%s)",
+                str(e)[:200], tx.id,
+            )
+        except Exception:
+            logger.exception(
+                "sasapay_to_intasend_fallback · unexpected error · "
+                "falling through to FAILED (tx=%s)",
+                tx.id,
+            )
+    # ───────────────────────────────────────────────────────────────────
 
     tx.status = Transaction.Status.FAILED
     tx.failure_reason = f"SasaPay: {reason}"[:500]

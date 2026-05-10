@@ -264,7 +264,19 @@ class PaymentSaga:
             # generic `/utilities/` (which has no KPLC serviceCode).
             # Returns Pin + Units in the callback. Falls back to plain
             # B2B if the merchant doesn't have WaaS provisioning.
-            if is_kplc_prepaid and getattr(client, "is_sasapay", False):
+            #
+            # 2026-05-10 update · SasaPay support confirmed via email
+            # that WaaS provisioning requires the merchant to be a
+            # registered limited company. CPAY TECHNOLOGIES is currently
+            # name-reservation only (full cert pending), so every WaaS
+            # call returns 401/403 and the saga adds an extra HTTP
+            # round-trip before falling back to B2B. Skip WaaS entirely
+            # while SASAPAY_WAAS_ENABLED is False (default). Flip the
+            # env var ON when the limited-company cert lands AND SasaPay
+            # confirms WaaS is provisioned on our merchant account.
+            from django.conf import settings as _dj_settings
+            waas_enabled = getattr(_dj_settings, "SASAPAY_WAAS_ENABLED", False)
+            if is_kplc_prepaid and waas_enabled and getattr(client, "is_sasapay", False):
                 user_phone = (self.tx.user.phone or "").lstrip("+")
                 if user_phone.startswith("0"):
                     user_phone = "254" + user_phone[1:]

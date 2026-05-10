@@ -125,14 +125,28 @@ fi
 cd "$PROJECT_ROOT"
 
 # ── Step 1: Build Expo web ───────────────────────────────────
+# 2026-05-10 · `expo export` produces a bare index.html with no
+# OG / Twitter / SEO meta. We inject them via scripts/inject-seo.js
+# AFTER the export so that:
+#   1. WhatsApp / Slack / FB / LinkedIn / iMessage previews of
+#      cpay.co.ke render the design-locked 1200×675 poster from
+#      `Cpay SEO and Social Images.html`.
+#   2. Twitter cards render at summary_large_image.
+#   3. Google Search has the right title + description for ranking.
+# Skipping inject-seo at deploy time is silent · no broken page,
+# just a regression to a bare "Cpay" link preview.
 if [ "$SKIP_BUILD" = false ]; then
     log "Building Expo web app..."
     cd mobile
     npx expo export --platform web
+    log "Injecting SEO + OG meta tags into dist/index.html..."
+    node scripts/inject-seo.js
     cd "$PROJECT_ROOT"
-    log "Build complete."
+    log "Build + SEO injection complete."
 else
     info "Skipping build (--skip-build flag set)."
+    info "(re-run inject-seo manually if dist/index.html lacks OG tags:"
+    info "   cd mobile && node scripts/inject-seo.js)"
 fi
 
 # Verify dist/ exists

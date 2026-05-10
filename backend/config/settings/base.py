@@ -599,6 +599,23 @@ SASAPAY_TRUST_IP_FOR_UNSIGNED_IPN = env.bool(
     "SASAPAY_TRUST_IP_FOR_UNSIGNED_IPN", default=True
 )
 
+# 2026-05-10 · SasaPay Wallet-as-a-Service (WaaS) gate.
+# WaaS unlocks the dedicated `/waas/utilities/kplc-token/` and
+# `/waas/utilities/postpaid-bill-payments/` endpoints, which return
+# the prepaid token + units in a structured `Pin` field rather than
+# making us parse it out of `ResultDesc`. SasaPay support confirmed
+# (2026-05-10 email) that consuming WaaS requires the merchant to be
+# a REGISTERED LIMITED COMPANY · CPAY TECHNOLOGIES is a name-reservation
+# only (full cert pending, see project_business_registration.md), so
+# every WaaS call currently returns 401/403 and adds an extra HTTP
+# round-trip before we fall back to plain B2B.
+#
+# Default: False · skip WaaS entirely, route KPLC + utility paybills
+# through the regular B2B / Utilities API. Flip to True after the
+# limited-company cert lands AND SasaPay confirms WaaS is provisioned
+# on our merchant account.
+SASAPAY_WAAS_ENABLED = env.bool("SASAPAY_WAAS_ENABLED", default=False)
+
 # ─── 2026-05-09 · External exchange / wallet integrations ──────────
 # OAuth-app credentials (provisioned at the exchange's developer
 # portal) for letting Cpay users link their account. Per-user API

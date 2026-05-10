@@ -28,17 +28,25 @@ if (!fs.existsSync(INDEX)) {
 
 const SITE_URL = "https://cpay.co.ke";
 const SITE_NAME = "Cpay";
-const TITLE = "Cpay · Pay Any Bill in Kenya with Crypto";
+// 2026-05-10 · headline rewritten to match the locked OG poster
+// (`Cpay SEO and Social Images.html` · cpay-og-1200x675).
+const TITLE = "Cpay · Pay any Paybill with crypto";
 const DESCRIPTION =
-  "Pay any Kenyan Paybill, Buy Goods Till, or send M-Pesa directly from your USDT, USDC, BTC, ETH or SOL. " +
-  "Live KES rates, instant settlement via licensed payment partners. " +
-  "Operating under Kenya VASP Act 2025.";
+  "Crypto in. KES out on M-Pesa. " +
+  "USDT, BTC, ETH or SOL · settles in under 30 seconds, rate locked for 90. " +
+  "Live in Kenya · operating under VASP Act 2025.";
+// 2026-05-10 · replaced with the design-locked 1200×675 poster
+// (matches Twitter's summary_large_image dim, accepted as og:image
+// by Facebook / WhatsApp / Slack / LinkedIn / iMessage / Discord).
 const OG_IMAGE = `${SITE_URL}/og-image.png`;
+const OG_IMAGE_W = 1200;
+const OG_IMAGE_H = 675;
+const OG_IMAGE_ALT = "Cpay · pay any Paybill with crypto · KES 1,450 paid with 11.03 USDT";
 const TWITTER_HANDLE = "@cpaykenya";
 const THEME_COLOR = "#10B981";
 
 const META_TAGS = `
-    <!-- 2026-05-09 · injected by scripts/inject-seo.js after expo export -->
+    <!-- 2026-05-10 · injected by scripts/inject-seo.js after expo export -->
     <meta name="description" content="${DESCRIPTION}" />
     <meta name="keywords" content="cpay, cryptocurrency, m-pesa, kenya, paybill, buygoods, USDT, USDC, BTC, ETH, SOL, crypto payments, fintech, vasp" />
     <meta name="robots" content="index,follow,max-image-preview:large" />
@@ -53,9 +61,11 @@ const META_TAGS = `
     <meta property="og:title" content="${TITLE}" />
     <meta property="og:description" content="${DESCRIPTION}" />
     <meta property="og:image" content="${OG_IMAGE}" />
-    <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="Cpay · pay bills in Kenya from your crypto" />
+    <meta property="og:image:secure_url" content="${OG_IMAGE}" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="${OG_IMAGE_W}" />
+    <meta property="og:image:height" content="${OG_IMAGE_H}" />
+    <meta property="og:image:alt" content="${OG_IMAGE_ALT}" />
     <meta property="og:locale" content="en_KE" />
 
     <!-- Twitter Card -->
@@ -65,7 +75,7 @@ const META_TAGS = `
     <meta name="twitter:title" content="${TITLE}" />
     <meta name="twitter:description" content="${DESCRIPTION}" />
     <meta name="twitter:image" content="${OG_IMAGE}" />
-    <meta name="twitter:image:alt" content="Cpay · pay bills in Kenya from your crypto" />
+    <meta name="twitter:image:alt" content="${OG_IMAGE_ALT}" />
 
     <!-- Schema.org Organization JSON-LD · gives Google rich-results eligibility -->
     <script type="application/ld+json">
