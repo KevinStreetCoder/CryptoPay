@@ -158,6 +158,17 @@ services:
       - cryptopay_media:/app/media
       - cryptopay_logs:/app/logs
       - cryptopay_certs:/app/certs
+      # 2026-05-10 · GCP service-account JSON for KMS + Secret Manager.
+      # The container's GOOGLE_APPLICATION_CREDENTIALS env var (set in
+      # .env.production) points at /run/secrets/gcp-kms.json · without
+      # this bind mount, every Secret Manager call raises
+      # DefaultCredentialsError and we end up serving every Phase-1
+      # secret from env-fallback while spamming the logs. Host file
+      # at /etc/cpay/cpay-kms-prod.json is mode 0444, parent dir
+      # /etc/cpay is 0700 root-only · only the Docker daemon (root)
+      # can reach it on the host, but the container's app user can
+      # read the mounted view.
+      - /etc/cpay/cpay-kms-prod.json:/run/secrets/gcp-kms.json:ro
     ports:
       - "127.0.0.1:8100:8000"
     env_file:
@@ -215,6 +226,11 @@ services:
       - cryptopay_media:/app/media
       - cryptopay_logs:/app/logs
       - cryptopay_certs:/app/certs
+      # 2026-05-10 · same GCP SA JSON mount as web · celery tasks
+      # need Secret Manager access (M-Pesa callback HMAC keys, OAuth
+      # secrets) the same way web does. Beat is intentionally NOT
+      # mounted here · see comment on the celery-beat service.
+      - /etc/cpay/cpay-kms-prod.json:/run/secrets/gcp-kms.json:ro
     env_file:
       - .env.production
     environment:
