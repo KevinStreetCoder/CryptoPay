@@ -237,6 +237,8 @@ const sw: Translations = {
     payBillSubtitle: "Huduma, usajili na mengineyo",
     buyGoodsSubtitle: "Lipa wafanyabiashara kupitia nambari ya Till",
     sendMpesaSubtitle: "Tuma pesa kwa nambari yoyote ya simu",
+    sendToCpay: "Tuma kwa mtumiaji wa Cpay",
+    sendToCpaySubtitle: "Bure · papo hapo · bila M-Pesa",
     payPochi: "Pochi la Biashara",
     payPochiSubtitle: "Tuma moja kwa moja kwa biashara ndogo",
     sendToBank: "Tuma Benki",

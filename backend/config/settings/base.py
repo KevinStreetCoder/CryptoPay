@@ -252,6 +252,20 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.mpesa.tasks.check_float_balance",
         "schedule": 300.0,  # Every 5 minutes
     },
+    # 2026-05-10 · SasaPay management tasks (when PAYMENT_PROVIDER=sasapay
+    # the tasks themselves no-op for non-sasapay providers).
+    "sync-sasapay-balance": {
+        "task": "apps.mpesa.sasapay_tasks.sync_sasapay_balance",
+        "schedule": 300.0,  # Every 5 minutes
+    },
+    "auto-rebalance-utility": {
+        "task": "apps.mpesa.sasapay_tasks.auto_rebalance_utility",
+        "schedule": 300.0,  # Every 5 minutes (covers a typical send burst)
+    },
+    "sync-sasapay-channel-codes": {
+        "task": "apps.mpesa.sasapay_tasks.sync_channel_codes",
+        "schedule": 86400.0,  # Daily
+    },
     "monitor-eth-deposits": {
         "task": "apps.blockchain.eth_listener.monitor_eth_deposits",
         "schedule": 30.0,  # Every 30 seconds (Alchemy-friendly)

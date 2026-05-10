@@ -87,6 +87,60 @@ export default function PayBillScreen() {
     return () => { cancelled = true; };
   }, []);
 
+  // 2026-05-10 · Bill-query for utility paybills · when user types a
+  // utility paybill+account, debounce-call /utilities/bill-query/
+  // and show the customer name + due amount BEFORE confirming.
+  // Eliminates wrong-smartcard typos. Only fires for documented
+  // utility codes (DSTV/GOTV/water · KPLC tokens use a separate
+  // dedicated endpoint).
+  const PAYBILL_TO_SERVICE_CODE: Record<string, string> = {
+    "444900": "SP-DSTV",
+    "423655": "SP-GOTV",
+    "525252": "SP-NRB-WATER",
+  };
+  const [billPreview, setBillPreview] = useState<{
+    customer_name: string;
+    due_amount: string;
+    due_date: string;
+  } | null>(null);
+  const [billPreviewState, setBillPreviewState] = useState<"idle" | "loading" | "found" | "notfound" | "error">("idle");
+  useEffect(() => {
+    setBillPreview(null);
+    setBillPreviewState("idle");
+    const serviceCode = PAYBILL_TO_SERVICE_CODE[paybillNumber];
+    if (!serviceCode || !accountNumber || accountNumber.length < 4) return;
+    let cancelled = false;
+    setBillPreviewState("loading");
+    const timer = setTimeout(async () => {
+      try {
+        const { data } = await paymentsApi.billQuery({
+          service_code: serviceCode,
+          account_number: accountNumber,
+        });
+        if (cancelled) return;
+        if (data?.customer_name) {
+          setBillPreview({
+            customer_name: data.customer_name,
+            due_amount: data.due_amount || "",
+            due_date: data.due_date || "",
+          });
+          setBillPreviewState("found");
+          // If user hasn't entered an amount yet, pre-fill with the
+          // due amount so a quick "pay full" tap is one click away.
+          if (!amount && data.due_amount) {
+            setAmount(data.due_amount);
+          }
+        } else {
+          setBillPreviewState("notfound");
+        }
+      } catch {
+        if (!cancelled) setBillPreviewState("error");
+      }
+    }, 700);
+    return () => { cancelled = true; clearTimeout(timer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paybillNumber, accountNumber]);
+
   // Fetch saved paybills on mount
   const fetchSavedBills = useCallback(async () => {
     try {
@@ -492,6 +546,49 @@ export default function PayBillScreen() {
                 testID="account-number-input"
                 maxFontSizeMultiplier={1.3}
               />
+
+              {/* 2026-05-10 · Bill-query preview · only renders when
+                  this paybill is a known utility (DSTV/GOTV/water).
+                  Shows "Customer · Due amount · Due date" so the user
+                  confirms BEFORE paying. Reduces wrong-smartcard
+                  losses. */}
+              {PAYBILL_TO_SERVICE_CODE[paybillNumber] && accountNumber.length >= 4 && (
+                <View style={{ marginTop: -12, marginBottom: 16, paddingHorizontal: 4 }}>
+                  {billPreviewState === "loading" && (
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                      <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_500Medium" }}>
+                        Looking up bill…
+                      </Text>
+                    </View>
+                  )}
+                  {billPreviewState === "found" && billPreview && (
+                    <GlassCard glowOpacity={0.10} style={{ marginTop: 4 }}>
+                      <View style={{ padding: 12, flexDirection: "row", alignItems: "center", gap: 10 }}>
+                        <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ color: tc.textPrimary, fontSize: 13, fontFamily: "DMSans_700Bold" }} numberOfLines={1}>
+                            {billPreview.customer_name}
+                          </Text>
+                          {!!billPreview.due_amount && (
+                            <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_400Regular", marginTop: 2 }} numberOfLines={1}>
+                              Due: KSh {billPreview.due_amount}
+                              {billPreview.due_date ? ` · ${billPreview.due_date}` : ""}
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+                    </GlassCard>
+                  )}
+                  {billPreviewState === "notfound" && (
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                      <Ionicons name="alert-circle-outline" size={14} color="#F59E0B" />
+                      <Text style={{ color: "#F59E0B", fontSize: 12, fontFamily: "DMSans_500Medium" }}>
+                        Bill not found · check the account number
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              )}
 
               {/* Save Label */}
               <SectionHeader title="Save as (optional)" icon="bookmark-outline" iconColor={colors.primary[400]} />

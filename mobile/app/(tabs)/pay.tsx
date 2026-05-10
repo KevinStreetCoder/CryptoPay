@@ -226,6 +226,18 @@ const PAYMENT_OPTIONS = [
     accentBg: "rgba(14, 165, 233, 0.12)",
     route: "/payment/send-to-bank" as const,
   },
+  // 2026-05-10 · Cpay-to-Cpay internal transfer · pure ledger move,
+  // no SasaPay/M-Pesa hop. Free, instant. Most differentiated tile
+  // in the picker · accent uses the brand emerald to highlight.
+  {
+    id: "cpay",
+    titleKey: "payment.sendToCpay" as any,
+    subtitleKey: "payment.sendToCpaySubtitle" as any,
+    icon: "send" as const,
+    accent: "#10B981",
+    accentBg: "rgba(16, 185, 129, 0.14)",
+    route: "/payment/send-to-cpay" as const,
+  },
   {
     id: "swap",
     titleKey: "payment.swapCrypto" as any,

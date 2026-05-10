@@ -28,6 +28,7 @@ import { useLocale } from "../../src/hooks/useLocale";
 import { NetworkBadge, currencyToChain } from "../../src/components/brand/NetworkBadge";
 import { getFrequent, type RecipientEntry } from "../../src/utils/recipientPrefs";
 import { usePersistedState, clearPersistedFields } from "../../src/hooks/usePersistedState";
+import { Spinner } from "../../src/components/brand/Spinner";
 
 const CRYPTO_OPTIONS: CurrencyCode[] = ["USDT", "USDC", "BTC", "ETH", "SOL"];
 
@@ -75,6 +76,43 @@ export default function SendMpesaScreen() {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // 2026-05-10 · pre-flight holder-name validation. Debounced 600ms
+  // after typing pauses · calls /payments/account/validate/ via the
+  // SasaPay account-validation endpoint (backend caches 1h server-
+  // side, so a re-typed number is free). Shows "Sending to: John
+  // Doe" before the user confirms · eliminates wrong-number losses.
+  const [recipientName, setRecipientName] = useState<string>("");
+  const [recipientLookupState, setRecipientLookupState] =
+    useState<"idle" | "loading" | "found" | "notfound" | "error">("idle");
+  useEffect(() => {
+    setRecipientName("");
+    setRecipientLookupState("idle");
+    if (!phone || phone.length < 9) return;
+    const fullPhone = phone.startsWith("0") ? "254" + phone.slice(1) : phone.startsWith("254") ? phone : "254" + phone;
+    if (fullPhone.length < 12) return;
+    let cancelled = false;
+    setRecipientLookupState("loading");
+    const timer = setTimeout(async () => {
+      try {
+        const { paymentsApi } = require("../../src/api/payments");
+        const { data } = await paymentsApi.validateAccount({
+          account_number: fullPhone,
+          channel_code: "63902",
+        });
+        if (cancelled) return;
+        if (data?.account_name) {
+          setRecipientName(data.account_name);
+          setRecipientLookupState("found");
+        } else {
+          setRecipientLookupState("notfound");
+        }
+      } catch {
+        if (!cancelled) setRecipientLookupState("error");
+      }
+    }, 600);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [phone]);
 
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
@@ -405,6 +443,39 @@ export default function SendMpesaScreen() {
                   maxFontSizeMultiplier={1.3}
                 />
               </View>
+
+              {/* 2026-05-10 · holder-name pill · shows after a debounced
+                  validate-account lookup so the user sees who they're
+                  about to pay BEFORE confirming. Eliminates wrong-
+                  number losses (typoed last digit, etc.). */}
+              {phone.length >= 9 && (
+                <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 4, marginTop: 6, marginBottom: 14, gap: 6 }}>
+                  {recipientLookupState === "loading" && (
+                    <>
+                      <Spinner variant="arc" size={12} color={tc.textMuted} />
+                      <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_500Medium" }}>
+                        Verifying recipient…
+                      </Text>
+                    </>
+                  )}
+                  {recipientLookupState === "found" && recipientName && (
+                    <>
+                      <Ionicons name="checkmark-circle" size={14} color={colors.success} />
+                      <Text style={{ color: tc.textPrimary, fontSize: 13, fontFamily: "DMSans_600SemiBold", flex: 1 }} numberOfLines={1}>
+                        Sending to {recipientName}
+                      </Text>
+                    </>
+                  )}
+                  {recipientLookupState === "notfound" && (
+                    <>
+                      <Ionicons name="alert-circle-outline" size={14} color="#F59E0B" />
+                      <Text style={{ color: "#F59E0B", fontSize: 12, fontFamily: "DMSans_500Medium" }}>
+                        We couldn't verify this number · double-check it
+                      </Text>
+                    </>
+                  )}
+                </View>
+              )}
 
               {/* Amount */}
               <SectionHeader title={t("payment.amountKes")} icon="cash-outline" iconColor={colors.primary[400]} />

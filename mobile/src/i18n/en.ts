@@ -235,6 +235,8 @@ const en = {
     payBillSubtitle: "Utilities, subscriptions & more",
     buyGoodsSubtitle: "Pay merchants via Till number",
     sendMpesaSubtitle: "Send money to any phone number",
+    sendToCpay: "Send to Cpay user",
+    sendToCpaySubtitle: "Free · instant · no M-Pesa needed",
     payPochi: "Pochi la Biashara",
     payPochiSubtitle: "Send directly to a small business",
     sendToBank: "Send to Bank",

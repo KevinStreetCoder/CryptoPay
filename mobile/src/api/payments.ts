@@ -277,4 +277,64 @@ export const paymentsApi = {
       params,
       responseType: "text",
     }),
+
+  // 2026-05-10 · Phase 2 mobile-callable SasaPay management endpoints.
+
+  // Bill query · DSTV / GOTV / NRB-WATER pre-payment lookup. Returns
+  // the customer name + due amount + due date so the user sees what
+  // they're about to pay BEFORE confirming. Cached 5min server-side.
+  billQuery: (data: { service_code: string; account_number: string; customer_mobile?: string }) =>
+    api.post<{
+      service_code: string;
+      account_number: string;
+      customer_name: string;
+      due_amount: string;
+      due_date: string;
+      currency: string;
+      cached?: boolean;
+    }>("/payments/utilities/bill-query/", data),
+
+  // Account validate · M-Pesa phone / paybill / bank-account holder
+  // name lookup. Used on Send-to-M-Pesa to render "Sending to: John
+  // Doe" before confirm. Cached 1h server-side. 30/min rate limit.
+  validateAccount: (data: { account_number: string; channel_code?: string }) =>
+    api.post<{
+      account_number: string;
+      account_name: string;
+      channel_code: string;
+      channel_name: string;
+      cached?: boolean;
+    }>("/payments/account/validate/", data),
+
+  // Live banks list · pulls from SasaPay channel-codes (cached 24h).
+  // Falls back to the existing static list (api/payments/banks/) on
+  // empty or error.
+  banksLive: () => api.get<{ banks: Array<{ slug: string; name: string; code: string }>; cached?: boolean }>("/payments/banks-live/"),
+
+  // Cpay-to-Cpay internal transfer · pure ledger move, no SasaPay
+  // hop. Recipient looked up by phone, username, or referral code.
+  sendToCpay: (data: {
+    recipient_phone?: string;
+    recipient_username?: string;
+    recipient_referral_code?: string;
+    currency: string;
+    amount: string;
+    pin: string;
+    idempotency_key: string;
+    memo?: string;
+  }) =>
+    api.post<{
+      id: string;
+      type: string;
+      status: string;
+      source_currency: string;
+      source_amount: string;
+      dest_currency: string;
+      dest_amount: string;
+      merchant_name: string;
+      biller_response: string;
+      recipient: { username: string; phone_masked: string };
+      created_at: string;
+      completed_at: string;
+    }>("/payments/send-to-cpay/", data),
 };
