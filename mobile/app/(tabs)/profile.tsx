@@ -11,7 +11,7 @@ import {
   Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { useTabScrollPadding } from "../../src/hooks/useTabScrollPadding";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useState, useEffect } from "react";
@@ -345,7 +345,8 @@ export default function ProfileScreen() {
   const tc = getThemeColors(isDark);
   const ts = getThemeShadows(isDark);
   const { formatPhone, phoneVisible, toggle: togglePhoneVisibility } = usePhonePrivacy();
-  const bottomTabBarHeight = useBottomTabBarHeight();
+  // 2026-05-10 · trimmed via useTabScrollPadding (40 px reduction).
+  const bottomTabBarHeight = useTabScrollPadding();
 
   const isDesktop = isWeb && width >= 900;
   const isLargeDesktop = isWeb && width >= 1200;

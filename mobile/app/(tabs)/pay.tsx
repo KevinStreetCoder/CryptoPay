@@ -1,7 +1,6 @@
 import { useState, useCallback } from "react";
 import { View, Text, Pressable, ScrollView, Platform, useWindowDimensions, Image, Alert, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -10,6 +9,7 @@ import { useThemeMode } from "../../src/stores/theme";
 import { SectionHeader } from "../../src/components/SectionHeader";
 import { SERVICE_LOGOS } from "../../src/constants/logos";
 import { useLocale } from "../../src/hooks/useLocale";
+import { useTabScrollPadding } from "../../src/hooks/useTabScrollPadding";
 import { paymentsApi, SavedPaybill } from "../../src/api/payments";
 import { useToast } from "../../src/components/Toast";
 import { Spinner } from "../../src/components/brand/Spinner";
@@ -303,7 +303,12 @@ export default function PayScreen() {
   const { t } = useLocale();
   const toast = useToast();
   const queryClient = useQueryClient();
-  const bottomTabBarHeight = useBottomTabBarHeight();
+  // 2026-05-10 · was useBottomTabBarHeight() which reserved the FULL
+  // tab-bar height as paddingBottom · left a thick dead zone above the
+  // tab bar with nothing in it. useTabScrollPadding() trims 40 px so
+  // the page reads compact while keeping a 24 px floor so the last
+  // item never gets clipped by the bar's icon row.
+  const bottomTabBarHeight = useTabScrollPadding();
 
   const isDesktop = isWeb && width >= 900;
   const isLargeDesktop = isWeb && width >= 1200;

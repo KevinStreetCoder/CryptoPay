@@ -9,7 +9,7 @@ import {
   Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { useTabScrollPadding } from "../../src/hooks/useTabScrollPadding";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
@@ -1200,10 +1200,12 @@ function HomeScreenContent() {
   const ts = getThemeShadows(isDark);
   // React Navigation v7 bottom tabs are absolute-positioned; without
   // this padding, the last crypto card / chart / tx row gets hidden
-  // under the tab bar. `useBottomTabBarHeight()` returns the exact
-  // height (including Android system-nav inset) so we can't over- or
-  // under-pad regardless of device.
-  const bottomTabBarHeight = useBottomTabBarHeight();
+  // under the tab bar. 2026-05-10 · was useBottomTabBarHeight() which
+  // reserved the FULL tab-bar height (incl safe-area inset) and left
+  // a thick dead zone above the bar. useTabScrollPadding() trims 40 px
+  // (or returns 24 on desktop where there's no bar) so the page reads
+  // compact while keeping the last item clear of the icon row.
+  const bottomTabBarHeight = useTabScrollPadding();
   // Display currency · switching to USD in settings makes every KES-based
   // number below (rate cards, summary bars, activity points) re-render in
   // USD using the live USD/KES rate.
@@ -1956,7 +1958,10 @@ function HomeScreenContent() {
         }
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
-          paddingBottom: 48,
+          // 2026-05-10 · was hard-coded 48 · use the shared hook so
+          // mobile + desktop match policy (24 on desktop with no tab
+          // bar, trimmed tab-bar height on touch).
+          paddingBottom: bottomTabBarHeight,
           paddingHorizontal: hPad,
           paddingTop: 8,
           width: "100%" as const,

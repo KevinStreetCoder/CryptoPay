@@ -11,7 +11,7 @@ import {
   Animated,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { useTabScrollPadding } from "../../src/hooks/useTabScrollPadding";
 import { Ionicons } from "@expo/vector-icons";
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter, useNavigation } from "expo-router";
@@ -151,7 +151,9 @@ export default function WalletScreen() {
   const router = useRouter();
   const { t } = useLocale();
   const { width } = useWindowDimensions();
-  const bottomTabBarHeight = useBottomTabBarHeight();
+  // 2026-05-10 · was useBottomTabBarHeight() · trimmed 40 px so the
+  // last item lands closer to the bar (compact look, no dead zone).
+  const bottomTabBarHeight = useTabScrollPadding();
   const isWeb = Platform.OS === "web";
   const isDesktop = isWeb && width >= 900;
   const isLargeDesktop = isWeb && width >= 1200;
