@@ -781,98 +781,67 @@ export default function SendToBankScreen() {
                 )}
               </View>
 
-              {/* Favourites · pinned by the user. Renders as a single
-                  tight row of 1-line tiles above the categories. */}
-              {filterSection(favouriteBanks).length > 0 && (
-                <View style={{ marginBottom: 18 }}>
-                  <Text
-                    style={{
-                      color: tc.textMuted,
-                      fontSize: 11,
-                      fontFamily: "DMSans_600SemiBold",
-                      letterSpacing: 0.6,
-                      textTransform: "uppercase",
-                      marginBottom: 10,
-                    }}
-                  >
-                    {t("payment.bankFavourites")}
-                  </Text>
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      flexWrap: "wrap",
-                      gap: tileGap,
-                    }}
-                  >
-                    {filterSection(favouriteBanks).map((bank) => (
-                      <BankTile
-                        key={`fav-${bank.slug}`}
-                        bank={bank}
-                        gridCols={gridCols}
-                        tileGap={tileGap}
-                        isSelected={false}
-                        isFavourite
-                        showStarPin
-                        onSelect={() => {
-                          setSelectedBank(bank);
-                          setQuote(null);
-                        }}
-
-                        onToggleFavourite={() => handleToggleFavourite(bank.slug)}
-                        tc={tc}
-                        isWeb={isWeb}
-                        t={t}
-                      />
-                    ))}
+              {/* 2026-05-10 · UNIFIED "Recent" section · merges
+                  Favourites + Frequent into one row. User feedback was
+                  the same as on paybill: two near-identical sections
+                  doing the same job is confusing. Favourites take
+                  priority + render with the gold-star pin (still
+                  toggleable on tap-and-hold). Deduped on slug. */}
+              {(() => {
+                const favs = filterSection(favouriteBanks);
+                const freqs = filterSection(frequentBanks);
+                const seen = new Set<string>(favs.map((b) => b.slug));
+                const merged = [
+                  ...favs.map((bank) => ({ bank, fav: true })),
+                  ...freqs
+                    .filter((b) => !seen.has(b.slug))
+                    .map((bank) => ({ bank, fav: false })),
+                ];
+                if (merged.length === 0) return null;
+                return (
+                  <View style={{ marginBottom: 18 }}>
+                    <Text
+                      style={{
+                        color: tc.textMuted,
+                        fontSize: 11,
+                        fontFamily: "DMSans_600SemiBold",
+                        letterSpacing: 0.6,
+                        textTransform: "uppercase",
+                        marginBottom: 10,
+                      }}
+                    >
+                      RECENT
+                    </Text>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        flexWrap: "wrap",
+                        gap: tileGap,
+                      }}
+                    >
+                      {merged.map(({ bank, fav }) => (
+                        <BankTile
+                          key={`recent-${bank.slug}`}
+                          bank={bank}
+                          gridCols={gridCols}
+                          tileGap={tileGap}
+                          isSelected={false}
+                          isFavourite={fav || favourites.includes(bank.slug)}
+                          showStarPin={fav}
+                          onSelect={() => {
+                            setSelectedBank(bank);
+                            setQuote(null);
+                          }}
+                          onToggleFavourite={() => handleToggleFavourite(bank.slug)}
+                          tc={tc}
+                          isWeb={isWeb}
+                          t={t}
+                        />
+                      ))}
+                    </View>
                   </View>
-                </View>
-              )}
-
-              {/* Frequent · top-3 most-used (excluding favourites). */}
-              {filterSection(frequentBanks).length > 0 && (
-                <View style={{ marginBottom: 18 }}>
-                  <Text
-                    style={{
-                      color: tc.textMuted,
-                      fontSize: 11,
-                      fontFamily: "DMSans_600SemiBold",
-                      letterSpacing: 0.6,
-                      textTransform: "uppercase",
-                      marginBottom: 10,
-                    }}
-                  >
-                    {t("payment.bankFrequent")}
-                  </Text>
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      flexWrap: "wrap",
-                      gap: tileGap,
-                    }}
-                  >
-                    {filterSection(frequentBanks).map((bank) => (
-                      <BankTile
-                        key={`freq-${bank.slug}`}
-                        bank={bank}
-                        gridCols={gridCols}
-                        tileGap={tileGap}
-                        isSelected={false}
-                        isFavourite={favourites.includes(bank.slug)}
-                        showStarPin={false}
-                        onSelect={() => {
-                          setSelectedBank(bank);
-                          setQuote(null);
-                        }}
-
-                        onToggleFavourite={() => handleToggleFavourite(bank.slug)}
-                        tc={tc}
-                        isWeb={isWeb}
-                        t={t}
-                      />
-                    ))}
-                  </View>
-                </View>
-              )}
+                );
+              })()}
 
               {/* Category sections · tier1 → midtier → regional → sharia */}
               {sectionList.map((section) => {

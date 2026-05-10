@@ -305,152 +305,137 @@ export default function PayBillScreen() {
                 marginTop: isDesktop ? 0 : 8,
               }}
             >
-              {/* 2026-05-09 · "Frequent" paybills · top-3 by use count
-                  with 90-day half-life decay (recipientPrefs). Hidden on
-                  fresh devices · doesn't conflict with Saved Bills which
-                  are explicit user pins kept server-side. Tap to prefill
-                  the form. Same wrap-grid card design as Saved. */}
-              {frequentBills.length > 0 && (
-                <View style={{ marginBottom: 20 }}>
-                  <SectionHeader title="Frequent" icon="time-outline" iconColor={colors.primary[400]} />
-                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, paddingBottom: 4 }}>
-                    {frequentBills.map((entry, idx) => {
-                      const cols = width >= 900 ? 4 : width >= 600 ? 3 : 2;
-                      const isOrphan = frequentBills.length % cols === 1 && idx === frequentBills.length - 1;
-                      const wPct = isOrphan ? "100%" : `${100 / cols - 2}%`;
-                      const isSelected = paybillNumber === entry.id && accountNumber === (entry.account || "");
-                      return (
-                        <Pressable
-                          key={`freq-${entry.id}-${entry.account || "_"}`}
-                          onPress={() => {
-                            setPaybillNumber(entry.id);
-                            if (entry.account) setAccountNumber(entry.account);
-                            if (entry.label) setSaveLabel(entry.label);
-                          }}
-                          style={({ pressed, hovered }: any) => ({
-                            backgroundColor: isWeb && hovered ? tc.dark.elevated : tc.glass.bg,
-                            borderRadius: 14,
-                            borderWidth: 1,
-                            borderColor: isSelected ? colors.primary[400] + "60" : tc.glass.border,
-                            paddingVertical: 12,
-                            paddingHorizontal: 14,
-                            flexBasis: wPct as any,
-                            flexGrow: 0,
-                            opacity: pressed ? 0.85 : 1,
-                            ...(isWeb ? { cursor: "pointer", transition: "all 0.15s ease" } as any : {}),
-                          })}
-                          accessibilityRole="button"
-                          accessibilityLabel={`Frequent paybill ${entry.label || entry.id}`}
-                        >
-                          <Text
-                            style={{ color: tc.textPrimary, fontSize: 13, fontFamily: "DMSans_600SemiBold" }}
-                            numberOfLines={1}
-                          >
-                            {entry.label || `Paybill ${entry.id}`}
-                          </Text>
-                          <Text
-                            style={{
-                              color: tc.textMuted,
-                              fontSize: 12,
-                              fontFamily: "DMSans_400Regular",
-                              marginTop: 4,
-                            }}
-                            numberOfLines={1}
-                          >
-                            {entry.id}{entry.account ? ` · ${entry.account}` : ""}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                </View>
-              )}
-
-              {/* Saved Bills */}
-              {savedBills.length > 0 && (
-                <View style={{ marginBottom: 20 }}>
-                  <SectionHeader title="Saved Bills" icon="bookmark-outline" iconColor={colors.primary[400]} />
-                  {/* 2026-05-09 design audit · was horizontal-scroll
-                      pill row · now 2-col flex-wrap grid (matches Deposit
-                      design across all payment screens). 1 orphan in last
-                      row spans full width. */}
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      flexWrap: "wrap",
-                      gap: 10,
-                      paddingBottom: 4,
-                    }}
-                  >
-                    {savedBills.map((bill, idx) => {
-                      const cols = width >= 900 ? 4 : width >= 600 ? 3 : 2;
-                      const isOrphan =
-                        savedBills.length % cols === 1 &&
-                        idx === savedBills.length - 1;
-                      const wPct = isOrphan ? "100%" : `${100 / cols - 2}%`;
-                      return (
-                      <Pressable
-                        key={bill.id}
-                        onPress={() => handleSelectSavedBill(bill)}
-                        style={({ pressed, hovered }: any) => ({
-                          backgroundColor: isWeb && hovered ? tc.dark.elevated : tc.glass.bg,
-                          borderRadius: 14,
-                          borderWidth: 1,
-                          borderColor:
-                            paybillNumber === bill.paybill_number && accountNumber === bill.account_number
-                              ? colors.primary[400] + "60"
-                              : tc.glass.border,
-                          paddingVertical: 12,
-                          paddingHorizontal: 14,
-                          flexBasis: wPct as any,
-                          flexGrow: 0,
-                          opacity: pressed ? 0.85 : 1,
-                          ...(isWeb ? { cursor: "pointer", transition: "all 0.15s ease" } as any : {}),
-                        })}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Select saved bill ${bill.label || bill.paybill_number}`}
-                      >
-                        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                          <Text
-                            style={{
-                              color: tc.textPrimary,
-                              fontSize: 13,
-                              fontFamily: "DMSans_600SemiBold",
-                              flex: 1,
-                            }}
-                            numberOfLines={1}
-                          >
-                            {bill.label || "Bill"}
-                          </Text>
+              {/* 2026-05-10 · UNIFIED "Recent" section · merges
+                  server-side Saved Bills (explicit pins) + on-device
+                  Frequent (auto-tracked usage). User feedback: two
+                  separate sections doing the same thing was confusing.
+                  Saved entries take priority (deduped by paybill+account)
+                  and show a bookmark icon · frequent-only entries show
+                  a clock icon. Both tap to prefill the form. Saved
+                  entries get a delete X. Limited to 6 visible to keep
+                  the section scannable on phone screens. */}
+              {(() => {
+                type Entry = {
+                  paybill: string;
+                  account: string;
+                  label: string;
+                  saved: boolean;
+                  savedId?: string;
+                };
+                const merged: Entry[] = [];
+                const seen = new Set<string>();
+                // Saved first (priority)
+                for (const b of savedBills) {
+                  const key = `${b.paybill_number}|${b.account_number}`;
+                  if (seen.has(key)) continue;
+                  seen.add(key);
+                  merged.push({
+                    paybill: b.paybill_number,
+                    account: b.account_number,
+                    label: b.label || "",
+                    saved: true,
+                    savedId: b.id,
+                  });
+                }
+                // Frequent fills the gap
+                for (const f of frequentBills) {
+                  const key = `${f.id}|${f.account || ""}`;
+                  if (seen.has(key)) continue;
+                  seen.add(key);
+                  merged.push({
+                    paybill: f.id,
+                    account: f.account || "",
+                    label: f.label || "",
+                    saved: false,
+                  });
+                }
+                const visible = merged.slice(0, 6);
+                if (visible.length === 0) return null;
+                return (
+                  <View style={{ marginBottom: 20 }}>
+                    <SectionHeader title="Recent" icon="time-outline" iconColor={colors.primary[400]} />
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, paddingBottom: 4 }}>
+                      {visible.map((entry, idx) => {
+                        const cols = width >= 900 ? 4 : width >= 600 ? 3 : 2;
+                        const isOrphan = visible.length % cols === 1 && idx === visible.length - 1;
+                        const wPct = isOrphan ? "100%" : `${100 / cols - 2}%`;
+                        const isSelected = paybillNumber === entry.paybill && accountNumber === entry.account;
+                        return (
                           <Pressable
-                            onPress={(e) => {
-                              e.stopPropagation?.();
-                              handleDeleteSavedBill(bill.id);
+                            key={`recent-${entry.paybill}-${entry.account || "_"}`}
+                            onPress={() => {
+                              setPaybillNumber(entry.paybill);
+                              if (entry.account) setAccountNumber(entry.account);
+                              if (entry.label) setSaveLabel(entry.label);
                             }}
-                            hitSlop={8}
-                            style={{ marginLeft: 8 }}
+                            style={({ pressed, hovered }: any) => ({
+                              backgroundColor: isWeb && hovered ? tc.dark.elevated : tc.glass.bg,
+                              borderRadius: 14,
+                              borderWidth: 1,
+                              borderColor: isSelected ? colors.primary[400] + "60" : tc.glass.border,
+                              paddingVertical: 12,
+                              paddingHorizontal: 14,
+                              flexBasis: wPct as any,
+                              flexGrow: 0,
+                              opacity: pressed ? 0.85 : 1,
+                              ...(isWeb ? { cursor: "pointer", transition: "all 0.15s ease" } as any : {}),
+                            })}
                             accessibilityRole="button"
-                            accessibilityLabel="Delete saved bill"
+                            accessibilityLabel={`${entry.saved ? "Saved" : "Frequent"} bill ${entry.label || entry.paybill}`}
                           >
-                            <Ionicons name="close-circle-outline" size={16} color={tc.textMuted} />
+                            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
+                              <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flex: 1, minWidth: 0 }}>
+                                <Ionicons
+                                  name={entry.saved ? "bookmark" : "time-outline"}
+                                  size={12}
+                                  color={entry.saved ? colors.primary[400] : tc.textMuted}
+                                  style={{ flexShrink: 0 }}
+                                />
+                                <Text
+                                  style={{
+                                    color: tc.textPrimary,
+                                    fontSize: 13,
+                                    fontFamily: "DMSans_600SemiBold",
+                                    flex: 1,
+                                  }}
+                                  numberOfLines={1}
+                                >
+                                  {entry.label || `Paybill ${entry.paybill}`}
+                                </Text>
+                              </View>
+                              {entry.saved && entry.savedId ? (
+                                <Pressable
+                                  onPress={(e) => {
+                                    e.stopPropagation?.();
+                                    handleDeleteSavedBill(entry.savedId!);
+                                  }}
+                                  hitSlop={8}
+                                  accessibilityRole="button"
+                                  accessibilityLabel="Delete saved bill"
+                                  style={{ flexShrink: 0 }}
+                                >
+                                  <Ionicons name="close-circle-outline" size={16} color={tc.textMuted} />
+                                </Pressable>
+                              ) : null}
+                            </View>
+                            <Text
+                              style={{
+                                color: tc.textMuted,
+                                fontSize: 12,
+                                fontFamily: "DMSans_400Regular",
+                                marginTop: 4,
+                              }}
+                              numberOfLines={1}
+                            >
+                              {entry.paybill}{entry.account ? ` · ${entry.account}` : ""}
+                            </Text>
                           </Pressable>
-                        </View>
-                        <Text
-                          style={{
-                            color: tc.textMuted,
-                            fontSize: 12,
-                            fontFamily: "DMSans_400Regular",
-                            marginTop: 4,
-                          }}
-                        >
-                          {bill.paybill_number} / {bill.account_number}
-                        </Text>
-                      </Pressable>
-                      );
-                    })}
+                        );
+                      })}
+                    </View>
                   </View>
-                </View>
-              )}
+                );
+              })()}
 
               {/* Paybill Number */}
               <SectionHeader title={t("payment.paybillNumber")} icon="document-text-outline" iconColor={colors.primary[400]} />

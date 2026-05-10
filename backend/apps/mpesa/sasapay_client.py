@@ -216,16 +216,31 @@ class SasaPayClient:
     # Mapping below covers the common Kenyan utilities. Anything not
     # in this map falls through to the regular B2B path.
     #
-    # The serviceCode values come from the SasaPay docs · operators
-    # who roll out new utilities can extend this map without code
-    # changes via the `SASAPAY_UTILITY_SERVICE_CODES` Django setting.
+    # 2026-05-10 · documented service codes per docs.sasapay.app are
+    # ONLY:
+    #   SP-SAFARICOM, SP-AIRTEL, SP-TELKOM    (airtime)
+    #   SP-DSTV, SP-GOTV                       (TV)
+    #   SP-NRB-WATER                           (Nairobi Water · only
+    #                                            shown in bill-query)
+    # KPLC is mentioned in the docs by name (Pin / Units fields are
+    # described as KPLC-specific) but NO service code is published.
+    # Earlier guesses (`SP-KPLC`, `SP-KPLC-POSTPAID`) get rejected by
+    # the live API with `{"status":false,"detail":"Provide a valid
+    # serviceCode"}` (HTTP 400). Until SasaPay confirms the codes,
+    # KPLC + Zuku paybills route through the regular B2B endpoint so
+    # at least payments SUCCEED · token relay degrades gracefully (no
+    # `Pin` field, but the M-Pesa receipt code still lands on the
+    # receipt + Transaction Details).
+    #
+    # Operators with confirmed codes from SasaPay can extend this map
+    # at runtime via the `SASAPAY_UTILITY_SERVICE_CODES` Django
+    # setting · no deploy needed.
     UTILITY_PAYBILL_SERVICE_CODES = {
-        "888880": "SP-KPLC",            # KPLC Prepaid
-        "888888": "SP-KPLC-POSTPAID",   # KPLC Postpaid
-        "444900": "SP-DSTV",            # DSTV
-        "423655": "SP-GOTV",            # GOTV (Multichoice)
-        "320320": "SP-ZUKU",            # Zuku Internet/TV
-        "888888-water": "SP-NRB-WATER", # Nairobi Water (sentinel)
+        # Confirmed in docs.sasapay.app.
+        "444900": "SP-DSTV",   # DSTV
+        "423655": "SP-GOTV",   # GOTV (Multichoice)
+        # KPLC, Zuku, water · NOT confirmed. Add via operator override
+        # below once SasaPay support replies.
     }
 
     def _utility_service_code_for_paybill(self, paybill: str) -> str | None:
