@@ -382,25 +382,37 @@ class SasaPayClient:
             reference: Unique transaction reference (auto-generated if None)
             callback_url: Override default callback URL
 
-        2026-05-09 NetworkCode fix · was hard-coded to "63902" (M-Pesa
-        source channel) which is the C2B/B2C source-rail selector, NOT
-        valid for B2B. Per docs.sasapay.app the B2B sample uses
-        `NetworkCode: "0"` (SasaPay routes to whichever rail the
-        receiver code resolves to). Sending "63902" was a likely
-        contributor to the SP01002 the user saw on the dashboard.
+        2026-05-10 payload-shape fix · the official SasaPay Java SDK
+        (github.com/SasaPay/sasapay-java-sdk · SasaPay.businessToBusiness)
+        sends ONLY these 7 fields:
+            MerchantCode, MerchantTransactionReference, Currency,
+            Amount, ReceiverMerchantCode, CallBackURL, Reason
+        Earlier we were sending extra fields:
+            - ReceiverAccountType (PAYBILL / TILL)
+            - NetworkCode ("0" or "63902")
+            - AccountReference
+        Those extra fields confused the API · `NetworkCode: 0` made it
+        look up the receiver in SasaPay's internal merchant registry
+        (giving "Receiver merchant account not found" for M-Pesa
+        paybills like 888880), and `NetworkCode: 63902` triggered the
+        SP01002 product-assignment check. Stripping to the SDK's exact
+        shape lets SasaPay route by receiver-code lookup.
+
+        AccountReference is preserved as a separate field name only when
+        it has substantive content · matches what the docs sample shows.
         """
-        return self._request("POST", "/payments/b2b/", {
+        body = {
             "MerchantCode": self.merchant_code,
             "MerchantTransactionReference": reference or str(uuid.uuid4()),
             "Currency": "KES",
             "Amount": str(amount),
             "ReceiverMerchantCode": receiver_code,
-            "AccountReference": account_ref,
-            "ReceiverAccountType": "PAYBILL",
-            "NetworkCode": "0",  # SasaPay (matches docs.sasapay.app sample)
-            "Reason": "Bill payment",
             "CallBackURL": callback_url or self.callback_url,
-        })
+            "Reason": "Bill payment",
+        }
+        if account_ref:
+            body["AccountReference"] = account_ref
+        return self._request("POST", "/payments/b2b/", body)
 
     def pay_till(self, receiver_code: str, amount: float,
                  reference: str = None, callback_url: str = None) -> dict:
@@ -411,7 +423,9 @@ class SasaPayClient:
             receiver_code: The target Till number (e.g., "5432100")
             amount: KES amount to pay
 
-        2026-05-09 NetworkCode fix · same as pay_paybill above.
+        2026-05-10 payload-shape fix · same as pay_paybill above.
+        Strips ReceiverAccountType + NetworkCode to match the official
+        SDK's exact request shape.
         """
         return self._request("POST", "/payments/b2b/", {
             "MerchantCode": self.merchant_code,
@@ -419,11 +433,8 @@ class SasaPayClient:
             "Currency": "KES",
             "Amount": str(amount),
             "ReceiverMerchantCode": receiver_code,
-            "AccountReference": "",
-            "ReceiverAccountType": "TILL",
-            "NetworkCode": "0",  # SasaPay (matches docs.sasapay.app sample)
-            "Reason": "Payment",
             "CallBackURL": callback_url or self.callback_url,
+            "Reason": "Buy goods payment",
         })
 
     # ── B2C — Send Money to Mobile ────────────────────────────────────────
