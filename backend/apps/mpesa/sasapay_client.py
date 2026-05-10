@@ -370,10 +370,45 @@ class SasaPayClient:
 
     # ── B2B — Pay Paybill / Till ───────────────────────────────────────────
 
+    # 2026-05-10 · KPLC / KPLC postpaid / DSTV / Zuku / etc. are M-PESA
+    # paybills (888880, 888888, etc.). Per the docs at sasapay.app
+    # `NetworkCode: "63902"` (M-PESA) routes B2B requests to those.
+    # `NetworkCode: "0"` is for paying SasaPay-internal merchants only.
+    # Our `_utility_service_code_for_paybill` map is also a useful
+    # signal for "this is an M-Pesa biller" since SasaPay-internal
+    # merchants don't have utility codes.
+    KNOWN_MPESA_PAYBILLS = {
+        "888880",  # KPLC PREPAID
+        "888888",  # KPLC POSTPAID
+        "444900",  # DSTV
+        "423655",  # GOTV
+        "320320",  # ZUKU
+        "525252",  # NRB-WATER (Nairobi Water)
+    }
+
+    def _network_code_for_paybill(self, paybill: str) -> str:
+        """Pick the right NetworkCode for B2B based on the receiver.
+
+        Per docs, NetworkCode IS REQUIRED on /payments/b2b/:
+          "63902" → M-PESA (KPLC, DSTV, GOTV, water, banks via paybill)
+          "63903" → Airtel Money
+          "63907" → T-Kash
+          "0"     → SasaPay-internal merchant
+        Operator override via SASAPAY_PAYBILL_NETWORK_CODES setting.
+        """
+        override = getattr(settings, "SASAPAY_PAYBILL_NETWORK_CODES", {}) or {}
+        if paybill in override:
+            return override[paybill]
+        if paybill in self.KNOWN_MPESA_PAYBILLS:
+            return "63902"
+        # Default to M-PESA for any 6-digit paybill (the vast majority
+        # in Kenya). 5-digit codes are usually SasaPay-internal.
+        return "63902" if len(str(paybill).strip()) >= 6 else "0"
+
     def pay_paybill(self, receiver_code: str, account_ref: str, amount: float,
                     reference: str = None, callback_url: str = None) -> dict:
         """
-        Pay a Paybill number via M-Pesa.
+        Pay a Paybill number via M-Pesa or SasaPay.
 
         Args:
             receiver_code: The target Paybill number (e.g., "888880")
@@ -382,50 +417,14 @@ class SasaPayClient:
             reference: Unique transaction reference (auto-generated if None)
             callback_url: Override default callback URL
 
-        2026-05-10 payload-shape fix · the official SasaPay Java SDK
-        (github.com/SasaPay/sasapay-java-sdk · SasaPay.businessToBusiness)
-        sends ONLY these 7 fields:
-            MerchantCode, MerchantTransactionReference, Currency,
-            Amount, ReceiverMerchantCode, CallBackURL, Reason
-        Earlier we were sending extra fields:
-            - ReceiverAccountType (PAYBILL / TILL)
-            - NetworkCode ("0" or "63902")
-            - AccountReference
-        Those extra fields confused the API · `NetworkCode: 0` made it
-        look up the receiver in SasaPay's internal merchant registry
-        (giving "Receiver merchant account not found" for M-Pesa
-        paybills like 888880), and `NetworkCode: 63902` triggered the
-        SP01002 product-assignment check. Stripping to the SDK's exact
-        shape lets SasaPay route by receiver-code lookup.
-
-        AccountReference is preserved as a separate field name only when
-        it has substantive content · matches what the docs sample shows.
-        """
-        body = {
-            "MerchantCode": self.merchant_code,
-            "MerchantTransactionReference": reference or str(uuid.uuid4()),
-            "Currency": "KES",
-            "Amount": str(amount),
-            "ReceiverMerchantCode": receiver_code,
-            "CallBackURL": callback_url or self.callback_url,
-            "Reason": "Bill payment",
-        }
-        if account_ref:
-            body["AccountReference"] = account_ref
-        return self._request("POST", "/payments/b2b/", body)
-
-    def pay_till(self, receiver_code: str, amount: float,
-                 reference: str = None, callback_url: str = None) -> dict:
-        """
-        Pay a Till number via M-Pesa.
-
-        Args:
-            receiver_code: The target Till number (e.g., "5432100")
-            amount: KES amount to pay
-
-        2026-05-10 payload-shape fix · same as pay_paybill above.
-        Strips ReceiverAccountType + NetworkCode to match the official
-        SDK's exact request shape.
+        2026-05-10 fix per official SasaPay docs · the public docs at
+        docs.sasapay.app/docs/b2b/ require BOTH `ReceiverAccountType`
+        ("PAYBILL"/"TILL") AND `NetworkCode` ("63902" for M-Pesa, "0"
+        for SasaPay-internal). Earlier I'd stripped these based on the
+        Java SDK's older signature · re-adding them per the
+        authoritative docs. NetworkCode is auto-resolved per the
+        receiver-code prefix · KPLC and other M-Pesa paybills get
+        "63902", SasaPay-internal merchants get "0".
         """
         return self._request("POST", "/payments/b2b/", {
             "MerchantCode": self.merchant_code,
@@ -433,8 +432,33 @@ class SasaPayClient:
             "Currency": "KES",
             "Amount": str(amount),
             "ReceiverMerchantCode": receiver_code,
+            "AccountReference": account_ref or "",
+            "ReceiverAccountType": "PAYBILL",
+            "NetworkCode": self._network_code_for_paybill(receiver_code),
+            "Reason": "Bill payment",
             "CallBackURL": callback_url or self.callback_url,
+        })
+
+    def pay_till(self, receiver_code: str, amount: float,
+                 reference: str = None, callback_url: str = None) -> dict:
+        """
+        Pay a Till number via M-Pesa or SasaPay.
+
+        2026-05-10 fix · same as pay_paybill · ReceiverAccountType +
+        NetworkCode are required per the docs. Tills don't take an
+        AccountReference (per docs · the field is "optional for TILL
+        payments").
+        """
+        return self._request("POST", "/payments/b2b/", {
+            "MerchantCode": self.merchant_code,
+            "MerchantTransactionReference": reference or str(uuid.uuid4()),
+            "Currency": "KES",
+            "Amount": str(amount),
+            "ReceiverMerchantCode": receiver_code,
+            "ReceiverAccountType": "TILL",
+            "NetworkCode": self._network_code_for_paybill(receiver_code),
             "Reason": "Buy goods payment",
+            "CallBackURL": callback_url or self.callback_url,
         })
 
     # ── B2C — Send Money to Mobile ────────────────────────────────────────
@@ -689,6 +713,38 @@ class SasaPayClient:
         return self._request("POST", "/transactions/verify/", {
             "merchantCode": self.merchant_code,
             "transactionCode": transaction_code,
+        })
+
+    def query_bill(
+        self,
+        service_code: str,
+        account_number: str,
+        customer_mobile: str,
+    ) -> dict:
+        """Query a bill BEFORE paying (DSTV, GOTV, NRB-WATER, etc.).
+
+        Per docs.sasapay.app/docs/sasapayutilities/ Bill Query
+        endpoint at `/utilities/bill-query/`. Returns the dueAmount,
+        dueDate, customerName so we can pre-fill the form on the
+        mobile app and confirm the bill before sending money.
+
+        Supported serviceCodes per docs:
+          SP-DSTV, SP-GOTV, SP-NRB-WATER
+
+        Returns shape: {
+          status: bool,
+          detail: str,
+          data: {
+            accountNumber, serviceCode, dueDate, dueAmount,
+            currency, customerName,
+          }
+        }
+        """
+        return self._request("POST", "/utilities/bill-query/", {
+            "merchantCode": self.merchant_code,
+            "serviceCode": service_code,
+            "customerMobile": customer_mobile,
+            "accountNumber": account_number,
         })
 
     def validate_account(self, phone: str, channel: str = "63902") -> dict:
