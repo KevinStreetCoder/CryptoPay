@@ -243,6 +243,7 @@ class PaymentSaga:
             # (plus `Units` for KPLC kWh) on the callback. Route here
             # whenever we know the serviceCode for the paybill.
             utility_service_code = None
+            is_kplc_prepaid = self.tx.mpesa_paybill == "888880"
             if getattr(client, "is_sasapay", False):
                 # Reach through the adapter to the underlying SasaPay
                 # client for the utility map. Only SasaPay supports
@@ -256,7 +257,61 @@ class PaymentSaga:
                 except Exception:
                     utility_service_code = None
 
-            if utility_service_code:
+            # 2026-05-10 · KPLC PREPAID dedicated WaaS endpoint.
+            # Found via the official SasaPay Java SDK
+            # (github.com/SasaPay/sasapay-java-sdk · ApiUrls.purchase_kplc).
+            # Path is `/waas/utilities/kplc-token/`, distinct from the
+            # generic `/utilities/` (which has no KPLC serviceCode).
+            # Returns Pin + Units in the callback. Falls back to plain
+            # B2B if the merchant doesn't have WaaS provisioning.
+            if is_kplc_prepaid and getattr(client, "is_sasapay", False):
+                user_phone = (self.tx.user.phone or "").lstrip("+")
+                if user_phone.startswith("0"):
+                    user_phone = "254" + user_phone[1:]
+                logger.info(
+                    "saga.routing_to_kplc_token_endpoint · tx=%s meter=%s",
+                    self.tx.id, self.tx.mpesa_account,
+                )
+                try:
+                    kplc_raw = client._client.pay_kplc_token(
+                        meter_number=self.tx.mpesa_account,
+                        amount=int(self.tx.dest_amount),
+                        mobile_number=user_phone,
+                    )
+                except Exception as e:
+                    # WaaS endpoint not provisioned (401/403/404) ·
+                    # gracefully fall back to plain B2B so the payment
+                    # still goes through (no Pin field on callback,
+                    # but the M-Pesa receipt still reaches the user).
+                    logger.warning(
+                        "saga.kplc_waas_unavailable · falling back to B2B "
+                        "tx=%s err=%s", self.tx.id, str(e)[:200],
+                    )
+                    kplc_raw = None
+
+                if kplc_raw is not None:
+                    waas_ok = bool(kplc_raw.get("status", True))
+                    result = {
+                        "ConversationID": kplc_raw.get("CheckoutRequestID")
+                                          or kplc_raw.get("checkoutRequestId")
+                                          or "",
+                        "OriginatorConversationID": kplc_raw.get("transactionReference") or str(self.tx.id),
+                        "ResponseCode": "0" if waas_ok else "1",
+                        "status": waas_ok,
+                        "ResponseDescription": kplc_raw.get("message")
+                                               or kplc_raw.get("detail")
+                                               or "",
+                        "_raw": kplc_raw,
+                    }
+                else:
+                    result = client.b2b_payment(
+                        paybill=self.tx.mpesa_paybill,
+                        account=self.tx.mpesa_account,
+                        amount=int(self.tx.dest_amount),
+                        remarks=f"CryptoPay-{self.tx.id}",
+                        reference=str(self.tx.id),
+                    )
+            elif utility_service_code:
                 # Normalise the user's phone to 254XXXXXXXXX so the
                 # biller SMS reaches them (not Cpay's sender phone).
                 user_phone = self.tx.user.phone or ""

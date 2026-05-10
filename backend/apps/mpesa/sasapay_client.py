@@ -252,6 +252,76 @@ class SasaPayClient:
             return override[paybill]
         return self.UTILITY_PAYBILL_SERVICE_CODES.get(str(paybill))
 
+    def pay_kplc_token(
+        self,
+        meter_number: str,
+        amount: float,
+        mobile_number: str,
+        callback_url: str | None = None,
+    ) -> dict:
+        """KPLC prepaid token purchase via the dedicated WaaS endpoint.
+
+        2026-05-10 · discovered via the official SasaPay Java SDK at
+        github.com/SasaPay/sasapay-java-sdk · ApiUrls.java exposes a
+        dedicated `/api/v1/waas/utilities/kplc-token/` endpoint distinct
+        from the generic `/utilities/` (which has no KPLC serviceCode).
+
+        Payload shape per the SDK's `Waas.purchaseKPLCtoken`:
+            {
+              "MerchantCode": "...",
+              "MeterNumber": "<KPLC meter / account ref>",
+              "BeneficiaryAccountNumber": "<recipient phone for token>",
+              "MobileNumber": "<billing phone>",
+              "Amount": <int>,
+              "CallBackUrl": "..."
+            }
+
+        Returns the prepaid TOKEN + UNITS in the callback.
+
+        Note · this endpoint requires WaaS (Wallet-as-a-Service)
+        provisioning on the merchant account · regular SasaPay
+        merchants get a 401/403/404. Caller should be ready to fall
+        back to plain B2B if this raises.
+        """
+        # Note · path is `/waas/utilities/kplc-token/` (no /api/v1
+        # prefix) because `self.base` already includes /api/v1.
+        return self._request("POST", "/waas/utilities/kplc-token/", {
+            "MerchantCode": self.merchant_code,
+            "MeterNumber": meter_number,
+            "BeneficiaryAccountNumber": mobile_number,
+            "MobileNumber": mobile_number,
+            "Amount": int(round(float(amount))),
+            "CallBackUrl": callback_url or self.callback_url,
+        })
+
+    def pay_postpaid_bill(
+        self,
+        service_code: str,
+        account_number: str,
+        amount: float,
+        mobile_number: str,
+        callback_url: str | None = None,
+    ) -> dict:
+        """Postpaid bill payment (KPLC postpaid 888888, water, etc.) via
+        WaaS dedicated endpoint `/api/v1/waas/utilities/postpaid-bill-
+        payments/`. Discovered via Java SDK · same payload shape:
+            { MerchantCode, ServiceCode, BeneficiaryAccountNumber,
+              AccountNumber, MobileNumber, Amount, CallBackUrl }
+        Requires WaaS provisioning. Caller must fall back to B2B on
+        401/403/404.
+        """
+        return self._request(
+            "POST", "/waas/utilities/postpaid-bill-payments/", {
+                "MerchantCode": self.merchant_code,
+                "ServiceCode": service_code,
+                "BeneficiaryAccountNumber": mobile_number,
+                "AccountNumber": account_number,
+                "MobileNumber": mobile_number,
+                "Amount": int(round(float(amount))),
+                "CallBackUrl": callback_url or self.callback_url,
+            }
+        )
+
     def pay_utility(
         self,
         paybill: str,
