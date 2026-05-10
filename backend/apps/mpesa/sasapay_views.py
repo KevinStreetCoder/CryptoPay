@@ -961,28 +961,114 @@ def _process_failed_payment(
     reason: str,
     url_tx_id: str | None = None,
 ):
-    """Process a failed B2B / B2C payment · compensate."""
+    """Process a failed B2B / B2C payment · compensate.
+
+    2026-05-10 lookup-strategy fix · the success path got Strategy 1b
+    (`id=ref` lookup) in commit 38661f4 because the saga sends
+    `reference=str(tx.id)` as MerchantTransactionReference. The FAILED
+    path was never updated · failure callbacks still use the old
+    idempotency_key=ref lookup which never matches → tx stuck CONFIRMING
+    → user's crypto stays locked. Logged today at 14:00:30 against
+    tx db516b45 with SP01002 ('not permitted according to product
+    assignment'); failure callback arrived but couldn't find the tx.
+
+    Mirror the success-path strategies here.
+    """
     from apps.payments.models import Transaction
+    from django.core.exceptions import ValidationError
 
     tx = None
+
+    # Strategy 0 · URL-token gave us the tx_id directly.
     if url_tx_id:
         tx = Transaction.objects.filter(id=url_tx_id).first()
+
+    # Strategy 1 · by idempotency_key (legacy path).
     if not tx and ref:
         tx = Transaction.objects.filter(idempotency_key=ref).first()
-    if not tx or tx.status in (Transaction.Status.COMPLETED, Transaction.Status.FAILED):
+
+    # Strategy 1b · by transaction.id (saga sends tx.id as
+    # MerchantTransactionReference per the 38661f4 fix).
+    if not tx and ref:
+        try:
+            tx = Transaction.objects.filter(id=ref).first()
+        except (ValueError, ValidationError):
+            pass
+
+    # Strategy 2 · by CheckoutRequestID in saga_data.
+    if not tx:
+        checkout_id = (
+            data.get("CheckoutRequestID")
+            or data.get("CheckoutRequestId")
+            or data.get("checkoutRequestId")
+            or ""
+        )
+        if checkout_id:
+            tx = Transaction.objects.filter(
+                saga_data__mpesa_conversation_id__contains=checkout_id
+            ).first()
+            if not tx:
+                tx = Transaction.objects.filter(
+                    saga_data__mpesa_checkout_request_id=checkout_id
+                ).first()
+
+    if not tx:
+        logger.warning(
+            "sasapay failure_callback: no matching tx · ref=%s reason=%s",
+            ref, str(reason)[:200],
+        )
+        return
+    if tx.status in (Transaction.Status.COMPLETED, Transaction.Status.FAILED):
+        logger.info(
+            "sasapay failure_callback: tx %s already %s · no-op",
+            tx.id, tx.status,
+        )
         return
 
-    from django.utils import timezone
-
     tx.status = Transaction.Status.FAILED
-    tx.failure_reason = f"SasaPay: {reason}"
+    tx.failure_reason = f"SasaPay: {reason}"[:500]
     tx.save(update_fields=["status", "failure_reason", "updated_at"])
 
+    # Compensate · unlock the locked crypto so the user gets it back.
+    # 2026-05-10 · was calling `unlock_and_refund(tx)` which never
+    # existed on WalletService · every B2B failure since 2026-04 has
+    # been silently leaving the user's crypto LOCKED. Real method is
+    # `unlock_funds(wallet_id, amount, transaction_id)` · params live
+    # in saga_data.locked_wallet_id + saga_data.locked_amount (set by
+    # PaymentSaga.lock_crypto · saga.py line 95).
     try:
         from apps.wallets.services import WalletService
-        WalletService.unlock_and_refund(tx)
+        from decimal import Decimal as _D
+        sd = tx.saga_data or {}
+        wallet_id = sd.get("locked_wallet_id")
+        locked_amount = _D(sd.get("locked_amount", "0") or "0")
+        if wallet_id and locked_amount > 0:
+            WalletService.unlock_funds(
+                wallet_id=wallet_id,
+                amount=locked_amount,
+                transaction_id=tx.id,
+            )
+            logger.info(
+                "sasapay refund OK · tx=%s amount=%s wallet=%s",
+                tx.id, locked_amount, wallet_id,
+            )
+        else:
+            logger.warning(
+                "sasapay refund skipped · tx=%s missing saga_data "
+                "(wallet_id=%s amount=%s)",
+                tx.id, wallet_id, locked_amount,
+            )
     except Exception:
         logger.exception("sasapay refund failed for tx %s", tx.id)
+
+    # 2026-05-10 · fire the failure-alert email so ops sees this
+    # bucketed by category. classify_failure_code maps SP01002 →
+    # "rail" / 2028 → "rail" / 1032 → "user", etc.
+    try:
+        from apps.core.tasks import send_failed_transaction_alert_task
+        send_failed_transaction_alert_task.delay(transaction_id=str(tx.id))
+    except Exception:
+        logger.exception("failure_alert_dispatch_failed tx=%s", tx.id)
 
     logger.warning("sasapay payment failed: tx=%s reason=%s", tx.id, reason)
 
