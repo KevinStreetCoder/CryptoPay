@@ -521,11 +521,12 @@ class SendToBankView(APIView):
     spec in `docs/research/SIGNUP-EMAIL-ABUSE.md`.
     """
 
-    # 2026-05-15 · beta launch · effectively no threshold so the closed-
-    # beta cohort can run real-money smoke tests without the email-verify
-    # gate. Post-beta we'll re-tier this back down (probably 100k) and
-    # introduce a fast-track KYC flow to lift it for verified users.
-    EMAIL_VERIFY_THRESHOLD_KES = Decimal("1000000")
+    # 2026-05-15 · keep the gate tight for beta. Test amounts are tiny
+    # (KES 50 first round), well below 50k, so the threshold doesn't
+    # bite real testers · but caps any beta-tester whose account is
+    # compromised at the same safety tier we always intended. Raise
+    # later via a fast-track KYC flow for verified users (post-beta).
+    EMAIL_VERIFY_THRESHOLD_KES = Decimal("50000")
 
     permission_classes = [IsNotSuspended]
     throttle_classes = [PaymentRateThrottle]
