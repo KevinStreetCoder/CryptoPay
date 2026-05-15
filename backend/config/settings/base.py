@@ -550,6 +550,15 @@ TOTP_FERNET_KEY_CIPHERTEXT = _gs("TOTP_FERNET_KEY_CIPHERTEXT", default="")
 #   "sasapay"  · SasaPay PSP (CBK-licensed, partial reversal API)
 #   "intasend" · IntaSend aggregator (replaced Kopo Kopo on 2026-05-08)
 PAYMENT_PROVIDER = env("PAYMENT_PROVIDER", default="daraja")
+# Per-method routing overrides (2026-05-15). Each falls back to
+# PAYMENT_PROVIDER when empty, so existing single-knob deploys stay
+# unchanged. Production beta routes paybill+till through IntaSend
+# (no per-paybill product-assignment gate) while keeping STK/B2C on
+# SasaPay (where the merchant float lives).
+PAYMENT_PROVIDER_PAYBILL = env("PAYMENT_PROVIDER_PAYBILL", default="")
+PAYMENT_PROVIDER_TILL = env("PAYMENT_PROVIDER_TILL", default="")
+PAYMENT_PROVIDER_B2C = env("PAYMENT_PROVIDER_B2C", default="")
+PAYMENT_PROVIDER_STK = env("PAYMENT_PROVIDER_STK", default="")
 SASAPAY_ENVIRONMENT = env("SASAPAY_ENVIRONMENT", default="sandbox")
 SASAPAY_CLIENT_ID = env("SASAPAY_CLIENT_ID", default="")
 SASAPAY_CLIENT_SECRET = _gs("SASAPAY_CLIENT_SECRET", default=env("SASAPAY_CLIENT_SECRET", default=""))
