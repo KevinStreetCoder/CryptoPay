@@ -246,6 +246,101 @@ def _handle_send_money_event(payload: dict) -> dict:
         return {"status": "completed", "tx_id": str(tx.id)}
 
     if _is_failed(state):
+        # ── SasaPay reverse-fallback (2026-05-15) ──────────────────────
+        #
+        # When IntaSend B2B fails on a paybill/till tx, retry through
+        # SasaPay instead of waiting for the saga cron to compensate.
+        # Mirror of the existing SasaPay → IntaSend handler in
+        # `apps/mpesa/sasapay_views._process_failed_payment`. Only fires
+        # if: (a) tx has paybill or till (NOT B2C · B2C float lives on
+        # SasaPay and we never routed it through IntaSend), (b) SasaPay
+        # creds configured, (c) no prior fallback attempt (avoid loops).
+        sd = dict(tx.saga_data or {})
+        prior_fallback = bool(sd.get("fallback_history"))
+        can_fallback = (
+            (tx.mpesa_paybill or tx.mpesa_till)
+            and not prior_fallback
+            and getattr(settings, "SASAPAY_CLIENT_ID", "")
+            and getattr(settings, "SASAPAY_CLIENT_SECRET", "")
+            and tx.dest_amount
+            and Decimal(str(tx.dest_amount)) > 0
+        )
+        if can_fallback:
+            try:
+                from apps.mpesa.sasapay_client import SasaPayClient
+                from django.utils import timezone as _tz
+                from apps.accounts.models import AuditLog
+
+                client = SasaPayClient()
+                api_ref = f"intasend-fb-{tx.id}"
+                kes_amount = Decimal(str(tx.dest_amount))
+
+                if tx.mpesa_paybill:
+                    resp = client.pay_paybill(
+                        receiver_code=str(tx.mpesa_paybill),
+                        account_ref=str(tx.mpesa_account or ""),
+                        amount=float(kes_amount),
+                        reference=api_ref,
+                    )
+                else:
+                    resp = client.pay_till(
+                        receiver_code=str(tx.mpesa_till),
+                        amount=float(kes_amount),
+                        reference=api_ref,
+                    )
+
+                conv_id = resp.get("B2BRequestID") or resp.get("ConversationID", "")
+                status_code = str(resp.get("ResponseCode", ""))
+                sasapay_status = resp.get("status")
+
+                if conv_id and status_code == "0" and sasapay_status is not False:
+                    sd["sasapay_request_id"] = conv_id
+                    sd["sasapay_api_ref"] = api_ref
+                    sd["fallback_provider"] = "sasapay"
+                    history = list(sd.get("fallback_history") or [])
+                    history.append({
+                        "from": "intasend",
+                        "to": "sasapay",
+                        "reason_state": state,
+                        "reason_desc": (payload.get("failed_reason") or "")[:200],
+                        "tracking_id": conv_id,
+                        "at": _tz.now().isoformat(),
+                    })
+                    sd["fallback_history"] = history
+                    tx.saga_data = sd
+                    tx.save(update_fields=["saga_data", "updated_at"])
+
+                    AuditLog.objects.create(
+                        user=tx.user,
+                        action="intasend_to_sasapay_fallback",
+                        details=(
+                            f"IntaSend send-money state={state}. Retrying via "
+                            f"SasaPay request_id={conv_id} api_ref={api_ref}. "
+                            f"Tx {tx.id} stays CONFIRMING; locked crypto remains "
+                            f"locked pending SasaPay callback."
+                        ),
+                    )
+                    logger.warning(
+                        "intasend_to_sasapay_fallback · tx=%s state=%s "
+                        "request_id=%s api_ref=%s",
+                        tx.id, state, conv_id, api_ref,
+                    )
+                    return {"status": "fallback_to_sasapay", "tx_id": str(tx.id)}
+
+                logger.error(
+                    "intasend_to_sasapay_fallback · SasaPay returned "
+                    "ResponseCode=%s status=%s · falling through to "
+                    "compensation (tx=%s)",
+                    status_code, sasapay_status, tx.id,
+                )
+            except Exception:
+                logger.exception(
+                    "intasend_to_sasapay_fallback · unexpected error · "
+                    "falling through to compensation (tx=%s)",
+                    tx.id,
+                )
+        # ───────────────────────────────────────────────────────────────
+
         # Don't compensate here · the saga's check_pending_mpesa_payments
         # cron handles compensation after a 10-min grace window so
         # transient retryable failures don't trigger a reversal storm.

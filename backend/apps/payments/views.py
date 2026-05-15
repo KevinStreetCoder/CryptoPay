@@ -521,11 +521,11 @@ class SendToBankView(APIView):
     spec in `docs/research/SIGNUP-EMAIL-ABUSE.md`.
     """
 
-    # Email-verification threshold for Send-to-Bank · larger than the
-    # M-Pesa daily transaction cap (KES 250k) is meaningless here, so
-    # we set the tier-step at KES 50k. The mobile client should disclose
-    # this requirement up front via the quote response.
-    EMAIL_VERIFY_THRESHOLD_KES = Decimal("50000")
+    # 2026-05-15 · beta launch · effectively no threshold so the closed-
+    # beta cohort can run real-money smoke tests without the email-verify
+    # gate. Post-beta we'll re-tier this back down (probably 100k) and
+    # introduce a fast-track KYC flow to lift it for verified users.
+    EMAIL_VERIFY_THRESHOLD_KES = Decimal("1000000")
 
     permission_classes = [IsNotSuspended]
     throttle_classes = [PaymentRateThrottle]

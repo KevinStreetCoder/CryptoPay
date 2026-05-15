@@ -244,12 +244,25 @@ class PaymentSaga:
             # whenever we know the serviceCode for the paybill.
             utility_service_code = None
             is_kplc_prepaid = self.tx.mpesa_paybill == "888880"
-            if getattr(client, "is_sasapay", False):
-                # Reach through the adapter to the underlying SasaPay
-                # client for the utility map. Only SasaPay supports
-                # the Utilities API.
+            # 2026-05-15 · this branch only fires when paybill is routed
+            # through SasaPay. When PAYMENT_PROVIDER_PAYBILL=intasend,
+            # IntaSend handles paybill via its own B2B endpoint without
+            # the per-paybill product-assignment gate, so the SasaPay
+            # Utilities-API special-case is irrelevant and we let the
+            # generic `client.b2b_payment(...)` path below dispatch to
+            # IntaSend.
+            paybill_via_sasapay = (
+                client.routing_for("paybill") == "sasapay"
+                if hasattr(client, "routing_for") else
+                getattr(client, "is_sasapay", False)
+            )
+            if paybill_via_sasapay:
                 try:
                     utility_service_code = (
+                        client._client_for("paybill")._utility_service_code_for_paybill(
+                            self.tx.mpesa_paybill
+                        )
+                        if hasattr(client, "_client_for") else
                         client._client._utility_service_code_for_paybill(
                             self.tx.mpesa_paybill
                         )
@@ -276,7 +289,7 @@ class PaymentSaga:
             # confirms WaaS is provisioned on our merchant account.
             from django.conf import settings as _dj_settings
             waas_enabled = getattr(_dj_settings, "SASAPAY_WAAS_ENABLED", False)
-            if is_kplc_prepaid and waas_enabled and getattr(client, "is_sasapay", False):
+            if is_kplc_prepaid and waas_enabled and paybill_via_sasapay:
                 user_phone = (self.tx.user.phone or "").lstrip("+")
                 if user_phone.startswith("0"):
                     user_phone = "254" + user_phone[1:]
@@ -285,7 +298,11 @@ class PaymentSaga:
                     self.tx.id, self.tx.mpesa_account,
                 )
                 try:
-                    kplc_raw = client._client.pay_kplc_token(
+                    sasapay_client = (
+                        client._client_for("paybill")
+                        if hasattr(client, "_client_for") else client._client
+                    )
+                    kplc_raw = sasapay_client.pay_kplc_token(
                         meter_number=self.tx.mpesa_account,
                         amount=int(self.tx.dest_amount),
                         mobile_number=user_phone,
@@ -334,7 +351,11 @@ class PaymentSaga:
                     "saga.routing_to_utilities · tx=%s paybill=%s service=%s",
                     self.tx.id, self.tx.mpesa_paybill, utility_service_code,
                 )
-                util_raw = client._client.pay_utility(
+                sasapay_client = (
+                    client._client_for("paybill")
+                    if hasattr(client, "_client_for") else client._client
+                )
+                util_raw = sasapay_client.pay_utility(
                     paybill=self.tx.mpesa_paybill,
                     account_number=self.tx.mpesa_account,
                     amount=int(self.tx.dest_amount),
