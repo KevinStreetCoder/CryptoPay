@@ -1,10 +1,11 @@
 import logging
 import threading
+import time
 from ipaddress import ip_address, ip_network
 
 from django.conf import settings
 from django.core.cache import cache
-from django.http import HttpResponseForbidden
+from django.http import HttpResponseForbidden, HttpResponseRedirect
 from django.utils import timezone
 
 _request_local = threading.local()
@@ -114,6 +115,95 @@ class AdminIPAllowListMiddleware:
             if not self._allowed(ip):
                 logger.warning("admin.blocked_ip path=%s ip=%s", request.path, ip)
                 return HttpResponseForbidden("forbidden")
+        return self.get_response(request)
+
+
+# Session key the AdminTOTPRequiredMiddleware writes when a staff user
+# has just passed the TOTP step · subsequent admin requests within the
+# freshness window skip the verify redirect.
+ADMIN_TOTP_SESSION_KEY = "admin_totp_verified_at"
+# Freshness window · staff has to re-enter TOTP every 4 hours. Long
+# enough to not be annoying, short enough that a stolen session token
+# stops being useful at the next admin action.
+ADMIN_TOTP_FRESHNESS_SECONDS = 4 * 3600
+
+
+class AdminTOTPRequiredMiddleware:
+    """D10 · gates the admin URL behind a TOTP step when
+    ADMIN_REQUIRE_TOTP=True.
+
+    Flow:
+      1. Anonymous / non-staff request → pass through (Django admin will
+         handle the login redirect itself).
+      2. Staff user without `totp_enabled` → redirect to /admin-totp/setup/.
+      3. Staff with `totp_enabled` but no fresh session flag → redirect
+         to /admin-totp/verify/.
+      4. Staff with a fresh flag (≤ ADMIN_TOTP_FRESHNESS_SECONDS) → pass.
+
+    The two enrolment paths (/admin-totp/setup/ and /admin-totp/verify/)
+    must be exempt from this middleware to avoid a redirect loop. We
+    check the exact path prefix `/admin-totp/` and let those through.
+
+    Why a custom middleware vs django-otp: django-otp ships with its own
+    middleware + admin-site subclass, which would force us to swap
+    `django.contrib.admin.site` for `django_otp.admin.OTPAdminSite`.
+    Our admin surface uses several custom views registered against the
+    default site; the swap would be a larger refactor. This middleware
+    is ~40 lines, uses our existing TOTP infrastructure end-to-end, and
+    lets the default admin site stay in place.
+    """
+
+    SETUP_PATH = "/admin-totp/setup/"
+    VERIFY_PATH = "/admin-totp/verify/"
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+        prefix = getattr(settings, "ADMIN_URL", "admin/")
+        if not prefix.startswith("/"):
+            prefix = "/" + prefix
+        self._admin_prefix = prefix
+
+    def __call__(self, request):
+        if not getattr(settings, "ADMIN_REQUIRE_TOTP", False):
+            return self.get_response(request)
+
+        path = request.path
+        # Always let the enrolment + verify endpoints through.
+        if path.startswith("/admin-totp/"):
+            return self.get_response(request)
+        # Only act on admin URLs · everything else (API, public, etc.) goes
+        # through unchanged.
+        if not path.startswith(self._admin_prefix):
+            return self.get_response(request)
+
+        user = getattr(request, "user", None)
+        if not user or not user.is_authenticated:
+            # Let Django admin's own auth handle this · the login page is
+            # served at /<admin>/login/ and our middleware shouldn't
+            # second-guess it.
+            return self.get_response(request)
+        if not user.is_staff:
+            # Non-staff can't reach admin views anyway · the admin site
+            # returns 403/redirect. No reason for the TOTP gate to fire.
+            return self.get_response(request)
+
+        if not getattr(user, "totp_enabled", False):
+            logger.info(
+                "admin.totp.setup_required user=%s path=%s",
+                user.pk, path,
+            )
+            return HttpResponseRedirect(self.SETUP_PATH + "?next=" + path)
+
+        verified_at = request.session.get(ADMIN_TOTP_SESSION_KEY)
+        now = int(time.time())
+        if not verified_at or (now - int(verified_at)) > ADMIN_TOTP_FRESHNESS_SECONDS:
+            logger.info(
+                "admin.totp.verify_required user=%s stale=%s",
+                user.pk,
+                None if not verified_at else (now - int(verified_at)),
+            )
+            return HttpResponseRedirect(self.VERIFY_PATH + "?next=" + path)
+
         return self.get_response(request)
 
 

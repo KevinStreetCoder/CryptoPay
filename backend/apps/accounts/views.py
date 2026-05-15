@@ -12,6 +12,7 @@ from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenRefreshView as _SimpleJWTTokenRefreshView
 
+from apps.core.throttling import GlobalOTPThrottle as _GlobalOTPThrottle
 from apps.wallets.services import WalletService
 
 from .models import AuditLog, Device, EmailVerificationToken, KYCDocument, PINResetToken, PushToken, User
@@ -56,6 +57,11 @@ class RequestOTPView(APIView):
     """Send a 6-digit OTP to the user's phone via Africa's Talking SMS."""
 
     permission_classes = [AllowAny]
+    # A4 · global circuit breaker on top of the per-phone counter below.
+    # Catches a distributed SMS-bomb · 10k OTPs across 10k phones from
+    # 10k IPs would slip past per-key throttles, draining the SMS budget.
+    # Configurable rate via GLOBAL_OTP_RATE_PER_HOUR env (default 1000/h).
+    throttle_classes = [_GlobalOTPThrottle]
 
     def post(self, request):
         serializer = RequestOTPSerializer(data=request.data)
@@ -2291,6 +2297,8 @@ class ForgotPINView(APIView):
     """
 
     permission_classes = [AllowAny]
+    # A4 · global SMS-bomb circuit breaker (see RequestOTPView).
+    throttle_classes = [_GlobalOTPThrottle]
 
     def post(self, request):
         serializer = ForgotPINSerializer(data=request.data)

@@ -8,6 +8,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from apps.core.admin_views import admin_stats_dashboard, admin_sms_health
+from apps.core.admin_totp_views import admin_totp_setup, admin_totp_verify
 from apps.core.media_views import ProtectedMediaView, public_media_forbidden
 from apps.core.views import (
     ApkDownloadHitView,
@@ -51,6 +52,13 @@ urlpatterns = [
     # Stats dashboards stay under the obfuscated prefix too.
     path(f"{_admin_prefix}stats/", admin_stats_dashboard, name="admin-stats"),
     path(f"{_admin_prefix}health/sms/", admin_sms_health, name="admin-sms-health"),
+    # D10 · admin TOTP enrolment + verify pages. Mounted OUTSIDE the
+    # obfuscated admin prefix so the AdminTOTPRequiredMiddleware can
+    # redirect to them without bouncing the user through the IP allow-
+    # list gate first (the enrolment URL is the same in dev as prod;
+    # the IP gate only protects the admin URL itself).
+    path("admin-totp/setup/", admin_totp_setup, name="admin-totp-setup"),
+    path("admin-totp/verify/", admin_totp_verify, name="admin-totp-verify"),
     path(_admin_prefix, admin.site.urls),
     path("api/v1/auth/", include("apps.accounts.urls")),
     path("api/v1/wallets/", include("apps.wallets.urls")),

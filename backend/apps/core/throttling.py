@@ -151,3 +151,53 @@ class SensitiveActionThrottle(SimpleRateThrottle):
                 "ident": str(request.user.id),
             }
         return None
+
+
+class GlobalOTPThrottle(SimpleRateThrottle):
+    """A4 · global circuit breaker on OTP issuance + verification.
+
+    Per-phone and per-IP throttles (existing) catch a single attacker
+    hammering a single account or hitting from a single IP. They do
+    NOT catch a distributed SMS-bomb · 10k OTP requests across 10k
+    phones from 10k IPs would slip through every per-key throttle.
+    SMS providers (Africa's Talking, Twilio) charge per send, so an
+    attacker can bleed Cpay's SMS budget without ever locking a single
+    user out.
+
+    This throttle keys on the literal string `"global"` so every
+    request worldwide hits the same counter. When the cap fires we
+    log to Sentry / on-call so a human looks immediately.
+
+    Configurable via `GLOBAL_OTP_RATE_PER_HOUR` env (default 1000/h).
+    """
+
+    scope = "global_otp"
+    cache_format = "throttle_%(scope)s_%(ident)s"
+
+    def __init__(self):
+        # Read rate at construction · settings can be patched in tests
+        # via @override_settings(GLOBAL_OTP_RATE_PER_HOUR=...).
+        rate_per_hour = getattr(settings, "GLOBAL_OTP_RATE_PER_HOUR", 1000)
+        self.rate = f"{rate_per_hour}/h"
+        # SimpleRateThrottle parses this in __init__, so we have to set
+        # `self.rate` BEFORE super().__init__.
+        super().__init__()
+
+    def get_cache_key(self, request, view):
+        # Single global counter · same key for every request.
+        return self.cache_format % {"scope": self.scope, "ident": "global"}
+
+    def throttle_failure(self):
+        """Log to Sentry / structured-log channel when the global cap
+        fires · this is "something is wrong, page someone" territory."""
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(
+            "global_otp_cap_breached",
+            extra={
+                "scope": self.scope,
+                "rate": self.rate,
+                "wait_seconds": int(self.wait() or 0),
+            },
+        )
+        return False  # signature contract · returns the throttled bool

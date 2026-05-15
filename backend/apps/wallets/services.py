@@ -36,7 +36,7 @@ class WalletService:
         wallet.balance += amount
         wallet.save(update_fields=["balance"])
 
-        return LedgerEntry.objects.create(
+        entry = LedgerEntry.objects.create(
             transaction_id=transaction_id,
             wallet=wallet,
             entry_type=LedgerEntry.EntryType.CREDIT,
@@ -44,6 +44,15 @@ class WalletService:
             balance_after=wallet.balance,
             description=description,
         )
+        # 2026-05-15 · bust the wallet-list cache so the dashboard sees
+        # the new balance on its next read. Lazy import to avoid the
+        # services-> views circular at module load.
+        try:
+            from apps.wallets.views import invalidate_wallet_cache
+            invalidate_wallet_cache(wallet.user_id)
+        except Exception:
+            pass  # never let a cache miss block a credit
+        return entry
 
     @staticmethod
     @db_transaction.atomic
@@ -75,7 +84,7 @@ class WalletService:
         wallet.balance -= amount
         wallet.save(update_fields=["balance"])
 
-        return LedgerEntry.objects.create(
+        entry = LedgerEntry.objects.create(
             transaction_id=transaction_id,
             wallet=wallet,
             entry_type=LedgerEntry.EntryType.DEBIT,
@@ -83,6 +92,12 @@ class WalletService:
             balance_after=wallet.balance,
             description=description,
         )
+        try:
+            from apps.wallets.views import invalidate_wallet_cache
+            invalidate_wallet_cache(wallet.user_id)
+        except Exception:
+            pass
+        return entry
 
     @staticmethod
     @db_transaction.atomic

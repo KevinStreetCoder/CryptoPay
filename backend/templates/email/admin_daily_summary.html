@@ -76,12 +76,59 @@
       <td class="label">Failed</td>
       <td class="value" style="color: #ef4444;">{{ failed_transactions }}</td>
     </tr>
+    {% if tx_24h %}
+    <tr>
+      <td class="label">In-flight (pending + confirming)</td>
+      <td class="value" style="color: #F59E0B;">{{ tx_24h.in_flight }}</td>
+    </tr>
+    <tr>
+      <td class="label">KES settled (completed)</td>
+      <td class="value">KES {{ tx_24h.kes_settled }}</td>
+    </tr>
+    <tr>
+      <td class="label">KES attempted (incl. failed)</td>
+      <td class="value" style="color: #94A3B8;">KES {{ tx_24h.kes_attempted }}</td>
+    </tr>
+    {% else %}
     <tr>
       <td class="label">Total Volume (KES)</td>
       <td class="value">KES {{ total_volume_kes }}</td>
     </tr>
+    {% endif %}
   </table>
 </div>
+
+{% if tx_7d or tx_all %}
+<p style="margin:24px 0 8px 0; font-size:11px; font-weight:700; color:#10B981; letter-spacing:1.5px; text-transform:uppercase;">Transactions (longer windows)</p>
+<div class="info-card">
+  <table role="presentation" cellpadding="0" cellspacing="0">
+    {% if tx_7d %}
+    <tr>
+      <td class="label">Last 7 days · completed</td>
+      <td class="value" style="color: #10B981;">{{ tx_7d.completed }}</td>
+    </tr>
+    <tr>
+      <td class="label">Last 7 days · failed</td>
+      <td class="value" style="color: #ef4444;">{{ tx_7d.failed }}</td>
+    </tr>
+    <tr>
+      <td class="label">Last 7 days · KES settled</td>
+      <td class="value">KES {{ tx_7d.kes_settled }}</td>
+    </tr>
+    {% endif %}
+    {% if tx_all %}
+    <tr>
+      <td class="label">All-time · completed</td>
+      <td class="value" style="color: #10B981;">{{ tx_all.completed }}</td>
+    </tr>
+    <tr>
+      <td class="label">All-time · KES settled</td>
+      <td class="value">KES {{ tx_all.kes_settled }}</td>
+    </tr>
+    {% endif %}
+  </table>
+</div>
+{% endif %}
 
 {% if wallet_balances %}
 <p style="margin:24px 0 8px 0; font-size:11px; font-weight:700; color:#10B981; letter-spacing:1.5px; text-transform:uppercase;">Wallet Balances</p>

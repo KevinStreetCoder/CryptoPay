@@ -548,28 +548,58 @@ def daily_summary_email(self):
         online_now = "N/A"
 
     # --- Transaction stats ---
-    try:
-        from apps.payments.models import Transaction
-
-        tx_qs = Transaction.objects.filter(created_at__gte=yesterday)
-        total_transactions = tx_qs.count()
-        completed_transactions = tx_qs.filter(status="completed").count()
-        failed_transactions = tx_qs.filter(status="failed").count()
-
-        # Volume in KES (dest_amount for KES transactions, source_amount for crypto->KES)
-        volume_agg = tx_qs.filter(status="completed").aggregate(
+    # 2026-05-15 · richer windows. The original only reported "last 24 h"
+    # which read "0" on quiet days even when the project had real lifetime
+    # volume · operators couldn't tell whether the rail had broken or
+    # whether the day was simply quiet. Now we publish three windows
+    # (24 h, 7 d, lifetime) and break out attempted volume separately
+    # from settled volume so failed-attempts are visible.
+    def _tx_volume_kes(qs):
+        """Sum KES movement across `qs`. Returns Decimal."""
+        agg = qs.aggregate(
             kes_volume=Sum("source_amount", filter=Q(source_currency="KES")),
             dest_volume=Sum("dest_amount", filter=Q(dest_currency="KES")),
         )
-        kes_in = volume_agg["kes_volume"] or Decimal("0")
-        kes_out = volume_agg["dest_volume"] or Decimal("0")
-        total_volume_kes = f"{(kes_in + kes_out):,.0f}"
+        return (agg["kes_volume"] or Decimal("0")) + (agg["dest_volume"] or Decimal("0"))
+
+    def _window_stats(tx_qs):
+        """Return {total, completed, failed, processing, pending,
+        kes_settled, kes_attempted} for the given queryset. Empty
+        windows return integer zeros (NOT "N/A") so the email never
+        regresses to the legacy sentinel value."""
+        return {
+            "total":         tx_qs.count(),
+            "completed":     tx_qs.filter(status="completed").count(),
+            "failed":        tx_qs.filter(status="failed").count(),
+            "processing":    tx_qs.filter(status="processing").count(),
+            "pending":       tx_qs.filter(status="pending").count(),
+            "confirming":    tx_qs.filter(status="confirming").count(),
+            "kes_settled":   _tx_volume_kes(tx_qs.filter(status="completed")),
+            "kes_attempted": _tx_volume_kes(tx_qs.exclude(status="pending")),
+        }
+
+    try:
+        from apps.payments.models import Transaction
+
+        all_tx = Transaction.objects.all()
+        last_7d_cutoff = now - timedelta(days=7)
+
+        stats_24h = _window_stats(all_tx.filter(created_at__gte=yesterday))
+        stats_7d  = _window_stats(all_tx.filter(created_at__gte=last_7d_cutoff))
+        stats_all = _window_stats(all_tx)
+
+        # Legacy field names retained for the existing template + tests.
+        total_transactions     = stats_24h["total"]
+        completed_transactions = stats_24h["completed"]
+        failed_transactions    = stats_24h["failed"]
+        total_volume_kes       = f"{stats_24h['kes_settled']:,.0f}"
     except Exception as e:
-        logger.error(f"Daily summary: transaction stats failed: {e}")
+        logger.error(f"Daily summary: transaction stats failed: {e}", exc_info=True)
         total_transactions = "N/A"
         completed_transactions = "N/A"
         failed_transactions = "N/A"
         total_volume_kes = "N/A"
+        stats_24h = stats_7d = stats_all = None
 
     # --- System wallet balances ---
     wallet_balances = []
@@ -584,6 +614,25 @@ def daily_summary_email(self):
     except Exception as e:
         logger.error(f"Daily summary: wallet balances failed: {e}")
 
+    # --- Format multi-window stats for template + plain text ---
+    def _fmt_kes(d):
+        try:
+            return f"{Decimal(d):,.0f}"
+        except (TypeError, ValueError):
+            return "N/A"
+
+    def _fmt_window(stats):
+        if not stats:
+            return None
+        return {
+            "total":           stats["total"],
+            "completed":       stats["completed"],
+            "failed":          stats["failed"],
+            "in_flight":       stats["pending"] + stats["processing"] + stats["confirming"],
+            "kes_settled":     _fmt_kes(stats["kes_settled"]),
+            "kes_attempted":   _fmt_kes(stats["kes_attempted"]),
+        }
+
     # --- Render HTML email ---
     context = {
         "date": date_str,
@@ -595,10 +644,15 @@ def daily_summary_email(self):
         "failed_logins": failed_logins,
         "active_24h": active_24h,
         "online_now": online_now,
+        # Legacy keys for the existing template (24h-only)
         "total_transactions": total_transactions,
         "completed_transactions": completed_transactions,
         "failed_transactions": failed_transactions,
         "total_volume_kes": total_volume_kes,
+        # New keys · richer windows. Template renders them when present.
+        "tx_24h":  _fmt_window(stats_24h),
+        "tx_7d":   _fmt_window(stats_7d),
+        "tx_all":  _fmt_window(stats_all),
         "wallet_balances": wallet_balances,
     }
     html_content = render_to_string("email/admin_daily_summary.html", context)
@@ -621,12 +675,20 @@ def daily_summary_email(self):
         f"  Active (last 24 h):     {active_24h}\n"
         f"  Online now (≤5 min):    {online_now}\n"
         f"\n"
-        f"Transactions (last 24 h)\n"
-        f"  Total:                  {total_transactions}\n"
-        f"  Completed:              {completed_transactions}\n"
-        f"  Failed:                 {failed_transactions}\n"
-        f"  Volume (KES):           {total_volume_kes}\n"
+        f"Transactions\n"
     )
+    for label, stats in (("last 24 h", stats_24h), ("last 7 d", stats_7d), ("all-time", stats_all)):
+        if stats is None:
+            plain_text += f"  {label:12s} · N/A (stats query failed)\n"
+            continue
+        plain_text += (
+            f"  {label:12s} · total={stats['total']:5d}  "
+            f"completed={stats['completed']:4d}  "
+            f"failed={stats['failed']:4d}  "
+            f"in-flight={stats['pending'] + stats['processing'] + stats['confirming']:3d}  "
+            f"KES settled={_fmt_kes(stats['kes_settled'])}  "
+            f"attempted={_fmt_kes(stats['kes_attempted'])}\n"
+        )
     if wallet_balances:
         plain_text += f"\nWallet Balances\n"
         for w in wallet_balances:
@@ -653,6 +715,11 @@ def daily_summary_email(self):
         "active_24h": active_24h,
         "online_now": online_now,
         "transactions": total_transactions,
+        # 2026-05-15 · richer-windows payload for ops dashboards. Empty
+        # 24-h window no longer hides the fact that lifetime volume exists.
+        "tx_24h": stats_24h,
+        "tx_7d":  stats_7d,
+        "tx_all": stats_all,
     }
 
 

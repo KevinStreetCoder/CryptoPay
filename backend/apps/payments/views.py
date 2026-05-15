@@ -1935,13 +1935,52 @@ class HostedCheckoutView(APIView):
 
 
 class TransactionHistoryView(ListAPIView):
-    """User's transaction history."""
+    """User's transaction history.
+
+    2026-05-15 · the first page (`?page=1` or no page arg) is the most-
+    requested URL on the app · loaded on every dashboard open, every
+    "transactions" tab visit. Cache it per-user for 60 s, invalidated
+    on any new transaction creation via the post_save signal in
+    `apps.payments.signals`.
+    """
 
     serializer_class = TransactionSerializer
     permission_classes = [IsAuthenticated]
 
+    _CACHE_TTL = 60
+    _CACHE_KEY = "tx_history_page1_v1:user:{user_id}"
+
     def get_queryset(self):
         return Transaction.objects.filter(user=self.request.user)
+
+    def list(self, request, *args, **kwargs):
+        # Only cache when the caller is asking for the default first
+        # page · any filter / search / non-1 page bypasses the cache
+        # so we don't index a thousand parameter combinations.
+        page = request.query_params.get("page", "1")
+        has_filter = any(
+            k in request.query_params
+            for k in ("status", "type", "currency", "search", "date_from", "date_to")
+        )
+        if page != "1" or has_filter:
+            return super().list(request, *args, **kwargs)
+
+        from django.core.cache import cache
+        key = self._CACHE_KEY.format(user_id=request.user.id)
+        cached = cache.get(key)
+        if cached is not None:
+            return Response(cached)
+        response = super().list(request, *args, **kwargs)
+        if response.status_code == 200:
+            cache.set(key, response.data, timeout=self._CACHE_TTL)
+        return response
+
+
+def invalidate_tx_history_cache(user_id) -> None:
+    """Drop the per-user tx-history-page-1 cache. Called from the
+    Transaction post_save signal in apps.payments.signals."""
+    from django.core.cache import cache
+    cache.delete(f"tx_history_page1_v1:user:{user_id}")
 
 
 class UnifiedActivityView(APIView):

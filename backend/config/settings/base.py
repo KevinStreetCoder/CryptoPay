@@ -93,6 +93,9 @@ MIDDLEWARE = [
     # D10: deny admin requests from un-allow-listed IPs. No-op when
     # ADMIN_IP_ALLOWLIST is empty (dev default).
     "apps.core.middleware.AdminIPAllowListMiddleware",
+    # D10: gate admin behind TOTP when ADMIN_REQUIRE_TOTP=True. No-op
+    # when the flag is False (dev default).
+    "apps.core.middleware.AdminTOTPRequiredMiddleware",
     "apps.core.middleware.AuditMiddleware",
     # Writes User.last_activity_at at most once per minute so admin can see
     # "online now" and last-active without firing O(requests) DB writes.
@@ -559,6 +562,14 @@ PAYMENT_PROVIDER_PAYBILL = env("PAYMENT_PROVIDER_PAYBILL", default="")
 PAYMENT_PROVIDER_TILL = env("PAYMENT_PROVIDER_TILL", default="")
 PAYMENT_PROVIDER_B2C = env("PAYMENT_PROVIDER_B2C", default="")
 PAYMENT_PROVIDER_STK = env("PAYMENT_PROVIDER_STK", default="")
+
+# A4 · global OTP-issuance circuit breaker. Per-phone + per-IP throttles
+# (already shipped) catch a single attacker hammering a single account.
+# This catches a distributed SMS-bomb · 10k OTPs across 10k phones from
+# 10k IPs would slip past per-key throttles, draining the SMS budget.
+# Default 1000/h is comfortably above legitimate beta volume and well
+# below anything that would cost real money.
+GLOBAL_OTP_RATE_PER_HOUR = env.int("GLOBAL_OTP_RATE_PER_HOUR", default=1000)
 SASAPAY_ENVIRONMENT = env("SASAPAY_ENVIRONMENT", default="sandbox")
 SASAPAY_CLIENT_ID = env("SASAPAY_CLIENT_ID", default="")
 SASAPAY_CLIENT_SECRET = _gs("SASAPAY_CLIENT_SECRET", default=env("SASAPAY_CLIENT_SECRET", default=""))

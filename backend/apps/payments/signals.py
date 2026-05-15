@@ -67,3 +67,16 @@ def _recon_deleted(sender, instance: ReconciliationCase, **kwargs):
         # flag refresh failure break the cascade delete that triggered
         # this handler.
         pass
+
+
+@receiver(post_save, sender=Transaction)
+def _invalidate_tx_history_cache_on_save(sender, instance: Transaction, **kwargs):
+    """2026-05-15 · bust the per-user transaction-history page-1 cache
+    whenever a tx is created or its status updates · the dashboard's
+    "recent transactions" panel must reflect the latest state, not a
+    stale 60 s read. Best-effort · never break the save."""
+    try:
+        from apps.payments.views import invalidate_tx_history_cache
+        invalidate_tx_history_cache(instance.user_id)
+    except Exception:
+        pass

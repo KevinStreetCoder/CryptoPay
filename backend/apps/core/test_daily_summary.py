@@ -232,6 +232,119 @@ class DailySummaryEmailTest(TestCase):
         self.assertEqual(result["active_24h"], 2)
         self.assertEqual(result["online_now"], 1)
 
+    def test_richer_windows_24h_7d_alltime(self):
+        """2026-05-15 regression · the email used to be data-correct but
+        operationally misleading: when no tx happened in the last 24 h
+        the volume read "0" with no signal that ~~lifetime volume~~ was
+        nonzero. Operators couldn't distinguish "rail is broken" from
+        "today was quiet". Fix · emit three windows (24 h / 7 d / all-
+        time) plus the attempted-vs-settled split so failed-attempt
+        volume is visible alongside completed volume."""
+        from apps.payments.models import Transaction
+        from apps.accounts.models import User as _U
+
+        u = _U.objects.create_user(phone="+254711222000", pin="123456")
+
+        # Old tx (lifetime, NOT 24h): completed KES 5,000 settled on day -10
+        Transaction.objects.create(
+            idempotency_key="old-completed",
+            user=u, type=Transaction.Type.PAYBILL_PAYMENT,
+            status=Transaction.Status.COMPLETED,
+            source_currency="USDT", source_amount=Decimal("38.46"),
+            dest_currency="KES",   dest_amount=Decimal("5000"),
+            created_at=timezone.now() - timedelta(days=10),
+        )
+        # Old tx, FAILED (counts in attempted, NOT settled)
+        Transaction.objects.create(
+            idempotency_key="old-failed",
+            user=u, type=Transaction.Type.PAYBILL_PAYMENT,
+            status=Transaction.Status.FAILED,
+            source_currency="USDT", source_amount=Decimal("7.69"),
+            dest_currency="KES",   dest_amount=Decimal("1000"),
+            created_at=timezone.now() - timedelta(days=10),
+        )
+        # Recent (within 24h) · in-flight, pending
+        Transaction.objects.create(
+            idempotency_key="recent-pending",
+            user=u, type=Transaction.Type.PAYBILL_PAYMENT,
+            status=Transaction.Status.PENDING,
+            source_currency="USDT", source_amount=Decimal("0.77"),
+            dest_currency="KES",   dest_amount=Decimal("100"),
+            created_at=timezone.now() - timedelta(hours=1),
+        )
+        # Tx within 7d but NOT 24h
+        Transaction.objects.create(
+            idempotency_key="midweek-completed",
+            user=u, type=Transaction.Type.PAYBILL_PAYMENT,
+            status=Transaction.Status.COMPLETED,
+            source_currency="USDT", source_amount=Decimal("15.38"),
+            dest_currency="KES",   dest_amount=Decimal("2000"),
+            created_at=timezone.now() - timedelta(days=4),
+        )
+
+        from apps.core.tasks import daily_summary_email
+        result = daily_summary_email.apply().result
+
+        # Last 24h: only the pending tx
+        self.assertEqual(result["tx_24h"]["total"], 1)
+        self.assertEqual(result["tx_24h"]["completed"], 0)
+        self.assertEqual(result["tx_24h"]["pending"], 1)
+        self.assertEqual(result["tx_24h"]["kes_settled"], Decimal("0"))
+
+        # Last 7d: pending + midweek completed = 2
+        self.assertEqual(result["tx_7d"]["total"], 2)
+        self.assertEqual(result["tx_7d"]["completed"], 1)
+        self.assertEqual(result["tx_7d"]["kes_settled"], Decimal("2000"))
+
+        # All-time: 4 total · 2 completed · 1 failed · 1 pending
+        self.assertEqual(result["tx_all"]["total"], 4)
+        self.assertEqual(result["tx_all"]["completed"], 2)
+        self.assertEqual(result["tx_all"]["failed"], 1)
+        self.assertEqual(result["tx_all"]["pending"], 1)
+        # Settled = old-completed (5000) + midweek (2000) = 7000
+        self.assertEqual(result["tx_all"]["kes_settled"], Decimal("7000"))
+        # Attempted (excludes pending) = 5000 + 1000 + 2000 = 8000
+        self.assertEqual(result["tx_all"]["kes_attempted"], Decimal("8000"))
+
+    def test_richer_windows_render_in_email_body(self):
+        """End-to-end · the new tx_7d + tx_all stats appear in the
+        plain-text + HTML email body so operators can see them."""
+        from apps.payments.models import Transaction
+        from apps.accounts.models import User as _U
+
+        u = _U.objects.create_user(phone="+254711333000", pin="123456")
+        Transaction.objects.create(
+            idempotency_key="lifetime-tx",
+            user=u, type=Transaction.Type.PAYBILL_PAYMENT,
+            status=Transaction.Status.COMPLETED,
+            source_currency="USDT", source_amount=Decimal("76.92"),
+            dest_currency="KES",   dest_amount=Decimal("10000"),
+            created_at=timezone.now() - timedelta(days=12),
+        )
+
+        from apps.core.tasks import daily_summary_email
+        daily_summary_email.apply()
+
+        self.assertEqual(len(mail.outbox), 1)
+        msg = mail.outbox[0]
+
+        # Plain text · three windows labelled
+        self.assertIn("last 24 h", msg.body)
+        self.assertIn("last 7 d", msg.body)
+        self.assertIn("all-time", msg.body)
+        # All-time KES 10,000 must surface even though the 24h window is empty
+        self.assertIn("10,000", msg.body)
+
+        # HTML · the longer-windows section is present + carries the value
+        html = next(
+            (alt for alt, mime in getattr(msg, "alternatives", [])
+             if "html" in mime.lower()),
+            "",
+        )
+        self.assertIn("Transactions (longer windows)", html)
+        self.assertIn("All-time", html)
+        self.assertIn("10,000", html)
+
     def test_field_rename_logs_error_not_silent_na(self):
         """
         If the User model ever renames `created_at`, the except branch must
