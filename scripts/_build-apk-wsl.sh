@@ -94,6 +94,27 @@ git log --oneline -1 2>&1 | head -1
 echo "Installing dependencies (WSL-native node_modules)..."
 npm ci --no-audit --no-fund 2>&1 | tail -5
 
+# ── Pre-build keystore sanity (2026-05-15) ──────────────────────────
+# Catch the regression where eas.json silently fell back to an EAS
+# auto-generated ephemeral keystore (empty cert DN, RSA-2048) because
+# `credentialsSource: "local"` was missing from the preview profile.
+# Refuse to build until both the credentials.json + keystore file are
+# present AND eas.json declares local credentials.
+[ -f "$WORK/credentials.json" ] || { echo "FATAL: $WORK/credentials.json missing · refuse build" >&2; exit 5; }
+[ -f "$WORK/credentials/cpay-release.keystore" ] || { echo "FATAL: keystore missing · refuse build" >&2; exit 5; }
+if ! grep -q '"credentialsSource": *"local"' "$WORK/eas.json"; then
+  echo "FATAL: eas.json must declare credentialsSource:local in the preview profile · refuse build" >&2
+  exit 5
+fi
+KS_PASS=$(python3 -c "import json; print(json.load(open('$WORK/credentials.json'))['android']['keystore']['keystorePassword'])")
+KS_ALIAS=$(python3 -c "import json; print(json.load(open('$WORK/credentials.json'))['android']['keystore']['keyAlias'])")
+EXPECTED_SHA1=$(keytool -list -v -keystore "$WORK/credentials/cpay-release.keystore" \
+    -storepass "$KS_PASS" -alias "$KS_ALIAS" 2>/dev/null \
+  | grep -E '^[[:space:]]*SHA1:' | head -1 | awk '{print $2}')
+[ -n "$EXPECTED_SHA1" ] || { echo "FATAL: could not read keystore SHA-1" >&2; exit 5; }
+echo "expected APK signing SHA-1: $EXPECTED_SHA1"
+echo
+
 echo "Starting EAS local build (preview profile)..."
 # Run EAS in a subshell so its full argv (which includes credentials as
 # base64) is isolated from `ps -ef` on the host. Pipe output through
@@ -102,5 +123,26 @@ echo "Starting EAS local build (preview profile)..."
   eas build --platform android --profile preview --local --non-interactive --output "$OUT" 2>&1
 ) | _scrub_eas_log | tail -60 | tee "$SCRUBBED" >&1
 
+[ -f "$OUT" ] || { echo "FATAL: build did not produce $OUT" >&2; exit 6; }
 ls -lh "$OUT"
+
+# ── Post-build keystore verification ────────────────────────────────
+# Pin the APK's signing certificate against the keystore-on-disk so a
+# silent fallback to the EAS-default keystore (SHA-1 5abe94d4...) can
+# never ship again.
+APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f 2>/dev/null | head -1)
+[ -n "$APKSIGNER" ] || { echo "FATAL: apksigner not found in build-tools" >&2; exit 7; }
+ACTUAL_SHA1=$("$APKSIGNER" verify --print-certs "$OUT" 2>&1 \
+  | grep -i "certificate SHA-1 digest" | head -1 | awk '{print $NF}')
+EXPECTED_HEX=$(echo "$EXPECTED_SHA1" | tr -d ':' | tr 'A-F' 'a-f')
+ACTUAL_HEX=$(echo "$ACTUAL_SHA1" | tr 'A-F' 'a-f')
+if [ "$ACTUAL_HEX" != "$EXPECTED_HEX" ]; then
+  echo "FATAL: APK signing cert mismatch" >&2
+  echo "  expected: $EXPECTED_HEX (from $WORK/credentials/cpay-release.keystore)" >&2
+  echo "  actual:   $ACTUAL_HEX (the APK that just built)" >&2
+  echo "  Deleting the wrongly-signed APK to prevent accidental shipping." >&2
+  rm -f "$OUT"
+  exit 4
+fi
+echo "OK · APK signed with the expected cpay-release.keystore (SHA-1 $EXPECTED_SHA1)"
 echo "BUILD_OK=$OUT"

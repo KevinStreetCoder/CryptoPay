@@ -77,12 +77,52 @@ git commit -qm "build" 2>&1 | tail -3 || true
 echo "Installing dependencies..."
 npm ci --no-audit --no-fund 2>&1 | tail -5
 
+# ── Pre-build keystore sanity (mirror of _build-apk-wsl.sh) ─────────
+[ -f "$WORK/credentials.json" ] || { echo "FATAL: $WORK/credentials.json missing · refuse build" >&2; exit 5; }
+[ -f "$WORK/credentials/cpay-release.keystore" ] || { echo "FATAL: keystore missing · refuse build" >&2; exit 5; }
+if ! grep -q '"credentialsSource": *"local"' "$WORK/eas.json"; then
+  echo "FATAL: eas.json must declare credentialsSource:local in the production profile · refuse build" >&2
+  exit 5
+fi
+KS_PASS=$(python3 -c "import json; print(json.load(open('$WORK/credentials.json'))['android']['keystore']['keystorePassword'])")
+KS_ALIAS=$(python3 -c "import json; print(json.load(open('$WORK/credentials.json'))['android']['keystore']['keyAlias'])")
+EXPECTED_SHA1=$(keytool -list -v -keystore "$WORK/credentials/cpay-release.keystore" \
+    -storepass "$KS_PASS" -alias "$KS_ALIAS" 2>/dev/null \
+  | grep -E '^[[:space:]]*SHA1:' | head -1 | awk '{print $2}')
+[ -n "$EXPECTED_SHA1" ] || { echo "FATAL: could not read keystore SHA-1" >&2; exit 5; }
+echo "expected AAB signing SHA-1: $EXPECTED_SHA1"
+echo
+
 echo "Starting EAS local build (production profile · AAB)..."
 (
   eas build --platform android --profile production --local --non-interactive --output "$OUT" 2>&1
 ) | _scrub_eas_log | tail -80 | tee "$SCRUBBED" >&1
 
+[ -f "$OUT" ] || { echo "FATAL: build did not produce $OUT" >&2; exit 6; }
 ls -lh "$OUT"
+
+# ── Post-build keystore verification ────────────────────────────────
+# AAB cert verify via apksigner works because AAB is a zip with the
+# same META-INF/CERT.RSA shape as an APK. Treat the AAB as an APK
+# for verification purposes; the cert bytes are identical to what
+# Google Play Signing re-signs against.
+APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f 2>/dev/null | head -1)
+[ -n "$APKSIGNER" ] || { echo "FATAL: apksigner not found in build-tools" >&2; exit 7; }
+ACTUAL_SHA1=$("$APKSIGNER" verify --print-certs "$OUT" 2>&1 \
+  | grep -i "certificate SHA-1 digest" | head -1 | awk '{print $NF}')
+EXPECTED_HEX=$(echo "$EXPECTED_SHA1" | tr -d ':' | tr 'A-F' 'a-f')
+ACTUAL_HEX=$(echo "$ACTUAL_SHA1" | tr 'A-F' 'a-f')
+if [ -n "$ACTUAL_HEX" ] && [ "$ACTUAL_HEX" != "$EXPECTED_HEX" ]; then
+  echo "FATAL: AAB signing cert mismatch" >&2
+  echo "  expected: $EXPECTED_HEX (from $WORK/credentials/cpay-release.keystore)" >&2
+  echo "  actual:   $ACTUAL_HEX (the AAB that just built)" >&2
+  echo "  Deleting the wrongly-signed AAB to prevent accidental shipping." >&2
+  rm -f "$OUT"
+  exit 4
+fi
+if [ -n "$ACTUAL_HEX" ]; then
+  echo "OK · AAB signed with the expected cpay-release.keystore (SHA-1 $EXPECTED_SHA1)"
+fi
 echo "BUILD_OK=$OUT"
 echo ""
 echo "Next step: upload this AAB to Google Play Console."
