@@ -21,6 +21,7 @@
     },
     "preview": {
       "distribution": "internal",
+      "credentialsSource": "local",
       "ios": {
         "simulator": false
       },
@@ -35,6 +36,7 @@
     },
     "production": {
       "distribution": "store",
+      "credentialsSource": "local",
       "autoIncrement": true,
       "ios": {
         "simulator": false
