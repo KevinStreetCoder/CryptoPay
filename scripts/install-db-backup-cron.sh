@@ -80,13 +80,21 @@ ssh "$VPS" '
 '
 
 echo
-echo "=== installing aws cli if missing (required for R2 upload) ==="
-ssh "$VPS" '
+echo "=== installing aws cli v2 if missing (required for R2 upload) ==="
+ssh "$VPS" 'set -e
   if command -v aws >/dev/null 2>&1; then
     echo "aws cli already installed: $(aws --version 2>&1 | head -1)"
   else
-    echo "Installing awscli (one-time)..."
-    apt-get update -qq && apt-get install -y -qq awscli
+    # Ubuntu 24.04 dropped the awscli package · install AWS CLI v2 via
+    # the official binary bundle. ~50 MB download, idempotent.
+    echo "Installing aws cli v2 (one-time, ~50 MB download)..."
+    apt-get install -y -qq unzip curl
+    cd /tmp
+    rm -rf aws awscliv2.zip
+    curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o awscliv2.zip
+    unzip -q awscliv2.zip
+    ./aws/install
+    rm -rf aws awscliv2.zip
     echo "Installed: $(aws --version 2>&1 | head -1)"
   fi
 '
