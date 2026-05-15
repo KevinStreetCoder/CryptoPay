@@ -1,8 +1,48 @@
 # https://cpay.co.ke · robots.txt
-# 2026-05-09 · written to override Cloudflare's auto-managed robots.txt.
+# 2026-05-15 · explicit allow-list of indexable public marketing pages,
+# explicit disallow of every auth-walled, API, and operator surface.
+# Overrides Cloudflare's auto-managed robots.txt (cpay.co.ke serves this
+# file directly via nginx from /var/www/cpay/public/robots.txt).
 
 User-agent: *
-Allow: /
+
+# ── Public, indexable surface ──────────────────────────────────────
+# These pages render real content without login and benefit from SEO.
+Allow: /$
+Allow: /landing
+Allow: /privacy
+Allow: /terms
+Allow: /pitch
+Allow: /favicon.ico
+Allow: /apple-touch-icon.png
+Allow: /og-image.png
+Allow: /robots.txt
+Allow: /sitemap.xml
+Allow: /static/
+Allow: /assets/
+
+# ── Auth-walled / private / non-content paths ──────────────────────
+# Google can't render JWT-cookie state, so indexing these wastes
+# crawl budget AND leaks URL shapes that aren't meant for discovery.
+Disallow: /auth/
+Disallow: /(tabs)/
+Disallow: /payment/
+Disallow: /settings/
+Disallow: /onboarding
+Disallow: /wallet/
+Disallow: /buy-crypto
+Disallow: /deposit
+Disallow: /api/
+Disallow: /admin/
+Disallow: /admin-totp/
 Disallow: /corporate
+Disallow: /r/
+Disallow: /download/
+
+# Crawl-delay keeps an aggressive bot from monopolising the proxy
+# during a launch announcement spike. 5s is roomy for legitimate
+# search crawlers (Google/Bing/Yandex ignore Crawl-delay anyway;
+# this helps with smaller bots).
+Crawl-delay: 5
 
 Sitemap: https://cpay.co.ke/sitemap.xml

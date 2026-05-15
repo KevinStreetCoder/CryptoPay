@@ -1,17 +1,59 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   cpay.co.ke · sitemap
-  2026-05-09 · keep this static for the marketing landing only. The
-  app proper (everything behind /login) is intentionally excluded
-  because Google can't index auth-walled state and crawl budget is
-  better spent on the public surface. /corporate is hidden by its
-  own meta-noindex AND by robots.txt Disallow · do not list it here.
+  2026-05-15 · public marketing surface only. Every auth-walled URL
+  (everything behind /login, /(tabs), /payment, /settings, /wallet) is
+  intentionally excluded · Google can't index JWT-cookie state and
+  crawl budget is better spent on the discoverable surface.
+
+  /corporate is hidden by both robots.txt Disallow and a meta-noindex
+  on the page itself · do not list it here.
+
+  /r/{code} is the parameterised referral-landing endpoint · the codes
+  are user-specific and rotate, so we don't enumerate them here. The
+  shareable pages still render OG cards when fetched, so social previews
+  work without sitemap-listing.
 -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+
+  <!-- Home · the primary marketing surface -->
   <url>
     <loc>https://cpay.co.ke/</loc>
-    <lastmod>2026-05-09</lastmod>
+    <lastmod>2026-05-15</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
+
+  <!-- /landing · explicit canonical for crawlers that pin the URL -->
+  <url>
+    <loc>https://cpay.co.ke/landing</loc>
+    <lastmod>2026-05-15</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- /privacy · regulatory page, low cadence -->
+  <url>
+    <loc>https://cpay.co.ke/privacy</loc>
+    <lastmod>2026-05-15</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+
+  <!-- /terms · regulatory page, low cadence -->
+  <url>
+    <loc>https://cpay.co.ke/terms</loc>
+    <lastmod>2026-05-15</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+
+  <!-- /pitch · investor/product pitch deck -->
+  <url>
+    <loc>https://cpay.co.ke/pitch</loc>
+    <lastmod>2026-05-15</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.4</priority>
+  </url>
+
 </urlset>

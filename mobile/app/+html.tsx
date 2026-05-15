@@ -54,6 +54,28 @@ export default function Root({ children }: PropsWithChildren) {
         <meta name="theme-color" content={THEME_COLOR} />
         <link rel="canonical" href={SITE_URL} />
 
+        {/* 2026-05-15 · perf hints (Lighthouse LCP / TBT optimisation).
+            preconnect handshakes the TLS round-trip for the CDNs we
+            need during first paint so the OG image + Google Fonts +
+            CoinGecko rate ticker land sooner. dns-prefetch is the
+            cheaper fallback for older browsers. */}
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="dns-prefetch" href="https://api.coingecko.com" />
+        <link rel="dns-prefetch" href="https://chart.googleapis.com" />
+
+        {/* Preload the hero / OG image so LCP sees it on the first
+            paint, not after the JS bundle decides to render the hero
+            section. Match the rel/as/type triplet exactly so the
+            browser actually de-duplicates the later fetch. */}
+        <link
+          rel="preload"
+          as="image"
+          href="/og-image.png"
+          type="image/png"
+          fetchPriority="high"
+        />
+
         {/* Favicon set */}
         <link rel="icon" href="/favicon.ico" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
