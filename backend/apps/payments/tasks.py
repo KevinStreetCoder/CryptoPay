@@ -812,7 +812,27 @@ def check_pending_mpesa_payments():
         updated_at__lt=cutoff,
     )
 
-    provider = getattr(app_settings, "PAYMENT_PROVIDER", "daraja").lower()
+    # 2026-05-15 · resolve the provider PER TRANSACTION TYPE, not by the
+    # legacy single-knob `PAYMENT_PROVIDER`. The per-method overrides
+    # (`PAYMENT_PROVIDER_PAYBILL`, `_TILL`, `_B2C`, `_STK`) determine
+    # which rail actually carried this tx. Before this fix, a paybill
+    # routed via IntaSend (`PAYMENT_PROVIDER_PAYBILL=intasend`) but the
+    # cron read the legacy knob (= `sasapay` for our beta deploy) and
+    # queried SasaPay with an IntaSend tracking_id. SasaPay returned 404
+    # · the saga set `failure_reason = "SasaPay: [404] no description"`
+    # even though the actual payment went through IntaSend (whose
+    # webhook had separately been 401'd · see intasend_views.py
+    # _verify_webhook). The user saw their crypto locked + paybill
+    # marked failed with a nonsense error.
+    from apps.mpesa.provider import _resolve_provider  # per-method router
+
+    _PROVIDER_FOR_TX_TYPE = {
+        Transaction.Type.PAYBILL_PAYMENT: "paybill",
+        Transaction.Type.TILL_PAYMENT:    "till",
+        Transaction.Type.SEND_MPESA:      "b2c",
+        Transaction.Type.BUY:             "stk",
+        Transaction.Type.DEPOSIT:         "stk",
+    }
 
     for tx in stuck:
         # Pull whichever ID the active rail recorded · key names differ.
@@ -825,6 +845,16 @@ def check_pending_mpesa_payments():
         )
         if not conversation_id:
             continue
+
+        method = _PROVIDER_FOR_TX_TYPE.get(tx.type)
+        if method is None:
+            # Unknown tx type · fall back to the legacy knob so we
+            # never regress old behaviour for callers we don't know.
+            provider = getattr(
+                app_settings, "PAYMENT_PROVIDER", "daraja",
+            ).lower()
+        else:
+            provider = _resolve_provider(method)
 
         # Active poll the provider · catches the case where the
         # callback dropped or got firewalled. Promotes "stuck in

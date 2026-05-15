@@ -6,7 +6,8 @@ import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
 import { useFonts, DMSans_400Regular, DMSans_500Medium, DMSans_600SemiBold, DMSans_700Bold } from "@expo-google-fonts/dm-sans";
 import { Ionicons } from "@expo/vector-icons";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "../src/queryClient";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import {
   useAuth,
@@ -43,18 +44,11 @@ import { useTrackLastRoute, getLastRouteIfFresh } from "../src/hooks/useLastRout
 // Prevent native splash from hiding until we're ready
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: (failureCount, error) => {
-        // Don't retry if session expired · user needs to re-login
-        if (error && (error as any).name === "SessionExpiredError") return false;
-        return failureCount < 2;
-      },
-      staleTime: 30000,
-    },
-  },
-});
+// 2026-05-15 · the QueryClient is now defined in `src/queryClient.ts`
+// so `src/stores/auth.ts` can `clearUserScopedQueries()` on every
+// login + logout · stops the "wrong-balance flash" right after login
+// where stale wallet data from the previous session rendered before
+// the background refetch landed.
 
 function RootNavigator() {
   const { user, loading, bootstrap, logout } = useAuth();

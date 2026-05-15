@@ -61,13 +61,49 @@ logger = logging.getLogger(__name__)
 # ── Authentication helpers ───────────────────────────────────────────
 
 
-def _verify_header_signature(request, body_bytes: bytes) -> bool:
-    """Verify the IntaSend HMAC signature header.
+def _verify_body_challenge(payload: dict) -> bool:
+    """Verify an IntaSend webhook via the `challenge` field in the payload.
 
-    IntaSend signs every callback with HMAC-SHA256 of the raw body keyed
-    on the dashboard "challenge" (which we treat as `INTASEND_WEBHOOK_SECRET`).
-    The header value is the hex digest, optionally prefixed with `sha256=`.
-    Constant-time compared.
+    2026-05-15 · this is IntaSend's PRIMARY documented auth scheme. When
+    you configure a webhook in the IntaSend dashboard you set a
+    "Challenge" string · IntaSend then includes that exact string as the
+    `challenge` field in every webhook body. Comparison is a constant-
+    time string match against `INTASEND_WEBHOOK_SECRET`.
+
+    Beta-launch bug 2026-05-15 · we shipped with only the HMAC-header
+    scheme (`_verify_header_signature` below), which is a *secondary*
+    IntaSend feature that needs to be turned on per-account and is
+    documented in their SDK source rather than the public docs. Without
+    the body-challenge fallback, every legitimate IntaSend webhook
+    (incl. the user's KSh 10 paybill at 22:37:04) was rejected with 401
+    and the saga left in CONFIRMING forever.
+
+    Returns True only when both the payload and the configured secret
+    are non-empty strings that match in constant time.
+    """
+    secret = getattr(settings, "INTASEND_WEBHOOK_SECRET", "") or ""
+    if not secret:
+        return False
+    received = payload.get("challenge") if isinstance(payload, dict) else None
+    if not isinstance(received, str) or not received:
+        return False
+    return hmac.compare_digest(
+        secret.encode("utf-8"), received.encode("utf-8"),
+    )
+
+
+def _verify_header_signature(request, body_bytes: bytes) -> bool:
+    """Verify the IntaSend HMAC signature header (secondary scheme).
+
+    IntaSend optionally signs every callback with HMAC-SHA256 of the
+    raw body keyed on the dashboard "challenge" (which we treat as
+    `INTASEND_WEBHOOK_SECRET`). The header value is the hex digest,
+    optionally prefixed with `sha256=`. Constant-time compared.
+
+    This scheme is OFF by default in the IntaSend dashboard · use
+    `_verify_body_challenge` as the primary path. Header-HMAC stays
+    in place because some merchants opt into it and we want both
+    paths covered.
     """
     secret = getattr(settings, "INTASEND_WEBHOOK_SECRET", "") or ""
     if not secret:
@@ -87,6 +123,19 @@ def _verify_header_signature(request, body_bytes: bytes) -> bool:
     if "=" in received:
         received = received.split("=", 1)[1]
     return hmac.compare_digest(expected, received)
+
+
+def _verify_webhook(request, body_bytes: bytes, payload: dict) -> bool:
+    """Composite verifier · either body-challenge OR header-HMAC must pass.
+
+    Both schemes require knowledge of `INTASEND_WEBHOOK_SECRET`, so accepting
+    either is no weaker than accepting just one. Body-challenge is the
+    common case in production; header-HMAC is the opt-in case for tighter
+    integrations.
+    """
+    return _verify_body_challenge(payload) or _verify_header_signature(
+        request, body_bytes,
+    )
 
 
 def _dedup_key(payload: dict) -> str | None:
@@ -388,12 +437,37 @@ def intasend_callback(request, token: str = ""):
         logger.warning("intasend.callback.bad_body")
         return JsonResponse({"error": "invalid_body"}, status=400)
 
-    # 1 · Signature verification (DEBUG bypass for local dev only).
+    # 1 · Auth verification (DEBUG bypass for local dev only).
+    #
+    # 2026-05-15 · accept BOTH the body-challenge scheme (IntaSend's
+    # default · `challenge` field in JSON body equals the dashboard
+    # challenge) AND the header-HMAC scheme (opt-in). Either path
+    # demonstrates knowledge of `INTASEND_WEBHOOK_SECRET`, so the
+    # security posture is unchanged. Previously only HMAC was accepted ·
+    # IntaSend's default deliveries were all 401'd, causing every B2B
+    # paybill to stick in CONFIRMING.
     if not getattr(settings, "DEBUG", False):
-        if not _verify_header_signature(request, body_bytes):
+        if not _verify_webhook(request, body_bytes, payload):
             logger.warning(
                 "intasend.callback.bad_signature",
-                extra={"payload_summary": {k: payload.get(k) for k in ("invoice_id", "tracking_id", "state")}},
+                extra={
+                    "payload_summary": {
+                        k: payload.get(k)
+                        for k in ("invoice_id", "tracking_id", "state",
+                                  "api_ref", "provider")
+                    },
+                    # Diagnostic · capture WHICH auth fields the request
+                    # carried so we can tell apart genuine attackers
+                    # (no auth at all) from secret mismatch (one or both
+                    # present but values don't match what we hold).
+                    "auth_signal": {
+                        "has_challenge_field": "challenge" in (payload or {}),
+                        "has_signature_header": bool(
+                            request.headers.get("X-IntaSend-Signature")
+                            or request.META.get("HTTP_X_INTASEND_SIGNATURE")
+                        ),
+                    },
+                },
             )
             return JsonResponse({"error": "bad_signature"}, status=401)
 

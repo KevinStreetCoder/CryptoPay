@@ -4,6 +4,7 @@ import { storage } from "../utils/storage";
 import { authApi, User } from "../api/auth";
 import { setOnSessionExpired, resetSessionExpired } from "../api/client";
 import { resetBalanceVisibility } from "./balance";
+import { clearUserScopedQueries } from "../queryClient";
 
 let _user: User | null = null;
 let _listeners: Set<() => void> = new Set();
@@ -20,6 +21,10 @@ export function forceLogout() {
   // Also clear the Google-unlock sentinel so a fresh sign-in isn't
   // perpetually stuck behind the gate.
   storage.deleteItemAsync("google_unlock_pending");
+  // 2026-05-15 · wipe React Query cache so the next login doesn't
+  // briefly render the previous user's balance / tx history. See
+  // src/queryClient.ts.
+  clearUserScopedQueries();
   _user = null;
   resetBalanceVisibility();
   notify();
@@ -183,6 +188,13 @@ export function useAuth() {
   const login = useCallback(async (phone: string, pin: string, otp?: string, challenge_id?: string) => {
     // challenge_id is set when the user approved the sign-in via push on
     // another trusted device · backend consumes it as proof and skips OTP.
+
+    // 2026-05-15 · wipe React Query cache BEFORE the login call so that
+    // even if the new user is the same as the previous session, the
+    // dashboard mount that follows sees a cold cache · BalanceCardSkeleton
+    // fires instead of briefly rendering the previous balance value.
+    clearUserScopedQueries();
+
     const { data } = await authApi.login({ phone, pin, otp, challenge_id });
     // Audit MEDIUM-9: when running on web, the backend strips `tokens`
     // from the response and sets HttpOnly cookies instead, so `data.tokens`
@@ -336,6 +348,10 @@ export function useAuth() {
     // user-initiated logout does. So a session blip still drops the
     // user straight to the PIN screen with their phone prefilled.
     await storage.deleteItemAsync("last_login_phone");
+    // 2026-05-15 · drop the user's React Query cache so the next
+    // session starts cold (BalanceCardSkeleton fires until the
+    // first fresh fetch completes).
+    clearUserScopedQueries();
     _user = null;
     resetBalanceVisibility();
     notify();

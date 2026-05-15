@@ -1751,7 +1751,15 @@ export default function WalletScreen() {
                 count={cryptoWallets.length}
               />
               {/* Assets Grid - 2 cols default, 3 cols on large desktop */}
-              {walletsLoading ? (
+              {/*
+                2026-05-15 · show skeletons while wallets is undefined too · not
+                just walletsLoading. After login we wipe the cache (auth.ts
+                calls clearUserScopedQueries) so wallets is briefly undefined
+                before the new fetch lands · without the !wallets guard we
+                drop into the "no crypto yet" empty-state branch and the user
+                sees ghost-empty for one frame.
+              */}
+              {walletsLoading || !wallets ? (
                 <View style={{ flexDirection: "row", gap: 16, flexWrap: "wrap" }}>
                   <View style={{ flex: 1, minWidth: 300 }}>
                     <WalletCardSkeleton />
@@ -2232,7 +2240,14 @@ export default function WalletScreen() {
         </View>
 
         {/* Crypto Wallets */}
-        {walletsLoading ? (
+        {/*
+          2026-05-15 · skeleton-first while wallets is undefined too. Same
+          rationale as the desktop branch above · login clears the cache so
+          there is a window where wallets === undefined and walletsLoading
+          is briefly false (before the refetch kicks). Without the !wallets
+          guard the empty-state ghost flashes for one frame.
+        */}
+        {walletsLoading || !wallets ? (
           <View style={{ paddingHorizontal: hPad, gap: 12 }}>
             <WalletCardSkeleton />
             <WalletCardSkeleton />

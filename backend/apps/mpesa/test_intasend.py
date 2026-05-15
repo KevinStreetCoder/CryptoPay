@@ -329,6 +329,98 @@ class TestWebhookSignature(TestCase):
         )
         assert resp.status_code == 200
 
+    # ── 2026-05-15 · body-challenge auth (IntaSend default scheme) ──
+    #
+    # Regression tests for the beta-launch bug: IntaSend's default
+    # webhook auth puts the dashboard "Challenge" string in the JSON
+    # body's `challenge` field · NOT in an HMAC header. We shipped only
+    # the HMAC scheme, so every paybill webhook was 401'd and the saga
+    # left in CONFIRMING. Composite verifier accepts EITHER scheme.
+
+    def test_accepts_valid_body_challenge_unknown_event(self):
+        body_obj = {"state": "PENDING", "challenge": _TEST_WEBHOOK_SECRET}
+        body = json.dumps(body_obj).encode("utf-8")
+        resp = self.client.post(
+            "/api/v1/intasend/callback/",
+            data=body,
+            content_type="application/json",
+            # No HMAC signature header · body challenge alone must pass.
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "ignored_unknown"
+
+    def test_accepts_valid_body_challenge_send_money_event(self):
+        # Confirms the body-challenge path doesn't break the
+        # downstream classifier · a real send-money payload with a
+        # valid challenge reaches the send-money handler.
+        body_obj = {
+            "state": "PENDING",
+            "provider": "MPESA-B2B",
+            "tracking_id": "tr-real-1",
+            "challenge": _TEST_WEBHOOK_SECRET,
+        }
+        body = json.dumps(body_obj).encode("utf-8")
+        resp = self.client.post(
+            "/api/v1/intasend/callback/",
+            data=body,
+            content_type="application/json",
+        )
+        assert resp.status_code == 200
+        # No matching pending tx in the test DB · the send_money handler
+        # returns tx_not_found, NOT bad_signature. That's the proof that
+        # auth passed.
+        assert resp.json()["status"] == "tx_not_found"
+
+    def test_rejects_wrong_body_challenge(self):
+        body_obj = {"state": "PENDING", "challenge": "WRONG_CHALLENGE_VALUE"}
+        body = json.dumps(body_obj).encode("utf-8")
+        resp = self.client.post(
+            "/api/v1/intasend/callback/",
+            data=body,
+            content_type="application/json",
+        )
+        assert resp.status_code == 401
+
+    def test_rejects_empty_body_challenge(self):
+        # Empty string challenge must NOT pass · prevents accidentally
+        # whitelisting requests that happen to carry `"challenge":""`.
+        body_obj = {"state": "PENDING", "challenge": ""}
+        body = json.dumps(body_obj).encode("utf-8")
+        resp = self.client.post(
+            "/api/v1/intasend/callback/",
+            data=body,
+            content_type="application/json",
+        )
+        assert resp.status_code == 401
+
+    def test_rejects_no_auth_at_all(self):
+        # Neither body-challenge nor HMAC header. Hard reject.
+        body_obj = {"state": "PENDING", "tracking_id": "tr-noauth"}
+        body = json.dumps(body_obj).encode("utf-8")
+        resp = self.client.post(
+            "/api/v1/intasend/callback/",
+            data=body,
+            content_type="application/json",
+        )
+        assert resp.status_code == 401
+
+    def test_body_challenge_constant_time_compare(self):
+        # Ensure compare_digest is used (not string ==). We assert
+        # behaviour: prefix-match must fail. If we ever regress to ==
+        # this still works, so the real safety net is reviewing
+        # `_verify_body_challenge` source. Belt-and-braces.
+        body_obj = {
+            "state": "PENDING",
+            "challenge": _TEST_WEBHOOK_SECRET[:10],  # prefix only
+        }
+        body = json.dumps(body_obj).encode("utf-8")
+        resp = self.client.post(
+            "/api/v1/intasend/callback/",
+            data=body,
+            content_type="application/json",
+        )
+        assert resp.status_code == 401
+
 
 @override_settings(
     DEBUG=False,

@@ -1499,11 +1499,17 @@ function HomeScreenContent() {
           </View>
           </TourStep>
 
-          {/* Balance Card */}
+          {/* Balance Card · 2026-05-15 · render skeleton until we have
+              the live, post-login wallet payload. The cache is cleared
+              on login (src/stores/auth.ts) so `wallets` is undefined
+              for the brief window between mount and the first fetch
+              landing · skeleton fires correctly during that window.
+              If the fetch errors and never returns data, the skeleton
+              keeps showing rather than dropping to empty space (which
+              would look broken). */}
           <TourStep nameKey="tour.step1Title" textKey="tour.step1Text" order={1}>
           <View style={{ marginBottom: 24, paddingHorizontal: 0 }}>
-            {wallets && <BalanceCard wallets={wallets} />}
-            {walletsLoading && <BalanceCardSkeleton />}
+            {wallets ? <BalanceCard wallets={wallets} /> : <BalanceCardSkeleton />}
           </View>
           </TourStep>
 
@@ -2253,8 +2259,12 @@ function HomeScreenContent() {
         >
           <View style={{ flex: isXLDesktop ? 7 : 6 }}>
             <TourStep nameKey="tour.step1Title" textKey="tour.step1Text" order={1}>
-              <View>{wallets && <BalanceCard wallets={wallets} />}
-              {walletsLoading && <BalanceCardSkeleton />}</View>
+              <View>
+                {/* See dashboard-mobile note above · same defensive
+                    render so the desktop layout doesn't briefly show
+                    stale data after re-login. */}
+                {wallets ? <BalanceCard wallets={wallets} /> : <BalanceCardSkeleton />}
+              </View>
             </TourStep>
           </View>
           <View style={{ flex: isXLDesktop ? 3 : 4 }}>

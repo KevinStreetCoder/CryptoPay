@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { View, Text, Pressable, Platform, useWindowDimensions } from "react-native";
 import { CryptoLogo } from "./CryptoLogo";
 import { Wallet } from "../api/wallets";
@@ -56,25 +57,46 @@ export function CryptoSelector({ options, selected, wallets, onSelect }: CryptoS
   const tc = getThemeColors(isDark);
   const { width: screenW } = useWindowDimensions();
 
-  // Column count · phones default to 3 (matches Deposit-screen design).
-  const columns = screenW >= 900 ? 4 : 3;
+  // 2026-05-15 v5 · measure the ACTUAL parent width via onLayout instead
+  // of trusting the viewport. On web, payment screens wrap the picker in
+  // a centred max-width container (~540 px desktop) while the viewport
+  // can be 1500 px+ · v4 read viewport, computed 4 cols × ~314 px each,
+  // and Yoga flex-wrapped each card to its own row because the parent
+  // couldn't fit them. The grid ended up as a stacked horizontal list
+  // with the orphan-span making the last card span the entire parent.
+  //
+  // `containerW` is null on first render (before onLayout fires); we
+  // fall back to a conservative phone-equivalent width so the first
+  // paint isn't blank. The component then re-renders once we have the
+  // real width and the grid snaps to the right column count.
+  const [containerW, setContainerW] = useState<number | null>(null);
+
+  const effectiveW = containerW ?? Math.min(screenW, 540);
+
+  // Column count · target ~110-130 px per card. On a 540-px parent that
+  // gives 4 cols (~125 px each); on a 360-px phone parent, 3 cols
+  // (~110 px each). Matches the Deposit-screen design at both extremes.
+  const columns = effectiveW >= 480 ? 4 : 3;
   const gap = 8;
-  // 2026-05-09 v4 · compute the card width in DP rather than a percent
-  // so RN/Yoga doesn't fall back to 1-col on the percent-flexBasis
-  // edge cases we hit on Galaxy / Pixel devices in vc 14.
-  // Parent screens wrap the picker in `paddingHorizontal: isDesktop ? 0 : 20`
-  // so we subtract 40 dp on phone (2 × 20). The (columns - 1) gaps
-  // come out of the remaining width, then divide.
-  const HPAD = screenW >= 900 ? 0 : 40;
-  const usable = Math.max(0, screenW - HPAD);
-  const cardW = Math.floor((usable - gap * (columns - 1)) / columns);
+  // No external padding subtraction · `effectiveW` is already the inner
+  // width of the parent (onLayout reports content-box width). The
+  // (columns - 1) gaps come straight off this width, then divide.
+  const cardW = Math.floor((effectiveW - gap * (columns - 1)) / columns);
 
   // Last-row orphan span · only fires when `length % columns === 1`.
-  // 5 items in 3 cols → 5%3 = 2 → NO span (last row has 2 already).
+  // 5 items in 4 cols → 5%4 = 1 → orphan, last spans the row.
+  // 5 items in 3 cols → 5%3 = 2 → no orphan.
   const lastIsOrphan = options.length % columns === 1;
 
   return (
     <View
+      onLayout={(e) => {
+        const w = Math.floor(e.nativeEvent.layout.width);
+        // Guard against onLayout firing with the same width (it does on
+        // some platforms when the parent re-renders) · avoids a render
+        // loop.
+        if (w > 0 && w !== containerW) setContainerW(w);
+      }}
       style={{
         flexDirection: "row" as const,
         flexWrap: "wrap" as const,
@@ -88,8 +110,10 @@ export function CryptoSelector({ options, selected, wallets, onSelect }: CryptoS
         const wallet = wallets?.find((w) => w.currency === crypto);
         const bal = wallet ? parseFloat(wallet.balance) : 0;
         const isLast = idx === options.length - 1;
-        // Last orphan spans the full row · uses the entire usable width.
-        const cardWidth = isLast && lastIsOrphan ? usable : cardW;
+        // Last orphan spans the full parent width (`effectiveW`) so the
+        // grid doesn't end with one half-width card hanging off the
+        // bottom-left corner. Fires only when length % columns === 1.
+        const cardWidth = isLast && lastIsOrphan ? effectiveW : cardW;
 
         return (
           <Pressable
