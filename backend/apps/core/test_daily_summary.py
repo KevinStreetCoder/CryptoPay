@@ -245,42 +245,50 @@ class DailySummaryEmailTest(TestCase):
 
         u = _U.objects.create_user(phone="+254711222000", pin="123456")
 
+        # Transaction.created_at uses auto_now_add=True · the constructor
+        # kwarg is silently ignored. Backdate via .update() so the rows
+        # land in the right windows for the test to be meaningful.
+        def _bkdt(tx, delta):
+            Transaction.objects.filter(id=tx.id).update(
+                created_at=timezone.now() - delta,
+            )
+
         # Old tx (lifetime, NOT 24h): completed KES 5,000 settled on day -10
-        Transaction.objects.create(
+        t1 = Transaction.objects.create(
             idempotency_key="old-completed",
             user=u, type=Transaction.Type.PAYBILL_PAYMENT,
             status=Transaction.Status.COMPLETED,
             source_currency="USDT", source_amount=Decimal("38.46"),
             dest_currency="KES",   dest_amount=Decimal("5000"),
-            created_at=timezone.now() - timedelta(days=10),
         )
+        _bkdt(t1, timedelta(days=10))
         # Old tx, FAILED (counts in attempted, NOT settled)
-        Transaction.objects.create(
+        t2 = Transaction.objects.create(
             idempotency_key="old-failed",
             user=u, type=Transaction.Type.PAYBILL_PAYMENT,
             status=Transaction.Status.FAILED,
             source_currency="USDT", source_amount=Decimal("7.69"),
             dest_currency="KES",   dest_amount=Decimal("1000"),
-            created_at=timezone.now() - timedelta(days=10),
         )
+        _bkdt(t2, timedelta(days=10))
         # Recent (within 24h) · in-flight, pending
-        Transaction.objects.create(
+        t3 = Transaction.objects.create(
             idempotency_key="recent-pending",
             user=u, type=Transaction.Type.PAYBILL_PAYMENT,
             status=Transaction.Status.PENDING,
             source_currency="USDT", source_amount=Decimal("0.77"),
             dest_currency="KES",   dest_amount=Decimal("100"),
-            created_at=timezone.now() - timedelta(hours=1),
         )
+        _bkdt(t3, timedelta(hours=1))
         # Tx within 7d but NOT 24h
-        Transaction.objects.create(
+        t4 = Transaction.objects.create(
             idempotency_key="midweek-completed",
             user=u, type=Transaction.Type.PAYBILL_PAYMENT,
             status=Transaction.Status.COMPLETED,
             source_currency="USDT", source_amount=Decimal("15.38"),
             dest_currency="KES",   dest_amount=Decimal("2000"),
-            created_at=timezone.now() - timedelta(days=4),
         )
+        _bkdt(t4, timedelta(days=4))
 
         from apps.core.tasks import daily_summary_email
         result = daily_summary_email.apply().result
@@ -313,12 +321,14 @@ class DailySummaryEmailTest(TestCase):
         from apps.accounts.models import User as _U
 
         u = _U.objects.create_user(phone="+254711333000", pin="123456")
-        Transaction.objects.create(
+        tx = Transaction.objects.create(
             idempotency_key="lifetime-tx",
             user=u, type=Transaction.Type.PAYBILL_PAYMENT,
             status=Transaction.Status.COMPLETED,
             source_currency="USDT", source_amount=Decimal("76.92"),
             dest_currency="KES",   dest_amount=Decimal("10000"),
+        )
+        Transaction.objects.filter(id=tx.id).update(
             created_at=timezone.now() - timedelta(days=12),
         )
 

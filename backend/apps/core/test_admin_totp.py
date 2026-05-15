@@ -41,10 +41,11 @@ def _make_user(staff=False, totp_enabled=False, totp_secret=""):
     if totp_enabled:
         u.totp_enabled = True
         if totp_secret:
-            if hasattr(u, "set_totp_secret"):
-                u.set_totp_secret(totp_secret)
-            else:
-                u.totp_secret = totp_secret
+            # `set_totp_secret` encrypts under the primary key · the
+            # view reads back via the `totp_secret_decrypted` property.
+            # Plain assignment would store ciphertext-shape strings
+            # without the encryption envelope and break the verify.
+            u.set_totp_secret(totp_secret)
         u.save()
     return u
 

@@ -14,6 +14,7 @@ from __future__ import annotations
 import io
 import time
 import logging
+from html import escape as html_escape  # stdlib · supports quote=True
 from urllib.parse import urlparse
 
 from django.conf import settings
@@ -65,9 +66,12 @@ def _render_setup_page(qr_uri: str, next_url: str, error: str = "") -> HttpRespo
 
 
 def _setup_html(otpauth_uri: str, next_url: str, err_html: str) -> str:
+    # url-encode the otpauth:// URI so a stray `&` doesn't truncate the
+    # query string passed to chart.googleapis.com. `html_escape(... quote=True)`
+    # is stdlib and accepts the kwarg; Django's html.escape does not.
     qr_src = (
         "https://chart.googleapis.com/chart?chs=220x220&cht=qr&chl="
-        + escape(otpauth_uri, quote=True)
+        + html_escape(otpauth_uri, quote=True)
     )
     return f"""<!doctype html>
 <html><head>
@@ -194,19 +198,11 @@ def admin_totp_setup(request):
         logger.warning("admin.totp.setup_failed user=%s", user.pk)
         return _render_setup_page(otpauth_uri, next_url, error="Wrong code · try again.")
 
-    # Persist the secret encrypted using the same encrypt_totp_secret
-    # the user-side TOTP setup view uses (apps.accounts.views), so a
-    # future code-rotation handles both consistently. We import lazily
-    # to avoid a circular import at module load.
+    # Persist · `set_totp_secret(...)` is the model's canonical
+    # encryption path (Fernet under the user's primary key). See
+    # apps.accounts.models.User. Reading back via `totp_secret_decrypted`.
     try:
-        from apps.accounts.models import User as _U
-        # Use the model's setter if present, else write directly. The
-        # User model's `set_totp_secret(...)` method is the canonical
-        # encryption path · see apps.accounts.models.
-        if hasattr(user, "set_totp_secret"):
-            user.set_totp_secret(secret)
-        else:
-            user.totp_secret = secret
+        user.set_totp_secret(secret)
         user.totp_enabled = True
         user.save(update_fields=["totp_secret", "totp_enabled"])
     except Exception:
@@ -241,15 +237,13 @@ def admin_totp_verify(request):
         return HttpResponse(_verify_html(next_url, ""))
 
     code = (request.POST.get("code") or "").strip()
-    # Get the decrypted secret · the model exposes get_totp_secret() in
-    # the same place setting it lives. Fall back to the raw field if
-    # we're talking to a legacy User schema.
+    # The User model encrypts totp_secret on write (set_totp_secret)
+    # and exposes the decrypted form via the `totp_secret_decrypted`
+    # property. Reading `user.totp_secret` directly returns the Fernet
+    # ciphertext · pyotp would then choke with `Non-base32 digit found`.
     secret = ""
     try:
-        if hasattr(user, "get_totp_secret"):
-            secret = user.get_totp_secret() or ""
-        else:
-            secret = user.totp_secret or ""
+        secret = user.totp_secret_decrypted or ""
     except Exception:
         logger.exception("admin.totp.verify_decrypt_failed user=%s", user.pk)
 

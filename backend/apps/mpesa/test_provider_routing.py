@@ -191,20 +191,28 @@ class TestPaymentProviderAdapter(TestCase):
     @override_settings(
         PAYMENT_PROVIDER="sasapay",
         PAYMENT_PROVIDER_PAYBILL="intasend",
+        PAYMENT_PROVIDER_TILL="intasend",
         SASAPAY_CLIENT_ID="x", SASAPAY_CLIENT_SECRET="y",
         SASAPAY_ENVIRONMENT="sandbox",
         INTASEND_API_SECRET="ISSecretKey_" + "x" * 64,
     )
     def test_clients_are_cached_per_method_provider(self):
-        """Same provider used for multiple methods → single client instance."""
+        """Same provider used for multiple methods → single client
+        instance. Sets BOTH paybill+till to IntaSend so the cache test
+        is meaningful (when each method routes differently, they'd
+        get different cached instances by design)."""
         adapter = PaymentProviderAdapter()
+        # Sanity-check the override propagated · failing here points to
+        # an env-binding issue, not the cache itself.
+        self.assertEqual(adapter.routing_for("paybill"), "intasend")
+        self.assertEqual(adapter.routing_for("till"), "intasend")
         # paybill + till both → intasend → same client object
         c1 = adapter._client_for("paybill")
         c2 = adapter._client_for("till")
-        assert c1 is c2, "expected cached IntaSendClient instance"
+        self.assertIs(c1, c2, "expected cached IntaSendClient instance")
         # b2c + stk both → sasapay → same client object
         c3 = adapter._client_for("b2c")
         c4 = adapter._client_for("stk")
-        assert c3 is c4, "expected cached SasaPayClient instance"
+        self.assertIs(c3, c4, "expected cached SasaPayClient instance")
         # different providers → different instances
-        assert c1 is not c3
+        self.assertIsNot(c1, c3)

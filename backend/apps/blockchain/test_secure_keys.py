@@ -41,11 +41,14 @@ class SecureKeyLoaderTest(TestCase):
 
     @override_settings(DEBUG=False, ALLOW_PLAINTEXT_HOT_WALLET=False,
                       KMS_ENABLED=False,
-                      SOL_HOT_WALLET_PRIVATE_KEY="someplaintext",
-                      BTC_HOT_WALLET_PRIVATE_KEY="L1...wifplaintext")
+                      SOL_HOT_WALLET_PRIVATE_KEY="<test-placeholder-not-a-key>",
+                      BTC_HOT_WALLET_PRIVATE_KEY="<test-placeholder-not-a-key>")
     def test_refuses_plaintext_in_production(self):
         """A14 belt-and-braces · the boot guard catches it too, but the
-        loader refuses plaintext in DEBUG=False even if it slips through."""
+        loader refuses plaintext in DEBUG=False even if it slips through.
+        Placeholder values use the literal `<test-placeholder-...>` form
+        so credential scanners and grep tools never match a key-shaped
+        string (no WIF prefix, no base58 alphabet, no hex)."""
         from apps.blockchain.secure_keys import (
             load_hot_wallet_key, HotWalletKeyMissing,
         )
@@ -54,16 +57,20 @@ class SecureKeyLoaderTest(TestCase):
         with self.assertRaisesRegex(HotWalletKeyMissing, "plaintext"):
             load_hot_wallet_key("btc")
 
-    @override_settings(DEBUG=True, KMS_ENABLED=False,
-                      SOL_HOT_WALLET_PRIVATE_KEY="2" + "a" * 87)  # base58-ish stub
+    @override_settings(
+        DEBUG=True, KMS_ENABLED=False,
+        SOL_HOT_WALLET_PRIVATE_KEY="<test-placeholder-not-a-key>",
+    )
     def test_plaintext_path_dev_returns_bytearray(self):
-        """DEBUG=True dev path · plaintext is read as utf-8 (Solana's
-        base58 / JSON-array formats land here verbatim, ready for the
-        broadcast path to parse with Keypair.from_base58_string)."""
+        """DEBUG=True dev path · the loader reads the env var as utf-8
+        bytes for non-hex inputs. We don't care that the string parses
+        as a real Solana key here · only that the loader hands the
+        caller a wipe-able bytearray of the input length."""
         from apps.blockchain.secure_keys import load_hot_wallet_key
         ba = load_hot_wallet_key("sol")
         self.assertIsInstance(ba, bytearray)
-        self.assertEqual(len(ba), 88)  # 1 + 87 chars utf-8 → 88 bytes
+        # `<test-placeholder-not-a-key>` is 29 chars utf-8 = 29 bytes.
+        self.assertEqual(len(ba), len("<test-placeholder-not-a-key>"))
 
     @override_settings(DEBUG=True, KMS_ENABLED=True,
                       SOL_HOT_WALLET_ENCRYPTED="kms-encrypted-blob-stub-sol",
@@ -96,29 +103,41 @@ class BroadcastWipeTest(TestCase):
     """Broadcast paths · key is wiped in finally even on exception."""
 
     @override_settings(DEBUG=True, KMS_ENABLED=False,
-                      SOL_HOT_WALLET_PRIVATE_KEY="invalid-base58-on-purpose")
+                      SOL_HOT_WALLET_PRIVATE_KEY="<test-placeholder-not-a-key>")
     def test_solana_broadcast_wipes_key_on_exception(self):
         """A14 · the wipe MUST run even when the broadcast call itself
         raises. Otherwise the loaded bytearray lingers in memory past
         the exception unwind, defeating the whole point of the wrapper.
+
+        We mock `solders.keypair.Keypair` at the top of the broadcast
+        path so a Rust-side panic (which bypasses Python's try/finally
+        and would skip our wipe) can never happen in this test.
         """
         from apps.blockchain import tasks as _blk_tasks
-        from apps.blockchain.secure_keys import load_hot_wallet_key
+        from apps.blockchain import secure_keys
 
-        # Capture the bytearray returned by load_hot_wallet_key so we
-        # can inspect it after the broadcast raises.
         captured: dict = {}
-        original = _blk_tasks.load_hot_wallet_key if hasattr(_blk_tasks, "load_hot_wallet_key") else None
+        original = secure_keys.load_hot_wallet_key
 
         def _capture(chain):
-            ba = load_hot_wallet_key(chain)
+            ba = original(chain)
             captured["ba"] = ba
             return ba
 
-        with patch("apps.blockchain.tasks.load_hot_wallet_key", side_effect=_capture, create=True):
-            # Force a downstream failure so we exercise the finally clause.
-            with patch("apps.blockchain.tasks.req" if False else "requests.post",
-                       side_effect=RuntimeError("forced network failure")):
+        # Mock both the Keypair constructors solders exposes · either
+        # path used by `_broadcast_solana` raises a plain Python error
+        # before any Rust code runs.
+        keypair_mock = type("KP", (), {
+            "from_base58_string": staticmethod(
+                lambda _: (_ for _ in ()).throw(RuntimeError("forced (mocked solders)")),
+            ),
+            "from_bytes": staticmethod(
+                lambda _: (_ for _ in ()).throw(RuntimeError("forced (mocked solders)")),
+            ),
+        })
+
+        with patch.object(secure_keys, "load_hot_wallet_key", side_effect=_capture):
+            with patch("solders.keypair.Keypair", keypair_mock):
                 with self.assertRaises(Exception):
                     _blk_tasks._broadcast_solana(
                         currency="SOL",
@@ -126,44 +145,44 @@ class BroadcastWipeTest(TestCase):
                         amount=Decimal("0.001"),
                     )
 
-        # After the broadcast raises, the captured bytearray must have
-        # been wiped (all zeros) by the finally clause.
-        if "ba" in captured:
-            self.assertTrue(
-                all(b == 0 for b in captured["ba"]),
-                f"SOL key bytearray was NOT wiped after broadcast failure: "
-                f"first byte = {captured['ba'][0]}",
-            )
+        self.assertIn("ba", captured, "load_hot_wallet_key was never called")
+        self.assertTrue(
+            all(b == 0 for b in captured["ba"]),
+            f"SOL key bytearray was NOT wiped after broadcast failure: "
+            f"first byte = {captured['ba'][0]}",
+        )
 
     @override_settings(BTC_WITHDRAWALS_ENABLED=True,
                       DEBUG=True, KMS_ENABLED=False,
-                      BTC_HOT_WALLET_PRIVATE_KEY="cVjzvdHGfL...wif-test",
+                      BTC_HOT_WALLET_PRIVATE_KEY="<test-placeholder-not-a-key>",
                       BTC_NETWORK="testnet")
     def test_bitcoin_broadcast_wipes_key_on_exception(self):
         from apps.blockchain import tasks as _blk_tasks
-        from apps.blockchain.secure_keys import load_hot_wallet_key
+        from apps.blockchain import secure_keys
 
         captured: dict = {}
+        original = secure_keys.load_hot_wallet_key
 
         def _capture(chain):
-            ba = load_hot_wallet_key(chain)
+            ba = original(chain)
             captured["ba"] = ba
             return ba
 
-        with patch("apps.blockchain.tasks.load_hot_wallet_key", side_effect=_capture, create=True):
-            # bit.PrivateKeyTestnet(...).get_balance will network out · force
-            # the call to raise so we hit the finally.
+        # Force the WIF parse to raise BEFORE bit touches the network.
+        # bit.PrivateKeyTestnet(<placeholder>) would itself fail; we
+        # mock it so the test pins the wipe behaviour, not bit's parse.
+        with patch.object(secure_keys, "load_hot_wallet_key", side_effect=_capture):
             with patch("bit.PrivateKeyTestnet") as mock_key:
-                mock_key.return_value.get_balance.side_effect = RuntimeError("forced")
+                mock_key.side_effect = RuntimeError("forced (mocked bit)")
                 with self.assertRaises(Exception):
                     _blk_tasks._broadcast_bitcoin(
                         destination_address="tb1qar0srrr7xfkvy5l643lydnw9re59gtzzwfqqqq",
                         amount=Decimal("0.001"),
                     )
 
-        if "ba" in captured:
-            self.assertTrue(
-                all(b == 0 for b in captured["ba"]),
-                f"BTC key bytearray was NOT wiped after broadcast failure: "
-                f"first byte = {captured['ba'][0]}",
-            )
+        self.assertIn("ba", captured, "load_hot_wallet_key was never called")
+        self.assertTrue(
+            all(b == 0 for b in captured["ba"]),
+            f"BTC key bytearray was NOT wiped after broadcast failure: "
+            f"first byte = {captured['ba'][0]}",
+        )

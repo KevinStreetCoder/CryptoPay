@@ -40,6 +40,15 @@ class WalletListCacheTest(TestCase):
         self.client = APIClient()
         self.client.force_authenticate(self.user)
 
+    @staticmethod
+    def _rows(payload):
+        """DRF default pagination wraps the list in `{count, next, previous,
+        results}`. Older non-paginated endpoints return a bare list. This
+        helper handles both shapes."""
+        if isinstance(payload, dict) and "results" in payload:
+            return payload["results"]
+        return payload
+
     def test_first_request_misses_then_populates_cache(self):
         key = _wallet_cache_key(self.user.id)
         self.assertIsNone(cache.get(key), "cache must be cold at test start")
@@ -62,7 +71,8 @@ class WalletListCacheTest(TestCase):
         self.assertEqual(r1.data, r2.data, "cache hit must serve identical bytes")
         # Confirm by inspecting the cached usdt balance · NOT 999.
         cached = cache.get(_wallet_cache_key(self.user.id))
-        usdt_row = next(w for w in cached if w["currency"] == "USDT")
+        rows = self._rows(cached)
+        usdt_row = next(w for w in rows if w["currency"] == "USDT")
         self.assertEqual(Decimal(usdt_row["balance"]), Decimal("10"))
 
     def test_credit_invalidates_cache(self):
@@ -116,10 +126,10 @@ class WalletListCacheTest(TestCase):
         client_b.force_authenticate(other)
         rb = client_b.get("/api/v1/wallets/")
         self.assertEqual(rb.status_code, 200)
-        b_payload = rb.data if isinstance(rb.data, list) else list(rb.data)
-        currencies = {w["currency"] for w in b_payload}
+        b_rows = self._rows(rb.data)
+        currencies = {w["currency"] for w in b_rows}
         self.assertIn("USDT", currencies)
         # User B has 1 wallet, user A had 2 · the payloads MUST differ
         # in row count (or at minimum in balance).
-        balances = {w["currency"]: w["balance"] for w in b_payload}
+        balances = {w["currency"]: w["balance"] for w in b_rows}
         self.assertEqual(Decimal(balances["USDT"]), Decimal("777"))

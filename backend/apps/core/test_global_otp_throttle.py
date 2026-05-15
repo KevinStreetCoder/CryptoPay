@@ -52,7 +52,7 @@ class GlobalOTPThrottleTest(TestCase):
         _account_views._GlobalOTPThrottle = _throttling.GlobalOTPThrottle
 
         client = APIClient()
-        url = reverse("request-otp")
+        url = reverse("accounts:request-otp")
 
         # First 3 requests · allowed (rate stays at 3/h).
         # (Each call lands on the OTP-issuance code path · we don't care
@@ -112,7 +112,7 @@ class GlobalOTPThrottleTest(TestCase):
 
         from rest_framework.test import APIClient
         client = APIClient()
-        url = reverse("request-otp")
+        url = reverse("accounts:request-otp")
 
         with patch("apps.core.email.send_sms", return_value=True):
             with self.assertLogs("apps.core.throttling", level="WARNING") as log_ctx:
