@@ -1,0 +1,20 @@
+# /etc/cron.d/cpay-backup · daily Postgres dump → R2 upload
+#
+# Installed via scripts/install-db-backup-cron.sh · do not edit the
+# file on the VPS in place; edit this template and re-run the installer.
+#
+# Time = 02:00 EAT (UTC+3) → 23:00 UTC (cron daemon runs in UTC inside
+# Contabo's default Ubuntu image).
+#
+# Output → /var/log/cpay-backup.log (rotated by logrotate ·
+# /etc/logrotate.d/cpay-backup).
+#
+# `MAILTO=` (empty) silences mail attempts on a host with no mailer.
+# Failures still surface via the BackupStale Prometheus alert + a
+# non-zero metric in cpay_backup.prom.
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+MAILTO=""
+
+# Daily at 02:00 EAT (= 23:00 UTC the previous day)
+0 23 * * * root /usr/local/bin/cpay-backup-wrapper.sh >> /var/log/cpay-backup.log 2>&1

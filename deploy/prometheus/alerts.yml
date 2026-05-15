@@ -84,19 +84,78 @@ groups:
           summary: "Celery queue backlog ({{ $value }} tasks)"
           description: "The Celery task queue has more than 100 pending tasks."
 
+      # Daily DB backup stale · alert if last successful backup is older
+      # than 26 hours (24h cadence + 2h slack). The metric is emitted by
+      # /usr/local/bin/cpay-backup-wrapper.sh via the node_exporter
+      # textfile collector. If the metric is missing entirely
+      # (`absent()`), that's ALSO a fire condition · means the cron
+      # never ran or the textfile dir got nuked.
+      - alert: BackupStale
+        expr: >
+          (time() - cpay_backup_last_success_timestamp_seconds > 26 * 3600)
+          or
+          absent(cpay_backup_last_success_timestamp_seconds)
+        for: 15m
+        labels:
+          severity: critical
+          service: cryptopay
+        annotations:
+          summary: "Daily DB backup is stale or missing"
+          description: "The last successful Postgres backup is more than 26 hours old, or the backup metric is missing entirely. Check /var/log/cpay-backup.log on the VPS and run /usr/local/bin/cpay-backup-wrapper.sh manually."
+
+      # Backup file smaller than 1 MB · the production DB has user, tx,
+      # wallet, audit-log data; a 1 MB dump means something dropped a
+      # table or pg_dump only partial-completed.
+      - alert: BackupTooSmall
+        expr: cpay_backup_size_bytes < 1048576 and cpay_backup_size_bytes > 0
+        for: 5m
+        labels:
+          severity: warning
+          service: cryptopay
+        annotations:
+          summary: "Last DB backup is suspiciously small ({{ $value }} bytes)"
+          description: "Production DB dump is < 1 MB. Verify the dump contains all expected tables: gunzip -c /var/backups/cpay/cryptopay_<latest>.sql.gz | grep '^CREATE TABLE' | wc -l"
+
+      # R2 off-VPS upload skipped · local backup OK but R2 verify failed
+      # or creds missing. Local-only backups are at risk if the VPS dies.
+      - alert: BackupR2Skipped
+        expr: cpay_backup_r2_uploaded == 0 and cpay_backup_size_bytes > 0
+        for: 30m
+        labels:
+          severity: warning
+          service: cryptopay
+        annotations:
+          summary: "DB backup not uploaded to R2"
+          description: "The last backup is on the VPS only, not Cloudflare R2. If the VPS dies we lose the backup window. Check R2_* env vars and awscli on the host."
+
   - name: cryptopay_host
     rules:
-      # High CPU usage > 90%
+      # Sustained high CPU > 80% for 5m. Tighter than the prior 90%/10m
+      # so we catch the runc-churn pattern (873 zombies on 2026-05-15
+      # had pushed runc to 50% and total CPU into the 6.x load range).
       - alert: HighCPUUsage
         expr: >
-          100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 90
-        for: 10m
+          100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
         labels:
           severity: warning
           service: cryptopay
         annotations:
           summary: "High CPU usage ({{ $value }}%)"
-          description: "CPU usage has been above 90% for 10 minutes."
+          description: "Host CPU has been above 80% for 5 minutes."
+
+      # Sustained high CPU > 95% for 2m → critical (something is wrong now,
+      # not later · likely a runaway worker or another zombie loop).
+      - alert: CriticalCPUUsage
+        expr: >
+          100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 95
+        for: 2m
+        labels:
+          severity: critical
+          service: cryptopay
+        annotations:
+          summary: "Critical CPU usage ({{ $value }}%)"
+          description: "Host CPU has been pinned above 95% for 2 minutes. Investigate runaway processes."
 
       # High memory usage > 90%
       - alert: HighMemoryUsage
@@ -109,3 +168,28 @@ groups:
         annotations:
           summary: "High memory usage ({{ $value | humanizePercentage }})"
           description: "System memory usage exceeds 90%."
+
+      # Zombie processes accumulating. node_exporter exposes per-state
+      # process counts. In production this should be near 0. The
+      # 2026-05-15 daphne PID-1 bug accumulated 873 over ~2 hours; we
+      # want to catch a recurrence within 5 minutes, not 5 days.
+      - alert: ZombieProcessesAccumulating
+        expr: node_processes_state{state="Z"} > 50
+        for: 5m
+        labels:
+          severity: warning
+          service: cryptopay
+        annotations:
+          summary: "Zombie processes accumulating ({{ $value }} zombies)"
+          description: "More than 50 zombie processes on the host for 5 minutes. Likely a parent process (daphne, celery, a subprocess.Popen path) not reaping children. Check ps -eo stat,ppid | awk '/^Z/' | sort -k2 | uniq -c -f1."
+
+      # Critical zombie flood · >500 means a container is leaking aggressively.
+      - alert: ZombieFlood
+        expr: node_processes_state{state="Z"} > 500
+        for: 1m
+        labels:
+          severity: critical
+          service: cryptopay
+        annotations:
+          summary: "Zombie process flood ({{ $value }} zombies)"
+          description: "Over 500 zombies on the host. A container parent is leaking children at scale. PID exhaustion is the next failure mode. Identify the parent and restart that container."

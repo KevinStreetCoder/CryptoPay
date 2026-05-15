@@ -1,0 +1,10 @@
+# /etc/logrotate.d/cpay-backup · keep 14 days of backup logs
+/var/log/cpay-backup.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 root root
+}

@@ -190,6 +190,14 @@ services:
       redis:
         condition: service_healthy
     restart: always
+    # 2026-05-15 · daphne runs as PID 1 inside the container, and Linux
+    # PID 1 must reap orphaned children. daphne doesn't, so every curl
+    # the healthcheck spawns leaks a zombie. After ~2 hours of uptime
+    # we observed 873 zombies parented to daphne; runc held 50% CPU
+    # cycling container namespaces for the leaked exec calls. `init: true`
+    # injects Docker's bundled tini as PID 1, which correctly reaps
+    # child processes. Container recreate required to take effect.
+    init: true
     logging:
       driver: json-file
       options:
@@ -396,6 +404,12 @@ services:
     command:
       - "--path.rootfs=/host"
       - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+      # 2026-05-15 · enable the textfile collector so the daily DB-backup
+      # cron can publish freshness + size metrics that Prometheus alerts
+      # against (BackupStale, BackupTooSmall). The path is INSIDE the
+      # container's /host bind-mount, which maps to /var/lib/... on the
+      # host. The cron writes to the host path; node_exporter reads.
+      - "--collector.textfile.directory=/host/var/lib/node_exporter/textfile_collector"
     volumes:
       - /:/host:ro,rslave
     restart: always
