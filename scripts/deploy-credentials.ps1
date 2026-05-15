@@ -122,22 +122,28 @@ except Exception as e:
     intasend = @{
         Title = "IntaSend (CBK-licensed payments aggregator)"
         Fields = @(
-            @{ Name = "INTASEND_PUBLISHABLE_KEY"; Label = "Publishable Key"; Masked = $false; ExpectedLen = @(40, 80); Required = $true }
-            @{ Name = "INTASEND_SECRET_KEY";      Label = "Secret Key";      Masked = $true;  ExpectedLen = @(40, 80); Required = $true }
-            @{ Name = "INTASEND_WEBHOOK_SECRET";  Label = "Webhook Secret";  Masked = $true;  ExpectedLen = @(20, 80); Required = $false }
+            @{ Name = "INTASEND_PUBLISHABLE_KEY"; Label = "Publishable Key (ISPubKey_…)"; Masked = $false; ExpectedLen = @(40, 80); Required = $true }
+            @{ Name = "INTASEND_API_SECRET";      Label = "API Secret (ISSecretKey_…)";    Masked = $true;  ExpectedLen = @(40, 80); Required = $true }
+            @{ Name = "INTASEND_WEBHOOK_SECRET";  Label = "Webhook Challenge (paste same value as IntaSend dashboard Challenge field)"; Masked = $true; ExpectedLen = @(20, 80); Required = $true }
         )
         EnvDefaults = @{ INTASEND_ENVIRONMENT = "production" }
         Verify = @'
 import os, requests
-sec = os.environ.get('INTASEND_SECRET_KEY', '')
-print('  secret_key_len=' + str(len(sec)))
-# Probe the wallets/list endpoint · cheapest authenticated call
+sec = os.environ.get('INTASEND_API_SECRET', '')
+ws  = os.environ.get('INTASEND_WEBHOOK_SECRET', '')
+print('  api_secret_len=' + str(len(sec)) + '  webhook_secret_len=' + str(len(ws)))
+# Probe a cheap authenticated endpoint · /api/v1/payment/status/ accepts
+# any invoice_id and returns 404 (auth OK) vs 401 (auth fail). The
+# /wallets/list/ endpoint sometimes returns 405 on certain account
+# tiers · status/ is universal.
 try:
-    r = requests.post('https://payment.intasend.com/api/v1/wallets/list/',
+    r = requests.post('https://payment.intasend.com/api/v1/payment/status/',
                       headers={'Authorization': 'Bearer ' + sec, 'Content-Type': 'application/json'},
-                      json={}, timeout=15)
-    print('  PROD wallets/list: HTTP ' + str(r.status_code) + '  body: ' + r.text[:160])
-    if r.status_code in (200, 201):
+                      json={'invoice_id': 'auth-probe'}, timeout=15)
+    print('  PROD payment/status: HTTP ' + str(r.status_code) + '  body: ' + r.text[:160])
+    if r.status_code in (200, 400, 404):
+        # 400/404 are auth-pass responses · the api_ref doesn't exist but
+        # the credentials were accepted.
         print('RESULT: SUCCESS')
     elif r.status_code in (401, 403):
         print('RESULT: FAILURE')
