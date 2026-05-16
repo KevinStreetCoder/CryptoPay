@@ -62,14 +62,21 @@ logger = logging.getLogger(__name__)
 
 
 class CpayTransferThrottle(UserRateThrottle):
-    """20/min · 2026-05-16. Was 6/min, which throttled users who
-    hit a wrong-PIN or insufficient-funds error mid-flow and retried ·
-    every failed-validation POST still counts toward the bucket, so a
-    user fixing a typo could hit 6 attempts in <30 s and see "Too Many
-    Requests". The PIN-lockout logic (3 wrong PINs → mandatory OTP)
-    is the actual abuse defence; the rate limit is just a flood guard,
-    so 20/min is a more appropriate ceiling."""
-    rate = "20/min"
+    """60/min · 2026-05-16 (was 20/min, was 6/min).
+
+    The bucket counted EVERY POST including 400-level (wrong PIN,
+    insufficient funds, recipient-not-found) failures. A user
+    diagnosing a typo could burn through 20 attempts in a single
+    flow and see "Too Many Requests" for the rest of the minute ·
+    confusing because the previous 19 didn't actually charge them
+    anything. The PIN-lockout (3 wrong PINs → mandatory OTP) is the
+    real abuse defence; this throttle is just a flood guard.
+
+    60/min is the floor that lets a normal user retry through their
+    own mistakes without hitting the wall. An attacker who DOES hit
+    the cap is already blocked by PIN-lockout + the per-currency
+    daily limits."""
+    rate = "60/min"
 
 
 SUPPORTED_CURRENCIES = {"USDT", "USDC", "BTC", "ETH", "SOL"}
