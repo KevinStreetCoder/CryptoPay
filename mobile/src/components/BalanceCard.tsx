@@ -1,19 +1,32 @@
 import { View, Text, Pressable, StyleSheet, useWindowDimensions, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Wallet } from "../api/wallets";
+import { Rate } from "../api/rates";
 import { CURRENCIES, CurrencyCode, colors, shadows, getThemeColors, getThemeShadows } from "../constants/theme";
 import { useThemeMode } from "../stores/theme";
 import { useBalanceVisibility } from "../stores/balance";
 import { useDisplayCurrency } from "../stores/displayCurrency";
 import { CryptoLogo } from "./CryptoLogo";
+import { computeTotalKes } from "../utils/portfolioTotal";
 
 const isWeb = Platform.OS === "web";
 
 interface BalanceCardProps {
   wallets: Wallet[];
+  /**
+   * Live rates feed · 2026-05-15. Required to fall back to
+   * `balance × kes_rate` when the backend hasn't populated
+   * `wallet.kes_value` yet (which was the entire cause of the
+   * Dashboard-vs-Wallet mismatch: dashboard showed KSh 19.96
+   * counting only USDT; wallet's fallback found SOL via kes_rate
+   * and showed KSh 981.69). Optional so old callers don't break ·
+   * when omitted the helper just skips the fallback and the card
+   * undercounts as before (preferable to crashing).
+   */
+  rates?: Rate[];
 }
 
-export function BalanceCard({ wallets }: BalanceCardProps) {
+export function BalanceCard({ wallets, rates }: BalanceCardProps) {
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
   const ts = getThemeShadows(isDark);
@@ -25,21 +38,17 @@ export function BalanceCard({ wallets }: BalanceCardProps) {
   // Defensive: ensure wallets is always an array
   const safeWallets = Array.isArray(wallets) ? wallets : [];
 
-  // Calculate total portfolio value in KES (KES balance + all crypto converted to KES)
-  const kesWallet = safeWallets.find((w) => w.currency === "KES");
-  const kesDirectBalance = kesWallet ? parseFloat(kesWallet.balance) : 0;
+  // Calculate total portfolio value in KES via the shared helper · the
+  // wallet tab uses the SAME function, so the two cards can never
+  // diverge again. Helper falls back to `balance × kes_rate` when
+  // `kes_value` is missing, which is what made wallet.tsx show the
+  // correct total while BalanceCard undercounted (pre-5eb8137).
+  const kesBalance = computeTotalKes(safeWallets, rates);
 
-  // Sum KES equivalent from all wallets (use kes_value if backend provides it,
-  // otherwise approximate from balance * rate shown in wallet pills)
+  // Crypto pills row still iterates the non-KES wallets (helper is only
+  // about the SUMMED total · the per-currency pills below still need
+  // the individual rows).
   const cryptoWallets = safeWallets.filter((w) => w.currency !== "KES");
-  const cryptoKesTotal = cryptoWallets.reduce((sum, w) => {
-    const bal = parseFloat(w.balance) || 0;
-    // Use kes_value from backend if available, otherwise estimate
-    const kesVal = (w as any).kes_value ? parseFloat((w as any).kes_value) : 0;
-    return sum + kesVal;
-  }, 0);
-
-  const kesBalance = kesDirectBalance + cryptoKesTotal;
 
   const formattedBalance = formatKes(kesBalance, { digits: 2 });
   const balanceA11yLabel = hidden

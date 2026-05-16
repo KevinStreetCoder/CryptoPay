@@ -26,6 +26,7 @@ import { WalletCardSkeleton, TransactionSkeleton } from "../../src/components/Sk
 import { useToast } from "../../src/components/Toast";
 import { ratesApi, Rate, normalizeRate } from "../../src/api/rates";
 import { walletsApi } from "../../src/api/wallets";
+import { computeTotalKes } from "../../src/utils/portfolioTotal";
 import { CURRENCIES, CurrencyCode, colors, getThemeColors, getThemeShadows } from "../../src/constants/theme";
 import { useThemeMode } from "../../src/stores/theme";
 import { useDisplayCurrency } from "../../src/stores/displayCurrency";
@@ -364,20 +365,17 @@ export default function WalletScreen() {
   const cryptoWallets = safeWallets.filter((w) => w.currency !== "KES");
   const transactions = txData?.results || [];
 
-  // Use kes_value from backend wallet API (includes spread) · matches BalanceCard
-  const totalKES = cryptoWallets.reduce((sum, w) => {
-    const kesVal = (w as any).kes_value ? parseFloat((w as any).kes_value) : 0;
-    if (kesVal > 0) return sum + kesVal;
-    // Fallback to rate calculation if kes_value not available
-    const balance = parseFloat(w.balance) || 0;
-    const rate = rates?.find((r) => r.currency === w.currency);
-    const kesRate = rate ? parseFloat(rate.kes_rate) || 0 : 0;
-    return sum + balance * kesRate;
-  }, 0);
-
+  // 2026-05-15 · single source of truth for the dashboard <-> wallet
+  // total. `computeTotalKes` returns KES wallet + sum of crypto wallets
+  // (preferring backend `kes_value`, falling back to `balance × kes_rate`).
+  // The BalanceCard on the dashboard now calls the same helper, so the
+  // two tabs can't disagree (they did pre-5eb8137 · dashboard showed
+  // KSh 19.96 while wallet showed KSh 981.69 for the same user because
+  // BalanceCard had no kes_rate fallback).
+  const grandTotal = computeTotalKes(safeWallets, rates);
   const kesWallet = safeWallets.find((w) => w.currency === "KES");
   const kesBalance = kesWallet ? parseFloat(kesWallet.balance) || 0 : 0;
-  const grandTotal = totalKES + kesBalance;
+  const totalKES = grandTotal - kesBalance;
 
   const getCurrencyColor = (currency: string) =>
     tc.crypto[currency] || colors.primary[400];

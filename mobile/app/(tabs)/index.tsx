@@ -1509,7 +1509,7 @@ function HomeScreenContent() {
               would look broken). */}
           <TourStep nameKey="tour.step1Title" textKey="tour.step1Text" order={1}>
           <View style={{ marginBottom: 24, paddingHorizontal: 0 }}>
-            {wallets ? <BalanceCard wallets={wallets} /> : <BalanceCardSkeleton />}
+            {wallets ? <BalanceCard wallets={wallets} rates={rates} /> : <BalanceCardSkeleton />}
           </View>
           </TourStep>
 
@@ -2263,7 +2263,7 @@ function HomeScreenContent() {
                 {/* See dashboard-mobile note above · same defensive
                     render so the desktop layout doesn't briefly show
                     stale data after re-login. */}
-                {wallets ? <BalanceCard wallets={wallets} /> : <BalanceCardSkeleton />}
+                {wallets ? <BalanceCard wallets={wallets} rates={rates} /> : <BalanceCardSkeleton />}
               </View>
             </TourStep>
           </View>
