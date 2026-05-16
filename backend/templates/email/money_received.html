@@ -1,0 +1,83 @@
+{% extends "email/base.html" %}
+
+{# 2026-05-16 · money-received email for the recipient · uses base.html. #}
+
+{% block title %}You received {{ amount }} {{ currency }} on Cpay{% endblock %}
+
+{% block content %}
+<h2 style="margin-bottom: 8px;">
+  <span style="color:#10B981;">&#10003;</span>
+  Money received
+</h2>
+<p style="font-size: 15px; color: #cbd5e1; margin-top: 0;">
+  Hi {{ full_name|default:"there" }}, <strong style="color:#f1f5f9;">{{ sender_label }}</strong>
+  just sent you funds on Cpay. They're already in your wallet.
+</p>
+
+{# Hero credit card · matches BalanceCard hero on mobile so the user #}
+{# opens the email and sees the same number in the same colour scheme. #}
+<div style="
+  background: linear-gradient(135deg, #0A1E1A 0%, #0F2E26 100%);
+  border: 1px solid rgba(16,185,129,0.30);
+  border-radius: 14px;
+  padding: 26px 28px;
+  margin: 24px 0;
+  text-align: center;
+">
+  <div style="font-size: 11px; color: #10B981; letter-spacing: 2px; text-transform: uppercase; font-weight: 700; margin-bottom: 6px;">
+    Amount Received
+  </div>
+  <div style="font-size: 38px; color: #f1f5f9; font-weight: 700; letter-spacing: -0.5px; font-family: 'Courier New', monospace; line-height: 1.1;">
+    {{ amount }} <span style="font-size: 22px; color: #94a3b8;">{{ currency }}</span>
+  </div>
+  {% if kes_equivalent %}
+  <div style="font-size: 14px; color: #cbd5e1; margin-top: 8px;">
+    &asymp; KSh {{ kes_equivalent }}
+  </div>
+  {% endif %}
+</div>
+
+<div class="info-card">
+  <table role="presentation" cellpadding="0" cellspacing="0">
+    <tr>
+      <td class="label">From</td>
+      <td class="value">
+        <strong>{{ sender_label }}</strong>
+        {% if sender_sub %}<br><span style="color:#94a3b8;font-size:13px;">{{ sender_sub }}</span>{% endif %}
+      </td>
+    </tr>
+    <tr>
+      <td class="label">Reference</td>
+      <td class="value">{{ reference }}</td>
+    </tr>
+    {% if memo %}
+    <tr>
+      <td class="label">Note</td>
+      <td class="value" style="font-style: italic;">"{{ memo }}"</td>
+    </tr>
+    {% endif %}
+    <tr>
+      <td class="label">Date &amp; Time</td>
+      <td class="value">{{ timestamp }}</td>
+    </tr>
+    <tr>
+      <td class="label">New balance</td>
+      <td class="value" style="color: #10B981;">{{ new_balance }} {{ currency }}</td>
+    </tr>
+  </table>
+</div>
+
+<p style="text-align: center; padding-top: 8px;">
+  <a href="https://app.cpay.co.ke/(tabs)/wallet"
+     style="display:inline-block;background-color:#10B981;color:#FFFFFF;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px;">
+    Open Wallet
+  </a>
+</p>
+
+<p style="font-size: 13px; color: #94a3b8;">
+  If you did not expect this transfer, you can still keep the funds &mdash;
+  they're yours now. Reach out to
+  <a href="mailto:support@cpay.co.ke" style="color: #10B981;">support@cpay.co.ke</a>
+  if anything looks off.
+</p>
+{% endblock %}

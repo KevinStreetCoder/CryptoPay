@@ -432,16 +432,41 @@ def _mask_phone(phone: str) -> str:
 
 
 def _notify_recipient(recipient, sender, amount, currency, memo, tx):
-    """Push + SMS the recipient that they've received money."""
-    from apps.core.tasks import send_push_task
+    """Notify the recipient that they've received money across all four
+    channels we support · push, SMS, email, in-app inbox.
 
-    sender_label = sender.full_name or sender.username or sender.phone or "a Cpay user"
+    2026-05-16 · added EMAIL (via the new templates/email/money_received
+    template) and IN-APP NOTIFICATION (via the notifications.services
+    helper, so the user's inbox shows "Money received from Jane D."
+    even if push was dismissed). Each channel runs in its own try/except
+    so one carrier's hiccup doesn't drop the others.
+    """
+    from apps.core.tasks import send_push_task
+    from apps.wallets.models import Wallet
+
+    sender_full = (sender.full_name or "").strip()
+    sender_phone = sender.phone or ""
+    sender_label = (
+        sender_full
+        or (sender_phone[:6] + "•" * max(0, len(sender_phone) - 6))
+        or "a Cpay user"
+    )
+    # "Jane D." style truncation for the email subject + body · keeps
+    # the SENDER's full surname out of the recipient's email.
+    if " " in sender_label:
+        parts = sender_label.split()
+        sender_label_display = f"{parts[0]} {parts[-1][0]}."
+    else:
+        sender_label_display = sender_label
+
     title = "Money received"
     body = (
-        f"{sender_label} sent you {amount} {currency}"
+        f"{sender_label_display} sent you {amount} {currency}"
         + (f": {memo}" if memo else "")
     )
+    short_ref = str(tx.id)[:8].upper()
 
+    # ── push ────────────────────────────────────────────────────────
     try:
         send_push_task.delay(
             user_id=str(recipient.id),
@@ -457,14 +482,72 @@ def _notify_recipient(recipient, sender, amount, currency, memo, tx):
     except Exception:
         logger.exception("notify_recipient.push_failed")
 
+    # ── SMS ─────────────────────────────────────────────────────────
     if recipient.phone and getattr(recipient, "notify_sms_enabled", True):
         try:
             from apps.core.email import send_sms
             send_sms(
                 recipient.phone,
-                f"Cpay · You received {amount} {currency} from {sender_label}"
+                f"Cpay · You received {amount} {currency} from "
+                f"{sender_label_display}"
                 + (f". Memo: {memo}" if memo else "")
                 + ". Tap the app to see details.",
             )
         except Exception:
             logger.exception("notify_recipient.sms_failed")
+
+    # ── email ───────────────────────────────────────────────────────
+    if recipient.email:
+        try:
+            from apps.core.email import send_money_received_email
+            from django.utils import timezone as _tz
+
+            # Pull the post-credit balance so the email shows
+            # "new balance: 0.0152 USDT" without a second DB hit at
+            # template-render time.
+            new_balance_str = ""
+            try:
+                w = Wallet.objects.get(user=recipient, currency=currency)
+                new_balance_str = str(w.balance)
+            except Wallet.DoesNotExist:
+                pass
+
+            # Mask the sender's phone so it can appear on the receipt
+            # without leaking the full number.
+            sender_sub = ""
+            if sender_phone:
+                if len(sender_phone) >= 8:
+                    sender_sub = (
+                        sender_phone[:7] + "••••" + sender_phone[-2:]
+                    )
+                else:
+                    sender_sub = "••••" + sender_phone[-2:]
+
+            send_money_received_email(
+                recipient,
+                amount=str(amount),
+                currency=currency,
+                sender_label=sender_label_display,
+                sender_sub=sender_sub,
+                reference=short_ref,
+                memo=memo or "",
+                timestamp=_tz.now().isoformat(timespec="seconds"),
+                new_balance=new_balance_str,
+                kes_equivalent=None,  # crypto-to-crypto · we don't compute the KES eq here
+            )
+        except Exception:
+            logger.exception("notify_recipient.email_failed")
+
+    # ── in-app inbox ────────────────────────────────────────────────
+    try:
+        from apps.notifications.services import notify_money_received
+        notify_money_received(
+            recipient,
+            sender_label=sender_label_display,
+            amount=str(amount),
+            currency=currency,
+            transaction_id=str(tx.id),
+            memo=memo or "",
+        )
+    except Exception:
+        logger.exception("notify_recipient.in_app_failed")

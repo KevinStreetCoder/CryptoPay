@@ -31,19 +31,31 @@
     -webkit-font-smoothing: antialiased;
   }
   .page { max-width: 480px; margin: 0 auto; padding: 32px 20px 60px; }
+  /* 2026-05-16 · canonical Cpay logo lockup · matches the PDF receipt
+     (pdf_receipt/receipt.html) and the mobile splash + email header.
+     The Coin-C mark is inline SVG so we don't need a hosted PNG · the
+     verify page is a public 60s-cached endpoint and inlining keeps the
+     first-byte short. .brand-word combines the emerald "C" + ink "pay"
+     wordmark in one element so the kerning between the two halves
+     can't drift across browser font-metric variations. */
   .brand {
-    display: flex; align-items: center; gap: 10px;
+    display: flex; align-items: center; gap: 12px;
     margin-bottom: 28px; color: var(--ink);
   }
-  .brand-mark {
-    width: 32px; height: 32px; border-radius: 8px;
-    background: var(--emerald); display: inline-flex;
-    align-items: center; justify-content: center;
-    color: #fff; font-weight: 800; font-size: 18px;
-    letter-spacing: -1px;
+  .brand-mark-svg {
+    width: 40px; height: 40px; display: block;
+    flex-shrink: 0;
   }
-  .brand-name {
-    font-weight: 700; font-size: 17px; letter-spacing: -0.3px;
+  .brand-word {
+    font-weight: 700; font-size: 22px; letter-spacing: -0.5px;
+    line-height: 1;
+  }
+  .brand-word .C { color: var(--emerald); }
+  .brand-word .rest { color: var(--ink); }
+  .brand-tagline {
+    font-size: 10px; color: var(--muted);
+    letter-spacing: 1.5px; text-transform: uppercase;
+    margin-top: 4px;
   }
   .card {
     background: var(--paper); border-radius: 18px;
@@ -140,8 +152,15 @@
 <body>
 <div class="page">
   <div class="brand">
-    <span class="brand-mark">C</span>
-    <span class="brand-name">Cpay</span>
+    {# Canonical Coin-C mark · same geometry as the PDF receipt + mobile splash. #}
+    <svg class="brand-mark-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" aria-label="Cpay">
+      <circle cx="100" cy="100" r="72" fill="none" stroke="#10B981" stroke-width="22" stroke-linecap="round" stroke-dasharray="380 500" transform="rotate(-135 100 100)"/>
+      <rect x="100" y="92" width="46" height="16" rx="3" fill="#10B981"/>
+    </svg>
+    <div>
+      <div class="brand-word"><span class="C">C</span><span class="rest">pay</span></div>
+      <div class="brand-tagline">Cpay Kenya Ltd</div>
+    </div>
   </div>
 
   <div class="auth-banner {% if not is_settled %}failed{% endif %}">

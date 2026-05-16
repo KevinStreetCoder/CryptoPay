@@ -462,6 +462,76 @@ def send_transaction_receipt(user, transaction):
         logger.error(f"Failed to send receipt to {user.email}: {e}")
 
 
+def send_money_received_email(
+    recipient_user, *,
+    amount: str, currency: str,
+    sender_label: str, sender_sub: str = "",
+    reference: str, memo: str = "",
+    timestamp: str = "", new_balance: str = "",
+    kes_equivalent: str | None = None,
+):
+    """Notify the RECIPIENT of an intra-Cpay transfer (or any wallet
+    credit) by email · 2026-05-16.
+
+    Distinct from `send_transaction_receipt` which goes to the SENDER.
+    Same visual system via the shared `email/base.html` so the brand
+    stays consistent. Respects the per-user `notify_email_enabled`
+    gate (kind="transactional") so users can opt out.
+
+    Args:
+        recipient_user: User instance receiving the credit.
+        amount: pre-formatted amount string ("0.0152" for crypto,
+                "1,250.00" for KES).
+        currency: e.g. "USDT" / "KES".
+        sender_label: human label · e.g. "Jane D." or a masked phone.
+        sender_sub: optional secondary line · e.g. "+254712••••89".
+        reference: short tx ref (first 8 chars of UUID, upper).
+        memo: optional sender-supplied note.
+        timestamp: ISO timestamp string (matches receipt formatting).
+        new_balance: post-credit wallet balance string for the same
+                     currency · sets up "you can see it in your wallet
+                     right now" without requiring an extra DB lookup
+                     from the email template.
+        kes_equivalent: optional pre-formatted KES value for the
+                        "≈ KSh 1,250" line under the hero amount.
+    """
+    if not _email_allowed(recipient_user, kind="transactional"):
+        return
+
+    context = {
+        "full_name": (recipient_user.full_name or recipient_user.phone or "there").strip(),
+        "amount": amount,
+        "currency": currency,
+        "sender_label": sender_label,
+        "sender_sub": sender_sub,
+        "reference": reference,
+        "memo": memo,
+        "timestamp": timestamp,
+        "new_balance": new_balance,
+        "kes_equivalent": kes_equivalent,
+    }
+
+    try:
+        html = render_to_string("email/money_received.html", context)
+        send_mail(
+            f"You received {amount} {currency} on Cpay",
+            "",
+            settings.DEFAULT_FROM_EMAIL,
+            [recipient_user.email],
+            html_message=html,
+            fail_silently=True,
+        )
+        logger.info(
+            "money_received_email.sent · to=%s ref=%s amount=%s %s",
+            recipient_user.email, reference, amount, currency,
+        )
+    except Exception as e:
+        logger.error(
+            "money_received_email.failed · to=%s err=%s",
+            recipient_user.email, e,
+        )
+
+
 def send_kyc_status_email(user, document_type, status, rejection_reason=None):
     """Send KYC document status update email directly.
 

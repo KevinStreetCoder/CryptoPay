@@ -9,7 +9,14 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   body { margin: 0; background: #F6F3EC; min-height: 100vh; font-family: 'DM Sans', system-ui, sans-serif; color: #0B1220; display: flex; align-items: center; justify-content: center; padding: 24px; }
-  .card { max-width: 420px; width: 100%; background: #fff; border: 1px solid #E5E7EB; border-radius: 18px; padding: 36px 28px 30px; text-align: center; box-sizing: border-box; }
+  .wrap { display: flex; flex-direction: column; align-items: center; max-width: 420px; width: 100%; }
+  .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 28px; }
+  .brand-mark-svg { width: 40px; height: 40px; display: block; flex-shrink: 0; }
+  .brand-word { font-weight: 700; font-size: 22px; letter-spacing: -0.5px; line-height: 1; }
+  .brand-word .C { color: #10B981; }
+  .brand-word .rest { color: #0B1220; }
+  .brand-tagline { font-size: 10px; color: #64748B; letter-spacing: 1.5px; text-transform: uppercase; margin-top: 4px; }
+  .card { width: 100%; background: #fff; border: 1px solid #E5E7EB; border-radius: 18px; padding: 36px 28px 30px; text-align: center; box-sizing: border-box; }
   h1 { margin: 18px 0 8px; font-size: 22px; letter-spacing: -0.4px; }
   p { color: #64748B; line-height: 1.55; font-size: 14px; }
   .code { font-family: 'JetBrains Mono', monospace; color: #1F2937; }
@@ -17,6 +24,18 @@
 </style>
 </head>
 <body>
+<div class="wrap">
+  {# 2026-05-16 · canonical Cpay logo. #}
+  <div class="brand">
+    <svg class="brand-mark-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" aria-label="Cpay">
+      <circle cx="100" cy="100" r="72" fill="none" stroke="#10B981" stroke-width="22" stroke-linecap="round" stroke-dasharray="380 500" transform="rotate(-135 100 100)"/>
+      <rect x="100" y="92" width="46" height="16" rx="3" fill="#10B981"/>
+    </svg>
+    <div>
+      <div class="brand-word"><span class="C">C</span><span class="rest">pay</span></div>
+      <div class="brand-tagline">Cpay Kenya Ltd</div>
+    </div>
+  </div>
 <div class="card">
   <svg width="56" height="56" viewBox="0 0 24 24" fill="none">
     <circle cx="12" cy="12" r="10" stroke="#F59E0B" stroke-width="1.6"/>
@@ -25,6 +44,7 @@
   <h1>Multiple receipts match this short code</h1>
   <p>The reference <span class="code">{{ code }}</span> is ambiguous · two receipts share the same prefix.</p>
   <p style="margin-top: 16px;">Send the full reference printed on your receipt (the longer <code class="code">CP-XXXXXX-KE</code> code) to <a href="mailto:support@cpay.co.ke">support@cpay.co.ke</a> and we'll verify it manually.</p>
+</div>
 </div>
 </body>
 </html>

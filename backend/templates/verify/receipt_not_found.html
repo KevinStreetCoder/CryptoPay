@@ -15,8 +15,21 @@
     font-family: 'DM Sans', system-ui, sans-serif; color: #0B1220;
     display: flex; align-items: center; justify-content: center; padding: 24px;
   }
+  .wrap {
+    display: flex; flex-direction: column; align-items: center;
+    max-width: 420px; width: 100%;
+  }
+  .brand {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 28px;
+  }
+  .brand-mark-svg { width: 40px; height: 40px; display: block; flex-shrink: 0; }
+  .brand-word { font-weight: 700; font-size: 22px; letter-spacing: -0.5px; line-height: 1; }
+  .brand-word .C { color: #10B981; }
+  .brand-word .rest { color: #0B1220; }
+  .brand-tagline { font-size: 10px; color: #64748B; letter-spacing: 1.5px; text-transform: uppercase; margin-top: 4px; }
   .card {
-    max-width: 420px; width: 100%; background: #fff;
+    width: 100%; background: #fff;
     border: 1px solid #E5E7EB; border-radius: 18px;
     padding: 36px 28px 30px; text-align: center;
   }
@@ -28,6 +41,18 @@
 </style>
 </head>
 <body>
+<div class="wrap">
+  {# 2026-05-16 · canonical Coin-C logo · matches PDF receipt / verify / email. #}
+  <div class="brand">
+    <svg class="brand-mark-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" aria-label="Cpay">
+      <circle cx="100" cy="100" r="72" fill="none" stroke="#10B981" stroke-width="22" stroke-linecap="round" stroke-dasharray="380 500" transform="rotate(-135 100 100)"/>
+      <rect x="100" y="92" width="46" height="16" rx="3" fill="#10B981"/>
+    </svg>
+    <div>
+      <div class="brand-word"><span class="C">C</span><span class="rest">pay</span></div>
+      <div class="brand-tagline">Cpay Kenya Ltd</div>
+    </div>
+  </div>
 <div class="card">
   <svg width="56" height="56" viewBox="0 0 24 24" fill="none">
     <circle cx="12" cy="12" r="10" stroke="#1F2937" stroke-width="1.6"/>
@@ -37,6 +62,7 @@
   <h1>We can't find this receipt</h1>
   <p>The reference <span class="code">{{ code }}</span> doesn't match any transaction on Cpay.</p>
   <p style="margin-top: 16px;">If you scanned this from a printed receipt, please contact <a href="mailto:support@cpay.co.ke">support@cpay.co.ke</a> with a clear photo.</p>
+</div>
 </div>
 </body>
 </html>
