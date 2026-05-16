@@ -162,3 +162,129 @@ class TestCpayUserLookupAuth(TestCase):
         c = APIClient()
         r = c.get(reverse("payments:cpay-user-lookup"), {"q": "+254712345678"})
         assert r.status_code in (401, 403)
+
+
+# 2026-05-16 · multi-result typeahead mode (`?suggest=1`) ────────────
+
+
+class TestCpayUserLookupSuggest(TestCase):
+    """Typeahead lookup · returns up to 5 matches across name / phone
+    suffix / referral code. Used by the send-to-cpay form so the
+    sender can pick the right recipient from a dropdown when there
+    are multiple "John"s."""
+
+    def setUp(self):
+        self.caller = _make_user(
+            phone="+254700000001", full_name="Caller One",
+        )
+        # Three Johns with different surnames + one Jane.
+        self.john_s = _make_user(
+            phone="+254712111111", full_name="John Smith",
+        )
+        self.john_d = _make_user(
+            phone="+254712222222", full_name="John Doe",
+        )
+        self.john_n = _make_user(
+            phone="+254745454554", full_name="John Njongoro",
+        )
+        self.jane = _make_user(
+            phone="+254799887766", full_name="Jane Mwangi",
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.caller)
+        self.url = reverse("payments:cpay-user-lookup")
+
+    def test_name_prefix_returns_all_matching(self):
+        r = self.client.get(self.url, {"q": "John", "suggest": "1"})
+        assert r.status_code == 200
+        results = r.json()["results"]
+        names = [x["display_name"] for x in results]
+        # All three Johns surface (surname truncated to initial).
+        assert "John S." in names
+        assert "John D." in names
+        assert "John N." in names
+        # Jane is NOT in the results.
+        assert "Jane M." not in names
+
+    def test_phone_suffix_match(self):
+        # Last 4 digits "4554" should pull up John Njongoro.
+        r = self.client.get(self.url, {"q": "4554", "suggest": "1"})
+        assert r.status_code == 200
+        results = r.json()["results"]
+        assert any(x["display_name"] == "John N." for x in results), results
+
+    def test_returns_at_most_5(self):
+        for i in range(7):
+            _make_user(
+                phone=f"+25470000{2000+i:04d}",
+                full_name=f"Bulk Person{i}",
+            )
+        r = self.client.get(self.url, {"q": "Bulk", "suggest": "1"})
+        results = r.json()["results"]
+        assert len(results) <= 5
+
+    def test_short_query_returns_empty(self):
+        # 1- or 2-char queries match too many users · the endpoint
+        # short-circuits to an empty list rather than fanning out.
+        r = self.client.get(self.url, {"q": "Jo", "suggest": "1"})
+        assert r.status_code == 200
+        assert r.json()["results"] == []
+
+    def test_self_excluded_from_results(self):
+        r = self.client.get(self.url, {"q": "Caller", "suggest": "1"})
+        results = r.json()["results"]
+        assert all(x["display_name"] != "Caller O." for x in results)
+
+
+# 2026-05-16 · POST send-to-cpay accepts both prefixed + unprefixed keys
+
+
+class TestSendToCpayFieldNameCompat(TestCase):
+    """Regression · the mobile send-to-cpay form was spreading its
+    detect-kind result `{username: ...}` directly into the POST body,
+    but the backend was reading the PREFIXED `recipient_username` key.
+    Result · every send-to-cpay POST returned 404 "Recipient not
+    found" even though the pre-flight lookup succeeded. Backend now
+    accepts EITHER shape for back-compat."""
+
+    def setUp(self):
+        self.sender = _make_user(
+            phone="+254712000001", full_name="Sender User",
+        )
+        self.recipient = _make_user(
+            phone="+254745454554", full_name="John Njongoro",
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.sender)
+        self.url = reverse("payments:send-to-cpay")
+
+    def _common_payload(self):
+        return {
+            "currency": "USDT",
+            "amount": "0.01",
+            "idempotency_key": "test-idem-1",
+            "pin": "WRONG_PIN_BUT_SHOWS_FIELD_NAME_BEHAVIOUR",
+        }
+
+    def test_unprefixed_username_key_resolves(self):
+        # Mobile shape · {username: "John Njongoro"}.
+        payload = {**self._common_payload(), "username": "John Njongoro"}
+        r = self.client.post(self.url, payload, format="json")
+        # We expect NOT 404 (recipient resolved). PIN is wrong so we
+        # get 400/403 from PIN check · the point is the resolution
+        # branch passed.
+        assert r.status_code != 404, r.content
+        # Body should NOT carry the "Recipient not found" message.
+        body = r.json() if r.headers.get("Content-Type", "").startswith("application/json") else {}
+        assert "Recipient not found" not in str(body), body
+
+    def test_prefixed_recipient_username_key_resolves(self):
+        # Backend-canonical shape · {recipient_username: "John Njongoro"}.
+        payload = {**self._common_payload(), "recipient_username": "John Njongoro"}
+        r = self.client.post(self.url, payload, format="json")
+        assert r.status_code != 404, r.content
+
+    def test_unprefixed_phone_key_resolves(self):
+        payload = {**self._common_payload(), "phone": "+254745454554"}
+        r = self.client.post(self.url, payload, format="json")
+        assert r.status_code != 404, r.content

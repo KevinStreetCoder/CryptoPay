@@ -350,4 +350,17 @@ export const paymentsApi = {
       phone_masked?: string;
       matched_by?: "phone" | "full_name" | "referral_code";
     }>("/payments/cpay-user-lookup/", { params: { q } }),
+
+  // 2026-05-16 · typeahead variant · returns up to 5 matches with the
+  // same privacy-safe profile shape. UI shows the list as a dropdown
+  // so the sender can pick one when their query is ambiguous (3 Johns).
+  cpayUserSuggest: (q: string) =>
+    api.get<{
+      results: Array<{
+        id: string;
+        display_name: string;
+        phone_masked: string;
+        matched_by: "phone" | "full_name" | "referral_code";
+      }>;
+    }>("/payments/cpay-user-lookup/", { params: { q, suggest: "1" } }),
 };

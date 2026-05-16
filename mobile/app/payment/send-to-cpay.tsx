@@ -122,6 +122,43 @@ export default function SendToCpayScreen() {
   const kesPerCrypto = cryptoRate ? parseFloat(cryptoRate.kes_rate) || 0 : 0;
   const kesEquivalent = parsedAmount * kesPerCrypto;
 
+  // 2026-05-16 · KES-first amount entry. Users find it MUCH easier to
+  // think in KES ("send my friend 200 bob") than in crypto units
+  // ("send 0.001823 SOL"). The mode toggle lives on the amount card:
+  //   - "kes" mode  → user types KES, we compute crypto = KES / rate
+  //   - "crypto" mode → user types crypto, we show KES equivalent
+  //                     (original behaviour · kept for power users)
+  // The CRYPTO amount is what we send to the backend regardless.
+  const [amountMode, setAmountMode] = useState<"kes" | "crypto">("kes");
+  const [kesInput, setKesInput] = useState<string>("");
+  const parsedKes = parseFloat(kesInput) || 0;
+
+  // When the user types in KES, derive the crypto amount + sync the
+  // `amount` field (which is the crypto value the backend expects).
+  useEffect(() => {
+    if (amountMode !== "kes") return;
+    if (!parsedKes || !kesPerCrypto) {
+      // Don't wipe a crypto-mode amount when user toggles modes.
+      return;
+    }
+    const cryptoFromKes = parsedKes / kesPerCrypto;
+    // Round to the currency's decimals so we don't send 17 decimal places.
+    const rounded = cryptoFromKes.toFixed(Math.min(decimals, 8));
+    if (rounded !== amount) setAmount(rounded);
+  }, [kesInput, kesPerCrypto, amountMode, decimals]);
+
+  // When the user toggles modes, seed the inactive field with the
+  // computed equivalent so they see a sensible starting value.
+  const switchToKesMode = () => {
+    setAmountMode("kes");
+    if (parsedAmount > 0 && kesPerCrypto > 0 && !kesInput) {
+      setKesInput((parsedAmount * kesPerCrypto).toFixed(2));
+    }
+  };
+  const switchToCryptoMode = () => {
+    setAmountMode("crypto");
+  };
+
   // Detect recipient identifier kind so backend gets the right field.
   const detectRecipientKind = (raw: string): {
     phone?: string;
@@ -144,59 +181,56 @@ export default function SendToCpayScreen() {
 
   const recipientKind = detectRecipientKind(recipient);
 
-  // 2026-05-16 · pre-send recipient lookup. As the user types their
-  // recipient (phone / referral code / name) we debounce-fire a query
-  // against /payments/cpay-user-lookup/ that returns a privacy-safe
-  // profile · the form gates "Continue" on `recipientFound === true`
-  // so the user can't proceed to PIN entry for a non-Cpay recipient
-  // (eliminates the "type PIN, wait, see 404" UX trap).
-  type LookupState =
-    | { state: "idle" }
-    | { state: "loading" }
-    | { state: "found"; display_name: string; phone_masked: string; matched_by: string }
-    | { state: "not_found" }
-    | { state: "error"; message: string };
-  const [recipientLookup, setRecipientLookup] = useState<LookupState>({ state: "idle" });
+  // 2026-05-16 · recipient lookup runs in TWO modes:
+  //   - typeahead suggestions list as the user types (3+ chars)
+  //   - confirmed single-result match once the user PICKS one
+  //
+  // The pre-2026-05-16 single-result auto-match was too fragile
+  // when multiple "John"s exist · the sender had no way to pick
+  // between them. Now we surface a click-to-confirm list and only
+  // gate Continue when one entry has been explicitly chosen.
+  type Suggestion = {
+    id: string;
+    display_name: string;
+    phone_masked: string;
+    matched_by: string;
+  };
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [suggestState, setSuggestState] = useState<"idle" | "loading" | "loaded" | "error">("idle");
+  const [pickedRecipient, setPickedRecipient] = useState<Suggestion | null>(null);
 
   useEffect(() => {
     const v = recipient.trim();
-    if (v.length < 4) {
-      setRecipientLookup({ state: "idle" });
+    if (v.length < 3) {
+      setSuggestions([]);
+      setSuggestState("idle");
+      // Clear the picked recipient if the user re-types from scratch.
+      setPickedRecipient(null);
       return;
     }
-    setRecipientLookup({ state: "loading" });
+    // If the user already picked someone and the text still matches
+    // that pick's display, don't re-query · they're confirmed.
+    if (pickedRecipient && (
+      v === pickedRecipient.display_name
+      || v === pickedRecipient.phone_masked
+    )) {
+      return;
+    }
+    setSuggestState("loading");
     const timer = setTimeout(async () => {
       try {
-        const { data } = await paymentsApi.cpayUserLookup(v);
-        if (data.found) {
-          setRecipientLookup({
-            state: "found",
-            display_name: data.display_name || "Cpay user",
-            phone_masked: data.phone_masked || "",
-            matched_by: data.matched_by || "",
-          });
-        } else {
-          setRecipientLookup({ state: "not_found" });
-        }
+        const { data } = await paymentsApi.cpayUserSuggest(v);
+        setSuggestions(data.results || []);
+        setSuggestState("loaded");
       } catch (err: any) {
-        // Throttle (429) is the only failure we want to soften · keep
-        // the form usable but note it. Any other error → not_found
-        // (defensive · we'd rather block a real recipient than allow
-        // a send into the void).
-        if (err?.response?.status === 429) {
-          setRecipientLookup({
-            state: "error",
-            message: "Too many checks. Wait a moment and retry.",
-          });
-        } else {
-          setRecipientLookup({ state: "not_found" });
-        }
+        setSuggestions([]);
+        setSuggestState("error");
       }
-    }, 400);
+    }, 350);
     return () => clearTimeout(timer);
-  }, [recipient]);
+  }, [recipient, pickedRecipient]);
 
-  const recipientFound = recipientLookup.state === "found";
+  const recipientFound = pickedRecipient !== null;
 
   const canContinue =
     parsedAmount > 0 &&
@@ -209,13 +243,15 @@ export default function SendToCpayScreen() {
         toast.warning("Amount required", "Enter the amount you want to send.");
       } else if (parsedAmount > balance) {
         toast.warning("Insufficient balance", `You have ${balance.toFixed(decimals)} ${selectedCrypto}.`);
-      } else if (recipientLookup.state === "not_found") {
+      } else if (!pickedRecipient && suggestState === "loaded" && suggestions.length === 0) {
         toast.warning(
           "Recipient not on Cpay",
-          "Ask them to sign up first · we couldn't find this phone / name / code.",
+          "We couldn't find anyone matching · ask them to sign up first.",
         );
-      } else if (recipientLookup.state === "loading") {
+      } else if (!pickedRecipient && suggestState === "loading") {
         toast.info("Checking recipient", "Hang on a moment…");
+      } else if (!pickedRecipient && suggestions.length > 0) {
+        toast.warning("Pick recipient", "Tap one of the matches below to confirm who you're sending to.");
       } else {
         toast.warning("Recipient required", "Enter a phone, name, or Cpay referral code.");
       }
@@ -229,8 +265,26 @@ export default function SendToCpayScreen() {
     setPinError(false);
     const idem_key = `cpay-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     try {
+      // 2026-05-16 · backend's POST /send-to-cpay/ reads PREFIXED keys
+      // (`recipient_phone` / `recipient_username` / `recipient_referral_code`).
+      // Earlier we were spreading the detect-kind dict unprefixed
+      // ({phone, username, referral_code}) and every POST 404'd
+      // "Recipient not found" even when the pre-flight lookup
+      // succeeded. Map explicitly so a future refactor of
+      // detectRecipientKind() can't silently re-introduce the bug.
+      // (Backend now also accepts unprefixed keys for safety, but
+      //  this is the canonical shape.)
+      const recipientBody: {
+        recipient_phone?: string;
+        recipient_username?: string;
+        recipient_referral_code?: string;
+      } = {};
+      if (recipientKind.phone) recipientBody.recipient_phone = recipientKind.phone;
+      if (recipientKind.username) recipientBody.recipient_username = recipientKind.username;
+      if (recipientKind.referral_code) recipientBody.recipient_referral_code = recipientKind.referral_code;
+
       const { data } = await paymentsApi.sendToCpay({
-        ...recipientKind,
+        ...recipientBody,
         currency: selectedCrypto,
         amount,
         pin,
@@ -298,21 +352,94 @@ export default function SendToCpayScreen() {
               <PaymentStepper currentStep={1} />
             </View>
 
-            <View style={{ alignItems: "center", marginTop: 24, marginBottom: 24 }}>
-              <View style={{ width: 68, height: 68, borderRadius: 20, backgroundColor: colors.primary[500] + "1A", alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: colors.primary[500] + "25", marginBottom: 16 }}>
-                <Ionicons name="lock-closed" size={30} color={colors.primary[400]} />
+            {/* 2026-05-16 · richer PIN-confirm card · mirrors the paybill
+                confirm screen so the sender sees a full transaction
+                breakdown (amount, recipient, KES equivalent, memo)
+                BEFORE typing their PIN. Earlier this screen showed
+                just "0.0100 SOL → John Njongoro" which obscured the
+                actual KES value at stake. */}
+            <View style={{ alignItems: "center", marginTop: 16, marginBottom: 20 }}>
+              <View style={{ width: 64, height: 64, borderRadius: 20, backgroundColor: colors.primary[500] + "1A", alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: colors.primary[500] + "25", marginBottom: 12 }}>
+                <Ionicons name="lock-closed" size={28} color={colors.primary[400]} />
               </View>
-              <Text style={{ color: tc.textPrimary, fontSize: 22, fontFamily: "DMSans_700Bold", textAlign: "center", marginBottom: 8 }}>
+              <Text style={{ color: tc.textPrimary, fontSize: 22, fontFamily: "DMSans_700Bold", textAlign: "center", marginBottom: 4 }}>
                 Confirm send to Cpay
               </Text>
-              <View style={{ backgroundColor: tc.dark.card, borderRadius: 16, paddingHorizontal: 20, paddingVertical: 12, flexDirection: "row", alignItems: "center", gap: 10, marginTop: 12, borderWidth: 1, borderColor: tc.glass.border }}>
-                <Text style={{ color: tc.textPrimary, fontSize: 17, fontFamily: "DMSans_700Bold" }}>
-                  {parsedAmount.toFixed(decimals)} {selectedCrypto}
-                </Text>
-                <Ionicons name="arrow-forward" size={14} color={tc.textMuted} />
-                <Text style={{ color: tc.textSecondary, fontSize: 15, fontFamily: "DMSans_500Medium" }} numberOfLines={1}>
-                  {recipient}
-                </Text>
+              <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_400Regular", textAlign: "center", marginBottom: 16 }}>
+                Your PIN is never stored or shared
+              </Text>
+
+              <View
+                style={{
+                  width: "100%",
+                  backgroundColor: tc.dark.card,
+                  borderRadius: 16,
+                  paddingHorizontal: 20,
+                  paddingVertical: 18,
+                  borderWidth: 1,
+                  borderColor: tc.glass.border,
+                  gap: 14,
+                }}
+              >
+                {/* Recipient · avatar circle + name + masked phone */}
+                {pickedRecipient ? (
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: tc.glass.border }}>
+                    <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.primary[500] + "20", alignItems: "center", justifyContent: "center" }}>
+                      <Text style={{ color: colors.primary[400], fontSize: 18, fontFamily: "DMSans_700Bold" }}>
+                        {(pickedRecipient.display_name?.[0] || "?").toUpperCase()}
+                      </Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: tc.textMuted, fontSize: 10, letterSpacing: 1, fontFamily: "DMSans_600SemiBold" }}>
+                        SENDING TO
+                      </Text>
+                      <Text style={{ color: tc.textPrimary, fontSize: 16, fontFamily: "DMSans_700Bold", marginTop: 2 }}>
+                        {pickedRecipient.display_name}
+                      </Text>
+                      <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_400Regular", marginTop: 1 }}>
+                        {pickedRecipient.phone_masked} · matched by {pickedRecipient.matched_by.replace("_", " ")}
+                      </Text>
+                    </View>
+                  </View>
+                ) : null}
+
+                {/* Amount row · big crypto + KES equivalent beneath */}
+                <View>
+                  <Text style={{ color: tc.textMuted, fontSize: 10, letterSpacing: 1, fontFamily: "DMSans_600SemiBold" }}>
+                    AMOUNT
+                  </Text>
+                  <View style={{ flexDirection: "row", alignItems: "baseline", gap: 8, marginTop: 4 }}>
+                    <Text style={{ color: tc.textPrimary, fontSize: 24, fontFamily: "DMSans_700Bold" }}>
+                      {parsedAmount.toFixed(Math.min(decimals, 8))}
+                    </Text>
+                    <Text style={{ color: tc.textSecondary, fontSize: 16, fontFamily: "DMSans_600SemiBold" }}>
+                      {selectedCrypto}
+                    </Text>
+                  </View>
+                  {kesPerCrypto > 0 ? (
+                    <Text style={{ color: colors.primary[400], fontSize: 13, fontFamily: "DMSans_500Medium", marginTop: 2 }}>
+                      ≈ KSh {(parsedAmount * kesPerCrypto).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </Text>
+                  ) : null}
+                </View>
+
+                {memo ? (
+                  <View>
+                    <Text style={{ color: tc.textMuted, fontSize: 10, letterSpacing: 1, fontFamily: "DMSans_600SemiBold" }}>
+                      MEMO
+                    </Text>
+                    <Text style={{ color: tc.textPrimary, fontSize: 13, fontFamily: "DMSans_500Medium", marginTop: 4, fontStyle: "italic" }} numberOfLines={2}>
+                      "{memo}"
+                    </Text>
+                  </View>
+                ) : null}
+
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingTop: 8, borderTopWidth: 1, borderTopColor: tc.glass.border }}>
+                  <Ionicons name="flash" size={12} color={colors.success} />
+                  <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_500Medium" }}>
+                    Instant · free · ledger-only · no M-Pesa hop
+                  </Text>
+                </View>
               </View>
             </View>
 
@@ -415,9 +542,72 @@ export default function SendToCpayScreen() {
                     found     · green card with the name + masked phone
                     not_found · red card · sender knows they can't send
                   Removes the "type PIN, see 'Recipient not found'" trap. */}
+              {/*
+                2026-05-16 · two-stage recipient picker.
+
+                State 1 · USER STILL TYPING · suggestState is "loading"
+                or "loaded" and pickedRecipient is null. We show the
+                suggestion list (up to 5 results) as clickable cards.
+                Empty result list → "no match" hint. Each card has the
+                same shape as the single-result confirmed card so
+                tap-to-pick feels continuous.
+
+                State 2 · USER PICKED ONE · pickedRecipient is set.
+                We show one big "Sending to: Jane D. (+254712••••89)"
+                confirmation card with a "Change" button that clears
+                the pick + lets them re-type.
+              */}
               {recipient ? (
                 <View style={{ marginBottom: 14 }}>
-                  {recipientLookup.state === "loading" ? (
+                  {pickedRecipient ? (
+                    /* Confirmed pick */
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 10,
+                        paddingVertical: 12,
+                        paddingHorizontal: 14,
+                        backgroundColor: colors.success + "12",
+                        borderRadius: 12,
+                        borderWidth: 1,
+                        borderColor: colors.success + "40",
+                      }}
+                      accessibilityLabel={`Sending to ${pickedRecipient.display_name}`}
+                    >
+                      <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: tc.textPrimary, fontSize: 14, fontFamily: "DMSans_700Bold" }}>
+                          {pickedRecipient.display_name}
+                        </Text>
+                        <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_400Regular", marginTop: 2 }}>
+                          {pickedRecipient.phone_masked} · matched by {pickedRecipient.matched_by.replace("_", " ")}
+                        </Text>
+                      </View>
+                      <Pressable
+                        onPress={() => {
+                          setPickedRecipient(null);
+                          setRecipient("");
+                          setSuggestions([]);
+                          setSuggestState("idle");
+                        }}
+                        accessibilityLabel="Change recipient"
+                        hitSlop={8}
+                        style={{
+                          paddingHorizontal: 12,
+                          paddingVertical: 6,
+                          borderRadius: 8,
+                          backgroundColor: tc.dark.card,
+                          borderWidth: 1,
+                          borderColor: tc.glass.border,
+                        }}
+                      >
+                        <Text style={{ color: tc.textPrimary, fontSize: 11, fontFamily: "DMSans_600SemiBold" }}>
+                          Change
+                        </Text>
+                      </Pressable>
+                    </View>
+                  ) : suggestState === "loading" ? (
                     <View
                       style={{
                         flexDirection: "row",
@@ -433,35 +623,67 @@ export default function SendToCpayScreen() {
                     >
                       <Spinner size={14} color={tc.textMuted} />
                       <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_500Medium" }}>
-                        Checking Cpay…
+                        Searching Cpay users…
                       </Text>
                     </View>
-                  ) : recipientLookup.state === "found" ? (
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: 10,
-                        paddingVertical: 12,
-                        paddingHorizontal: 14,
-                        backgroundColor: colors.success + "12",
-                        borderRadius: 12,
-                        borderWidth: 1,
-                        borderColor: colors.success + "40",
-                      }}
-                      accessibilityLabel={`Sending to ${recipientLookup.display_name}`}
-                    >
-                      <Ionicons name="checkmark-circle" size={18} color={colors.success} />
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ color: tc.textPrimary, fontSize: 13, fontFamily: "DMSans_700Bold" }}>
-                          {recipientLookup.display_name}
-                        </Text>
-                        <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_400Regular", marginTop: 2 }}>
-                          {recipientLookup.phone_masked} · matched by {recipientLookup.matched_by}
-                        </Text>
-                      </View>
+                  ) : suggestState === "loaded" && suggestions.length > 0 ? (
+                    /* Suggestion list · clickable cards */
+                    <View>
+                      <Text style={{ color: tc.textMuted, fontSize: 10, fontFamily: "DMSans_600SemiBold", letterSpacing: 1, marginBottom: 8, paddingHorizontal: 4, textTransform: "uppercase" }}>
+                        Tap to pick recipient
+                      </Text>
+                      {suggestions.map((s) => (
+                        <Pressable
+                          key={s.id}
+                          onPress={() => {
+                            setPickedRecipient(s);
+                            // Replace the input with the picked display name so
+                            // the user sees a coherent state.
+                            setRecipient(s.display_name);
+                          }}
+                          style={({ pressed, hovered }: any) => ({
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 10,
+                            paddingVertical: 12,
+                            paddingHorizontal: 14,
+                            backgroundColor: pressed || hovered ? colors.primary[500] + "10" : tc.dark.card,
+                            borderRadius: 12,
+                            borderWidth: 1,
+                            borderColor: tc.glass.border,
+                            marginBottom: 8,
+                            ...(isWeb ? { cursor: "pointer", transition: "all 0.12s ease" } : {}),
+                          })}
+                          accessibilityLabel={`Pick ${s.display_name}`}
+                          accessibilityRole="button"
+                        >
+                          <View
+                            style={{
+                              width: 36,
+                              height: 36,
+                              borderRadius: 18,
+                              backgroundColor: colors.primary[500] + "20",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <Text style={{ color: colors.primary[400], fontSize: 14, fontFamily: "DMSans_700Bold" }}>
+                              {(s.display_name?.[0] || "?").toUpperCase()}
+                            </Text>
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ color: tc.textPrimary, fontSize: 14, fontFamily: "DMSans_600SemiBold" }}>
+                              {s.display_name}
+                            </Text>
+                            <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_400Regular", marginTop: 2 }}>
+                              {s.phone_masked} · by {s.matched_by.replace("_", " ")}
+                            </Text>
+                          </View>
+                          <Ionicons name="chevron-forward" size={16} color={tc.textMuted} />
+                        </Pressable>
+                      ))}
                     </View>
-                  ) : recipientLookup.state === "not_found" ? (
+                  ) : suggestState === "loaded" && suggestions.length === 0 ? (
                     <View
                       style={{
                         flexDirection: "row",
@@ -477,16 +699,14 @@ export default function SendToCpayScreen() {
                     >
                       <Ionicons name="close-circle" size={16} color={colors.error} />
                       <Text style={{ color: tc.textPrimary, fontSize: 12, fontFamily: "DMSans_500Medium", flex: 1 }}>
-                        Not a Cpay user · ask them to sign up first.
+                        Nobody matches "{recipient}" on Cpay · ask them to sign up first.
                       </Text>
                     </View>
-                  ) : recipientLookup.state === "error" ? (
-                    <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_400Regular", paddingHorizontal: 4 }}>
-                      {recipientLookup.message}
-                    </Text>
                   ) : (
                     <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_400Regular", paddingHorizontal: 4 }}>
-                      Detected as: {recipientKind.phone ? "phone" : recipientKind.referral_code ? "referral code" : "name"}
+                      {recipient.length < 3
+                        ? "Keep typing · we'll show matches after 3+ characters."
+                        : "Detected as: " + (recipientKind.phone ? "phone" : recipientKind.referral_code ? "referral code" : "name")}
                     </Text>
                   )}
                 </View>
@@ -494,8 +714,55 @@ export default function SendToCpayScreen() {
                 <View style={{ height: 14 }} />
               )}
 
-              {/* Amount */}
-              <SectionHeader title="Amount" icon="cash-outline" iconColor={colors.primary[400]} />
+              {/* Amount · 2026-05-16 KES-first by default · the toggle
+                  swaps which side the user is typing on. Crypto value
+                  is always what goes to the backend; KES is just a
+                  user-facing mental-math aid. */}
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                <SectionHeader title="Amount" icon="cash-outline" iconColor={colors.primary[400]} />
+                <View
+                  style={{
+                    flexDirection: "row",
+                    backgroundColor: tc.dark.card,
+                    borderRadius: 10,
+                    padding: 2,
+                    borderWidth: 1,
+                    borderColor: tc.glass.border,
+                  }}
+                >
+                  <Pressable
+                    onPress={switchToKesMode}
+                    style={({ pressed }) => ({
+                      paddingHorizontal: 12,
+                      paddingVertical: 6,
+                      borderRadius: 8,
+                      backgroundColor: amountMode === "kes" ? colors.primary[500] + "25" : "transparent",
+                      opacity: pressed ? 0.7 : 1,
+                    })}
+                    accessibilityLabel="Enter amount in KES"
+                  >
+                    <Text style={{ color: amountMode === "kes" ? colors.primary[400] : tc.textMuted, fontSize: 11, fontFamily: "DMSans_700Bold", letterSpacing: 0.6 }}>
+                      KES
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={switchToCryptoMode}
+                    style={({ pressed }) => ({
+                      paddingHorizontal: 12,
+                      paddingVertical: 6,
+                      borderRadius: 8,
+                      backgroundColor: amountMode === "crypto" ? colors.primary[500] + "25" : "transparent",
+                      opacity: pressed ? 0.7 : 1,
+                    })}
+                    accessibilityLabel={`Enter amount in ${selectedCrypto}`}
+                  >
+                    <Text style={{ color: amountMode === "crypto" ? colors.primary[400] : tc.textMuted, fontSize: 11, fontFamily: "DMSans_700Bold", letterSpacing: 0.6 }}>
+                      {selectedCrypto}
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+
               <View style={{
                 flexDirection: "row",
                 alignItems: "center",
@@ -507,28 +774,55 @@ export default function SendToCpayScreen() {
                 marginBottom: 6,
               }}>
                 <Text style={{ color: tc.textSecondary, fontSize: 16, fontFamily: "DMSans_700Bold", marginRight: 6 }}>
-                  {selectedCrypto}
+                  {amountMode === "kes" ? "KSh" : selectedCrypto}
                 </Text>
-                <TextInput
-                  value={amount}
-                  onChangeText={setAmount}
-                  placeholder="0.00"
-                  placeholderTextColor={tc.dark.muted}
-                  keyboardType="decimal-pad"
-                  onFocus={() => setFocusedField("amount")}
-                  onBlur={() => setFocusedField(null)}
-                  style={{
-                    flex: 1,
-                    color: tc.textPrimary,
-                    fontSize: 22,
-                    fontFamily: "DMSans_700Bold",
-                    paddingVertical: 14,
-                    ...(isWeb ? ({ outlineStyle: "none" } as any) : {}),
-                  }}
-                  accessibilityLabel="Amount"
-                />
+                {amountMode === "kes" ? (
+                  <TextInput
+                    value={kesInput}
+                    onChangeText={setKesInput}
+                    placeholder="0"
+                    placeholderTextColor={tc.dark.muted}
+                    keyboardType="decimal-pad"
+                    onFocus={() => setFocusedField("amount")}
+                    onBlur={() => setFocusedField(null)}
+                    style={{
+                      flex: 1,
+                      color: tc.textPrimary,
+                      fontSize: 22,
+                      fontFamily: "DMSans_700Bold",
+                      paddingVertical: 14,
+                      ...(isWeb ? ({ outlineStyle: "none" } as any) : {}),
+                    }}
+                    accessibilityLabel="Amount in KES"
+                  />
+                ) : (
+                  <TextInput
+                    value={amount}
+                    onChangeText={setAmount}
+                    placeholder="0.00"
+                    placeholderTextColor={tc.dark.muted}
+                    keyboardType="decimal-pad"
+                    onFocus={() => setFocusedField("amount")}
+                    onBlur={() => setFocusedField(null)}
+                    style={{
+                      flex: 1,
+                      color: tc.textPrimary,
+                      fontSize: 22,
+                      fontFamily: "DMSans_700Bold",
+                      paddingVertical: 14,
+                      ...(isWeb ? ({ outlineStyle: "none" } as any) : {}),
+                    }}
+                    accessibilityLabel={`Amount in ${selectedCrypto}`}
+                  />
+                )}
                 <Pressable
-                  onPress={() => setAmount(balance.toFixed(decimals))}
+                  onPress={() => {
+                    if (amountMode === "kes" && kesPerCrypto > 0) {
+                      setKesInput((balance * kesPerCrypto).toFixed(0));
+                    } else {
+                      setAmount(balance.toFixed(decimals));
+                    }
+                  }}
                   style={({ pressed }) => ({
                     paddingHorizontal: 10,
                     paddingVertical: 4,
@@ -553,12 +847,16 @@ export default function SendToCpayScreen() {
               >
                 <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_400Regular" }}>
                   Available: {balance.toFixed(decimals)} {selectedCrypto}
+                  {kesPerCrypto > 0 ? `  ·  ≈ KSh ${(balance * kesPerCrypto).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : ""}
                 </Text>
-                {/* 2026-05-16 · live KES equivalent so the sender sees
-                    "≈ KSh 132.50" alongside the crypto amount they're
-                    typing. Hidden until both rate + a positive amount
-                    are available (avoids "≈ KSh 0.00" flash). */}
-                {parsedAmount > 0 && kesPerCrypto > 0 ? (
+                {/* 2026-05-16 · always show the OTHER side of the conversion
+                    so the user has both numbers visible. In KES mode this is
+                    "= 0.001823 SOL"; in crypto mode it's "≈ KSh 132.50". */}
+                {amountMode === "kes" && parsedAmount > 0 ? (
+                  <Text style={{ color: colors.primary[400], fontSize: 12, fontFamily: "DMSans_600SemiBold" }}>
+                    = {parsedAmount.toFixed(Math.min(decimals, 8))} {selectedCrypto}
+                  </Text>
+                ) : amountMode === "crypto" && parsedAmount > 0 && kesPerCrypto > 0 ? (
                   <Text style={{ color: colors.primary[400], fontSize: 12, fontFamily: "DMSans_600SemiBold" }}>
                     ≈ KSh {kesEquivalent.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Text>

@@ -133,23 +133,42 @@ class CpayLookupThrottle(UserRateThrottle):
     rate = "60/min"
 
 
+def _safe_profile(recipient, kind: str) -> dict:
+    """Privacy-trimmed profile · surname → first initial, masked phone."""
+    display_name = (getattr(recipient, "full_name", "") or "").strip()
+    parts = display_name.split()
+    if len(parts) >= 2:
+        display_name = f"{parts[0]} {parts[-1][0]}."
+    phone = getattr(recipient, "phone", "") or ""
+    if len(phone) >= 8:
+        phone_masked = phone[:7] + "••••" + phone[-2:]
+    else:
+        phone_masked = "••••" + phone[-2:] if len(phone) >= 2 else "••••"
+    return {
+        "id": str(recipient.id)[:8],
+        "display_name": display_name or "Cpay user",
+        "phone_masked": phone_masked,
+        "matched_by": kind,
+    }
+
+
 class CpayUserLookupView(APIView):
-    """GET cpay-user-lookup/?q=<phone|username|referral_code>
+    """GET cpay-user-lookup/?q=<phone|name|referral_code>[&suggest=1]
 
-    Pre-send recipient lookup used by the Send-to-Cpay mobile screen.
-    Returns the resolved user's safe public profile so the sender can
-    confirm "you are sending to Jane Doe (07••••6789)" BEFORE entering
-    their PIN. Was previously inlined into POST send-to-cpay/ as a
-    404-after-PIN-verify response · much worse UX (user types PIN,
-    waits for a network round-trip, sees "Recipient not found").
+    Two modes:
 
-    2026-05-16 · privacy-safe response shape:
-      { "found": true, "id": "<short>", "display_name": "Jane D.",
-        "phone_masked": "+254712••••89", "username": "janedoe", ... }
-    For non-matches we return `{"found": false}` with HTTP 200 instead
-    of 404 · 404 leaks "this identifier doesn't exist" to enumeration
-    via response-time differences. 200/found:false reads exactly the
-    same on the network as a real match from the sender's perspective.
+      (default) · single-result match · returns `{"found": true, ...}`
+      when ONE unambiguous recipient is identified, or `{"found": false}`
+      otherwise (200, never 404 · enumeration-resistant). Used for the
+      Continue-button gating on the send form.
+
+      ?suggest=1 · multi-result typeahead · returns up to 5 matches as
+      `{"results": [...]}`. Used by the typeahead dropdown on the
+      send-to-cpay form so the sender can pick from multiple "John"s
+      by phone-suffix or name. Each entry has the same privacy-safe
+      profile shape (display_name with surname → initial, masked
+      phone, matched_by). Searches across full_name (icontains),
+      phone (suffix), and referral code.
 
     Throttled at 60/min/user (CpayLookupThrottle) to keep enumeration
     costly without breaking the typed-as-they-go UX.
@@ -161,42 +180,72 @@ class CpayUserLookupView(APIView):
         q = (request.query_params.get("q") or "").strip()
         if not q:
             return Response({"found": False, "error": "q is required"}, status=400)
-        # Reuse the same detect-kind logic mobile uses so backend
-        # and frontend agree on what "this string" represents.
+        suggest = (request.query_params.get("suggest") or "").lower() in {"1", "true", "yes"}
+
+        if suggest:
+            return self._suggest(request, q)
+
+        # Single-result · canonical match via _resolve_recipient.
         kind_kwargs = _detect_kind(q)
         recipient, kind = _resolve_recipient(**kind_kwargs)
         if not recipient or recipient.id == request.user.id:
-            # Don't leak whether the identifier exists · same shape
-            # for "no match" and "matches yourself". Sender will still
-            # be blocked at POST time if they try to self-send.
             return Response({"found": False})
         if not recipient.is_active or getattr(recipient, "is_suspended", False):
             return Response({"found": False})
+        return Response({"found": True, **_safe_profile(recipient, kind)})
 
-        display_name = (
-            (getattr(recipient, "full_name", "") or "").strip()
-            or ""
+    def _suggest(self, request, q: str):
+        """Multi-result typeahead. Searches:
+          - full_name icontains
+          - phone endswith (last-N digits typed)
+          - referral code iexact
+        Returns up to 5 results (the UI can scroll).
+        """
+        from django.db.models import Q
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+
+        # Lower bound · don't fan out a query for 1-2 char prefixes,
+        # which would match nearly every user. 3+ chars is the floor
+        # for a meaningful search.
+        if len(q) < 3:
+            return Response({"results": []})
+
+        qs = User.objects.filter(is_active=True).exclude(id=request.user.id)
+
+        # Build OR filter across the three fields. Phone suffix match
+        # is anchored on endswith so "5454" finds anyone whose phone
+        # ends with those four digits (matches the masked-phone hint
+        # the user sees in the result card).
+        filters = (
+            Q(full_name__icontains=q)
+            | Q(phone__endswith=q.lstrip("+").lstrip("0"))
         )
-        # Drop surname to first initial · "Jane D." · so we don't leak
-        # the recipient's full identity to a random sender who typed
-        # their phone. They still see enough to confirm right person.
-        parts = display_name.split()
-        if len(parts) >= 2:
-            display_name = f"{parts[0]} {parts[-1][0]}."
+        # Referral code lookup via the OneToOne (related table).
+        # Only fires when the input looks like an alnum code · avoids
+        # joining for every typed-as-they-go fragment.
+        import re as _re
+        if _re.match(r"^[A-Za-z0-9]{4,12}$", q):
+            filters |= Q(referral_code__code__iexact=q)
 
-        phone = getattr(recipient, "phone", "") or ""
-        # Mask middle 4 digits · "+254712••••89".
-        if len(phone) >= 8:
-            phone_masked = phone[:7] + "••••" + phone[-2:]
-        else:
-            phone_masked = "••••" + phone[-2:] if len(phone) >= 2 else "••••"
+        matches = list(
+            qs.filter(filters)
+              .order_by("full_name", "phone")[:5]
+        )
+
+        # Decide the matched-by hint per result based on which branch
+        # actually matched · keeps the UI labels honest.
+        def _hint(u):
+            if u.full_name and q.lower() in u.full_name.lower():
+                return "full_name"
+            if u.phone and u.phone.endswith(q.lstrip("+").lstrip("0")):
+                return "phone"
+            return "referral_code"
 
         return Response({
-            "found": True,
-            "id": str(recipient.id)[:8],
-            "display_name": display_name,
-            "phone_masked": phone_masked,
-            "matched_by": kind,  # so the UI can show "Matched by phone"
+            "results": [
+                _safe_profile(u, _hint(u)) for u in matches
+            ],
         })
 
 
@@ -259,10 +308,24 @@ class SendToCpayView(APIView):
             return pin_error
 
         # ── Resolve recipient ────────────────────────────────────
+        # 2026-05-16 · accept BOTH prefixed (`recipient_phone`) and
+        # unprefixed (`phone`) keys. The mobile send-to-cpay screen
+        # spreads its detectRecipientKind() result directly into the
+        # POST body using the unprefixed keys ({phone}/{username}/
+        # {referral_code}); the backend was only reading the prefixed
+        # variants and `_resolve_recipient` silently returned None for
+        # every send. Pre-flight lookup worked because it uses the
+        # unprefixed keys too · POST 404'd consistently. Reading both
+        # keeps the existing tests + any old clients working without
+        # forcing a synchronised release.
         recipient, kind = _resolve_recipient(
-            phone=d.get("recipient_phone") or "",
-            username=d.get("recipient_username") or "",
-            referral_code=d.get("recipient_referral_code") or "",
+            phone=(d.get("recipient_phone") or d.get("phone") or ""),
+            username=(d.get("recipient_username") or d.get("username") or ""),
+            referral_code=(
+                d.get("recipient_referral_code")
+                or d.get("referral_code")
+                or ""
+            ),
         )
         if not recipient:
             return Response(
