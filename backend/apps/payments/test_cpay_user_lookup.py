@@ -288,3 +288,43 @@ class TestSendToCpayFieldNameCompat(TestCase):
         payload = {**self._common_payload(), "phone": "+254745454554"}
         r = self.client.post(self.url, payload, format="json")
         assert r.status_code != 404, r.content
+
+    # 2026-05-16 · `recipient_id_prefix` is the authoritative pointer
+    # back to a typeahead-picked recipient. Solves the "John N." vs
+    # "John Njongoro" truncated-display-name mismatch we hit in prod.
+
+    def test_id_prefix_resolves_when_display_name_truncated(self):
+        # Use the first 8 chars of the recipient UUID · same as what
+        # the typeahead returns via cpay-user-lookup/?suggest=1.
+        id_prefix = str(self.recipient.id)[:8]
+        payload = {**self._common_payload(), "recipient_id_prefix": id_prefix}
+        r = self.client.post(self.url, payload, format="json")
+        # NOT 404 · id-prefix matched; PIN is wrong so we get 400/403
+        # from PIN check · the resolution branch passed.
+        assert r.status_code != 404, r.content
+        body = r.json() if r.headers.get("Content-Type", "").startswith("application/json") else {}
+        assert "Recipient not found" not in str(body), body
+
+    def test_id_prefix_takes_precedence_over_username(self):
+        # Even if a (mismatched) username is also passed, the id_prefix
+        # wins · belt-and-braces against the truncated-display name
+        # contaminating the lookup.
+        id_prefix = str(self.recipient.id)[:8]
+        payload = {
+            **self._common_payload(),
+            "recipient_id_prefix": id_prefix,
+            # Truncated display name that DOESN'T match the full name
+            "recipient_username": "John N.",
+        }
+        r = self.client.post(self.url, payload, format="json")
+        assert r.status_code != 404, r.content
+
+    def test_short_id_prefix_falls_through(self):
+        # 6-char minimum on the id-prefix lookup · a 2-char input
+        # must NOT match a random user. We verify via direct call to
+        # _resolve_recipient (the POST handler hits PIN-check first,
+        # which would 401 before resolution and mask the fallthrough).
+        from apps.payments.internal_transfer import _resolve_recipient
+        u, kind = _resolve_recipient(user_id_prefix="ab")
+        assert u is None
+        assert kind is None

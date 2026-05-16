@@ -312,11 +312,16 @@ export const paymentsApi = {
   banksLive: () => api.get<{ banks: Array<{ slug: string; name: string; code: string }>; cached?: boolean }>("/payments/banks-live/"),
 
   // Cpay-to-Cpay internal transfer · pure ledger move, no SasaPay
-  // hop. Recipient looked up by phone, username, or referral code.
+  // hop. Recipient looked up by phone, username, referral code, OR
+  // the 8-char user-id prefix returned by /cpay-user-lookup/?suggest=1.
+  // The id-prefix is the authoritative pointer when the typeahead
+  // is used · prevents the "John N." (truncated display) vs.
+  // "John Njongoro" (real full_name) mismatch.
   sendToCpay: (data: {
     recipient_phone?: string;
     recipient_username?: string;
     recipient_referral_code?: string;
+    recipient_id_prefix?: string;
     currency: string;
     amount: string;
     pin: string;

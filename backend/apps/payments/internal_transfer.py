@@ -94,16 +94,36 @@ class CpayTransferThrottle(UserRateThrottle):
 SUPPORTED_CURRENCIES = {"USDT", "USDC", "BTC", "ETH", "SOL"}
 
 
-def _resolve_recipient(*, phone="", username="", referral_code=""):
-    """Find the recipient user by any of the three identifiers.
+def _resolve_recipient(*, phone="", username="", referral_code="", user_id_prefix=""):
+    """Find the recipient user by any of the four identifiers.
 
     Returns (user, lookup_kind) or (None, None).
     Privacy-safe · we don't leak whether a phone is registered to
     the caller via timing differences (each branch does a single
     indexed query).
+
+    2026-05-16 · added `user_id_prefix` (first 8 hex chars of the
+    user's UUID, returned by `cpay-user-lookup/?suggest=1`). When the
+    sender picks a recipient from the typeahead, the mobile UI
+    overwrites the text input with the privacy-truncated display name
+    (e.g. "John N." for "John Njongoro"). Re-resolving by username
+    would then miss the user (full_name__iexact="John N." doesn't
+    match "John Njongoro"). The id-prefix lookup is the authoritative
+    pointer back to the picked row · stable across surname truncation,
+    case changes, and other display-only transformations.
     """
     from django.contrib.auth import get_user_model
     User = get_user_model()
+
+    # ID-prefix lookup takes precedence · this is the typeahead's
+    # round-trip identifier, the most reliable way to re-point to a
+    # specific user.
+    if user_id_prefix:
+        prefix = user_id_prefix.strip().lower()
+        if prefix and len(prefix) >= 6:
+            u = User.objects.filter(id__startswith=prefix).first()
+            if u:
+                return u, "id_prefix"
 
     if phone:
         # Normalise · accept "+2547...", "07...", "254..."
@@ -337,21 +357,25 @@ class SendToCpayView(APIView):
 
         # ── Resolve recipient ────────────────────────────────────
         # 2026-05-16 · accept BOTH prefixed (`recipient_phone`) and
-        # unprefixed (`phone`) keys. The mobile send-to-cpay screen
-        # spreads its detectRecipientKind() result directly into the
-        # POST body using the unprefixed keys ({phone}/{username}/
-        # {referral_code}); the backend was only reading the prefixed
-        # variants and `_resolve_recipient` silently returned None for
-        # every send. Pre-flight lookup worked because it uses the
-        # unprefixed keys too · POST 404'd consistently. Reading both
-        # keeps the existing tests + any old clients working without
-        # forcing a synchronised release.
+        # unprefixed (`phone`) keys + a NEW `recipient_id_prefix`
+        # field (8-char UUID prefix) which the typeahead returns on
+        # /cpay-user-lookup/?suggest=1. The id-prefix is the
+        # authoritative pointer back to a picked user · text-based
+        # username/phone lookups can drift when the mobile UI shows
+        # a privacy-truncated display name ("John N." instead of
+        # "John Njongoro"), which was the bug we hit in prod.
         recipient, kind = _resolve_recipient(
             phone=(d.get("recipient_phone") or d.get("phone") or ""),
             username=(d.get("recipient_username") or d.get("username") or ""),
             referral_code=(
                 d.get("recipient_referral_code")
                 or d.get("referral_code")
+                or ""
+            ),
+            user_id_prefix=(
+                d.get("recipient_id_prefix")
+                or d.get("recipient_id")
+                or d.get("id")
                 or ""
             ),
         )

@@ -284,23 +284,30 @@ export default function SendToCpayScreen() {
     setPinError(false);
     const idem_key = `cpay-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     try {
-      // 2026-05-16 · backend's POST /send-to-cpay/ reads PREFIXED keys
-      // (`recipient_phone` / `recipient_username` / `recipient_referral_code`).
-      // Earlier we were spreading the detect-kind dict unprefixed
-      // ({phone, username, referral_code}) and every POST 404'd
-      // "Recipient not found" even when the pre-flight lookup
-      // succeeded. Map explicitly so a future refactor of
-      // detectRecipientKind() can't silently re-introduce the bug.
-      // (Backend now also accepts unprefixed keys for safety, but
-      //  this is the canonical shape.)
+      // 2026-05-16 · prefer the PICKED recipient's id_prefix · this
+      // is the authoritative pointer returned by the typeahead. The
+      // text-based fallbacks (recipient_phone / recipient_username
+      // etc) drift when the UI shows a privacy-truncated display
+      // name (we set the input to "John N." after pick · which then
+      // doesn't match "John Njongoro" via full_name__iexact). The
+      // id-prefix is round-trip-stable.
+      //
+      // If the user did NOT pick from the typeahead (rare edge case
+      // where canContinue passes without a pick) we still send the
+      // detect-kind keys as a fallback.
       const recipientBody: {
+        recipient_id_prefix?: string;
         recipient_phone?: string;
         recipient_username?: string;
         recipient_referral_code?: string;
       } = {};
-      if (recipientKind.phone) recipientBody.recipient_phone = recipientKind.phone;
-      if (recipientKind.username) recipientBody.recipient_username = recipientKind.username;
-      if (recipientKind.referral_code) recipientBody.recipient_referral_code = recipientKind.referral_code;
+      if (pickedRecipient?.id) {
+        recipientBody.recipient_id_prefix = pickedRecipient.id;
+      } else {
+        if (recipientKind.phone) recipientBody.recipient_phone = recipientKind.phone;
+        if (recipientKind.username) recipientBody.recipient_username = recipientKind.username;
+        if (recipientKind.referral_code) recipientBody.recipient_referral_code = recipientKind.referral_code;
+      }
 
       const { data } = await paymentsApi.sendToCpay({
         ...recipientBody,
