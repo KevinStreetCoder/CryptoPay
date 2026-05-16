@@ -304,6 +304,7 @@ const en = {
     paymentConfirmedDesc: "Your payment has been confirmed and completed",
     paymentProcessingDesc: "Waiting for M-Pesa confirmation. This may take a moment.",
     paymentFailedDesc: "Something went wrong. Your funds are safe.",
+    refundedRetryHint: "Your crypto has been credited back to your wallet. You can safely retry this payment.",
     swapComplete: "Swap Complete!",
     swapConfirmedDesc: "Your crypto swap has been completed successfully",
     swapInfoText: "Transaction details are in your history.\nYour updated balances are reflected in your wallets.",

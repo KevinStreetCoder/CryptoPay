@@ -256,6 +256,7 @@
         </div>
       </div>
 
+      {# 2026-05-16 · status pill · 4 explicit branches; see test_receipt_template.py #}
       <!-- Hero amount -->
       <div class="hero">
         <div class="left">
@@ -263,16 +264,27 @@
           <div class="amt">{{ dest_display }}</div>
         </div>
         <div class="right">
-          {# 2026-05-09 fix · Status enum values are lowercase
-             ("completed" / "failed" / "pending"), not uppercase.
-             The previous comparison `tx.status == 'COMPLETED'` was
-             ALWAYS false, so every receipt rendered PENDING even
-             on settled transactions. #}
-          <span class="pill {% if tx.status == 'completed' %}{% elif tx.status == 'failed' %}pill-failed{% else %}pill-pending{% endif %}">
-            <span class="dot"></span>{% if tx.status == 'completed' %}SETTLED{% elif tx.status == 'failed' %}FAILED{% else %}PENDING{% endif %}
-          </span>
+          {% if tx.status == 'completed' %}
+            <span class="pill"><span class="dot"></span>SETTLED</span>
+          {% elif tx.status == 'failed' %}
+            <span class="pill pill-failed"><span class="dot"></span>FAILED</span>
+          {% elif tx.status == 'confirming' or tx.status == 'processing' %}
+            <span class="pill pill-pending"><span class="dot"></span>PROCESSING</span>
+          {% else %}
+            <span class="pill pill-pending"><span class="dot"></span>PENDING</span>
+          {% endif %}
         </div>
       </div>
+
+      {# 2026-05-16 · failure_reason banner on FAILED receipts #}
+      {% if tx.status == 'failed' and tx.failure_reason %}
+      <div style="margin: 12px 0; padding: 12px 14px; border-radius: 10px;
+                  background: #FEF2F2; border: 1px solid #FCA5A5; color: #991B1B;
+                  font-size: 12px; line-height: 1.5;">
+        <div style="font-weight: 700; margin-bottom: 4px;">Payment did not settle</div>
+        <div>{{ tx.failure_reason }}</div>
+      </div>
+      {% endif %}
 
       <!-- Paid-to -->
       {% if recipient %}

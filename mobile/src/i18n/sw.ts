@@ -306,6 +306,7 @@ const sw: Translations = {
     paymentConfirmedDesc: "Malipo yako yamethibitishwa na kukamilika",
     paymentProcessingDesc: "Kusubiri uthibitisho wa M-Pesa. Hii inaweza kuchukua muda.",
     paymentFailedDesc: "Kuna kitu kimekwenda vibaya. Fedha zako ziko salama.",
+    refundedRetryHint: "Crypto yako imerudishwa kwenye pochi. Unaweza kujaribu malipo tena.",
     swapComplete: "Ubadilishaji Umekamilika!",
     swapConfirmedDesc: "Ubadilishaji wako wa crypto umekamilika",
     swapInfoText: "Maelezo ya muamala yako yako kwenye historia yako.\nSalio lako lililosasishwa linaonyeshwa kwenye pochi yako.",

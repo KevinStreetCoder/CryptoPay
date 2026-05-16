@@ -192,6 +192,15 @@ export default function PaymentSuccessScreen() {
   const [liveMerchantName, setLiveMerchantName] = useState(
     (params.merchant_name || "").trim()
   );
+  // 2026-05-16 · live failure_reason · seeded from the route param
+  // (set by confirm.tsx when the saga's sync API call returns an error)
+  // and refreshed when polling picks up the cron / webhook-set value.
+  // Surface this next to the FAILED badge so the user sees WHY the
+  // payment didn't settle (not just a generic red banner) and can
+  // decide whether to retry or contact support.
+  const [liveFailureReason, setLiveFailureReason] = useState(
+    (params.error_message || "").trim()
+  );
 
   const { width } = useWindowDimensions();
   const isDesktop = isWeb && width >= 900;
@@ -219,12 +228,23 @@ export default function PaymentSuccessScreen() {
         if (cbName && cbName !== liveMerchantName) {
           setLiveMerchantName(cbName);
         }
+        // 2026-05-16 · pick up failure_reason as soon as the saga writes
+        // it (sync rejection, webhook-FAILED state, or cron timeout).
+        // Earlier we polled status only · the user saw a generic red
+        // banner with no explanation when payment failed.
+        const cbReason = ((data as any).failure_reason || "").trim();
+        if (cbReason && cbReason !== liveFailureReason) {
+          setLiveFailureReason(cbReason);
+        }
         if (newStatus !== liveStatus) {
           setLiveStatus(newStatus);
           queryClient.invalidateQueries({ queryKey: ["wallets"] });
           queryClient.invalidateQueries({ queryKey: ["transactions"] });
           if (newStatus === "completed" && !isWeb) {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          }
+          if (newStatus === "failed" && !isWeb) {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
           }
         }
       } catch {}
@@ -373,11 +393,48 @@ export default function PaymentSuccessScreen() {
           }}
         >
           {isFailed
-            ? params.error_message || t("payment.paymentFailedDesc")
+            ? liveFailureReason || params.error_message || t("payment.paymentFailedDesc")
             : isCompleted
               ? (isSwap ? t("payment.swapConfirmedDesc") : t("payment.paymentConfirmedDesc"))
               : t("payment.paymentProcessingDesc")}
         </Text>
+
+        {/*
+          2026-05-16 · explicit "Funds refunded · please retry" banner
+          when the saga's failure_reason carries one. Prevents the user
+          from thinking they need to chase the merchant for a refund;
+          the crypto is already back in their wallet.
+        */}
+        {isFailed && liveFailureReason && liveFailureReason.toLowerCase().includes("refund") && (
+          <View
+            style={{
+              width: "100%",
+              backgroundColor: colors.warning + "12",
+              borderColor: colors.warning + "40",
+              borderWidth: 1,
+              borderRadius: 12,
+              paddingVertical: 12,
+              paddingHorizontal: 14,
+              marginBottom: 20,
+              flexDirection: "row",
+              alignItems: "flex-start",
+              gap: 10,
+            }}
+          >
+            <Ionicons name="information-circle" size={18} color={colors.warning} />
+            <Text
+              style={{
+                color: tc.textPrimary,
+                fontSize: 13,
+                lineHeight: 20,
+                fontFamily: "DMSans_500Medium",
+                flex: 1,
+              }}
+            >
+              {t("payment.refundedRetryHint") || "Your crypto has been credited back to your wallet. You can safely retry this payment."}
+            </Text>
+          </View>
+        )}
 
         {/* Receipt Card · animated */}
         <Animated.View
