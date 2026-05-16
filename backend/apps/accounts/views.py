@@ -2711,6 +2711,87 @@ class IsStaffUser(IsAuthenticated):
         return super().has_permission(request, view) and request.user.is_staff
 
 
+# 2026-05-17 · admin user-listing surfaces a "total KES balance" per
+# user. Rather than hit the rates service per user (which would tank
+# the paginated list with N currency * M users calls), build a single
+# crypto→KES rate map once and reuse for the whole page. The map is
+# also cached for 60s so a refresh-heavy admin dashboard doesn't spam
+# the rates provider.
+def _build_kes_rate_map() -> dict:
+    """Return `{currency: Decimal(rate_kes_per_unit)}` for every
+    crypto Cpay supports, plus KES itself = 1.
+
+    Read from the same `RateService.get_crypto_kes_rate()` that drives
+    the user-facing quote screen · we want admin-visible totals to
+    match what a user would see when they tap "swap to KES" on their
+    wallet. Falls back to 0 silently if the rate provider is down so a
+    partial outage doesn't 500 the admin list (the affected wallets
+    just contribute 0 to the user's total, which is conservative).
+
+    60-second cache lives in Redis (`admin:user_kes_rate_map`); admin
+    list views are auto-refreshed by the dashboard polling but the
+    rate-provider underneath only needs to be hit once per minute.
+    """
+    from decimal import Decimal as _D
+    from django.core.cache import cache as _cache
+
+    cached = _cache.get("admin:user_kes_rate_map")
+    if cached:
+        # Decimal serialises to str in cache · rehydrate.
+        return {k: _D(str(v)) for k, v in cached.items()}
+
+    rate_map: dict = {"KES": _D("1")}
+    try:
+        from apps.rates.services import RateService
+    except ImportError:
+        return rate_map
+
+    # Currencies Cpay supports for wallets. Mirrors the canonical set
+    # in mobile/src/constants/* + apps.wallets.constants. If a user
+    # somehow has a wallet in a currency outside this set, it falls
+    # through to zero KES contribution (safe + noisy in logs).
+    for ccy in ("USDT", "USDC", "BTC", "ETH", "SOL"):
+        try:
+            info = RateService.get_crypto_kes_rate(ccy)
+            rate_map[ccy] = _D(str(info.get("final_rate") or "0"))
+        except Exception:  # noqa: BLE001
+            # Per-currency failure should NOT take down the rest of
+            # the rate map · log and continue with 0 for this one.
+            logger.warning(
+                "admin.kes_rate_map.skipped_currency",
+                extra={"currency": ccy},
+            )
+            rate_map[ccy] = _D("0")
+
+    # Persist as str-keyed dict (json-safe).
+    _cache.set(
+        "admin:user_kes_rate_map",
+        {k: str(v) for k, v in rate_map.items()},
+        timeout=60,
+    )
+    return rate_map
+
+
+def _wallet_total_kes(wallets_iterable, rate_map: dict):
+    """Sum `wallet.balance * rate_map[currency]` across an iterable
+    of Wallet rows. Returns Decimal quantised to 2 dp.
+
+    `wallets_iterable` can be a queryset OR a pre-fetched list · the
+    caller decides based on whether the wallets came from a prefetch.
+    """
+    from decimal import Decimal as _D
+    total = _D("0")
+    for w in wallets_iterable:
+        ccy = (w.currency or "").upper()
+        rate = rate_map.get(ccy, _D("0"))
+        try:
+            bal = _D(str(w.balance or 0))
+        except Exception:  # noqa: BLE001
+            bal = _D("0")
+        total += bal * rate
+    return total.quantize(_D("0.01"))
+
+
 class AdminUserListView(APIView):
     """List users with KYC distribution stats. Staff only."""
 
@@ -2758,7 +2839,18 @@ class AdminUserListView(APIView):
 
         total = qs.count()
         start = (page - 1) * page_size
-        users = qs[start : start + page_size]
+        # 2026-05-17 · prefetch wallets for the page-size users so the
+        # per-user KES-balance loop below makes ONE DB round-trip total
+        # (Django's prefetch_related batches) instead of N+1 hits.
+        from apps.wallets.models import Wallet as _Wallet
+        users = qs[start : start + page_size].prefetch_related(
+            db_models.Prefetch(
+                "wallets",
+                queryset=_Wallet.objects.only(
+                    "user_id", "currency", "balance",
+                ),
+            )
+        )
 
         # Online window. Anything newer = "active now" dot. 5 minutes is
         # the common convention; matches Slack/Discord presence UX.
@@ -2767,10 +2859,18 @@ class AdminUserListView(APIView):
         # "Active today" is a softer "recently seen" signal (24h).
         today_cutoff = timezone.now() - timedelta(hours=24)
 
+        # 2026-05-17 · build ONE crypto→KES rate map per request so we
+        # don't hit the rates service per-user-per-currency. 60-s
+        # cache + per-currency error isolation inside the helper.
+        rate_map = _build_kes_rate_map()
+
         user_list = []
         for u in users:
             is_online = bool(u.last_activity_at and u.last_activity_at > online_cutoff)
             active_today = bool(u.last_activity_at and u.last_activity_at > today_cutoff)
+            # The prefetched wallets attribute is the iterable; pass as-is
+            # so _wallet_total_kes doesn't trigger another query.
+            total_kes = _wallet_total_kes(u.wallets.all(), rate_map)
             user_list.append({
                 "id": str(u.id),
                 "phone": u.phone,
@@ -2791,6 +2891,11 @@ class AdminUserListView(APIView):
                 # Platform fingerprint ("apk" / "ios" / "web_mobile" /
                 # "web_desktop" / ""). Admin list renders an icon per row.
                 "last_platform": u.last_platform or "",
+                # 2026-05-17 · total wallet balance converted to KES at
+                # the user-facing crypto/KES rate. Helps ops triage
+                # high-value accounts at a glance + drives the new
+                # "Top balances" sort filter in the admin dashboard.
+                "total_kes_balance": str(total_kes),
             })
 
         # Aggregate: total online right now (useful header stat).
@@ -2994,16 +3099,34 @@ class AdminUserDetailView(APIView):
 
         # Wallet balances
         from apps.wallets.models import Wallet
-        wallets = Wallet.objects.filter(user=target_user)
-        wallet_data = [
-            {
+        wallets = list(Wallet.objects.filter(user=target_user))
+
+        # 2026-05-17 · convert each wallet to KES at the user-facing
+        # crypto/KES rate so ops sees both the per-currency balance
+        # and its equivalent monetary value in one row.
+        rate_map = _build_kes_rate_map()
+        from decimal import Decimal as _D
+        wallet_data = []
+        for w in wallets:
+            ccy = (w.currency or "").upper()
+            rate = rate_map.get(ccy, _D("0"))
+            bal = _D(str(w.balance or 0))
+            kes_value = (bal * rate).quantize(_D("0.01"))
+            wallet_data.append({
                 "currency": w.currency,
                 "balance": str(w.balance),
                 "locked_balance": str(w.locked_balance),
                 "available_balance": str(w.available_balance),
-            }
-            for w in wallets
-        ]
+                # KES equivalent per wallet · zero for KES wallet itself
+                # only because rate=1, which is fine.
+                "kes_value": str(kes_value),
+                "rate_kes_per_unit": str(rate),
+            })
+
+        # Aggregate total · sum of per-wallet KES values. This is the
+        # number that drives the "high-value account" header on the
+        # detail page.
+        total_kes_balance = _wallet_total_kes(wallets, rate_map)
 
         # Devices
         devices = target_user.devices.all().order_by("-last_seen")[:10]
@@ -3120,6 +3243,10 @@ class AdminUserDetailView(APIView):
                 "updated_at": target_user.updated_at.isoformat(),
             },
             "wallets": wallet_data,
+            # 2026-05-17 · per-user total wallet balance in KES.
+            # Renders as the headline number on the admin user-detail
+            # page; helps ops triage high-value accounts before action.
+            "total_kes_balance": str(total_kes_balance),
             "recent_transactions": transactions,
             "devices": device_data,
             "current_device": current_device,
