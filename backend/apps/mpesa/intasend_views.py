@@ -172,11 +172,67 @@ def _dedup_key(payload: dict) -> str | None:
 
 
 def _is_complete(state: str) -> bool:
-    return (state or "").upper() in {"COMPLETE", "COMPLETED", "PROCESSED"}
+    s = (state or "").upper().strip()
+    # IntaSend uses a handful of synonyms · "complete" (batch-level),
+    # "completed" (per-tx), "processed" (legacy), "successful" (B2C
+    # confirm callback), plus status codes "BC100" (batch complete)
+    # and "TS100" (transaction successful).
+    return s in {
+        "COMPLETE", "COMPLETED", "PROCESSED", "SUCCESSFUL", "SUCCESS",
+        "BC100", "TS100",
+    }
 
 
 def _is_failed(state: str) -> bool:
-    return (state or "").upper() in {"FAILED", "RETRY", "FAILED_RETRYABLE"}
+    s = (state or "").upper().strip()
+    # 2026-05-16 · added "Initiation failed" (the literal inner-tx
+    # status IntaSend's B2B send-money sets when the disbursement is
+    # rejected pre-flight · e.g. insufficient wallet balance OR
+    # can_disburse=False on the wallet config). Status codes:
+    #   TF103 = transaction failed at initiation
+    #   TF102 = transaction failed during processing
+    #   TF101 = transaction failed at acknowledgement
+    return s in {
+        "FAILED", "RETRY", "FAILED_RETRYABLE",
+        "INITIATION FAILED", "INITIATION_FAILED",
+        "TF101", "TF102", "TF103",
+    }
+
+
+def _resolve_send_money_state(payload: dict) -> str:
+    """Pick the most authoritative state from an IntaSend send-money
+    webhook payload.
+
+    Send-money batches carry status at two levels:
+      - top-level `state` · the BATCH status (often "Complete" even
+        when every inner tx failed)
+      - `transactions[0].status` · the PER-TRANSACTION status, which
+        is what we actually care about for the saga.
+
+    Earlier we only read top-level `state`. A payload with
+    `state: ""` + `transactions: [{status: "Initiation failed"}]`
+    fell through to "noted" and the tx hung in CONFIRMING until the
+    10-min cron compensated. Per-tx status takes precedence when it
+    looks more specific than the batch status.
+    """
+    top_state = (payload.get("state") or "").strip()
+    txs = payload.get("transactions") or []
+    if txs and isinstance(txs, list):
+        first = txs[0] if isinstance(txs[0], dict) else {}
+        per_tx_state = (first.get("status") or "").strip()
+        per_tx_code = (first.get("status_code") or "").strip()
+        # Use the per-tx status if it looks more specific than the
+        # batch state. "Initiation failed" / "Failed" trump "Complete".
+        if per_tx_state and (
+            _is_failed(per_tx_state)
+            or _is_complete(per_tx_state)
+            or not top_state
+        ):
+            return per_tx_state
+        # Or use the per-tx status_code if it's a TF/TS code.
+        if per_tx_code:
+            return per_tx_code
+    return top_state
 
 
 # ── Per-event handlers ───────────────────────────────────────────────
@@ -188,7 +244,17 @@ def _find_pending_tx(payload: dict):
     Tries (in order):
       1. `api_ref` (our UUID round-tripped from initiate)
       2. `tracking_id` against `Transaction.saga_data["intasend_tracking_id"]`
-      3. `invoice_id` against `Transaction.saga_data["intasend_invoice_id"]`
+      3. `file_id` against `Transaction.saga_data["intasend_file_id"]`
+         (2026-05-16 · for B2B/send-money where IntaSend's webhook
+         carries the per-tx tracking_id which doesn't match what we
+         stored at initiate-time. The file_id is the stable batch
+         identifier that's set on the initiate response AND echoed
+         on every webhook for that batch.)
+      4. `invoice_id` against `Transaction.saga_data["intasend_invoice_id"]`
+      5. `mpesa_conversation_id` fallback · we stamped this with
+         whichever ID IntaSend's initiate returned (file_id for
+         send-money batches), so a webhook delivering the same
+         file_id resolves cleanly.
     """
     from apps.payments.models import Transaction
 
@@ -202,6 +268,20 @@ def _find_pending_tx(payload: dict):
     if tracking_id:
         tx = Transaction.objects.filter(
             saga_data__intasend_tracking_id=tracking_id
+        ).first()
+        if tx:
+            return tx
+
+    file_id = payload.get("file_id")
+    if file_id:
+        tx = Transaction.objects.filter(
+            saga_data__intasend_file_id=file_id
+        ).first()
+        if tx:
+            return tx
+        # Legacy txs where we stamped file_id as mpesa_conversation_id.
+        tx = Transaction.objects.filter(
+            saga_data__mpesa_conversation_id=file_id,
         ).first()
         if tx:
             return tx
@@ -298,12 +378,17 @@ def _handle_send_money_event(payload: dict) -> dict:
     from apps.payments.models import Transaction
     from apps.payments.saga import PaymentSaga
 
-    state = payload.get("state", "")
+    # 2026-05-16 · use the helper that resolves per-tx status from
+    # `transactions[0].status` when top-level `state` is empty/batch-level.
+    # IntaSend's B2B "Initiation failed" lives only at the per-tx level
+    # and was previously dropped, leaving txs in CONFIRMING for 10 min
+    # until the cron compensated.
+    state = _resolve_send_money_state(payload)
     tx = _find_pending_tx(payload)
     if not tx:
         logger.warning(
-            "intasend.send_money.tx_not_found",
-            extra={"payload_summary": {k: payload.get(k) for k in ("api_ref", "tracking_id", "invoice_id", "state")}},
+            "intasend.send_money.tx_not_found · state=%s file_id=%s tracking_id=%s",
+            state, payload.get("file_id", ""), payload.get("tracking_id", ""),
         )
         return {"status": "tx_not_found"}
 

@@ -577,6 +577,147 @@ class TestWebhookClassification(TestCase):
         assert _classify_event(payload) == "send_money"
 
 
+# 2026-05-16 · per-transaction inner-status resolution ───────────────
+
+
+class TestResolveSendMoneyState(TestCase):
+    """IntaSend's send-money batches carry status at TWO levels:
+        top-level `state` · batch status (often "Complete" even when
+            every inner tx failed)
+        `transactions[0].status` · per-tx, the one the saga cares about.
+
+    Earlier we only read top-level `state`. A payload with state=""
+    + transactions=[{status: "Initiation failed"}] fell through to
+    "noted" and the tx hung in CONFIRMING until the 10-min cron
+    compensated. This regression test guards against re-introducing
+    that drop."""
+
+    def test_empty_state_picks_up_per_tx_initiation_failed(self):
+        from apps.mpesa.intasend_views import _resolve_send_money_state, _is_failed
+        payload = {
+            "state": "",
+            "transactions": [
+                {"status": "Initiation failed", "status_code": "TF103"},
+            ],
+        }
+        s = _resolve_send_money_state(payload)
+        assert _is_failed(s), s
+
+    def test_per_tx_failure_overrides_batch_complete(self):
+        # The smoking-gun payload: BATCH "Complete" but the inner tx
+        # actually failed. Per-tx must win.
+        from apps.mpesa.intasend_views import _resolve_send_money_state, _is_failed
+        payload = {
+            "state": "Complete",
+            "transactions": [
+                {"status": "Initiation failed", "status_code": "TF103"},
+            ],
+        }
+        s = _resolve_send_money_state(payload)
+        assert _is_failed(s), s
+
+    def test_per_tx_complete_keeps_complete(self):
+        from apps.mpesa.intasend_views import _resolve_send_money_state, _is_complete
+        payload = {
+            "state": "Complete",
+            "transactions": [
+                {"status": "Completed", "status_code": "TS100"},
+            ],
+        }
+        s = _resolve_send_money_state(payload)
+        assert _is_complete(s), s
+
+    def test_status_codes_recognised(self):
+        from apps.mpesa.intasend_views import _is_failed, _is_complete
+        assert _is_failed("TF103")
+        assert _is_failed("TF102")
+        assert _is_failed("TF101")
+        assert _is_complete("BC100")
+        assert _is_complete("TS100")
+
+
+class TestFindPendingTxByFileId(TestCase):
+    """B2B / send-money webhooks deliver a per-tx `tracking_id` that
+    doesn't match what we stored at initiate-time (we stamp
+    `saga_data.intasend_file_id` because the initiate response only
+    has the batch-level file_id). _find_pending_tx must look up by
+    file_id too, otherwise the webhook returns tx_not_found and the
+    tx hangs in CONFIRMING."""
+
+    def test_resolves_via_intasend_file_id_in_saga_data(self):
+        from apps.payments.models import Transaction
+        from apps.accounts.models import User
+        from apps.mpesa.intasend_views import _find_pending_tx
+        from uuid import uuid4
+
+        user = User.objects.create_user(
+            email=f"file-id-test-{uuid4().hex[:6]}@example.com",
+            phone=f"+25470{uuid4().int % 10000000:07d}",
+            password="testing12345",
+        )
+        tx = Transaction.objects.create(
+            user=user,
+            idempotency_key=str(uuid4()),
+            type=Transaction.Type.PAYBILL_PAYMENT,
+            status=Transaction.Status.CONFIRMING,
+            source_currency="SOL",
+            source_amount="0.00190758",
+            dest_currency="KES",
+            dest_amount="10",
+            fee_amount="0",
+            fee_currency="KES",
+            mpesa_paybill="888880",
+            saga_data={"intasend_file_id": "YGQ9ZNX"},
+        )
+        # Webhook payload carries a per-tx tracking_id (mismatched)
+        # AND the batch file_id (matches what we stored).
+        payload = {
+            "tracking_id": "98834bcd-d7ab-4e23-9082-6878b380171c",
+            "file_id": "YGQ9ZNX",
+            "state": "",
+            "transactions": [{"status": "Initiation failed"}],
+        }
+        found = _find_pending_tx(payload)
+        assert found is not None
+        assert found.id == tx.id
+
+    def test_resolves_via_mpesa_conversation_id_legacy(self):
+        # Older tx rows stamped file_id as mpesa_conversation_id (no
+        # intasend_file_id key). _find_pending_tx falls back to that
+        # column too, so existing rows still resolve.
+        from apps.payments.models import Transaction
+        from apps.accounts.models import User
+        from apps.mpesa.intasend_views import _find_pending_tx
+        from uuid import uuid4
+
+        user = User.objects.create_user(
+            email=f"legacy-conv-{uuid4().hex[:6]}@example.com",
+            phone=f"+25470{uuid4().int % 10000000:07d}",
+            password="testing12345",
+        )
+        tx = Transaction.objects.create(
+            user=user,
+            idempotency_key=str(uuid4()),
+            type=Transaction.Type.PAYBILL_PAYMENT,
+            status=Transaction.Status.CONFIRMING,
+            source_currency="USDT",
+            source_amount="0.10",
+            dest_currency="KES",
+            dest_amount="10",
+            fee_amount="0",
+            fee_currency="KES",
+            mpesa_paybill="888880",
+            saga_data={"mpesa_conversation_id": "LEGACY-FILE-ID"},
+        )
+        payload = {
+            "file_id": "LEGACY-FILE-ID",
+            "state": "Complete",
+        }
+        found = _find_pending_tx(payload)
+        assert found is not None
+        assert found.id == tx.id
+
+
 # ── 2026-05-16 · query_transaction routes to the right endpoint ──────
 
 
