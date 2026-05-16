@@ -75,7 +75,19 @@ class CpayTransferThrottle(UserRateThrottle):
     60/min is the floor that lets a normal user retry through their
     own mistakes without hitting the wall. An attacker who DOES hit
     the cap is already blocked by PIN-lockout + the per-currency
-    daily limits."""
+    daily limits.
+
+    **2026-05-16 scope-isolation fix · `scope = 'cpay_transfer'`.**
+    All `UserRateThrottle` subclasses inherit `scope = 'user'` from
+    DRF's base · the cache key is `throttle_user_<userid>` regardless
+    of which subclass we wire to a view. So a user who burns 120
+    lookups on the typeahead also blows past the 60 cap on transfers
+    in the SAME bucket · they'd see 429 on the very first send-to-
+    cpay POST because the typeahead had already filled the slot.
+    Unique scope per throttle → each gets its own cache key →
+    independent counters. See sibling throttles in this file and
+    in sasapay_admin_views for the same fix."""
+    scope = "cpay_transfer"
     rate = "60/min"
 
 
@@ -140,7 +152,12 @@ class CpayLookupThrottle(UserRateThrottle):
     when the user toggles back and forth between picks. The 60/min
     floor was tripping legitimate users mid-form ("Too many requests"
     toast on Send-to-Cpay). 120/min stays cheap (one cached query
-    per char) but still rate-limits any actual enumeration script."""
+    per char) but still rate-limits any actual enumeration script.
+
+    `scope = 'cpay_lookup'` so this throttle keeps its OWN bucket ·
+    see CpayTransferThrottle for the regression we hit when scopes
+    were shared."""
+    scope = "cpay_lookup"
     rate = "120/min"
 
 

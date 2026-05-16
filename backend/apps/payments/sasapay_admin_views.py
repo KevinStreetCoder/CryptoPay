@@ -165,7 +165,12 @@ class BillQueryThrottle(UserRateThrottle):
     bill name once the paybill number is 5-7 digits. Combined with
     the user typing the account number, a single live-validation
     session burns 4-6 requests; with the prior 30/min cap a user
-    paying multiple bills in quick succession would hit 429."""
+    paying multiple bills in quick succession would hit 429.
+
+    `scope = 'bill_query'` · isolated bucket so this doesn't burn
+    the user's shared `throttle_user_<id>` slot (see CpayTransfer
+    throttle for the same fix-pattern)."""
+    scope = "bill_query"
     rate = "60/min"
 
 
@@ -263,7 +268,11 @@ class AccountValidateThrottle(UserRateThrottle):
     a privacy-sensitive endpoint, so we keep enumeration costly · 60/min
     per authenticated user is the floor that still feels snappy in the
     legitimate UX. Use BillQueryThrottle (also 60/min) as the matched
-    pair for paybill name lookups."""
+    pair for paybill name lookups.
+
+    `scope = 'account_validate'` · isolated cache bucket so this
+    doesn't burn the user's shared `throttle_user_<id>` slot."""
+    scope = "account_validate"
     rate = "60/min"
 
 
