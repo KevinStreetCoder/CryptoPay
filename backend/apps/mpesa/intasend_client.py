@@ -420,13 +420,35 @@ class IntaSendClient:
         collection_aliases = {"collection", "c2b", "stk"}
 
         def _hit_send_money() -> dict:
-            payload = {}
-            if tracking_id:
-                payload["tracking_id"] = tracking_id
+            # 2026-05-17 · CRITICAL · `/api/v1/send-money/status/`
+            # REQUIRES `tracking_id` in the payload. Passing only
+            # `file_id` returns:
+            #   400 {"type":"client_error","errors":[{"code":
+            #     "invalid_request_data","detail":"tracking_id is required"}]}
+            # Production tx C87DC5F2 lost 60 KES because the cron
+            # called _hit_send_money with file_id alone, IntaSendError
+            # raised, the saga waited 10 min and compensated · even
+            # though IntaSend had already disbursed via M-Pesa B2B.
+            #
+            # If the caller only has a file_id (legacy txs that didn't
+            # capture the per-tx tracking_id at initiate time), we
+            # cannot use the send-money status endpoint at all · raise
+            # a typed error so query_transaction falls back to the
+            # collection endpoint or surfaces the limitation to the
+            # cron.
+            if not tracking_id:
+                raise IntaSendError(
+                    "send-money status endpoint requires tracking_id "
+                    "(file_id alone is not accepted by IntaSend). "
+                    "Caller must persist per-tx tracking_id at initiate "
+                    "time and pass it here."
+                )
+            payload = {"tracking_id": tracking_id}
             if invoice_id:
-                # IntaSend send-money status doesn't accept invoice_id ·
-                # we pass file_id under this name for callers that store
-                # the file batch ID as `invoice_id` (rare).
+                # Belt-and-braces · include file_id alongside tracking_id
+                # when caller has both. IntaSend doesn't require it but
+                # accepts it for disambiguation on rare batch ID
+                # collisions.
                 payload["file_id"] = invoice_id
             return self._post("/api/v1/send-money/status/", payload)
 

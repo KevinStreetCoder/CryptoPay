@@ -141,7 +141,7 @@ def _verify_webhook(request, body_bytes: bytes, payload: dict) -> bool:
 def _dedup_key(payload: dict) -> str | None:
     """Compose a Redis SETNX dedup key for a webhook delivery.
 
-    2026-05-16 · MUST include `state` in the key. IntaSend sends MULTIPLE
+    2026-05-16 · MUST include state in the key. IntaSend sends MULTIPLE
     webhooks for the same tracking_id as the payment progresses:
 
         QUEUED  → PROCESSING  → COMPLETED   (happy path)
@@ -152,23 +152,53 @@ def _dedup_key(payload: dict) -> str | None:
     (usually a near-empty QUEUED notification with no `state` value)
     won the SETNX, and every subsequent state transition for the SAME
     tracking_id returned 200 "duplicate" before our handler ever saw
-    the COMPLETED / FAILED state. Saga stuck in CONFIRMING forever,
-    cron's 10-min compensate eventually refunded the user.
+    the COMPLETED / FAILED state.
 
-    Composing (tracking_id, state) means each distinct state for a tx
-    is processed exactly once · genuine retries by IntaSend for the
-    SAME (tracking_id, state) still dedup correctly.
+    2026-05-17 · CRITICAL FIX driven by tx C87DC5F2 (production money loss).
+    The send-money webhook does NOT have a top-level `state` field at
+    all · the per-tx status lives in `transactions[0].status`. So the
+    earlier "include state in key" change still produced the SAME
+    dedup key (no-state) for every state of a send-money tx. The
+    terminal "Successful" callback was silently dropped as a duplicate
+    and the saga compensated even though IntaSend had already settled
+    the M-Pesa B2B disbursement on the user (real receipt issued).
+
+    Fix · the key now incorporates the per-tx `status` AND
+    `status_code` from `transactions[0]` when present, mirroring
+    `_resolve_send_money_state`. Collection webhooks fall back to the
+    top-level `state` field as before. Belt-and-braces: also include
+    `failed_code` / `failed_reason` length sketch so a transition from
+    "Successful · code=X" → "Successful · code=Y" (rare but real on
+    PESALINK fallbacks) doesn't collide.
+
+    Composing (tracking_id, effective_state) means each distinct state
+    for a tx is processed exactly once · genuine retries by IntaSend
+    for the SAME (tracking_id, effective_state) still dedup correctly.
 
     Falls back to (invoice_id, state) for collection events.
     """
     tid = payload.get("tracking_id") or payload.get("invoice_id")
     if not (isinstance(tid, str) and tid):
         return None
-    # Normalise state · empty / missing → "no-state" sentinel so the
-    # first-webhook-with-no-state still gets ONE chance to fire (the
-    # send_money handler returns "noted" for unknown states; harmless).
-    state = (payload.get("state") or "no-state").strip().upper()
-    return f"intasend_callback_seen:{tid}:{state}"
+
+    # 2026-05-17 · Pull the most authoritative state for dedup.
+    # Send-money batches carry status only at transactions[0].status /
+    # transactions[0].status_code · top-level `state` is empty.
+    # Collection events use top-level `state`.
+    top_state = (payload.get("state") or "").strip().upper()
+    per_tx_state = ""
+    per_tx_code = ""
+    txs = payload.get("transactions") or []
+    if isinstance(txs, list) and txs and isinstance(txs[0], dict):
+        per_tx_state = (txs[0].get("status") or "").strip().upper()
+        per_tx_code = (txs[0].get("status_code") or "").strip().upper()
+
+    # `effective_state` collapses every transition signal into one
+    # token. For send-money: prefer per-tx status, then per-tx code.
+    # For collection: top-level state. Sentinel "no-state" so a
+    # genuinely empty FIRST webhook still gets one chance to fire.
+    effective_state = per_tx_state or per_tx_code or top_state or "no-state"
+    return f"intasend_callback_seen:{tid}:{effective_state}"
 
 
 def _is_complete(state: str) -> bool:

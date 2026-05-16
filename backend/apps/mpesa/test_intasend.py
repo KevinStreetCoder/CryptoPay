@@ -548,6 +548,295 @@ class TestWebhookDedup(TestCase):
         assert r1.json().get("status") != "duplicate"
         assert r2.json()["status"] == "duplicate"
 
+    # 2026-05-17 · regression for the C87DC5F2 money-loss bug.
+    #
+    # IntaSend send-money webhooks have NO top-level `state` field ·
+    # the per-tx status lives in `transactions[0].status` /
+    # `transactions[0].status_code`. The pre-fix dedup keyed on
+    # `payload.get("state")` which was always empty, so EVERY callback
+    # for the same tracking_id produced the same dedup key. The terminal
+    # "Successful" / "TS100" callback was dropped as a duplicate and
+    # the saga compensated even after IntaSend had already issued the
+    # M-Pesa B2B receipt to the user. Production lost 60 KES on tx
+    # C87DC5F2 because of this.
+
+    def test_send_money_per_tx_status_changes_dedup_independently(self):
+        # Three identical top-level shapes (no `state` field), but
+        # transactions[0].status transitions QUEUED → PROCESSING →
+        # Successful. The new dedup MUST process each independently
+        # so the terminal "Successful" reaches the handler.
+        sig = lambda b: _hmac_hex(_TEST_WEBHOOK_SECRET, b)
+        queued = (
+            b'{"tracking_id":"c87-bug-1","file_id":"Y95DPDB",'
+            b'"provider":"MPESA-B2B","transactions":[{"status":"Queued"}]}'
+        )
+        processing = (
+            b'{"tracking_id":"c87-bug-1","file_id":"Y95DPDB",'
+            b'"provider":"MPESA-B2B","transactions":[{"status":"Processing"}]}'
+        )
+        successful = (
+            b'{"tracking_id":"c87-bug-1","file_id":"Y95DPDB",'
+            b'"provider":"MPESA-B2B","transactions":[{"status":"Successful",'
+            b'"status_code":"TS100","provider_reference":"UEHUEAQ0W8"}]}'
+        )
+
+        r1 = self.client.post("/api/v1/intasend/callback/", data=queued,
+                              content_type="application/json",
+                              HTTP_X_INTASEND_SIGNATURE=sig(queued))
+        r2 = self.client.post("/api/v1/intasend/callback/", data=processing,
+                              content_type="application/json",
+                              HTTP_X_INTASEND_SIGNATURE=sig(processing))
+        r3 = self.client.post("/api/v1/intasend/callback/", data=successful,
+                              content_type="application/json",
+                              HTTP_X_INTASEND_SIGNATURE=sig(successful))
+
+        # NONE of the three should be "duplicate" · the dedup key
+        # incorporates per-tx status. The terminal "Successful" callback
+        # MUST reach the handler · this is the bug that lost the 60 KES.
+        for r in (r1, r2, r3):
+            assert r.status_code == 200, r.content
+            assert r.json().get("status") != "duplicate", (
+                f"per-tx status change dedup'd as duplicate · this is "
+                f"the C87DC5F2 bug pattern: {r.content!r}"
+            )
+
+    def test_send_money_identical_per_tx_status_still_dedups(self):
+        # A burst of IDENTICAL terminal "Successful" callbacks (IntaSend
+        # retries) must still dedup so we don't double-complete the
+        # saga or open redundant reconciliation cases.
+        sig = lambda b: _hmac_hex(_TEST_WEBHOOK_SECRET, b)
+        body = (
+            b'{"tracking_id":"c87-bug-2","file_id":"YA1A1B1",'
+            b'"provider":"MPESA-B2B","transactions":[{"status":"Successful",'
+            b'"status_code":"TS100"}]}'
+        )
+
+        r1 = self.client.post("/api/v1/intasend/callback/", data=body,
+                              content_type="application/json",
+                              HTTP_X_INTASEND_SIGNATURE=sig(body))
+        r2 = self.client.post("/api/v1/intasend/callback/", data=body,
+                              content_type="application/json",
+                              HTTP_X_INTASEND_SIGNATURE=sig(body))
+        r3 = self.client.post("/api/v1/intasend/callback/", data=body,
+                              content_type="application/json",
+                              HTTP_X_INTASEND_SIGNATURE=sig(body))
+
+        assert r1.json().get("status") != "duplicate"
+        assert r2.json()["status"] == "duplicate"
+        assert r3.json()["status"] == "duplicate"
+
+    def test_send_money_per_tx_status_code_alone_distinguishes(self):
+        # Some IntaSend B2B callbacks carry only `status_code` (e.g.
+        # "TS100" / "TF103") without the human-readable `status` text.
+        # The dedup must use status_code as a fallback so a transition
+        # from QUEUED (no code) → TS100 still produces distinct keys.
+        sig = lambda b: _hmac_hex(_TEST_WEBHOOK_SECRET, b)
+        queued = (
+            b'{"tracking_id":"c87-bug-3","provider":"MPESA-B2B",'
+            b'"transactions":[{"status":""}]}'  # empty status, no code
+        )
+        terminal = (
+            b'{"tracking_id":"c87-bug-3","provider":"MPESA-B2B",'
+            b'"transactions":[{"status":"","status_code":"TS100"}]}'
+        )
+
+        r1 = self.client.post("/api/v1/intasend/callback/", data=queued,
+                              content_type="application/json",
+                              HTTP_X_INTASEND_SIGNATURE=sig(queued))
+        r2 = self.client.post("/api/v1/intasend/callback/", data=terminal,
+                              content_type="application/json",
+                              HTTP_X_INTASEND_SIGNATURE=sig(terminal))
+        # status_code alone must change the dedup key.
+        assert r1.json().get("status") != "duplicate"
+        assert r2.json().get("status") != "duplicate", (
+            f"per-tx status_code change dedup'd as duplicate: {r2.content!r}"
+        )
+
+
+# ── Status-query · C87DC5F2 regression ─────────────────────────────
+#
+# 2026-05-17 · the saga's compensation cron polls IntaSend's
+# /api/v1/send-money/status/ before deciding to refund. Two production
+# bugs caused tx C87DC5F2 to compensate even though IntaSend had
+# already settled the M-Pesa disbursement:
+#
+#  1. `_hit_send_money(invoice_id=file_id)` (no tracking_id) hit a
+#     400 "tracking_id is required" from IntaSend. IntaSendError raised
+#     → cron's safety net silently gave up.
+#
+#  2. The state resolver read `result.get("state") or result.get("status")`
+#     which captured top-level "Completed" / "BC100" but NOT per-tx
+#     `transactions[0].status == "Successful"` / `status_code == "TS100"`.
+#     Some intermediate polling windows return per-tx detail before the
+#     batch-level state flips to Completed. We MUST treat per-tx
+#     "Successful" / "TS100" as a complete signal so the saga finishes.
+
+
+@override_settings(
+    DEBUG=False,
+    INTASEND_WEBHOOK_SECRET=_TEST_WEBHOOK_SECRET,
+    INTASEND_API_SECRET=_TEST_SECRET,
+    PAYMENT_PROVIDER_TILL="intasend",
+    PAYMENT_PROVIDER_PAYBILL="intasend",
+)
+class TestIntasendStatusQueryRegressionC87DC5F2(TestCase):
+    """Confirms the cron now reads the SAME payload IntaSend served us
+    during the C87DC5F2 incident and resolves the saga correctly."""
+
+    def test_hit_send_money_requires_tracking_id(self):
+        # The IntaSend API requires tracking_id on /send-money/status/.
+        # Calling with file_id only must raise a clear IntaSendError
+        # instead of swallowing the 400 and returning bad data.
+        from apps.mpesa.intasend_client import IntaSendClient, IntaSendError
+
+        c = IntaSendClient()
+        with pytest.raises(IntaSendError) as excinfo:
+            c.query_transaction(invoice_id="Y95DPDB", kind="send_money")
+        assert "tracking_id" in str(excinfo.value).lower(), str(excinfo.value)
+
+    @patch("apps.mpesa.intasend_client.IntaSendClient._post")
+    def test_query_passes_tracking_id_not_just_file_id(self, post_mock):
+        # When the caller has BOTH tracking_id and a file_id, the
+        # request body MUST include tracking_id (the required field)
+        # AND may include file_id (optional disambiguator).
+        from apps.mpesa.intasend_client import IntaSendClient
+
+        post_mock.return_value = {"status": "Completed", "transactions": []}
+        IntaSendClient().query_transaction(
+            tracking_id="trk-123",
+            invoice_id="file-456",
+            kind="send_money",
+        )
+        post_mock.assert_called_once()
+        path, body = post_mock.call_args.args
+        assert path == "/api/v1/send-money/status/"
+        assert body.get("tracking_id") == "trk-123"
+        # file_id is fine to include alongside.
+        assert body.get("file_id") in (None, "file-456")
+
+    @patch("apps.mpesa.intasend_client.IntaSendClient._post")
+    def test_cron_resolves_per_tx_successful_state(self, post_mock):
+        """The exact response shape we saw from IntaSend for Y95DPDB ·
+        top-level status=Completed AND transactions[0].status=Successful.
+        The cron must call saga.complete() with the per-tx
+        provider_reference as the M-Pesa receipt."""
+        from apps.payments.tasks import _resolve_via_intasend_status
+        from apps.payments.models import Transaction
+        from apps.accounts.models import User
+        from decimal import Decimal as _D
+
+        # Real response captured from prod IntaSend API for Y95DPDB.
+        post_mock.return_value = {
+            "file_id": "Y95DPDB",
+            "tracking_id": "1851bad9-a5d3-4c9d-b836-73b10028bd00",
+            "status": "Completed",
+            "status_code": "BC100",
+            "transactions": [
+                {
+                    "status": "Successful",
+                    "status_code": "TS100",
+                    "provider_reference": "UEHUEAQ0W8",
+                    "amount": "50.00",
+                    "account": "6663979",
+                    "account_type": "TillNumber",
+                }
+            ],
+            "paid_amount": "50.00",
+        }
+
+        u = User.objects.create_user(
+            email="c87@example.com", phone="+254700111222", password="t",
+        )
+        tx = Transaction.objects.create(
+            user=u,
+            type=Transaction.Type.TILL_PAYMENT,
+            status=Transaction.Status.CONFIRMING,
+            source_currency="SOL",
+            source_amount=_D("0.00554019"),
+            dest_currency="KES",
+            dest_amount=_D("50.00000000"),
+            mpesa_till="6663979",
+            saga_data={
+                "intasend_file_id": "Y95DPDB",
+                "intasend_tracking_id": "1851bad9-a5d3-4c9d-b836-73b10028bd00",
+            },
+            idempotency_key="idem-c87-test",
+            chain="SOL",
+        )
+
+        # Patch saga so we just assert the call · we don't want this
+        # test to depend on wallet ledger plumbing.
+        with patch("apps.payments.saga.PaymentSaga") as saga_cls:
+            saga_inst = MagicMock()
+            saga_cls.return_value = saga_inst
+            _resolve_via_intasend_status(tx, "Y95DPDB")
+
+        saga_inst.complete.assert_called_once()
+        # The receipt passed to saga.complete MUST be the per-tx
+        # provider_reference (the M-Pesa B2B receipt). The earlier code
+        # read `result.get("mpesa_reference")` which is empty for B2B.
+        kwargs = saga_inst.complete.call_args.kwargs
+        receipt = kwargs.get("mpesa_receipt") or ""
+        assert receipt == "UEHUEAQ0W8", (
+            f"expected the M-Pesa B2B provider_reference UEHUEAQ0W8 "
+            f"to be passed to saga.complete · got {receipt!r}"
+        )
+
+    @patch("apps.mpesa.intasend_client.IntaSendClient._post")
+    def test_cron_resolves_per_tx_tf103_state(self, post_mock):
+        """Mirror of the success path · per-tx status_code "TF103"
+        ("Initiation failed") must trigger compensate even when
+        top-level state is empty or "Complete" (IntaSend's batch
+        wrapper can report Complete with all txs failed)."""
+        from apps.payments.tasks import _resolve_via_intasend_status
+        from apps.payments.models import Transaction
+        from apps.accounts.models import User
+        from decimal import Decimal as _D
+
+        post_mock.return_value = {
+            "file_id": "FAILBATCH",
+            "tracking_id": "trk-fail",
+            "status": "",       # batch-level empty
+            "transactions": [
+                {
+                    "status": "Initiation failed",
+                    "status_code": "TF103",
+                    "amount": "100.00",
+                }
+            ],
+        }
+
+        u = User.objects.create_user(
+            email="c87-fail@example.com",
+            phone="+254700111223",
+            password="t",
+        )
+        tx = Transaction.objects.create(
+            user=u,
+            type=Transaction.Type.TILL_PAYMENT,
+            status=Transaction.Status.CONFIRMING,
+            source_currency="USDT",
+            source_amount=_D("1.0"),
+            dest_currency="KES",
+            dest_amount=_D("100.00000000"),
+            mpesa_till="123456",
+            saga_data={
+                "intasend_file_id": "FAILBATCH",
+                "intasend_tracking_id": "trk-fail",
+            },
+            idempotency_key="idem-c87-fail",
+            chain="USDT",
+        )
+
+        with patch("apps.payments.saga.PaymentSaga") as saga_cls:
+            saga_inst = MagicMock()
+            saga_cls.return_value = saga_inst
+            _resolve_via_intasend_status(tx, "trk-fail")
+
+        # Failure path · compensate (not complete).
+        saga_inst.complete.assert_not_called()
+        saga_inst.compensate_convert.assert_called_once()
+
 
 @override_settings(
     DEBUG=False,

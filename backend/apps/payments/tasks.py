@@ -589,12 +589,17 @@ def _resolve_via_intasend_status(tx, tracking_id: str) -> None:
     real_tracking_id = sd.get("intasend_tracking_id") or tracking_id
 
     try:
-        if kind == "send_money" and file_id:
-            # Prefer file_id for send-money status; falls back to
-            # tracking_id inside query_transaction if the endpoint
-            # complains.
+        if kind == "send_money":
+            # 2026-05-17 · CRITICAL FIX driven by tx C87DC5F2.
+            # IntaSend's /api/v1/send-money/status/ REQUIRES tracking_id.
+            # Passing only file_id raised IntaSendError (400 "tracking_id
+            # is required") and the cron silently gave up · saga
+            # compensated even after IntaSend successfully disbursed via
+            # M-Pesa B2B. Always pass tracking_id; file_id is optional.
             result = IntaSendClient().query_transaction(
-                invoice_id=file_id, kind="send_money",
+                tracking_id=real_tracking_id,
+                invoice_id=file_id,  # passed alongside, NOT in place of
+                kind="send_money",
             )
         else:
             result = IntaSendClient().query_transaction(
@@ -613,10 +618,43 @@ def _resolve_via_intasend_status(tx, tracking_id: str) -> None:
         )
         return
 
+    # 2026-05-17 · resolve state from BOTH the top-level field AND
+    # transactions[0].status / status_code. Send-money status responses
+    # carry top-level `status: "Completed"` AND per-tx `status: "Successful"`
+    # / `status_code: "TS100"` — we must check both because batch-level
+    # state can be empty during intermediate polling and the per-tx
+    # detail is the authoritative success/failure signal.
     state = (result.get("state") or result.get("status") or "").upper()
-    receipt = result.get("mpesa_reference") or result.get("api_ref") or ""
+    txs = result.get("transactions") or []
+    per_tx_state = ""
+    per_tx_code = ""
+    if isinstance(txs, list) and txs and isinstance(txs[0], dict):
+        per_tx_state = (txs[0].get("status") or "").upper()
+        per_tx_code = (txs[0].get("status_code") or "").upper()
 
-    if state in {"COMPLETE", "COMPLETED", "PROCESSED"}:
+    # Receipt fallback chain · top-level mpesa_reference, then per-tx
+    # provider_reference (M-Pesa B2B receipt), then api_ref.
+    receipt = (
+        result.get("mpesa_reference")
+        or (txs[0].get("provider_reference") if (isinstance(txs, list) and txs and isinstance(txs[0], dict)) else "")
+        or result.get("api_ref")
+        or ""
+    )
+
+    _SUCCESS_STATES = {
+        "COMPLETE", "COMPLETED", "PROCESSED", "SUCCESSFUL", "SUCCESS",
+        "BC100", "TS100",
+    }
+    _FAIL_STATES = {
+        "FAILED", "RETRY", "FAILED_RETRYABLE",
+        "INITIATION FAILED", "INITIATION_FAILED",
+        "TF101", "TF102", "TF103",
+    }
+
+    def _any(s_set, *vals):
+        return any((v or "").strip() in s_set for v in vals)
+
+    if _any(_SUCCESS_STATES, state, per_tx_state, per_tx_code):
         try:
             PaymentSaga(tx).complete(mpesa_receipt=receipt)
         except Exception:
@@ -624,8 +662,11 @@ def _resolve_via_intasend_status(tx, tracking_id: str) -> None:
                 "intasend.status_query.complete_failed",
                 extra={"tx_id": str(tx.id)},
             )
-    elif state in {"FAILED", "RETRY", "FAILED_RETRYABLE"}:
-        tx.failure_reason = f"IntaSend reported state {state}."
+    elif _any(_FAIL_STATES, state, per_tx_state, per_tx_code):
+        tx.failure_reason = (
+            f"IntaSend reported state={state!r} per_tx={per_tx_state!r} "
+            f"code={per_tx_code!r}."
+        )
         tx.status = Transaction.Status.FAILED
         tx.save(update_fields=["failure_reason", "status", "updated_at"])
         try:
