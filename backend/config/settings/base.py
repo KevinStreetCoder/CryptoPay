@@ -1202,8 +1202,8 @@ AUTH_COOKIE_DOMAIN = env("AUTH_COOKIE_DOMAIN", default="")
 # bump them via .env on the VPS without a backend redeploy. Defaults
 # match `mobile/app.json::version` + `android.versionCode` so dev +
 # CI never see a stale-version banner.
-MOBILE_VERSION_LATEST_NAME = env("MOBILE_VERSION_LATEST_NAME", default="1.1.12")
-MOBILE_VERSION_LATEST_CODE = env.int("MOBILE_VERSION_LATEST_CODE", default=21)
+MOBILE_VERSION_LATEST_NAME = env("MOBILE_VERSION_LATEST_NAME", default="1.1.13")
+MOBILE_VERSION_LATEST_CODE = env.int("MOBILE_VERSION_LATEST_CODE", default=22)
 # Minimum versionCode that still receives feature support · users below
 # get a STRONGLY recommended (but dismissable) update prompt.
 MOBILE_VERSION_MIN_SUPPORTED_CODE = env.int(

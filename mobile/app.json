@@ -2,7 +2,7 @@
   "expo": {
     "name": "Cpay",
     "slug": "cryptopay",
-    "version": "1.1.12",
+    "version": "1.1.13",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -67,7 +67,7 @@
     },
     "android": {
       "package": "ke.co.cryptopay.app",
-      "versionCode": 21,
+      "versionCode": 22,
       "adaptiveIcon": {
         "backgroundColor": "#0B1220",
         "foregroundImage": "./assets/android-icon-foreground.png",
