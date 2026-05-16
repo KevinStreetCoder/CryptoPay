@@ -46,6 +46,8 @@ import { GlassCard } from "../../src/components/GlassCard";
 import { useLocale } from "../../src/hooks/useLocale";
 import { usePersistedState } from "../../src/hooks/usePersistedState";
 import { Spinner } from "../../src/components/brand/Spinner";
+import { ratesApi, normalizeRate, Rate } from "../../src/api/rates";
+import { useQuery } from "@tanstack/react-query";
 
 const CRYPTO_OPTIONS: CurrencyCode[] = ["USDT", "USDC", "BTC", "ETH", "SOL"];
 
@@ -91,6 +93,35 @@ export default function SendToCpayScreen() {
   const parsedAmount = parseFloat(amount) || 0;
   const decimals = CURRENCIES[selectedCrypto]?.decimals ?? 4;
 
+  // 2026-05-16 · live KES preview · user enters the amount in crypto
+  // units (what the backend wants) and we show "≈ KSh 123.45" beneath
+  // so they have an instant feel for the actual KES value the
+  // recipient will see in their wallet. Uses the same /rates/ feed
+  // wallet.tsx uses · shared React Query cache key keeps the rate
+  // consistent across screens.
+  const { data: rates } = useQuery<Rate[]>({
+    queryKey: ["rates"],
+    queryFn: async () => {
+      const currencies = ["USDC", "USDT", "BTC", "SOL", "ETH"];
+      const results = await Promise.all(
+        currencies.map(async (c) => {
+          try {
+            const { data } = await ratesApi.getRate(c);
+            return normalizeRate(data);
+          } catch {
+            return null;
+          }
+        }),
+      );
+      return results.filter(Boolean) as Rate[];
+    },
+    refetchInterval: 30000,
+    staleTime: 0,
+  });
+  const cryptoRate = rates?.find((r) => r.currency === selectedCrypto);
+  const kesPerCrypto = cryptoRate ? parseFloat(cryptoRate.kes_rate) || 0 : 0;
+  const kesEquivalent = parsedAmount * kesPerCrypto;
+
   // Detect recipient identifier kind so backend gets the right field.
   const detectRecipientKind = (raw: string): {
     phone?: string;
@@ -112,10 +143,65 @@ export default function SendToCpayScreen() {
   };
 
   const recipientKind = detectRecipientKind(recipient);
+
+  // 2026-05-16 · pre-send recipient lookup. As the user types their
+  // recipient (phone / referral code / name) we debounce-fire a query
+  // against /payments/cpay-user-lookup/ that returns a privacy-safe
+  // profile · the form gates "Continue" on `recipientFound === true`
+  // so the user can't proceed to PIN entry for a non-Cpay recipient
+  // (eliminates the "type PIN, wait, see 404" UX trap).
+  type LookupState =
+    | { state: "idle" }
+    | { state: "loading" }
+    | { state: "found"; display_name: string; phone_masked: string; matched_by: string }
+    | { state: "not_found" }
+    | { state: "error"; message: string };
+  const [recipientLookup, setRecipientLookup] = useState<LookupState>({ state: "idle" });
+
+  useEffect(() => {
+    const v = recipient.trim();
+    if (v.length < 4) {
+      setRecipientLookup({ state: "idle" });
+      return;
+    }
+    setRecipientLookup({ state: "loading" });
+    const timer = setTimeout(async () => {
+      try {
+        const { data } = await paymentsApi.cpayUserLookup(v);
+        if (data.found) {
+          setRecipientLookup({
+            state: "found",
+            display_name: data.display_name || "Cpay user",
+            phone_masked: data.phone_masked || "",
+            matched_by: data.matched_by || "",
+          });
+        } else {
+          setRecipientLookup({ state: "not_found" });
+        }
+      } catch (err: any) {
+        // Throttle (429) is the only failure we want to soften · keep
+        // the form usable but note it. Any other error → not_found
+        // (defensive · we'd rather block a real recipient than allow
+        // a send into the void).
+        if (err?.response?.status === 429) {
+          setRecipientLookup({
+            state: "error",
+            message: "Too many checks. Wait a moment and retry.",
+          });
+        } else {
+          setRecipientLookup({ state: "not_found" });
+        }
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [recipient]);
+
+  const recipientFound = recipientLookup.state === "found";
+
   const canContinue =
     parsedAmount > 0 &&
     parsedAmount <= balance &&
-    (recipientKind.phone || recipientKind.username || recipientKind.referral_code);
+    recipientFound;
 
   const handleContinue = () => {
     if (!canContinue) {
@@ -123,8 +209,15 @@ export default function SendToCpayScreen() {
         toast.warning("Amount required", "Enter the amount you want to send.");
       } else if (parsedAmount > balance) {
         toast.warning("Insufficient balance", `You have ${balance.toFixed(decimals)} ${selectedCrypto}.`);
+      } else if (recipientLookup.state === "not_found") {
+        toast.warning(
+          "Recipient not on Cpay",
+          "Ask them to sign up first · we couldn't find this phone / name / code.",
+        );
+      } else if (recipientLookup.state === "loading") {
+        toast.info("Checking recipient", "Hang on a moment…");
       } else {
-        toast.warning("Recipient required", "Enter a phone, username, or Cpay referral code.");
+        toast.warning("Recipient required", "Enter a phone, name, or Cpay referral code.");
       }
       return;
     }
@@ -314,10 +407,89 @@ export default function SendToCpayScreen() {
                   accessibilityLabel="Recipient identifier"
                 />
               </View>
+              {/* 2026-05-16 · live recipient confirmation card · proves
+                  the recipient is a real Cpay user before the sender
+                  hits Continue → PIN. Four visual states:
+                    idle      · no input, no card
+                    loading   · spinner
+                    found     · green card with the name + masked phone
+                    not_found · red card · sender knows they can't send
+                  Removes the "type PIN, see 'Recipient not found'" trap. */}
               {recipient ? (
-                <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_400Regular", marginBottom: 14, paddingHorizontal: 4 }}>
-                  Detected as: {recipientKind.phone ? "phone" : recipientKind.referral_code ? "referral code" : "username"}
-                </Text>
+                <View style={{ marginBottom: 14 }}>
+                  {recipientLookup.state === "loading" ? (
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 8,
+                        paddingVertical: 10,
+                        paddingHorizontal: 14,
+                        backgroundColor: tc.dark.card,
+                        borderRadius: 12,
+                        borderWidth: 1,
+                        borderColor: tc.glass.border,
+                      }}
+                    >
+                      <Spinner size={14} color={tc.textMuted} />
+                      <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_500Medium" }}>
+                        Checking Cpay…
+                      </Text>
+                    </View>
+                  ) : recipientLookup.state === "found" ? (
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 10,
+                        paddingVertical: 12,
+                        paddingHorizontal: 14,
+                        backgroundColor: colors.success + "12",
+                        borderRadius: 12,
+                        borderWidth: 1,
+                        borderColor: colors.success + "40",
+                      }}
+                      accessibilityLabel={`Sending to ${recipientLookup.display_name}`}
+                    >
+                      <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: tc.textPrimary, fontSize: 13, fontFamily: "DMSans_700Bold" }}>
+                          {recipientLookup.display_name}
+                        </Text>
+                        <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_400Regular", marginTop: 2 }}>
+                          {recipientLookup.phone_masked} · matched by {recipientLookup.matched_by}
+                        </Text>
+                      </View>
+                    </View>
+                  ) : recipientLookup.state === "not_found" ? (
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 10,
+                        paddingVertical: 10,
+                        paddingHorizontal: 14,
+                        backgroundColor: colors.error + "12",
+                        borderRadius: 12,
+                        borderWidth: 1,
+                        borderColor: colors.error + "40",
+                      }}
+                    >
+                      <Ionicons name="close-circle" size={16} color={colors.error} />
+                      <Text style={{ color: tc.textPrimary, fontSize: 12, fontFamily: "DMSans_500Medium", flex: 1 }}>
+                        Not a Cpay user · ask them to sign up first.
+                      </Text>
+                    </View>
+                  ) : recipientLookup.state === "error" ? (
+                    <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_400Regular", paddingHorizontal: 4 }}>
+                      {recipientLookup.message}
+                    </Text>
+                  ) : (
+                    <Text style={{ color: tc.textMuted, fontSize: 11, fontFamily: "DMSans_400Regular", paddingHorizontal: 4 }}>
+                      Detected as: {recipientKind.phone ? "phone" : recipientKind.referral_code ? "referral code" : "name"}
+                    </Text>
+                  )}
+                </View>
               ) : (
                 <View style={{ height: 14 }} />
               )}
@@ -370,9 +542,28 @@ export default function SendToCpayScreen() {
                   </Text>
                 </Pressable>
               </View>
-              <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_400Regular", marginBottom: 16, paddingHorizontal: 4 }}>
-                Available: {balance.toFixed(decimals)} {selectedCrypto}
-              </Text>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginBottom: 16,
+                  paddingHorizontal: 4,
+                }}
+              >
+                <Text style={{ color: tc.textMuted, fontSize: 12, fontFamily: "DMSans_400Regular" }}>
+                  Available: {balance.toFixed(decimals)} {selectedCrypto}
+                </Text>
+                {/* 2026-05-16 · live KES equivalent so the sender sees
+                    "≈ KSh 132.50" alongside the crypto amount they're
+                    typing. Hidden until both rate + a positive amount
+                    are available (avoids "≈ KSh 0.00" flash). */}
+                {parsedAmount > 0 && kesPerCrypto > 0 ? (
+                  <Text style={{ color: colors.primary[400], fontSize: 12, fontFamily: "DMSans_600SemiBold" }}>
+                    ≈ KSh {kesEquivalent.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </Text>
+                ) : null}
+              </View>
 
               {/* Crypto picker */}
               <SectionHeader title={t("payment.payWith")} icon="wallet-outline" iconColor={colors.primary[400]} />

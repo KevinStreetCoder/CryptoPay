@@ -375,35 +375,40 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       const data = await login(phone, pendingPin, otp);
-      // 2026-05-09 audit fix · the user reported the APK closing after
-      // OTP entry with no spinner. Two issues stacked: (a) OTPInput
-      // didn't show a visible loading state (now fixed in OTPInput.tsx
-      // with an explicit "Verifying…" row), and (b) router.replace was
-      // being called sync after an async login that may have already
-      // unmounted the screen on some Android race paths. Wrap the
-      // navigation in setTimeout(0) so the React reconciliation
-      // settles before we call replace; also fall back to push if
-      // replace ever throws.
-      const target = (data as any)?.email_verify_required
-        ? "/auth/email-verify-required"
-        : "/(tabs)";
-      try {
-        router.replace(target as any);
-      } catch (navErr) {
-        // Last-resort fallback · push instead of replace if RN's
-        // navigation tree is in an odd state
-        console.warn("login.replace_failed_falling_back_to_push", navErr);
+      // 2026-05-16 · APK crash root cause was DOUBLE router.replace:
+      // (1) here, sync after login(), targeting /(tabs)
+      // (2) in _layout.tsx route guard, fired by the user-state flip
+      //     that login()'s notify() triggers · ALSO targeting /(tabs)
+      // Two concurrent navigation transitions on the Expo Router stack
+      // crash the Android view tree (user reported "APK crashes after
+      // entering new-device OTP and we have to reopen it"). Fix · let
+      // the route guard own the /(tabs) navigation (it's the
+      // authoritative redirect on user-state change), and only handle
+      // the SPECIAL case here (email-verify-required, which the guard
+      // would otherwise bounce back to /(tabs)).
+      //
+      // Earlier comment about "setTimeout(0) for reconciliation" was
+      // chasing symptoms · the real fix is to not double-fire navigate.
+      const emailVerifyRequired = Boolean((data as any)?.email_verify_required);
+      if (emailVerifyRequired) {
         try {
-          router.push(target as any);
-        } catch (pushErr) {
-          // Total nav failure · surface to user instead of silent close
-          console.error("login.navigation_failed_completely", pushErr);
-          toast.error(
-            "Signed in",
-            "But couldn't open home automatically. Please reopen the app.",
-          );
+          router.replace("/auth/email-verify-required" as any);
+        } catch (navErr) {
+          console.warn("login.replace_failed_falling_back_to_push", navErr);
+          try {
+            router.push("/auth/email-verify-required" as any);
+          } catch (pushErr) {
+            console.error("login.navigation_failed_completely", pushErr);
+            toast.error(
+              "Signed in",
+              "But couldn't open the email-verify screen. Please reopen the app.",
+            );
+          }
         }
       }
+      // Else · the route guard in app/_layout.tsx sees the user flip
+      // and routes us to /(tabs) on its own. We intentionally do NOT
+      // call replace here to avoid the double-navigate crash.
     } catch (err: unknown) {
       const appError = normalizeError(err);
       toast.error(appError.title, appError.message);

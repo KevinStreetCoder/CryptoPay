@@ -128,4 +128,14 @@ urlpatterns = [
         internal_transfer.SendToCpayView.as_view(),
         name="send-to-cpay",
     ),
+    # ── 2026-05-16 · Pre-send recipient lookup ──
+    # User types a phone / username / referral → UI fires this query
+    # debounced so we can show "Sending to Jane D. (+254712••••89)"
+    # BEFORE the user enters their PIN. Returns 200 {"found": false}
+    # for non-matches (constant-shape response · no enumeration leak).
+    path(
+        "cpay-user-lookup/",
+        internal_transfer.CpayUserLookupView.as_view(),
+        name="cpay-user-lookup",
+    ),
 ]

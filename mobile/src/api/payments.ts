@@ -337,4 +337,17 @@ export const paymentsApi = {
       created_at: string;
       completed_at: string;
     }>("/payments/send-to-cpay/", data),
+
+  // 2026-05-16 · pre-send recipient lookup. Fires debounced from the
+  // Send-to-Cpay form as the user types · returns 200 {"found":bool}
+  // with a privacy-trimmed profile so we can show "Sending to Jane D."
+  // BEFORE the user enters their PIN.
+  cpayUserLookup: (q: string) =>
+    api.get<{
+      found: boolean;
+      id?: string;
+      display_name?: string;
+      phone_masked?: string;
+      matched_by?: "phone" | "full_name" | "referral_code";
+    }>("/payments/cpay-user-lookup/", { params: { q } }),
 };

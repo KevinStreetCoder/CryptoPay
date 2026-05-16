@@ -89,19 +89,11 @@
 <p>Your transaction could not be completed. If funds were debited, they will be refunded to your wallet automatically.</p>
 {% endif %}
 
-{% comment %}
-  2026-05-09 · universal link to app.cpay.co.ke. Android intent
-  filter (autoVerify + Digital Asset Links) routes this directly
-  into the installed app at /payment/detail?id=<tx>. iOS uses
-  associated-domains for the same. When the app is NOT installed,
-  the browser opens the same route on the Expo Router web build
-  hosted at app.cpay.co.ke · so users without the APK still get a
-  full transaction-detail page rather than a marketing page.
-
-  Django's {# #} is a SINGLE-LINE comment · the multi-line form
-  rendered as raw text in the email body (visible to users). Use
-  {% comment %} ... {% endcomment %} for blocks.
-{% endcomment %}
+{# 2026-05-09 · universal link to app.cpay.co.ke #}
+{# Android: autoVerify intent filter + Digital Asset Links route /payment/detail?id=<tx> into the installed app. #}
+{# iOS: associated-domains for the same. #}
+{# When the app isn't installed, the browser opens the same route on app.cpay.co.ke (Expo Router web build). #}
+{# Django's {# #} is single-line ONLY · don't try {% comment %}/{% endcomment %} blocks that reference themselves. #}
 <p style="text-align: center; padding-top: 8px;">
   <a href="https://app.cpay.co.ke/payment/detail?id={{ transaction_id }}" style="display:inline-block;background-color:#10B981;color:#FFFFFF;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px;">View in App</a>
 </p>

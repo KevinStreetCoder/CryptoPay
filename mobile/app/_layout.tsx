@@ -248,16 +248,22 @@ function RootNavigator() {
         router.replace("/auth/login");
       }
     } else if (user && (inAuthGroup || isLanding)) {
-      // Exempt the Google-unlock gate and the initial-PIN setup from the
-      // default "authenticated user bounces back to tabs" rule. Without
-      // this, a returning Google user is instantly redirected to (tabs)
-      // the moment tokens are stored · before the async
-      // `googleUnlockPending` state has caught up · and the unlock
-      // screen is bypassed.
-      const isUnlockScreen = segments[0] === "auth" && (
-        segments[1] === "google-unlock" || segments[1] === "set-initial-pin"
+      // Exempt the Google-unlock gate, initial-PIN setup, and the
+      // email-verify-required gate from the default "authenticated
+      // user bounces back to tabs" rule. Without these exemptions:
+      //  - a returning Google user is instantly redirected to (tabs)
+      //    the moment tokens are stored, before the async
+      //    `googleUnlockPending` state catches up
+      //  - a user whose backend response sets `email_verify_required`
+      //    is bounced off /auth/email-verify-required straight into
+      //    /(tabs) and never sees the gate (the saga then 403s on
+      //    every payment screen, leaving the user confused)
+      const isExemptAuthScreen = segments[0] === "auth" && (
+        segments[1] === "google-unlock"
+        || segments[1] === "set-initial-pin"
+        || segments[1] === "email-verify-required"
       );
-      if (!isUnlockScreen) {
+      if (!isExemptAuthScreen) {
         router.replace("/(tabs)");
       }
     }

@@ -161,9 +161,12 @@ class SasaPayVerifyTransactionView(APIView):
 
 
 class BillQueryThrottle(UserRateThrottle):
-    """Cap at ~30/min so a chatty UX still feels instant but a
-    malicious enumeration script gets rate-limited."""
-    rate = "30/min"
+    """60/min · 2026-05-16 raise · the paybill UI auto-queries the
+    bill name once the paybill number is 5-7 digits. Combined with
+    the user typing the account number, a single live-validation
+    session burns 4-6 requests; with the prior 30/min cap a user
+    paying multiple bills in quick succession would hit 429."""
+    rate = "60/min"
 
 
 class BillQueryView(APIView):
@@ -252,10 +255,16 @@ class BillQueryView(APIView):
 
 
 class AccountValidateThrottle(UserRateThrottle):
-    """30/min · same logic as BillQueryThrottle. Account validation is
-    a privacy-sensitive endpoint (returns the holder name from a phone
-    or paybill number), so we want to keep enumeration costly."""
-    rate = "30/min"
+    """60/min · 2026-05-16. Was 30/min; the mobile send-money screen
+    auto-validates as the user types a phone number, and a 10-digit
+    Kenyan phone produces up to 7 validate calls (one per char from
+    length>=4 onwards · UI debounced at 400ms means a user typing
+    fast hits the cap inside 60s without misuse). Validation is still
+    a privacy-sensitive endpoint, so we keep enumeration costly · 60/min
+    per authenticated user is the floor that still feels snappy in the
+    legitimate UX. Use BillQueryThrottle (also 60/min) as the matched
+    pair for paybill name lookups."""
+    rate = "60/min"
 
 
 class AccountValidateView(APIView):

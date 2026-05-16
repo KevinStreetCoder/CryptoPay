@@ -62,8 +62,14 @@ logger = logging.getLogger(__name__)
 
 
 class CpayTransferThrottle(UserRateThrottle):
-    """6/min · matches our other PIN-protected payment rails."""
-    rate = "6/min"
+    """20/min · 2026-05-16. Was 6/min, which throttled users who
+    hit a wrong-PIN or insufficient-funds error mid-flow and retried ·
+    every failed-validation POST still counts toward the bucket, so a
+    user fixing a typo could hit 6 attempts in <30 s and see "Too Many
+    Requests". The PIN-lockout logic (3 wrong PINs → mandatory OTP)
+    is the actual abuse defence; the rate limit is just a flood guard,
+    so 20/min is a more appropriate ceiling."""
+    rate = "20/min"
 
 
 SUPPORTED_CURRENCIES = {"USDT", "USDC", "BTC", "ETH", "SOL"}
@@ -93,18 +99,123 @@ def _resolve_recipient(*, phone="", username="", referral_code=""):
             return u, "phone"
 
     if username:
-        u = User.objects.filter(username__iexact=username.strip()).first()
+        # 2026-05-16 · User model has NO `username` field (USERNAME_FIELD
+        # is `phone`). Match by `full_name` iexact instead · the closest
+        # thing to a human-typeable identifier. Pre-fix this branch
+        # silently returned None for every lookup.
+        u = User.objects.filter(full_name__iexact=username.strip()).first()
         if u:
-            return u, "username"
+            return u, "full_name"
 
     if referral_code:
         rc = referral_code.strip().upper()
         if rc:
-            u = User.objects.filter(referral_code=rc).first()
+            # 2026-05-16 · `User.referral_code` is a reverse OneToOne to
+            # `ReferralCode` (related_name="referral_code"), NOT a string
+            # field. The previous `filter(referral_code=rc)` was matching
+            # against the FK PK (user.id) which is never equal to a
+            # 6-8 char referral code string · so referral-code lookup
+            # NEVER actually found anybody. Query the related table's
+            # `code` field with iexact for the documented case-insensitive
+            # match.
+            u = User.objects.filter(referral_code__code__iexact=rc).first()
             if u:
                 return u, "referral_code"
 
     return None, None
+
+
+class CpayLookupThrottle(UserRateThrottle):
+    """60/min · pre-send recipient lookup. The mobile UI debounce-
+    fires this as the user types a phone / username so we want it
+    snappy; 60/min comfortably covers a fast typist (one query per
+    char above length 4) without enabling enumeration."""
+    rate = "60/min"
+
+
+class CpayUserLookupView(APIView):
+    """GET cpay-user-lookup/?q=<phone|username|referral_code>
+
+    Pre-send recipient lookup used by the Send-to-Cpay mobile screen.
+    Returns the resolved user's safe public profile so the sender can
+    confirm "you are sending to Jane Doe (07••••6789)" BEFORE entering
+    their PIN. Was previously inlined into POST send-to-cpay/ as a
+    404-after-PIN-verify response · much worse UX (user types PIN,
+    waits for a network round-trip, sees "Recipient not found").
+
+    2026-05-16 · privacy-safe response shape:
+      { "found": true, "id": "<short>", "display_name": "Jane D.",
+        "phone_masked": "+254712••••89", "username": "janedoe", ... }
+    For non-matches we return `{"found": false}` with HTTP 200 instead
+    of 404 · 404 leaks "this identifier doesn't exist" to enumeration
+    via response-time differences. 200/found:false reads exactly the
+    same on the network as a real match from the sender's perspective.
+
+    Throttled at 60/min/user (CpayLookupThrottle) to keep enumeration
+    costly without breaking the typed-as-they-go UX.
+    """
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [CpayLookupThrottle]
+
+    def get(self, request):
+        q = (request.query_params.get("q") or "").strip()
+        if not q:
+            return Response({"found": False, "error": "q is required"}, status=400)
+        # Reuse the same detect-kind logic mobile uses so backend
+        # and frontend agree on what "this string" represents.
+        kind_kwargs = _detect_kind(q)
+        recipient, kind = _resolve_recipient(**kind_kwargs)
+        if not recipient or recipient.id == request.user.id:
+            # Don't leak whether the identifier exists · same shape
+            # for "no match" and "matches yourself". Sender will still
+            # be blocked at POST time if they try to self-send.
+            return Response({"found": False})
+        if not recipient.is_active or getattr(recipient, "is_suspended", False):
+            return Response({"found": False})
+
+        display_name = (
+            (getattr(recipient, "full_name", "") or "").strip()
+            or ""
+        )
+        # Drop surname to first initial · "Jane D." · so we don't leak
+        # the recipient's full identity to a random sender who typed
+        # their phone. They still see enough to confirm right person.
+        parts = display_name.split()
+        if len(parts) >= 2:
+            display_name = f"{parts[0]} {parts[-1][0]}."
+
+        phone = getattr(recipient, "phone", "") or ""
+        # Mask middle 4 digits · "+254712••••89".
+        if len(phone) >= 8:
+            phone_masked = phone[:7] + "••••" + phone[-2:]
+        else:
+            phone_masked = "••••" + phone[-2:] if len(phone) >= 2 else "••••"
+
+        return Response({
+            "found": True,
+            "id": str(recipient.id)[:8],
+            "display_name": display_name,
+            "phone_masked": phone_masked,
+            "matched_by": kind,  # so the UI can show "Matched by phone"
+        })
+
+
+def _detect_kind(q: str) -> dict:
+    """Mirror the mobile-side detect-kind heuristic · phone / username /
+    referral_code. Kept here so a malformed/older client never blocks
+    backend resolution."""
+    v = q.strip()
+    if not v:
+        return {}
+    # Phone · "+2547...", "07...", "254..."
+    bare = v.replace(" ", "").replace("-", "")
+    import re
+    if re.match(r"^(\+?254|0)\d{6,12}$", bare):
+        return {"phone": bare}
+    # Referral · ALL-CAPS alphanumeric 4-12
+    if re.match(r"^[A-Z0-9]{4,12}$", v) and v == v.upper():
+        return {"referral_code": v}
+    return {"username": v}
 
 
 class SendToCpayView(APIView):
