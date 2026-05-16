@@ -401,6 +401,100 @@ def _handle_collection_event(payload: dict) -> dict:
     return {"status": "completed", "tx_id": str(tx_locked.id)}
 
 
+def _per_tx_field(payload: dict, key: str) -> str:
+    """Pull a `transactions[0].<key>` value safely. Returns '' on any
+    shape we don't understand · IntaSend send-money batches may have
+    multiple txs (multi-disbursement files) but Cpay only ever sends
+    1 tx per file so [0] is canonical for our flow."""
+    txs = payload.get("transactions") or []
+    if isinstance(txs, list) and txs and isinstance(txs[0], dict):
+        v = txs[0].get(key)
+        if v not in (None, ""):
+            return str(v)
+    return ""
+
+
+def _enrich_tx_from_send_money_payload(tx, payload: dict) -> None:
+    """Capture the per-tx IntaSend send-money fields onto the
+    Transaction record + saga_data so they're available to:
+      - the customer receipt template (recipient name → "Paid to: KPLC
+        PREPAID")
+      - the admin user-detail view (full audit trail)
+      - support triage (status_description tells "Reversed by user"
+        apart from "Insufficient balance" apart from "Account closed")
+
+    Saves the following onto `tx.saga_data`:
+      - intasend_provider_account_name · the till/paybill owner name
+        from M-Pesa's records (when IntaSend resolves it)
+      - intasend_status_description · human text of the final state
+      - intasend_provider_reference · the M-Pesa B2B receipt
+      - intasend_provider · MPESA-B2B / MPESA-B2C / PESALINK
+      - intasend_charges · the per-tx IntaSend cost (so the
+        reconciliation can compute our spread vs IntaSend's take)
+
+    Also stamps the `merchant_name` column with the provider account
+    name when present · this is the field the email receipt template
+    already renders as "Paid To" so users see the merchant by name.
+
+    All writes are best-effort · if any IntaSend payload shape changes
+    we don't crash the saga's complete path.
+    """
+    try:
+        sd = dict(tx.saga_data or {})
+        provider_account_name = _per_tx_field(payload, "provider_account_name")
+        status_description = _per_tx_field(payload, "status_description")
+        provider_reference = _per_tx_field(payload, "provider_reference")
+        provider = (
+            _per_tx_field(payload, "provider")
+            or (payload.get("provider") or "")
+        )
+        charges = _per_tx_field(payload, "charge") or str(payload.get("charges") or "")
+
+        if provider_account_name:
+            sd["intasend_provider_account_name"] = provider_account_name
+        if status_description:
+            sd["intasend_status_description"] = status_description
+        if provider_reference:
+            sd["intasend_provider_reference"] = provider_reference
+        if provider:
+            sd["intasend_provider"] = provider
+        if charges:
+            sd["intasend_charges"] = charges
+
+        update_fields = []
+        if sd != (tx.saga_data or {}):
+            tx.saga_data = sd
+            update_fields.append("saga_data")
+
+        # `merchant_name` is the canonical "who did we pay" column on
+        # the Transaction model · used by the email receipt template.
+        # IntaSend's provider_account_name is the M-Pesa-registered
+        # recipient name (e.g. "KENYA POWER PREPAID"). Only overwrite
+        # if we don't already have a more specific value · don't clobber
+        # a hand-curated label like "KPLC Prepaid · token meter".
+        if provider_account_name and not (tx.merchant_name or "").strip():
+            tx.merchant_name = provider_account_name[:120]
+            update_fields.append("merchant_name")
+
+        # `biller_response` doubles up as the M-Pesa free-text reply
+        # surface · for utility tokens we already write the prepaid
+        # token here. For B2B/B2C without a biller string, the human
+        # status description is a decent stand-in.
+        if status_description and not (tx.biller_response or "").strip():
+            tx.biller_response = status_description[:500]
+            update_fields.append("biller_response")
+
+        if update_fields:
+            tx.save(update_fields=update_fields + ["updated_at"])
+    except Exception:  # noqa: BLE001
+        # Enrichment is best-effort · NEVER block the saga's complete
+        # path on an audit-trail write.
+        logger.exception(
+            "intasend.send_money.enrichment_failed",
+            extra={"tx_id": str(tx.id)},
+        )
+
+
 def _handle_send_money_event(payload: dict) -> dict:
     """B2C/B2B side: a Send Money we initiated has resolved. Routes
     through the saga so reconciliation cases open consistently with
@@ -425,8 +519,28 @@ def _handle_send_money_event(payload: dict) -> dict:
     saga = PaymentSaga(tx)
 
     if _is_complete(state):
+        # 2026-05-17 · enrich the transaction with the per-tx detail
+        # IntaSend returns on the send-money webhook · the recipient's
+        # registered name, the actual provider receipt, status text.
+        # These power:
+        #   - the customer receipt ("Paid to: KPLC PREPAID" instead of
+        #     "Paid to: 888880")
+        #   - the admin user-detail view (full audit trail per tx)
+        #   - support triage (status_description distinguishes "Reversed
+        #     by user" from "Insufficient balance" from "Account closed")
+        _enrich_tx_from_send_money_payload(tx, payload)
+
+        # Receipt fallback chain · top-level mpesa_reference (B2C),
+        # then per-tx provider_reference (B2B receipt · authoritative
+        # for paybill/till), then api_ref.
+        receipt = (
+            payload.get("mpesa_reference")
+            or _per_tx_field(payload, "provider_reference")
+            or payload.get("api_ref")
+            or ""
+        )
         try:
-            saga.complete(mpesa_receipt=payload.get("mpesa_reference") or "")
+            saga.complete(mpesa_receipt=receipt)
         except Exception:
             logger.exception(
                 "intasend.send_money.complete_failed",

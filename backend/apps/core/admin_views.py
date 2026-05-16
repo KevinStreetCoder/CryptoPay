@@ -1,4 +1,5 @@
 import json
+import logging
 import time
 from datetime import timedelta
 from decimal import Decimal
@@ -6,6 +7,9 @@ from decimal import Decimal
 import requests
 
 from django.conf import settings
+
+
+logger = logging.getLogger(__name__)
 from django.contrib.admin.views.decorators import staff_member_required
 from django.db.models import Count, Sum, Q, F
 from django.db.models.functions import TruncDate, Substr, Coalesce
@@ -517,6 +521,177 @@ def admin_stats_dashboard(request):
 # ---------------------------------------------------------------------------
 # SMS health check endpoint — staff-only, verifies eSMS / AT delivery on demand
 # ---------------------------------------------------------------------------
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def admin_revenue_dashboard(request):
+    """Total revenue earned · grouped by period, tx type, and currency.
+
+    2026-05-17 · ops asked "how much have we made so far?". This
+    endpoint sums every completed transaction's `fee_amount` +
+    `excise_duty_amount` (the two columns we stamp at tx creation
+    time) and surfaces:
+
+      - lifetime totals per currency
+      - rolling 24h / 7d / 30d totals per currency
+      - breakdown by transaction type (paybill / till / send / buy /
+        swap / withdrawal)
+      - "earned vs booked" reconciliation · compares the sum from the
+        Transaction table against the live SystemWallet(wallet_type=
+        FEE) balance per currency. ANY gap means revenue wasn't moved
+        to the fee wallet on completion (currently only SWAP txs book
+        revenue · paybill/till/B2C/buy paths calculate the fee but
+        never move it).
+
+    The "earned but not booked" gap is a known issue · this endpoint
+    is the operator's first signal that a tx type isn't wired into
+    the revenue ledger.
+
+    Auth · staff_member_required. Returns 403 to non-staff.
+    """
+    from apps.payments.models import Transaction
+    from apps.wallets.models import SystemWallet
+
+    completed = Transaction.objects.filter(status="completed")
+
+    # ── Period filters ────────────────────────────────────────────
+    now = timezone.now()
+    cutoffs = {
+        "last_24h": now - timedelta(hours=24),
+        "last_7d":  now - timedelta(days=7),
+        "last_30d": now - timedelta(days=30),
+    }
+
+    def _sum_block(qs):
+        """Returns {currency → {fee, excise, total, tx_count}}."""
+        rows = (
+            qs.values("fee_currency")
+              .annotate(
+                  fee=Coalesce(Sum("fee_amount"), Decimal("0")),
+                  excise=Coalesce(Sum("excise_duty_amount"), Decimal("0")),
+                  tx_count=Count("id"),
+              )
+        )
+        by_ccy = {}
+        for r in rows:
+            ccy = (r["fee_currency"] or "").upper() or "UNKNOWN"
+            by_ccy[ccy] = {
+                "fee": str(r["fee"] or 0),
+                "excise": str(r["excise"] or 0),
+                "total": str((r["fee"] or Decimal("0")) + (r["excise"] or Decimal("0"))),
+                "tx_count": r["tx_count"],
+            }
+        return by_ccy
+
+    # ── Lifetime totals ───────────────────────────────────────────
+    lifetime = _sum_block(completed)
+
+    # ── Rolling windows ───────────────────────────────────────────
+    periods = {
+        name: _sum_block(completed.filter(completed_at__gte=cutoff))
+        for name, cutoff in cutoffs.items()
+    }
+
+    # ── Breakdown by tx type ──────────────────────────────────────
+    by_type_rows = (
+        completed.values("type", "fee_currency")
+        .annotate(
+            fee=Coalesce(Sum("fee_amount"), Decimal("0")),
+            excise=Coalesce(Sum("excise_duty_amount"), Decimal("0")),
+            tx_count=Count("id"),
+            volume_dest=Coalesce(Sum("dest_amount"), Decimal("0")),
+        )
+        .order_by("type", "fee_currency")
+    )
+    by_type = []
+    for r in by_type_rows:
+        by_type.append({
+            "tx_type": r["type"],
+            "fee_currency": (r["fee_currency"] or "").upper() or "UNKNOWN",
+            "tx_count": r["tx_count"],
+            "fee": str(r["fee"] or 0),
+            "excise": str(r["excise"] or 0),
+            "total_revenue": str(
+                (r["fee"] or Decimal("0")) + (r["excise"] or Decimal("0"))
+            ),
+            # Volume of money moved through this tx-type (useful to see
+            # if revenue scales linearly with volume).
+            "dest_volume": str(r["volume_dest"] or 0),
+        })
+
+    # ── "Earned vs Booked" reconciliation ─────────────────────────
+    # Sum the Transaction-record fee/excise per currency (what we
+    # SHOULD have moved to the fee wallet) vs the current fee
+    # SystemWallet balance (what we actually moved). Gap = bug or
+    # awaiting sweep.
+    fee_wallets = {
+        w.currency.upper(): w.balance
+        for w in SystemWallet.objects.filter(
+            wallet_type=SystemWallet.WalletType.FEE
+        )
+    }
+    reconciliation = []
+    seen_ccys = set(lifetime.keys()) | set(fee_wallets.keys())
+    for ccy in sorted(seen_ccys):
+        earned = Decimal(lifetime.get(ccy, {}).get("fee", "0"))
+        excise = Decimal(lifetime.get(ccy, {}).get("excise", "0"))
+        booked = Decimal(fee_wallets.get(ccy, Decimal("0")))
+        # Excise is a tax · NOT our revenue · we'd remit it to KRA.
+        # The "earned" for reconciliation purposes is fee_amount only.
+        gap = (earned - booked)
+        reconciliation.append({
+            "currency": ccy,
+            "earned_per_tx_records": str(earned),
+            "booked_in_fee_wallet": str(booked),
+            "gap": str(gap),
+            "excise_owed_to_kra": str(excise),
+        })
+
+    return JsonResponse({
+        "lifetime": lifetime,
+        "periods": periods,
+        "by_type": by_type,
+        "reconciliation": reconciliation,
+        # Headline: total KES equivalent in fees collected. Sums KES +
+        # crypto fees (crypto fees converted at rate map, falling back
+        # to 0 if rates are down). Front-end displays as the dashboard
+        # headline tile.
+        "lifetime_kes_equivalent": _revenue_kes_equivalent(lifetime),
+        "checked_at": now.isoformat(),
+    }, encoder=DecimalEncoder)
+
+
+def _revenue_kes_equivalent(lifetime_block: dict) -> str:
+    """Convert the per-currency revenue totals into a single KES
+    equivalent for the headline tile. Uses the same RateService the
+    user-facing app uses (post-spread rate · what a user would receive
+    if they swapped that crypto to KES today).
+
+    Returns Decimal-2dp as str. Fail-soft: missing currency → 0.
+    """
+    try:
+        from apps.rates.services import RateService
+    except ImportError:
+        return "0.00"
+    total = Decimal("0")
+    for ccy, block in (lifetime_block or {}).items():
+        fee = Decimal(str(block.get("fee") or 0))
+        if ccy == "KES":
+            total += fee
+            continue
+        if fee <= 0:
+            continue
+        try:
+            info = RateService.get_crypto_kes_rate(ccy)
+            rate = Decimal(str(info.get("final_rate") or 0))
+            total += fee * rate
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "revenue.kes_equivalent.skipped",
+                extra={"currency": ccy, "fee": str(fee)},
+            )
+    return str(total.quantize(Decimal("0.01")))
 
 
 @staff_member_required

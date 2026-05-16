@@ -672,6 +672,144 @@ class TestWebhookDedup(TestCase):
 #     "Successful" / "TS100" as a complete signal so the saga finishes.
 
 
+# ── Send-money enrichment (2026-05-17) ──────────────────────────────
+#
+# When IntaSend's send-money webhook fires, the per-tx detail block
+# carries the recipient's M-Pesa-registered name (`provider_account_name`),
+# the human status description, the provider receipt, and the IntaSend
+# charge. We now stash all of these onto Transaction.saga_data + populate
+# `merchant_name` so the customer receipt + admin user-detail surface
+# them.
+
+
+@override_settings(
+    DEBUG=False,
+    INTASEND_WEBHOOK_SECRET=_TEST_WEBHOOK_SECRET,
+    INTASEND_API_SECRET=_TEST_SECRET,
+    PAYMENT_PROVIDER_TILL="intasend",
+    PAYMENT_PROVIDER_PAYBILL="intasend",
+)
+class TestSendMoneyEnrichment(TestCase):
+    """Verifies the IntaSend per-tx fields (provider_account_name,
+    status_description, provider_reference, charges) are captured
+    onto the Transaction record when the saga completes."""
+
+    def _make_pending_tx(self):
+        from apps.payments.models import Transaction
+        from apps.accounts.models import User
+        from decimal import Decimal as _D
+
+        u = User.objects.create_user(
+            email="enrich@example.com",
+            phone="+254700020001",
+            password="t",
+        )
+        return Transaction.objects.create(
+            user=u,
+            type=Transaction.Type.PAYBILL_PAYMENT,
+            status=Transaction.Status.CONFIRMING,
+            source_currency="USDT",
+            source_amount=_D("0.4"),
+            dest_currency="KES",
+            dest_amount=_D("50.00"),
+            mpesa_paybill="888880",
+            mpesa_account="ACC-001",
+            saga_data={
+                "intasend_file_id": "FID-ENRICH",
+                "intasend_tracking_id": "TRK-ENRICH",
+            },
+            idempotency_key="idem-enrich",
+            chain="USDT",
+        )
+
+    def test_provider_account_name_saved_to_saga_data_and_merchant_name(self):
+        from apps.mpesa.intasend_views import _enrich_tx_from_send_money_payload
+
+        tx = self._make_pending_tx()
+        payload = {
+            "tracking_id": "TRK-ENRICH",
+            "file_id": "FID-ENRICH",
+            "provider": "MPESA-B2B",
+            "transactions": [
+                {
+                    "status": "Successful",
+                    "status_code": "TS100",
+                    "status_description": "The service request is processed successfully.",
+                    "provider": "MPESA-B2B",
+                    "provider_reference": "UEHUEAQ0W8",
+                    "provider_account_name": "KENYA POWER PREPAID",
+                    "charge": "10.00",
+                },
+            ],
+        }
+
+        _enrich_tx_from_send_money_payload(tx, payload)
+        tx.refresh_from_db()
+
+        # saga_data captures the full audit-trail set.
+        sd = tx.saga_data or {}
+        assert sd.get("intasend_provider_account_name") == "KENYA POWER PREPAID"
+        assert sd.get("intasend_status_description") == (
+            "The service request is processed successfully."
+        )
+        assert sd.get("intasend_provider_reference") == "UEHUEAQ0W8"
+        assert sd.get("intasend_provider") == "MPESA-B2B"
+        assert sd.get("intasend_charges") == "10.00"
+
+        # merchant_name populated so the email receipt renders "Paid To:
+        # KENYA POWER PREPAID" instead of "Paid To: 888880".
+        assert tx.merchant_name == "KENYA POWER PREPAID"
+        # biller_response also populated with the human status text.
+        assert tx.biller_response == (
+            "The service request is processed successfully."
+        )
+
+    def test_existing_merchant_name_not_clobbered(self):
+        # When a hand-curated label exists (e.g. set during quote · "KPLC
+        # · token meter") the enrichment must NOT overwrite it. The
+        # IntaSend account name is informational fallback only.
+        from apps.mpesa.intasend_views import _enrich_tx_from_send_money_payload
+
+        tx = self._make_pending_tx()
+        tx.merchant_name = "KPLC · token meter"
+        tx.save(update_fields=["merchant_name"])
+
+        _enrich_tx_from_send_money_payload(tx, {
+            "tracking_id": "TRK-ENRICH",
+            "transactions": [{
+                "provider_account_name": "DIFFERENT NAME",
+                "status_description": "ok",
+            }],
+        })
+
+        tx.refresh_from_db()
+        assert tx.merchant_name == "KPLC · token meter", (
+            "enrichment must not clobber a hand-curated merchant_name"
+        )
+        # saga_data still gets the IntaSend echo for audit purposes.
+        assert tx.saga_data.get("intasend_provider_account_name") == "DIFFERENT NAME"
+
+    def test_enrichment_never_blocks_saga(self):
+        # If IntaSend ships a totally wrong payload shape (no
+        # `transactions` array, or fields with unexpected types), the
+        # enrichment helper must swallow the error so saga.complete
+        # keeps running. Otherwise a malformed payload could prevent
+        # the M-Pesa receipt from being stamped on the tx.
+        from apps.mpesa.intasend_views import _enrich_tx_from_send_money_payload
+
+        tx = self._make_pending_tx()
+        # Garbage payload · transactions is a dict instead of a list.
+        _enrich_tx_from_send_money_payload(tx, {
+            "tracking_id": "TRK-ENRICH",
+            "transactions": {"this": "is not", "a": "list"},
+        })
+
+        tx.refresh_from_db()
+        # No fields populated, but also no exception · the test
+        # passing means the helper didn't raise.
+        assert (tx.saga_data or {}).get("intasend_provider_account_name") in (None, "")
+
+
 @override_settings(
     DEBUG=False,
     INTASEND_WEBHOOK_SECRET=_TEST_WEBHOOK_SECRET,
