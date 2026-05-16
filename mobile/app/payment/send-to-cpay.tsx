@@ -15,7 +15,7 @@
  *   4. On success → navigate to /payment/success with synthesised
  *      params so the existing screen renders cleanly
  */
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -199,6 +199,18 @@ export default function SendToCpayScreen() {
   const [suggestState, setSuggestState] = useState<"idle" | "loading" | "loaded" | "error">("idle");
   const [pickedRecipient, setPickedRecipient] = useState<Suggestion | null>(null);
 
+  // 2026-05-16 · debounce + de-dupe + back-off on the recipient
+  // typeahead. The pre-fix loop fired one network call per keystroke
+  // (debounced 350ms) which tripped 429 "Too Many Requests" on fast
+  // typers + on users who toggled back-and-forth between picks. New
+  // shape:
+  //   - debounce to 500ms (typing "John Njongoro" without pauses
+  //     fires AT MOST 2-3 queries · rather than 11)
+  //   - dedupe queries via lastQueriedRef so a re-render with the
+  //     same input string skips the network call
+  //   - 429-aware error path: drop into "error" state, message
+  //     mentions the cool-down, recovers on next typing change
+  const lastQueriedRef = useRef<string>("");
   useEffect(() => {
     const v = recipient.trim();
     if (v.length < 3) {
@@ -216,8 +228,15 @@ export default function SendToCpayScreen() {
     )) {
       return;
     }
+    // Dedupe · if we just queried this exact string, no point doing
+    // it again. Saves a round-trip when the form re-renders for an
+    // unrelated reason (rate refetch, theme toggle).
+    if (lastQueriedRef.current === v && suggestState !== "error") {
+      return;
+    }
     setSuggestState("loading");
     const timer = setTimeout(async () => {
+      lastQueriedRef.current = v;
       try {
         const { data } = await paymentsApi.cpayUserSuggest(v);
         setSuggestions(data.results || []);
@@ -226,7 +245,7 @@ export default function SendToCpayScreen() {
         setSuggestions([]);
         setSuggestState("error");
       }
-    }, 350);
+    }, 500);
     return () => clearTimeout(timer);
   }, [recipient, pickedRecipient]);
 
@@ -337,7 +356,16 @@ export default function SendToCpayScreen() {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: tc.dark.bg }}>
         <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-          <View style={{ flex: 1, paddingHorizontal: 20, paddingTop: 20 }}>
+          {/*
+            2026-05-16 · constrain PIN-step width on desktop to match the
+            form-step's centred card (maxWidth 600). Earlier the details
+            card stretched to the full viewport (1400+ px on a wide
+            monitor) while the PIN input sat at its natural narrow width
+            below · the visual mismatch read as "broken layout". Both
+            now live inside the same centred container so they share
+            the same horizontal extent.
+          */}
+          <View style={isDesktop ? { width: "100%", maxWidth: 600, alignSelf: "center", paddingHorizontal: 36, paddingTop: 28, paddingBottom: 32 } : { flex: 1, paddingHorizontal: 20, paddingTop: 20 }}>
             <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 16 }}>
               <Pressable
                 onPress={() => setStep("form")}

@@ -126,11 +126,15 @@ def _resolve_recipient(*, phone="", username="", referral_code=""):
 
 
 class CpayLookupThrottle(UserRateThrottle):
-    """60/min · pre-send recipient lookup. The mobile UI debounce-
-    fires this as the user types a phone / username so we want it
-    snappy; 60/min comfortably covers a fast typist (one query per
-    char above length 4) without enabling enumeration."""
-    rate = "60/min"
+    """120/min · 2026-05-16 raise. The mobile typeahead fires a query
+    on EVERY keystroke past length 3 (debounced 350ms · so a fast
+    typist who types "John Njongoro" without long pauses generates
+    11 queries in ~2 s). On top of that, the form re-fires queries
+    when the user toggles back and forth between picks. The 60/min
+    floor was tripping legitimate users mid-form ("Too many requests"
+    toast on Send-to-Cpay). 120/min stays cheap (one cached query
+    per char) but still rate-limits any actual enumeration script."""
+    rate = "120/min"
 
 
 def _safe_profile(recipient, kind: str) -> dict:
