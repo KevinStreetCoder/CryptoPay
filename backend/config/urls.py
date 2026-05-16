@@ -7,7 +7,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from apps.core.admin_views import admin_stats_dashboard, admin_sms_health
+from apps.core.admin_views import admin_stats_dashboard, admin_sms_health, admin_float_balances
 from apps.core.admin_totp_views import admin_totp_setup, admin_totp_verify
 from apps.core.media_views import ProtectedMediaView, public_media_forbidden
 from apps.core.views import (
@@ -76,6 +76,14 @@ urlpatterns = [
     # Stats dashboards stay under the obfuscated prefix too.
     path(f"{_admin_prefix}stats/", admin_stats_dashboard, name="admin-stats"),
     path(f"{_admin_prefix}health/sms/", admin_sms_health, name="admin-sms-health"),
+    # 2026-05-17 · combined IntaSend + SasaPay float-balance dashboard.
+    # Single endpoint that queries both providers live + returns total
+    # disbursable KES across the two M-Pesa rails. Caches 30s. Staff-only.
+    path(
+        f"{_admin_prefix}float/balances/",
+        admin_float_balances,
+        name="admin-float-balances",
+    ),
     # D10 · admin TOTP enrolment + verify pages. Mounted OUTSIDE the
     # obfuscated admin prefix so the AdminTOTPRequiredMiddleware can
     # redirect to them without bouncing the user through the IP allow-

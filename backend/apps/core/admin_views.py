@@ -3,6 +3,8 @@ import time
 from datetime import timedelta
 from decimal import Decimal
 
+import requests
+
 from django.conf import settings
 from django.contrib.admin.views.decorators import staff_member_required
 from django.db.models import Count, Sum, Q, F
@@ -515,6 +517,171 @@ def admin_stats_dashboard(request):
 # ---------------------------------------------------------------------------
 # SMS health check endpoint — staff-only, verifies eSMS / AT delivery on demand
 # ---------------------------------------------------------------------------
+
+
+@staff_member_required
+@require_http_methods(["GET"])
+def admin_float_balances(request):
+    """Combined float balance dashboard · IntaSend + SasaPay.
+
+    2026-05-17 · ops asked for ONE place to see the total settlement
+    float across BOTH M-Pesa rails. Previously each provider was
+    monitored separately:
+      - SasaPay · `apps.mpesa.tasks.check_float_balance` low-balance alert
+      - IntaSend · `intasend_healthcheck` CLI
+
+    This endpoint queries each provider's balance API live and returns
+    a normalised JSON shape so the admin dashboard can render a single
+    "Total float available to disburse" tile + a per-provider breakdown.
+
+    Public shape:
+      {
+        "total_disbursable_kes": float,   # SUM across both providers,
+                                          # only wallets with can_disburse
+                                          # = True for IntaSend or working
+                                          # account for SasaPay
+        "providers": {
+          "intasend": {
+              "available_kes": float,
+              "total_kes": float,
+              "wallets": [
+                  {"wallet_id", "label", "currency", "balance",
+                   "can_disburse", "wallet_type"}
+              ],
+              "error": str | null,
+          },
+          "sasapay": {
+              "available_kes": float,
+              "total_kes": float,
+              "accounts": [
+                  {"label", "balance", "is_working", "is_utility"}
+              ],
+              "error": str | null,
+          },
+        },
+        "checked_at": iso8601,
+      }
+
+    Cached for 30 s so a dashboard auto-refresh every few seconds
+    doesn't hammer either provider's balance API. Live refresh via
+    ?refresh=1 bypasses cache.
+
+    Auth · staff_member_required. Returns 403 to non-staff.
+    """
+    from django.core.cache import cache as _cache
+
+    CACHE_KEY = "admin:float_balances:v1"
+    if not request.GET.get("refresh"):
+        cached = _cache.get(CACHE_KEY)
+        if cached:
+            return JsonResponse(cached, encoder=DecimalEncoder)
+
+    intasend_block = _fetch_intasend_float()
+    sasapay_block = _fetch_sasapay_float()
+
+    # Total disbursable = sum of disburse-eligible balances across both
+    # providers. For IntaSend that's wallets with can_disburse=True; for
+    # SasaPay that's the Working + Utility balance (Bulk Payment isn't
+    # routinely used for B2B/B2C).
+    total_disbursable = (
+        float(intasend_block.get("available_kes", 0))
+        + float(sasapay_block.get("available_kes", 0))
+    )
+
+    payload = {
+        "total_disbursable_kes": round(total_disbursable, 2),
+        "providers": {
+            "intasend": intasend_block,
+            "sasapay": sasapay_block,
+        },
+        "checked_at": timezone.now().isoformat(),
+    }
+    _cache.set(CACHE_KEY, payload, timeout=30)
+    return JsonResponse(payload, encoder=DecimalEncoder)
+
+
+def _fetch_intasend_float() -> dict:
+    """Query IntaSend's /api/v1/wallets/ and normalise.
+
+    Returns ZERO available_kes if any HTTP or auth error · the admin
+    dashboard renders the failure inline rather than blocking the whole
+    page on a partial outage.
+    """
+    out = {
+        "available_kes": 0.0,
+        "total_kes": 0.0,
+        "wallets": [],
+        "error": None,
+    }
+    try:
+        from apps.mpesa.intasend_client import IntaSendClient
+        client = IntaSendClient()
+        resp = requests.get(
+            f"{client.base_url}/api/v1/wallets/",
+            headers=client._headers(),
+            timeout=8,
+        )
+        if resp.status_code != 200:
+            out["error"] = f"HTTP {resp.status_code}: {resp.text[:200]}"
+            return out
+        wallets = (resp.json() or {}).get("results") or []
+        for w in wallets:
+            ccy = (w.get("currency") or "").upper()
+            bal = float(w.get("current_balance") or 0)
+            can_disburse = bool(w.get("can_disburse"))
+            out["wallets"].append({
+                "wallet_id": w.get("wallet_id") or "",
+                "label": w.get("label") or "",
+                "currency": ccy,
+                "balance": bal,
+                "can_disburse": can_disburse,
+                "wallet_type": w.get("wallet_type") or "",
+            })
+            if ccy == "KES":
+                out["total_kes"] += bal
+                if can_disburse:
+                    out["available_kes"] += bal
+        out["available_kes"] = round(out["available_kes"], 2)
+        out["total_kes"] = round(out["total_kes"], 2)
+    except Exception as e:  # noqa: BLE001
+        out["error"] = str(e)[:200]
+    return out
+
+
+def _fetch_sasapay_float() -> dict:
+    """Query SasaPay's /payments/check-balance/ and normalise."""
+    out = {
+        "available_kes": 0.0,
+        "total_kes": 0.0,
+        "accounts": [],
+        "error": None,
+    }
+    try:
+        from apps.mpesa.sasapay_client import SasaPayClient
+        client = SasaPayClient()
+        resp = client.check_balance()
+        data = resp.get("data") or {}
+        for entry in data.get("Accounts") or []:
+            label = (entry.get("account_label") or "").lower()
+            bal = float(entry.get("account_balance") or 0)
+            is_working = "working" in label
+            is_utility = "utility" in label
+            out["accounts"].append({
+                "label": entry.get("account_label") or "",
+                "balance": bal,
+                "is_working": is_working,
+                "is_utility": is_utility,
+            })
+            out["total_kes"] += bal
+            # Disburse-eligible · Working (B2B / paybill / till settle from
+            # here in SasaPay's design) + Utility (B2C).
+            if is_working or is_utility:
+                out["available_kes"] += bal
+        out["available_kes"] = round(out["available_kes"], 2)
+        out["total_kes"] = round(out["total_kes"], 2)
+    except Exception as e:  # noqa: BLE001
+        out["error"] = str(e)[:200]
+    return out
 
 
 @csrf_exempt

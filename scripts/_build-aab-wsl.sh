@@ -77,20 +77,49 @@ git commit -qm "build" 2>&1 | tail -3 || true
 echo "Installing dependencies..."
 npm ci --no-audit --no-fund 2>&1 | tail -5
 
-# ── Pre-build keystore sanity (mirror of _build-apk-wsl.sh) ─────────
-[ -f "$WORK/credentials.json" ] || { echo "FATAL: $WORK/credentials.json missing · refuse build" >&2; exit 5; }
-[ -f "$WORK/credentials/cpay-release.keystore" ] || { echo "FATAL: keystore missing · refuse build" >&2; exit 5; }
-if ! grep -q '"credentialsSource": *"local"' "$WORK/eas.json"; then
-  echo "FATAL: eas.json must declare credentialsSource:local in the production profile · refuse build" >&2
+# ── Pre-build keystore sanity ───────────────────────────────────────
+# 2026-05-17 · Play Console rejected our vc 22 upload because we'd
+# signed with the wrong keystore. Play registered the EAS auto-managed
+# keystore (SHA-1 5A:BE:94:D4:…:4B:80) on the very first upload, and
+# every subsequent upload must keep using that key OR submit a Play
+# key-reset request (slow). Our locally-generated cpay-release.keystore
+# (73:21:C5:…:84:49) is therefore useless until we either rotate the
+# upload key on Play or start a fresh listing.
+#
+# Two supported paths · controlled by eas.json `credentialsSource`:
+#
+#   "local"  · sign with mobile/credentials/cpay-release.keystore.
+#              Used historically; ONLY safe if Play still trusts it.
+#   "remote" · EAS pulls the cloud-stored keystore for project
+#              3ca5c56b-30ff-454d-ad81-801f8d888db8 and signs locally
+#              with that. Matches the Play-registered key (5A:BE:…).
+#              This is the path we're on as of 2026-05-17.
+CREDENTIALS_SOURCE=$(python3 -c "
+import json
+print(json.load(open('$WORK/eas.json'))['build']['production'].get('credentialsSource',''))
+")
+echo "credentialsSource (production profile): $CREDENTIALS_SOURCE"
+
+if [ "$CREDENTIALS_SOURCE" = "local" ]; then
+  [ -f "$WORK/credentials.json" ] || { echo "FATAL: $WORK/credentials.json missing · refuse build" >&2; exit 5; }
+  [ -f "$WORK/credentials/cpay-release.keystore" ] || { echo "FATAL: keystore missing · refuse build" >&2; exit 5; }
+  KS_PASS=$(python3 -c "import json; print(json.load(open('$WORK/credentials.json'))['android']['keystore']['keystorePassword'])")
+  KS_ALIAS=$(python3 -c "import json; print(json.load(open('$WORK/credentials.json'))['android']['keystore']['keyAlias'])")
+  EXPECTED_SHA1=$(keytool -list -v -keystore "$WORK/credentials/cpay-release.keystore" \
+      -storepass "$KS_PASS" -alias "$KS_ALIAS" 2>/dev/null \
+    | grep -E '^[[:space:]]*SHA1:' | head -1 | awk '{print $2}')
+  [ -n "$EXPECTED_SHA1" ] || { echo "FATAL: could not read keystore SHA-1" >&2; exit 5; }
+  echo "expected AAB signing SHA-1 (local): $EXPECTED_SHA1"
+elif [ "$CREDENTIALS_SOURCE" = "remote" ]; then
+  # The Play-registered upload key. EAS fetches the keystore from
+  # cloud during the build; we only verify the cert AFTER the build
+  # by comparing the AAB's signing fingerprint against this pin.
+  EXPECTED_SHA1="5A:BE:94:D4:ED:90:4A:0A:B5:6D:1F:7F:CA:69:FF:24:C1:94:4B:80"
+  echo "expected AAB signing SHA-1 (remote · Play upload key): $EXPECTED_SHA1"
+else
+  echo "FATAL: eas.json production.credentialsSource must be 'local' or 'remote' · got '$CREDENTIALS_SOURCE'" >&2
   exit 5
 fi
-KS_PASS=$(python3 -c "import json; print(json.load(open('$WORK/credentials.json'))['android']['keystore']['keystorePassword'])")
-KS_ALIAS=$(python3 -c "import json; print(json.load(open('$WORK/credentials.json'))['android']['keystore']['keyAlias'])")
-EXPECTED_SHA1=$(keytool -list -v -keystore "$WORK/credentials/cpay-release.keystore" \
-    -storepass "$KS_PASS" -alias "$KS_ALIAS" 2>/dev/null \
-  | grep -E '^[[:space:]]*SHA1:' | head -1 | awk '{print $2}')
-[ -n "$EXPECTED_SHA1" ] || { echo "FATAL: could not read keystore SHA-1" >&2; exit 5; }
-echo "expected AAB signing SHA-1: $EXPECTED_SHA1"
 echo
 
 echo "Starting EAS local build (production profile · AAB)..."
