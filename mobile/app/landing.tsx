@@ -917,21 +917,63 @@ export default function LandingPage() {
                 Already have an account? <Text style={{ color: tc.primary[300], fontFamily: "DMSans_600SemiBold" }}>Sign In</Text>
               </Text>
             </Pressable>
-            <View style={{ flexDirection: "row", gap: 12, marginTop: 14, justifyContent: isDesktop ? "flex-start" : "center" }}>
-              <Pressable onPress={() => { /* /apk/ is a short URL on the Django
-                 app that increments a Redis counter then 302s to the nginx-
-                 served APK. Gives us a download tally in the admin dashboard
-                 without proxying the 110 MB binary through Django. */
-                 const u = `https://cpay.co.ke/apk/?v=${Date.now()}`; if (isWeb) { window.location.href = u; } else Linking.openURL(u); }}
+            {/*
+              2026-05-16 · Play Store CTA. Was a "Download Android APK"
+              button that hit /apk/ → /download/cryptopay.apk (a VPS-
+              hosted 110 MB binary). After closed-testing approval we
+              swapped to Play Store distribution · the /apk/ short URL
+              now 302s to the Play listing so existing share links /
+              QR codes / printed materials keep working.
+            */}
+            <View style={{ flexDirection: "row", gap: 12, marginTop: 14, justifyContent: isDesktop ? "flex-start" : "center", flexWrap: "wrap" }}>
+              <Pressable
+                onPress={() => {
+                  const u = `https://cpay.co.ke/apk/?v=${Date.now()}`;
+                  if (isWeb) { window.location.href = u; } else Linking.openURL(u);
+                }}
                 style={({ hovered }: any) => ({ flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: hovered ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.03)", borderWidth: 1, borderColor: "rgba(255,255,255,0.1)", borderRadius: 12, paddingVertical: 8, paddingHorizontal: 14, ...(isWeb ? { cursor: "pointer", transition: "all 0.2s ease" } as any : {}) })}>
                 <Image source={STORE_ICONS.googlePlay} style={{ width: 20, height: 20 }} resizeMode="contain" />
-                <View><Text style={{ color: tc.textMuted, fontSize: 8, fontFamily: "DMSans_400Regular" }}>DOWNLOAD</Text><Text style={{ color: tc.textPrimary, fontSize: 12, fontFamily: "DMSans_600SemiBold" }}>Android APK</Text></View>
+                <View>
+                  <Text style={{ color: tc.textMuted, fontSize: 8, fontFamily: "DMSans_400Regular" }}>GET IT ON</Text>
+                  <Text style={{ color: tc.textPrimary, fontSize: 12, fontFamily: "DMSans_600SemiBold" }}>Google Play</Text>
+                </View>
               </Pressable>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "rgba(255,255,255,0.02)", borderWidth: 1, borderColor: "rgba(255,255,255,0.06)", borderRadius: 12, paddingVertical: 8, paddingHorizontal: 14, opacity: 0.5 }}>
                 <Image source={STORE_ICONS.appStore} style={{ width: 20, height: 20, opacity: 0.7 }} resizeMode="contain" />
                 <View><Text style={{ color: tc.textMuted, fontSize: 8, fontFamily: "DMSans_400Regular" }}>Download on the</Text><Text style={{ color: tc.textSecondary, fontSize: 12, fontFamily: "DMSans_600SemiBold" }}>App Store</Text></View>
               </View>
             </View>
+
+            {/*
+              Early-access enrollment link · users tap this to JOIN the
+              closed-testing cohort before they can install from Play.
+              Shown as a smaller secondary CTA underneath the main
+              store badges. Once the app moves to open beta or full
+              production, this whole block can be hidden conditionally.
+            */}
+            <Pressable
+              onPress={() => {
+                const u = "https://cpay.co.ke/testing/";
+                if (isWeb) { window.location.href = u; } else Linking.openURL(u);
+              }}
+              style={({ hovered }: any) => ({
+                marginTop: 12,
+                alignSelf: isDesktop ? "flex-start" : "center",
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 6,
+                paddingVertical: 6,
+                paddingHorizontal: 10,
+                borderRadius: 8,
+                backgroundColor: hovered ? "rgba(16,185,129,0.08)" : "transparent",
+                ...(isWeb ? { cursor: "pointer", transition: "all 0.2s ease" } as any : {}),
+              })}
+              accessibilityLabel="Join early access on Google Play"
+            >
+              <Text style={{ color: tc.primary[300], fontSize: 11, fontFamily: "DMSans_600SemiBold", letterSpacing: 0.3 }}>
+                ✨  Join early access  →
+              </Text>
+            </Pressable>
           </View>
         </RevealOnScroll>
 

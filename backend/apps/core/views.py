@@ -139,18 +139,45 @@ class HealthCheckView(APIView):
 # APK download tracking
 # ────────────────────────────────────────────────────────────────
 
+#: Canonical Google Play listing for Cpay's Android app.
+#: 2026-05-16 · transitioned from VPS-hosted APK distribution to
+#: Play Store distribution after closed-testing approval landed.
+#: The /apk/ short URL now redirects here so:
+#:   - Existing share links (QR codes, emails, SMS, social posts)
+#:     keep working · they just land on Play Store now.
+#:   - The download counter still ticks · we keep analytics on
+#:     CTA engagement even when distribution moved to Play.
+#:   - First-time installers get auto-updates from Play forever.
+PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=ke.co.cryptopay.app"
+
+#: Closed-testing enrollment URL · users tap this to JOIN the alpha
+#: cohort before they can install from Play. Once they enroll, the
+#: production Play Store listing lets them install.
+#: Listed under Play Console → Testing → Closed testing → Alpha →
+#: Testers tab → "Join on the web" link.
+PLAY_TESTING_URL = "https://play.google.com/apps/testing/ke.co.cryptopay.app"
+
+
 class ApkDownloadView(APIView):
     """
-    GET /apk  →  302 to /download/cryptopay.apk, after incrementing a
-    Redis counter. The actual file is served by nginx (fast path, no
-    Django in the data path). We only participate in the redirect so
-    we can count, without bloating nginx with a custom Lua module.
+    GET /apk  →  302 to the Google Play listing, after incrementing a
+    Redis counter so the admin dashboard keeps tracking install-CTA
+    engagement.
 
-    Counter key: `metrics:apk_downloads_total` (integer).
-    Read via the admin metrics endpoint below.
+    2026-05-16 · was redirecting to /download/cryptopay.apk (a
+    VPS-hosted 110 MB APK file we shipped pre-Play-Store-approval).
+    Now points at Play Store · the VPS file is gone, the counter
+    semantic just shifts from "downloads started" to "Play Store
+    landings". Same metric name (`metrics:apk_downloads_total`) for
+    historical continuity.
 
-    We intentionally do NOT require auth here — anonymous downloads
-    are the norm for public APK distribution before Play Store gating.
+    The /apk/ short URL was used in: QR codes on print materials,
+    SMS invites, email CTAs, the landing page's "Download Android"
+    button, and pasted into WhatsApp groups during the closed beta.
+    Keeping the same redirect point means none of those break.
+
+    We intentionally do NOT require auth here · the Play Store
+    redirect is public.
     """
 
     permission_classes = [AllowAny]
@@ -172,9 +199,44 @@ class ApkDownloadView(APIView):
             # Never let a telemetry failure block the download itself.
             logger.warning(f"APK download counter incr failed: {e}")
 
-        # 302 (temporary) so caching proxies don't memoise the redirect
-        # destination past a URL rotation.
-        resp = HttpResponseRedirect("/download/cryptopay.apk")
+        # 2026-05-16 · 302 to Play Store (was /download/cryptopay.apk).
+        # 302 (temporary) so caching proxies don't memoise this past
+        # any future URL rotation (e.g. App Store launch when iOS
+        # ships and we conditionally route by User-Agent).
+        resp = HttpResponseRedirect(PLAY_STORE_URL)
+        resp["Cache-Control"] = "no-store"
+        return resp
+
+
+class PlayTestingRedirectView(APIView):
+    """GET /testing  →  302 to the Google Play closed-testing enrollment URL.
+
+    Convenience short URL for inviting alpha / beta cohort users.
+    Distinct from the production Play Store listing · tapping this
+    enrolls the user in the testing track BEFORE they can install
+    the closed-testing build.
+
+    Same Redis counter shape as the main `/apk/` endpoint so we can
+    distinguish "early-access invite clicks" from "general install
+    clicks" in the admin dashboard.
+
+    Add to invite emails / SMS / personal messages as
+    `https://cpay.co.ke/testing/` instead of pasting the long
+    Play Store URL.
+    """
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def get(self, request):
+        try:
+            cache.incr("metrics:apk_testing_invites_total")
+        except ValueError:
+            cache.set("metrics:apk_testing_invites_total", 1, timeout=None)
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"Testing-invite counter incr failed: {e}")
+
+        resp = HttpResponseRedirect(PLAY_TESTING_URL)
         resp["Cache-Control"] = "no-store"
         return resp
 

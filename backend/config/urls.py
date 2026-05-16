@@ -15,6 +15,7 @@ from apps.core.views import (
     ApkDownloadMetricsView,
     ApkDownloadView,
     HealthCheckView,
+    PlayTestingRedirectView,
 )
 
 
@@ -36,14 +37,22 @@ urlpatterns = [
     path("", api_root, name="api-root"),
     path("", include("django_prometheus.urls")),
     path("health/", HealthCheckView.as_view(), name="health-check"),
-    # Short-URL APK download (counts hits, 302s to the nginx-served file).
-    # Landing page links to /apk/ instead of /download/cryptopay.apk so the
-    # counter ticks. The actual binary is still served by nginx.
+    # 2026-05-16 · /apk/ now 302s to the Google Play listing (was
+    # /download/cryptopay.apk). All existing share links (QR codes,
+    # invite emails / SMS, social posts) keep working because the
+    # short URL is unchanged · only the destination flipped.
     path("apk/", ApkDownloadView.as_view(), name="apk-download-tracker"),
-    # Side-effect-only counter tick · nginx mirrors direct hits on
-    # /download/cryptopay.apk here so the counter can't be bypassed by
-    # cache-busted URLs or anyone using the direct path.
+    # Side-effect-only counter tick · we keep this hook for legacy
+    # direct-hits on /download/cryptopay.apk that some QR-code-scanners
+    # may have memoised, but the file itself is gone from the VPS
+    # (see deploy/nginx/cpay-live.conf · the /download/ location 302s
+    # to Play Store too).
     path("apk/hit/", ApkDownloadHitView.as_view(), name="apk-download-hit"),
+    # 2026-05-16 · early-access enrollment short URL · used when sending
+    # invites to closed-testing alpha cohort. Distinct counter so
+    # admin dashboard separates "general install" from "early-access
+    # opt-in" signals.
+    path("testing/", PlayTestingRedirectView.as_view(), name="play-testing-redirect"),
     path(
         "api/v1/admin/metrics/apk-downloads/",
         ApkDownloadMetricsView.as_view(),
