@@ -200,14 +200,34 @@ class IntaSendClient:
         narrative: str = "Bill payment",
     ) -> dict:
         """B2B Paybill · pays an M-Pesa paybill on behalf of the merchant
-        wallet. Auto-approves (`requires_approval='NO'`) so the saga's
-        ~17-min retry envelope still fits."""
+        wallet.
+
+        2026-05-16 · payload corrected per IntaSend's official docs at
+        https://developers.intasend.com/docs/m-pesa-b2b:
+
+          - `account_type` MUST be the literal string "PayBill"
+            (case-sensitive · "PayBill", NOT "paybill"/"Paybill").
+          - `account_reference` is the field name for the bill account
+            number we were sending as `account_number`. IntaSend
+            silently dropped our `account_number` field and the M-Pesa
+            B2B leg then failed with TF103 "Initiation failed" because
+            the bill couldn't be matched without an account reference.
+
+        Previously every paybill we sent through IntaSend failed with
+        TF103. The wallet's `can_disburse: false` flag was a red
+        herring · we were actually sending a malformed payload that
+        IntaSend's M-Pesa B2B handler couldn't process. Confirmed via
+        the API docs the user pasted from
+        https://developers.intasend.com (the official IntaSend
+        developer hub) which document the exact field shape.
+        """
         return self._send_money(
             provider="MPESA-B2B",
             transactions=[{
                 "name": (reference or "Cpay")[:32],
                 "account": str(paybill),
-                "account_number": str(account),
+                "account_type": "PayBill",
+                "account_reference": str(account),
                 "amount": int(round(float(amount))),
                 "narrative": narrative[:64],
             }],
@@ -221,12 +241,20 @@ class IntaSendClient:
         reference: Optional[str] = None,
         narrative: str = "BuyGoods",
     ) -> dict:
-        """B2B Till · pays an M-Pesa BuyGoods till."""
+        """B2B Till · pays an M-Pesa BuyGoods till.
+
+        2026-05-16 · `account_type: "TillNumber"` (case-sensitive · NOT
+        "Till" / "till" / "BuyGoods") added per IntaSend's docs. Same
+        root-cause family as pay_paybill above · the missing
+        account_type field caused IntaSend to reject every till send
+        with TF103.
+        """
         return self._send_money(
             provider="MPESA-B2B",
             transactions=[{
                 "name": (reference or "Cpay")[:32],
                 "account": str(till),
+                "account_type": "TillNumber",
                 "amount": int(round(float(amount))),
                 "narrative": narrative[:64],
             }],
@@ -301,40 +329,36 @@ class IntaSendClient:
         file_id = data.get("file_id") or ""
         wallet = data.get("wallet") or {}
 
-        # 2026-05-16 · synchronous fail-fast on disabled-disbursement.
+        # 2026-05-16 · synchronous fail-fast on TF101/102/103 in the
+        # initiate response.
         #
-        # IntaSend's merchant account ships with `can_disburse: false`
-        # on every wallet until support flips the toggle (B2B verification
-        # / KYB / Tier-upgrade). When that toggle is OFF, the initiate
-        # call returns 201 (looks successful at HTTP level) but the
-        # per-transaction status is "Initiation failed" (TF103) and
-        # `paid_amount: 0`. Without this check the saga would set the
-        # tx to CONFIRMING and wait 10 minutes for the cron to time out
-        # while the user stared at a "Confirming..." spinner.
+        # The initiate POST returns 201 (HTTP-successful) even when the
+        # disbursement itself can't proceed. The TRUE failure signal is
+        # `transactions[0].status_code` of TF101 / TF102 / TF103 or
+        # the literal "Initiation failed" status string. When this
+        # appears synchronously, we know the M-Pesa B2B leg won't run
+        # (bad paybill, wrong account_reference, account not enabled
+        # for B2B, etc) so we raise immediately rather than parking
+        # the tx in CONFIRMING for 10 minutes.
         #
-        # Detect that here and raise so the saga marks failed + refunds
-        # immediately (sub-second). The failure_reason explicitly names
-        # `can_disburse=false` so ops sees the IntaSend dashboard issue.
+        # 2026-05-16 update · REMOVED the `wallet.can_disburse: false`
+        # check. Empirically this flag returns `false` even on
+        # transactions that successfully complete (verified via live
+        # till disburse 5629642 · M-Pesa receipt UEGUEAPMIV, status
+        # TS100). `can_disburse` is not a hard disbursement gate; the
+        # earlier reading of it was wrong. The TF103 signature alone
+        # is the correct failure detection.
         FAIL_STATES = {"INITIATION FAILED", "INITIATION_FAILED", "FAILED",
                        "REJECTED"}
         FAIL_CODES = {"TF101", "TF102", "TF103"}
         if (
             per_tx_status.upper() in FAIL_STATES
             or per_tx_code.upper() in FAIL_CODES
-            or (wallet and wallet.get("can_disburse") is False
-                and per_tx_status.lower() != "complete")
         ):
-            reason_parts = [
-                f"IntaSend initiate failed sync · status={per_tx_status!r}",
-                f"code={per_tx_code!r}",
-            ]
-            if wallet.get("can_disburse") is False:
-                reason_parts.append(
-                    f"wallet can_disburse=False (wallet_id={wallet.get('wallet_id')!r}, "
-                    f"balance={wallet.get('current_balance')}); "
-                    f"ops: enable disbursement on the IntaSend merchant account"
-                )
-            raise IntaSendError(" · ".join(reason_parts))
+            raise IntaSendError(
+                f"IntaSend initiate failed sync · "
+                f"status={per_tx_status!r} code={per_tx_code!r}"
+            )
 
         # Final fallback to the legacy field if the new shape isn't present
         # (defensive · IntaSend has bumped shapes before).

@@ -152,7 +152,18 @@ class TestStkPush(TestCase):
     INTASEND_API_SECRET=_TEST_SECRET,
 )
 class TestSendMoney(TestCase):
-    def test_pay_paybill_uses_b2b_with_account_number(self):
+    def test_pay_paybill_uses_b2b_with_correct_payload(self):
+        """2026-05-16 · IntaSend B2B paybill payload spec
+        (https://developers.intasend.com/docs/m-pesa-b2b):
+
+          account_type = "PayBill"   (case-sensitive)
+          account_reference = the bill account number
+          account = the paybill number itself
+
+        Before this fix · we sent `account_number` (wrong field name)
+        and no `account_type` at all · IntaSend's M-Pesa B2B leg then
+        rejected every paybill with TF103 "Initiation failed".
+        """
         from apps.mpesa.intasend_client import IntaSendClient
 
         with patch("apps.mpesa.intasend_client.requests.post") as mock_post:
@@ -169,14 +180,26 @@ class TestSendMoney(TestCase):
         assert payload["provider"] == "MPESA-B2B"
         assert payload["currency"] == "KES"
         assert payload["requires_approval"] == "NO"
-        # Both paybill (account) and account_no carried.
         tx0 = payload["transactions"][0]
         assert tx0["account"] == "247247"
-        assert tx0["account_number"] == "0123456789"
+        assert tx0["account_type"] == "PayBill", (
+            "account_type must be exactly 'PayBill' (case-sensitive · "
+            "IntaSend's M-Pesa B2B handler rejects anything else with TF103)"
+        )
+        assert tx0["account_reference"] == "0123456789", (
+            "Field name MUST be 'account_reference' per the docs · "
+            "we previously sent 'account_number' and the M-Pesa B2B "
+            "leg dropped it on the floor"
+        )
+        # account_number (the old wrong key) must NOT be present.
+        assert "account_number" not in tx0
         assert tx0["amount"] == 1000
         assert payload["api_ref"] == "cpay-tx-1"
 
-    def test_pay_till_uses_b2b_without_account_number(self):
+    def test_pay_till_uses_b2b_with_tillnumber_account_type(self):
+        """2026-05-16 · till payments need `account_type: "TillNumber"`
+        (case-sensitive). Without it IntaSend rejects with TF103 · we
+        confirmed this empirically on the live API."""
         from apps.mpesa.intasend_client import IntaSendClient
 
         with patch("apps.mpesa.intasend_client.requests.post") as mock_post:
@@ -187,7 +210,12 @@ class TestSendMoney(TestCase):
         assert payload["provider"] == "MPESA-B2B"
         tx0 = payload["transactions"][0]
         assert tx0["account"] == "888888"
-        # No account_number for till payments.
+        assert tx0["account_type"] == "TillNumber", (
+            "account_type must be exactly 'TillNumber' (case-sensitive)"
+        )
+        # No account_reference for tills (only paybills need it).
+        assert "account_reference" not in tx0
+        # And no account_number (the legacy wrong key).
         assert "account_number" not in tx0
 
     def test_send_to_mobile_uses_b2c(self):
@@ -681,56 +709,41 @@ class TestFindPendingTxByFileId(TestCase):
         assert found is not None
         assert found.id == tx.id
 
-    def test_initiate_raises_sync_when_can_disburse_false(self):
-        """2026-05-16 · IntaSend merchants ship with `can_disburse: false`
-        on every wallet until support flips the toggle. The initiate
-        call HTTP-201's but the per-tx status is "Initiation failed".
-        We MUST raise sync so the saga marks failed + refunds within a
-        second · without this the user stares at a 10-min spinner
-        before the cron times out.
-        """
-        from unittest.mock import MagicMock, patch
-        from apps.mpesa.intasend_client import IntaSendClient, IntaSendError
+    def test_initiate_does_not_fail_on_can_disburse_false_alone(self):
+        """2026-05-16 update · `wallet.can_disburse: false` is NOT a
+        hard disbursement gate. Verified via live till disburse on
+        2026-05-16: status `Successful (TS100)` with M-Pesa receipt
+        UEGUEAPMIV even though the wallet still showed
+        `can_disburse: false`. The flag is something else (auto-
+        disburse-without-approval capability? quota?) · NOT a kill
+        switch.
 
-        # Mock the underlying POST so we can exercise the sync-fail path
-        # without hitting the real IntaSend sandbox.
+        So fail-fast on can_disburse alone would incorrectly reject
+        valid transactions. The TF101/102/103 status_code check is
+        sufficient.
+        """
+        from unittest.mock import patch
+        from apps.mpesa.intasend_client import IntaSendClient
         fake_response = {
             "file_id": "ABC1234",
-            "wallet": {
-                "wallet_id": "084VJZY",
-                "can_disburse": False,
-                "current_balance": 92.0,
-                "currency": "KES",
-            },
+            "wallet": {"can_disburse": False, "current_balance": 92.0},
             "transactions": [
-                {
-                    "status": "Initiation failed",
-                    "status_code": "TF103",
-                    "tracking_id": "00000000-0000-0000-0000-000000000001",
-                    "amount": "10.00",
-                },
+                {"status": "Pending", "status_code": "TP101",
+                 "tracking_id": "00000000-0000-0000-0000-000000000001"},
             ],
         }
         with patch.object(IntaSendClient, "_post", return_value=fake_response):
             client = IntaSendClient.__new__(IntaSendClient)
             client.callback_url = ""
             client.wallet_id = ""
-            try:
-                client._send_money(
-                    provider="MPESA-B2B",
-                    transactions=[{"name": "x", "account": "888880",
-                                   "amount": 10, "narrative": "test"}],
-                    reference="test",
-                )
-            except IntaSendError as e:
-                # Reason must mention can_disburse so ops know what to fix
-                msg = str(e)
-                assert "can_disburse" in msg.lower() or "false" in msg.lower(), msg
-                assert "ops" in msg.lower() or "merchant" in msg.lower(), msg
-            else:
-                raise AssertionError(
-                    "Expected IntaSendError when can_disburse=False"
-                )
+            # Should NOT raise · only TF1xx codes trigger fail-fast.
+            result = client._send_money(
+                provider="MPESA-B2B",
+                transactions=[{"name": "x", "account": "x",
+                               "amount": 10, "narrative": "x"}],
+                reference="x",
+            )
+            assert result["ResponseCode"] == "0"
 
     def test_initiate_raises_sync_on_tf103_only(self):
         # Even with can_disburse=True, a TF103 status code from the
