@@ -18,6 +18,7 @@ import {
 } from "../src/stores/auth";
 import { ErrorBoundary } from "../src/components/ErrorBoundary";
 import { NetworkStatus } from "../src/components/NetworkStatus";
+import { UpdateAvailableBanner } from "../src/components/UpdateAvailableBanner";
 import { LoadingScreen } from "../src/components/LoadingScreen";
 import { ToastProvider } from "../src/components/Toast";
 import { DashboardLayout } from "../src/components/WebSidebar";
@@ -330,6 +331,12 @@ function RootNavigator() {
       ) : (
         stackContent
       )}
+
+      {/* 2026-05-16 · Android-only "Update available" prompt. Self-gates
+          to Platform.OS === "android" + polls /api/v1/app/version/. Renders
+          a slide-in banner (optional update), a modal (recommended), or
+          a no-dismiss modal (forced). See UpdateAvailableBanner.tsx. */}
+      <UpdateAvailableBanner />
 
       {/* Onboarding popup · shown once after first login */}
       <OnboardingModal

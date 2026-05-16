@@ -5,6 +5,7 @@ Core views — health check and system status.
 import logging
 import time
 
+from django.conf import settings
 from django.core.cache import cache
 from django.db import connection
 from django.http import HttpResponseRedirect
@@ -298,3 +299,77 @@ class ApkDownloadMetricsView(APIView):
         except (TypeError, ValueError):
             total = 0
         return Response({"total": total})
+
+
+# ────────────────────────────────────────────────────────────────
+# Mobile version manifest
+# ────────────────────────────────────────────────────────────────
+
+
+class AppVersionView(APIView):
+    """
+    GET /api/v1/app/version/  →  Mobile version manifest.
+
+    Read by the mobile app on cold-start (`UpdateAvailableBanner`).
+    The bundled `Constants.expoConfig.version` /
+    `expo.android.versionCode` is compared against this payload to
+    decide:
+
+      - bundled >= latest_version_code  →  silent · no banner
+      - bundled <  latest_version_code AND
+        bundled >= minimum_supported_version_code  →  optional update
+        (dismissable banner)
+      - bundled <  minimum_supported_version_code  →  recommended
+        update (full-screen modal, still dismissable)
+      - bundled <  force_update_below_version_code  →  forced update
+        (modal with NO dismiss, only "Update now" → store)
+
+    Public endpoint · no auth required. The mobile client hits it
+    pre-login so even users sitting on the auth screen with a stale
+    build see the banner. Cached for 5 min on the client side to
+    avoid hammering the API on every focus event.
+
+    Source of truth: `settings.MOBILE_VERSION_*` (env-overridable so
+    ops can bump version metadata without a backend redeploy).
+    """
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def get(self, request):
+        platform = (request.query_params.get("platform") or "android").lower()
+        if platform not in ("android", "ios"):
+            return Response(
+                {"detail": "platform must be one of: android, ios"},
+                status=400,
+            )
+
+        # iOS not shipped yet · return a sentinel so the client knows
+        # to skip the banner entirely (no point telling iOS users to
+        # update to a build that doesn't exist).
+        if platform == "ios":
+            return Response({
+                "platform": "ios",
+                "available": False,
+                "latest_version": None,
+                "latest_version_code": None,
+                "minimum_supported_version_code": None,
+                "force_update_below_version_code": None,
+                "store_url": None,
+                "release_notes": None,
+            })
+
+        return Response({
+            "platform": "android",
+            "available": True,
+            "latest_version": settings.MOBILE_VERSION_LATEST_NAME,
+            "latest_version_code": int(settings.MOBILE_VERSION_LATEST_CODE),
+            "minimum_supported_version_code": int(
+                settings.MOBILE_VERSION_MIN_SUPPORTED_CODE
+            ),
+            "force_update_below_version_code": int(
+                settings.MOBILE_VERSION_FORCE_BELOW_CODE
+            ),
+            "store_url": settings.MOBILE_VERSION_STORE_URL,
+            "release_notes": settings.MOBILE_VERSION_RELEASE_NOTES,
+        })

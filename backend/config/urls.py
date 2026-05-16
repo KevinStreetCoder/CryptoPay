@@ -14,6 +14,7 @@ from apps.core.views import (
     ApkDownloadHitView,
     ApkDownloadMetricsView,
     ApkDownloadView,
+    AppVersionView,
     HealthCheckView,
     PlayTestingRedirectView,
 )
@@ -58,6 +59,13 @@ urlpatterns = [
         ApkDownloadMetricsView.as_view(),
         name="admin-apk-metrics",
     ),
+    # 2026-05-16 · mobile version manifest · the app polls this on
+    # cold-start (and on every focus event, cached for 5 min) to
+    # decide whether to surface an "Update available" banner / modal.
+    # Public · no auth required (we need pre-login installs to also
+    # get the prompt). See `apps.core.views.AppVersionView` for the
+    # contract + escalation tiers.
+    path("api/v1/app/version/", AppVersionView.as_view(), name="app-version"),
     # Stats dashboards stay under the obfuscated prefix too.
     path(f"{_admin_prefix}stats/", admin_stats_dashboard, name="admin-stats"),
     path(f"{_admin_prefix}health/sms/", admin_sms_health, name="admin-sms-health"),

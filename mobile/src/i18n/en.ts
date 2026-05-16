@@ -24,6 +24,15 @@ const en = {
     pending: "Pending",
     off: "Off",
   },
+  updateAvailable: {
+    title: "Update available",
+    body: "A newer version of Cpay is available.",
+    bodyForced: "You must update Cpay to keep using it.",
+    bodyRecommended: "Please update Cpay for important fixes and improvements.",
+    cta: "Update now",
+    later: "Later",
+    releaseNotesLabel: "What's new",
+  },
   auth: {
     login: "Login",
     register: "Register",

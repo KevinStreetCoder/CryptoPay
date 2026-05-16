@@ -1179,3 +1179,49 @@ PROTECTED_MEDIA_INTERNAL_PREFIX = env(
 # AUTH_COOKIE_DOMAIN="cpay.co.ke" when the web bundle lives on the same
 # apex (app.cpay.co.ke) and needs cookies to be sent to api.cpay.co.ke.
 AUTH_COOKIE_DOMAIN = env("AUTH_COOKIE_DOMAIN", default="")
+
+# ──────────────────────────────────────────────────────────────────────
+# Mobile version manifest · drives the in-app "Update available" banner
+# ──────────────────────────────────────────────────────────────────────
+# 2026-05-16 · post-Play-rollout, every cold-start the app pings
+# `/api/v1/app/version/` and compares this config to the bundled
+# `Constants.expoConfig.version` + `expo.android.versionCode`.
+#
+# Three escalation tiers:
+#   1. Optional update · banner with "Update now / Later". Shown when
+#      bundled versionCode < latest_version_code.
+#   2. Recommended update · full-screen modal but still dismissable.
+#      Shown when bundled versionCode < minimum_supported_version_code.
+#   3. Force update · full-screen modal with NO dismiss · forces user
+#      to the Play Store. Shown when bundled versionCode <
+#      force_update_below_version_code · used only when we ship a
+#      build that fixes a money-loss bug we can't afford to leave
+#      live (e.g. wrong-recipient payments, double-spend).
+#
+# We DON'T hard-code these in Python · they're settings so ops can
+# bump them via .env on the VPS without a backend redeploy. Defaults
+# match `mobile/app.json::version` + `android.versionCode` so dev +
+# CI never see a stale-version banner.
+MOBILE_VERSION_LATEST_NAME = env("MOBILE_VERSION_LATEST_NAME", default="1.1.12")
+MOBILE_VERSION_LATEST_CODE = env.int("MOBILE_VERSION_LATEST_CODE", default=21)
+# Minimum versionCode that still receives feature support · users below
+# get a STRONGLY recommended (but dismissable) update prompt.
+MOBILE_VERSION_MIN_SUPPORTED_CODE = env.int(
+    "MOBILE_VERSION_MIN_SUPPORTED_CODE", default=18
+)
+# Anything below this is force-update-only · use rarely. Set to 0 to
+# disable force-update entirely.
+MOBILE_VERSION_FORCE_BELOW_CODE = env.int(
+    "MOBILE_VERSION_FORCE_BELOW_CODE", default=0
+)
+# What the banner CTA opens. The /apk/ short URL bounces through our
+# analytics counter before landing on Play Store · we want that telemetry.
+MOBILE_VERSION_STORE_URL = env(
+    "MOBILE_VERSION_STORE_URL",
+    default="https://cpay.co.ke/apk/",
+)
+# Short release-note shown inside the banner · localised on the client.
+MOBILE_VERSION_RELEASE_NOTES = env(
+    "MOBILE_VERSION_RELEASE_NOTES",
+    default="Bug fixes and stability improvements.",
+)

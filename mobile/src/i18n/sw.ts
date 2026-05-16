@@ -26,6 +26,15 @@ const sw: Translations = {
     pending: "Inasubiri",
     off: "Imezimwa",
   },
+  updateAvailable: {
+    title: "Toleo jipya linapatikana",
+    body: "Toleo jipya la Cpay limepatikana.",
+    bodyForced: "Lazima usasishe Cpay ili uendelee kuitumia.",
+    bodyRecommended: "Tafadhali sasisha Cpay kwa marekebisho muhimu.",
+    cta: "Sasisha sasa",
+    later: "Baadaye",
+    releaseNotesLabel: "Mabadiliko mapya",
+  },
   auth: {
     login: "Ingia",
     register: "Jisajili",
