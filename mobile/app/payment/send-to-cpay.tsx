@@ -48,6 +48,7 @@ import { usePersistedState } from "../../src/hooks/usePersistedState";
 import { Spinner } from "../../src/components/brand/Spinner";
 import { ratesApi, normalizeRate, Rate } from "../../src/api/rates";
 import { useQuery } from "@tanstack/react-query";
+import { pickHighestBalanceCurrency } from "../../src/utils/portfolioTotal";
 
 const CRYPTO_OPTIONS: CurrencyCode[] = ["USDT", "USDC", "BTC", "ETH", "SOL"];
 
@@ -71,7 +72,14 @@ export default function SendToCpayScreen() {
   const [recipient, setRecipient] = usePersistedState(PERSIST_KEYS.recipient, "");
   const [amount, setAmount] = usePersistedState(PERSIST_KEYS.amount, "");
   const [memo, setMemo] = usePersistedState(PERSIST_KEYS.memo, "");
-  const [persistedCrypto, setPersistedCrypto] = usePersistedState(PERSIST_KEYS.crypto, "USDT");
+  // 2026-05-16 · auto-select the crypto with the HIGHEST KES-equivalent
+  // balance, not always "USDT". A beta user holding only SOL was being
+  // shown USDT (empty) as the default every time they opened this
+  // screen · they had to manually tap SOL to even attempt a send. The
+  // auto-pick fires once after rates + wallets load and ONLY when the
+  // user hasn't already chosen something (`persistedCrypto === ""`),
+  // so an explicit prior pick survives across navigations.
+  const [persistedCrypto, setPersistedCrypto] = usePersistedState(PERSIST_KEYS.crypto, "");
   const selectedCrypto = (persistedCrypto || "USDT") as CurrencyCode;
   const setSelectedCrypto = (c: CurrencyCode) => setPersistedCrypto(c);
 
@@ -121,6 +129,24 @@ export default function SendToCpayScreen() {
   const cryptoRate = rates?.find((r) => r.currency === selectedCrypto);
   const kesPerCrypto = cryptoRate ? parseFloat(cryptoRate.kes_rate) || 0 : 0;
   const kesEquivalent = parsedAmount * kesPerCrypto;
+
+  // 2026-05-16 · auto-pick highest-balance crypto on first load.
+  // Runs once after wallets + rates resolve · only writes when the
+  // user hasn't already chosen something (persistedCrypto blank).
+  // An explicit prior pick survives across sessions.
+  useEffect(() => {
+    if (persistedCrypto) return; // user already picked, don't override
+    if (!wallets || !rates) return; // wait for data
+    const best = pickHighestBalanceCurrency(
+      CRYPTO_OPTIONS,
+      wallets,
+      rates,
+      "USDT",
+    );
+    if (best && best !== persistedCrypto) {
+      setPersistedCrypto(best);
+    }
+  }, [wallets, rates, persistedCrypto]);
 
   // 2026-05-16 · KES-first amount entry. Users find it MUCH easier to
   // think in KES ("send my friend 200 bob") than in crypto units

@@ -15,6 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Button } from "../../src/components/Button";
 import { useToast } from "../../src/components/Toast";
 import { useWallets } from "../../src/hooks/useWallets";
+import { pickHighestBalanceCurrency } from "../../src/utils/portfolioTotal";
 import { ratesApi, Quote } from "../../src/api/rates";
 import { normalizeError } from "../../src/utils/apiErrors";
 import { cacheQuote } from "../../src/utils/rateCache";
@@ -47,8 +48,11 @@ export default function PayTillScreen() {
   // 2026-05-09 · persisted form state.
   const [tillNumber, setTillNumber] = usePersistedState(PERSIST_KEYS.till, prefill || "");
   const [amount, setAmount] = usePersistedState(PERSIST_KEYS.amount, "");
+  // 2026-05-16 · default "" so the auto-pick effect (below) fires
+  // on first visit and selects the highest-balance crypto rather than
+  // hardcoding USDT.
   const [persistedCrypto, setPersistedCrypto] = usePersistedState(
-    PERSIST_KEYS.crypto, "USDT",
+    PERSIST_KEYS.crypto, "",
   );
   const selectedCrypto = (persistedCrypto || "USDT") as CurrencyCode;
   const setSelectedCrypto = (c: CurrencyCode) => setPersistedCrypto(c);
@@ -65,6 +69,18 @@ export default function PayTillScreen() {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // 2026-05-16 · auto-pick highest-balance crypto on first visit.
+  const CRYPTO_DEFAULTS: CurrencyCode[] = ["USDT", "USDC", "BTC", "ETH", "SOL"];
+  useEffect(() => {
+    if (persistedCrypto) return;
+    if (!wallets) return;
+    const best = pickHighestBalanceCurrency(
+      CRYPTO_DEFAULTS, wallets, undefined, "USDT",
+    );
+    if (best && best !== persistedCrypto) setPersistedCrypto(best);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wallets, persistedCrypto]);
 
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);

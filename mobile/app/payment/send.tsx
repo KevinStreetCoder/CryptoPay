@@ -16,6 +16,7 @@ import { Button } from "../../src/components/Button";
 import { CryptoSelector } from "../../src/components/CryptoSelector";
 import { useToast } from "../../src/components/Toast";
 import { useWallets } from "../../src/hooks/useWallets";
+import { pickHighestBalanceCurrency } from "../../src/utils/portfolioTotal";
 import { ratesApi, Quote } from "../../src/api/rates";
 import { normalizeError } from "../../src/utils/apiErrors";
 import { cacheQuote } from "../../src/utils/rateCache";
@@ -58,8 +59,10 @@ export default function SendMpesaScreen() {
   // `clearPersistedFields(["send_phone", "send_amount"])`.
   const [phone, setPhone] = usePersistedState(PERSIST_KEYS.phone, "");
   const [amount, setAmount] = usePersistedState(PERSIST_KEYS.amount, "");
+  // 2026-05-16 · default "" so auto-pick effect (below) selects the
+  // highest-balance crypto on first visit instead of always USDT.
   const [persistedCrypto, setPersistedCrypto] = usePersistedState(
-    PERSIST_KEYS.crypto, "USDT",
+    PERSIST_KEYS.crypto, "",
   );
   const selectedCrypto = (persistedCrypto || "USDT") as CurrencyCode;
   const setSelectedCrypto = (c: CurrencyCode) => setPersistedCrypto(c);
@@ -76,6 +79,20 @@ export default function SendMpesaScreen() {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // 2026-05-16 · auto-pick highest-balance crypto on first visit
+  // so a user holding only SOL doesn't always see USDT (empty) as
+  // the default.
+  const CRYPTO_DEFAULTS: CurrencyCode[] = ["USDT", "USDC", "BTC", "ETH", "SOL"];
+  useEffect(() => {
+    if (persistedCrypto) return;
+    if (!wallets) return;
+    const best = pickHighestBalanceCurrency(
+      CRYPTO_DEFAULTS, wallets, undefined, "USDT",
+    );
+    if (best && best !== persistedCrypto) setPersistedCrypto(best);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wallets, persistedCrypto]);
 
   // 2026-05-10 · pre-flight holder-name validation. Debounced 600ms
   // after typing pauses · calls /payments/account/validate/ via the

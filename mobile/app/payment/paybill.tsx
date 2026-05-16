@@ -15,6 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Button } from "../../src/components/Button";
 import { useToast } from "../../src/components/Toast";
 import { useWallets } from "../../src/hooks/useWallets";
+import { pickHighestBalanceCurrency } from "../../src/utils/portfolioTotal";
 import { ratesApi, Quote } from "../../src/api/rates";
 import { paymentsApi, SavedPaybill } from "../../src/api/payments";
 import { normalizeError } from "../../src/utils/apiErrors";
@@ -62,8 +63,11 @@ export default function PayBillScreen() {
     PERSIST_KEYS.label, prefillName || "",
   );
   const [amount, setAmount] = usePersistedState(PERSIST_KEYS.amount, "");
+  // 2026-05-16 · auto-pick highest-balance crypto · see send-to-cpay
+  // for full rationale. Default is "" (so the auto-pick effect fires
+  // on first visit); after that, the user's explicit pick persists.
   const [persistedCrypto, setPersistedCrypto] = usePersistedState(
-    PERSIST_KEYS.crypto, "USDT",
+    PERSIST_KEYS.crypto, "",
   );
   const selectedCrypto = (persistedCrypto || "USDT") as CurrencyCode;
   const setSelectedCrypto = (c: CurrencyCode) => setPersistedCrypto(c);
@@ -86,6 +90,21 @@ export default function PayBillScreen() {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // 2026-05-16 · auto-pick highest-balance crypto when the form has
+  // no persisted choice yet · prevents "always USDT" default on a
+  // user who only holds SOL. Uses wallet.kes_value (set by backend),
+  // no extra network call needed.
+  const CRYPTO_DEFAULTS: CurrencyCode[] = ["USDT", "USDC", "BTC", "ETH", "SOL"];
+  useEffect(() => {
+    if (persistedCrypto) return;
+    if (!wallets) return;
+    const best = pickHighestBalanceCurrency(
+      CRYPTO_DEFAULTS, wallets, undefined, "USDT",
+    );
+    if (best && best !== persistedCrypto) setPersistedCrypto(best);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wallets, persistedCrypto]);
 
   // 2026-05-10 · Bill-query for utility paybills · when user types a
   // utility paybill+account, debounce-call /utilities/bill-query/
