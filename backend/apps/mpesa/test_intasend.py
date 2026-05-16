@@ -681,6 +681,112 @@ class TestFindPendingTxByFileId(TestCase):
         assert found is not None
         assert found.id == tx.id
 
+    def test_initiate_raises_sync_when_can_disburse_false(self):
+        """2026-05-16 · IntaSend merchants ship with `can_disburse: false`
+        on every wallet until support flips the toggle. The initiate
+        call HTTP-201's but the per-tx status is "Initiation failed".
+        We MUST raise sync so the saga marks failed + refunds within a
+        second · without this the user stares at a 10-min spinner
+        before the cron times out.
+        """
+        from unittest.mock import MagicMock, patch
+        from apps.mpesa.intasend_client import IntaSendClient, IntaSendError
+
+        # Mock the underlying POST so we can exercise the sync-fail path
+        # without hitting the real IntaSend sandbox.
+        fake_response = {
+            "file_id": "ABC1234",
+            "wallet": {
+                "wallet_id": "084VJZY",
+                "can_disburse": False,
+                "current_balance": 92.0,
+                "currency": "KES",
+            },
+            "transactions": [
+                {
+                    "status": "Initiation failed",
+                    "status_code": "TF103",
+                    "tracking_id": "00000000-0000-0000-0000-000000000001",
+                    "amount": "10.00",
+                },
+            ],
+        }
+        with patch.object(IntaSendClient, "_post", return_value=fake_response):
+            client = IntaSendClient.__new__(IntaSendClient)
+            client.callback_url = ""
+            client.wallet_id = ""
+            try:
+                client._send_money(
+                    provider="MPESA-B2B",
+                    transactions=[{"name": "x", "account": "888880",
+                                   "amount": 10, "narrative": "test"}],
+                    reference="test",
+                )
+            except IntaSendError as e:
+                # Reason must mention can_disburse so ops know what to fix
+                msg = str(e)
+                assert "can_disburse" in msg.lower() or "false" in msg.lower(), msg
+                assert "ops" in msg.lower() or "merchant" in msg.lower(), msg
+            else:
+                raise AssertionError(
+                    "Expected IntaSendError when can_disburse=False"
+                )
+
+    def test_initiate_raises_sync_on_tf103_only(self):
+        # Even with can_disburse=True, a TF103 status code from the
+        # per-tx entry must trip the sync-fail guard.
+        from unittest.mock import patch
+        from apps.mpesa.intasend_client import IntaSendClient, IntaSendError
+        fake_response = {
+            "file_id": "ABC1234",
+            "wallet": {"can_disburse": True, "current_balance": 1000.0},
+            "transactions": [
+                {"status": "Initiation failed", "status_code": "TF103",
+                 "tracking_id": "00000000-0000-0000-0000-000000000001"},
+            ],
+        }
+        with patch.object(IntaSendClient, "_post", return_value=fake_response):
+            client = IntaSendClient.__new__(IntaSendClient)
+            client.callback_url = ""
+            client.wallet_id = ""
+            try:
+                client._send_money(
+                    provider="MPESA-B2B",
+                    transactions=[{"name": "x", "account": "x",
+                                   "amount": 10, "narrative": "x"}],
+                    reference="x",
+                )
+            except IntaSendError as e:
+                assert "TF103" in str(e) or "failed" in str(e).lower(), str(e)
+            else:
+                raise AssertionError("Expected IntaSendError on TF103")
+
+    def test_initiate_succeeds_with_normal_response(self):
+        # Sanity · a healthy initiate response (Queued/Pending state,
+        # can_disburse=True) should NOT raise.
+        from unittest.mock import patch
+        from apps.mpesa.intasend_client import IntaSendClient
+        fake_response = {
+            "file_id": "ABC1234",
+            "wallet": {"can_disburse": True, "current_balance": 100000.0},
+            "transactions": [
+                {"status": "Pending", "status_code": "TP100",
+                 "tracking_id": "00000000-0000-0000-0000-000000000001"},
+            ],
+        }
+        with patch.object(IntaSendClient, "_post", return_value=fake_response):
+            client = IntaSendClient.__new__(IntaSendClient)
+            client.callback_url = ""
+            client.wallet_id = ""
+            result = client._send_money(
+                provider="MPESA-B2B",
+                transactions=[{"name": "x", "account": "x",
+                               "amount": 10, "narrative": "x"}],
+                reference="x",
+            )
+            assert result["ResponseCode"] == "0"
+            assert result["intasend_file_id"] == "ABC1234"
+
     def test_resolves_via_mpesa_conversation_id_legacy(self):
         # Older tx rows stamped file_id as mpesa_conversation_id (no
         # intasend_file_id key). _find_pending_tx falls back to that

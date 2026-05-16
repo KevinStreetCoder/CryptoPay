@@ -296,7 +296,46 @@ class IntaSendClient:
         # file_id for send-money batches).
         first_tx = (data.get("transactions") or [{}])[0] or {}
         per_tx_tracking_id = first_tx.get("tracking_id") or ""
+        per_tx_status = (first_tx.get("status") or "").strip()
+        per_tx_code = (first_tx.get("status_code") or "").strip()
         file_id = data.get("file_id") or ""
+        wallet = data.get("wallet") or {}
+
+        # 2026-05-16 · synchronous fail-fast on disabled-disbursement.
+        #
+        # IntaSend's merchant account ships with `can_disburse: false`
+        # on every wallet until support flips the toggle (B2B verification
+        # / KYB / Tier-upgrade). When that toggle is OFF, the initiate
+        # call returns 201 (looks successful at HTTP level) but the
+        # per-transaction status is "Initiation failed" (TF103) and
+        # `paid_amount: 0`. Without this check the saga would set the
+        # tx to CONFIRMING and wait 10 minutes for the cron to time out
+        # while the user stared at a "Confirming..." spinner.
+        #
+        # Detect that here and raise so the saga marks failed + refunds
+        # immediately (sub-second). The failure_reason explicitly names
+        # `can_disburse=false` so ops sees the IntaSend dashboard issue.
+        FAIL_STATES = {"INITIATION FAILED", "INITIATION_FAILED", "FAILED",
+                       "REJECTED"}
+        FAIL_CODES = {"TF101", "TF102", "TF103"}
+        if (
+            per_tx_status.upper() in FAIL_STATES
+            or per_tx_code.upper() in FAIL_CODES
+            or (wallet and wallet.get("can_disburse") is False
+                and per_tx_status.lower() != "complete")
+        ):
+            reason_parts = [
+                f"IntaSend initiate failed sync · status={per_tx_status!r}",
+                f"code={per_tx_code!r}",
+            ]
+            if wallet.get("can_disburse") is False:
+                reason_parts.append(
+                    f"wallet can_disburse=False (wallet_id={wallet.get('wallet_id')!r}, "
+                    f"balance={wallet.get('current_balance')}); "
+                    f"ops: enable disbursement on the IntaSend merchant account"
+                )
+            raise IntaSendError(" · ".join(reason_parts))
+
         # Final fallback to the legacy field if the new shape isn't present
         # (defensive · IntaSend has bumped shapes before).
         tracking_id = per_tx_tracking_id or file_id or data.get("tracking_id", "")
