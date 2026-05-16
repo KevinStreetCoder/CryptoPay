@@ -89,13 +89,33 @@
 <p>Your transaction could not be completed. If funds were debited, they will be refunded to your wallet automatically.</p>
 {% endif %}
 
-{# 2026-05-09 · universal link to app.cpay.co.ke #}
-{# Android: autoVerify intent filter + Digital Asset Links route /payment/detail?id=<tx> into the installed app. #}
-{# iOS: associated-domains for the same. #}
-{# When the app isn't installed, the browser opens the same route on app.cpay.co.ke (Expo Router web build). #}
-{# Django's {# #} is single-line ONLY · don't try {% comment %}/{% endcomment %} blocks that reference themselves. #}
+{# 2026-05-17 · the View-in-App button now hits the smart /open/ #}
+{# redirect on cpay.co.ke. That endpoint detects the user-agent and: #}
+{#   Android · fires intent://payment/detail?id=<tx>#Intent;... that #}
+{#     opens the installed app, OR falls back to the Play Store listing #}
+{#     when the app isn't installed (no more dead-end web logins) #}
+{#   iOS / desktop · meta-refresh to app.cpay.co.ke web bundle #}
+{# Why through /open/ and not direct app.cpay.co.ke · Android App #}
+{# Links open the app for installed users either way, but users without #}
+{# the app used to land on the web login with no install nudge. /open/ #}
+{# closes that gap by routing them straight to Google Play. #}
 <p style="text-align: center; padding-top: 8px;">
-  <a href="https://app.cpay.co.ke/payment/detail?id={{ transaction_id }}" style="display:inline-block;background-color:#10B981;color:#FFFFFF;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px;">View in App</a>
+  <a href="https://cpay.co.ke/open/?path=payment/detail&id={{ transaction_id }}"
+     style="display:inline-block;background-color:#10B981;color:#FFFFFF;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px;">
+    View in App
+  </a>
+</p>
+
+{# 2026-05-17 · Play Store badge below the primary CTA · gives users #}
+{# without the app a one-tap path to install. Same Play CDN icon Google #}
+{# uses on every Android promo material, hot-linked from a public CDN. #}
+<p style="text-align: center; margin-top: -4px;">
+  <a href="https://cpay.co.ke/apk/" style="text-decoration:none;display:inline-block;">
+    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/7/78/Google_Play_Store_badge_EN.svg/512px-Google_Play_Store_badge_EN.svg.png"
+         alt="Get it on Google Play"
+         width="135" height="40"
+         style="display:inline-block;height:40px;border:0;outline:none;text-decoration:none;">
+  </a>
 </p>
 
 <p style="font-size: 13px; color: #94a3b8;">

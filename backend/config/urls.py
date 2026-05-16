@@ -16,6 +16,7 @@ from apps.core.views import (
     ApkDownloadView,
     AppVersionView,
     HealthCheckView,
+    OpenInAppView,
     PlayTestingRedirectView,
 )
 
@@ -54,6 +55,12 @@ urlpatterns = [
     # admin dashboard separates "general install" from "early-access
     # opt-in" signals.
     path("testing/", PlayTestingRedirectView.as_view(), name="play-testing-redirect"),
+    # 2026-05-17 · smart "open in app" redirect used by transactional
+    # email CTAs (View in App / Open Wallet / etc.). Detects Android
+    # → fires an `intent://` URL that opens the installed app OR
+    # falls back to Play Store. iOS / desktop / unknown UA → web bundle.
+    # Whitelisted in-app paths only · see _DEEP_LINK_PATHS in views.py.
+    path("open/", OpenInAppView.as_view(), name="open-in-app"),
     path(
         "api/v1/admin/metrics/apk-downloads/",
         ApkDownloadMetricsView.as_view(),

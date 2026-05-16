@@ -67,10 +67,23 @@
   </table>
 </div>
 
+{# 2026-05-17 · the Open Wallet button now hits /open/ which detects #}
+{# the user-agent. Android → intent:// → installed app (or Play Store #}
+{# fallback). iOS / desktop → app.cpay.co.ke web bundle. #}
 <p style="text-align: center; padding-top: 8px;">
-  <a href="https://app.cpay.co.ke/(tabs)/wallet"
+  <a href="https://cpay.co.ke/open/?path=(tabs)/wallet"
      style="display:inline-block;background-color:#10B981;color:#FFFFFF;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px;">
     Open Wallet
+  </a>
+</p>
+
+{# Play Store badge for users without the app · single-tap install path. #}
+<p style="text-align: center; margin-top: -4px;">
+  <a href="https://cpay.co.ke/apk/" style="text-decoration:none;display:inline-block;">
+    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/7/78/Google_Play_Store_badge_EN.svg/512px-Google_Play_Store_badge_EN.svg.png"
+         alt="Get it on Google Play"
+         width="135" height="40"
+         style="display:inline-block;height:40px;border:0;outline:none;text-decoration:none;">
   </a>
 </p>
 
