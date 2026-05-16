@@ -76,6 +76,30 @@ echo "Syncing mobile/ to $WORK (this takes 30-60s)..."
 # parent repo that EAS might mistake for the project root.
 rsync -a --delete --exclude=node_modules --exclude=dist --exclude=.expo --exclude=.git "$SRC/mobile/" "$WORK/" 2>&1 | tail -5
 
+# ── 2026-05-16 · PKCS12 password-equality preflight ───────────────────
+#
+# AGP's `:app:packageRelease` task fails with the MISLEADING error
+# "Get Key failed: Given final block not properly padded" if the
+# keystore is PKCS12 AND credentials.json has different values for
+# `keystorePassword` and `keyPassword`. PKCS12 requires the two
+# passwords to be IDENTICAL · keytool prints "Different store and key
+# passwords not supported for PKCS12 KeyStores. Ignoring user-specified
+# -keypass value" but AGP doesn't catch that and throws the padding
+# error 14 minutes into the build. Preflight catches it in ~1s.
+echo "=== preflight · PKCS12 password equality ==="
+python3 - <<'PY'
+import json, sys
+c = json.load(open("/mnt/c/Users/Street Coder/StartupsIdeas/CryptoPay/mobile/credentials.json"))["android"]["keystore"]
+sp, kp = c.get("keystorePassword",""), c.get("keyPassword","")
+if not sp:
+    print("FAIL · keystorePassword missing"); sys.exit(1)
+if sp != kp:
+    print("FAIL · PKCS12 keystore needs keystorePassword == keyPassword.")
+    print("      Run: bash scripts/_credentials-fix-pkcs12.sh")
+    sys.exit(2)
+print("OK · PKCS12 password equality satisfied.")
+PY
+
 cd "$WORK"
 # Git refuses to operate on a tree with mixed ownership by default.
 git config --global --add safe.directory "$WORK"
