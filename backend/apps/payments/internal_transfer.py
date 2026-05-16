@@ -451,18 +451,33 @@ class SendToCpayView(APIView):
 
                 # Debit sender + credit recipient · WalletService
                 # raises on insufficient balance / row-lock failure.
+                # 2026-05-16 · stripped stale `recipient.username` /
+                # `sender.username` references · User model has no
+                # `username` field (USERNAME_FIELD='phone'). Was crashing
+                # post-debit with AttributeError, leaving the ledger in
+                # a half-committed state from the user's perspective.
+                _recipient_label = (
+                    (getattr(recipient, "full_name", "") or "").strip()
+                    or recipient.phone
+                    or "Cpay user"
+                )
+                _sender_label = (
+                    (getattr(sender, "full_name", "") or "").strip()
+                    or sender.phone
+                    or "Cpay user"
+                )
                 WalletService.debit(
                     wallet_id=sender_wallet.id,
                     amount=amount,
                     transaction_id=str(tx.id),
-                    description=f"Cpay transfer to {recipient.phone or recipient.username}",
+                    description=f"Cpay transfer to {_recipient_label}",
                 )
                 WalletService.credit(
                     wallet_id=recipient_wallet.id,
                     amount=amount,
                     transaction_id=str(tx.id),
                     description=(
-                        f"Cpay transfer from {sender.phone or sender.username}"
+                        f"Cpay transfer from {_sender_label}"
                         + (f" · {memo}" if memo else "")
                     ),
                 )
@@ -470,12 +485,10 @@ class SendToCpayView(APIView):
                 tx.status = Transaction.Status.COMPLETED
                 from django.utils import timezone
                 tx.completed_at = timezone.now()
-                tx.merchant_name = (
-                    recipient.full_name or recipient.username or recipient.phone or ""
-                )[:120]
+                tx.merchant_name = _recipient_label[:120]
                 tx.biller_response = (
                     f"Cpay transfer · {amount} {currency} → "
-                    f"{recipient.full_name or recipient.username or recipient.phone}"
+                    f"{_recipient_label}"
                     + (f"\nMemo: {memo}" if memo else "")
                 )
                 tx.save(update_fields=[
@@ -532,7 +545,17 @@ def _serialize(tx, recipient):
         "merchant_name": tx.merchant_name,
         "biller_response": getattr(tx, "biller_response", "") or "",
         "recipient": {
-            "username": recipient.username or "",
+            # 2026-05-16 · User model has NO `username` field
+            # (USERNAME_FIELD = 'phone'). Was `recipient.username` ·
+            # crashed with AttributeError post-debit / pre-response, so
+            # the transfer COMMITTED to the ledger but the 500 made
+            # the client think it failed → retry → double-charge risk.
+            # Now exposes full_name (privacy-trimmed by the caller's
+            # own display logic) + masked phone.
+            "display_name": (
+                (getattr(recipient, "full_name", "") or "").strip()
+                or ""
+            ),
             "phone_masked": _mask_phone(recipient.phone or ""),
         },
         "created_at": tx.created_at.isoformat() if tx.created_at else "",
