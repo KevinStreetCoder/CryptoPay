@@ -434,6 +434,7 @@ class TestWebhookDedup(TestCase):
         cache.clear()
 
     def test_duplicate_tracking_id_rejected_as_duplicate(self):
+        # IDENTICAL (tracking_id, state) replay · still dedups.
         body = b'{"state":"PENDING","tracking_id":"dup-1","invoice_id":"i"}'
         sig = _hmac_hex(_TEST_WEBHOOK_SECRET, body)
         # First delivery
@@ -450,6 +451,73 @@ class TestWebhookDedup(TestCase):
         )
         assert r1.status_code == 200
         assert r2.status_code == 200
+        assert r2.json()["status"] == "duplicate"
+
+    # 2026-05-16 · regression for the stuck-paybill bug.
+    #
+    # IntaSend delivers MULTIPLE webhooks for the same tracking_id as
+    # the payment progresses (QUEUED → PROCESSING → COMPLETED/FAILED).
+    # The pre-fix dedup was keyed on tracking_id alone, so the FIRST
+    # webhook (usually a near-empty QUEUED with no `state`) ate the
+    # SETNX and EVERY subsequent state transition came back 200
+    # "duplicate" before the handler saw it. Saga stuck CONFIRMING
+    # forever. New dedup composes (tracking_id, state) so distinct
+    # states get processed independently while identical replays
+    # still dedup.
+
+    def test_multi_state_same_tracking_id_each_processed(self):
+        sig = lambda b: _hmac_hex(_TEST_WEBHOOK_SECRET, b)
+        queued     = b'{"state":"QUEUED","tracking_id":"multi-1","provider":"MPESA-B2B"}'
+        processing = b'{"state":"PROCESSING","tracking_id":"multi-1","provider":"MPESA-B2B"}'
+        completed  = b'{"state":"COMPLETE","tracking_id":"multi-1","provider":"MPESA-B2B"}'
+
+        rq = self.client.post("/api/v1/intasend/callback/", data=queued,
+                              content_type="application/json",
+                              HTTP_X_INTASEND_SIGNATURE=sig(queued))
+        rp = self.client.post("/api/v1/intasend/callback/", data=processing,
+                              content_type="application/json",
+                              HTTP_X_INTASEND_SIGNATURE=sig(processing))
+        rc = self.client.post("/api/v1/intasend/callback/", data=completed,
+                              content_type="application/json",
+                              HTTP_X_INTASEND_SIGNATURE=sig(completed))
+        # All three must be processed (not deduped) · the response
+        # status is `tx_not_found` because no matching pending tx
+        # exists in this isolated unit test · the point is none of
+        # them is `duplicate`.
+        for r in (rq, rp, rc):
+            assert r.status_code == 200, r.content
+            assert r.json().get("status") != "duplicate", r.content
+
+    def test_same_state_replay_still_dedups(self):
+        # Idempotent retries by IntaSend (same tracking_id + same state)
+        # must still dedup · otherwise we'd process the same business
+        # event twice.
+        sig = lambda b: _hmac_hex(_TEST_WEBHOOK_SECRET, b)
+        body = b'{"state":"COMPLETE","tracking_id":"dup-state-1","provider":"MPESA-B2B"}'
+
+        r1 = self.client.post("/api/v1/intasend/callback/", data=body,
+                              content_type="application/json",
+                              HTTP_X_INTASEND_SIGNATURE=sig(body))
+        r2 = self.client.post("/api/v1/intasend/callback/", data=body,
+                              content_type="application/json",
+                              HTTP_X_INTASEND_SIGNATURE=sig(body))
+        assert r1.status_code == 200
+        assert r2.status_code == 200
+        assert r2.json()["status"] == "duplicate"
+
+    def test_no_state_field_dedups_against_other_no_state(self):
+        # Defensive · the empty-state QUEUED webhook should still
+        # dedup against itself (so a duplicate flood doesn't hammer
+        # the saga's no-state path).
+        sig = lambda b: _hmac_hex(_TEST_WEBHOOK_SECRET, b)
+        body = b'{"tracking_id":"no-state-1","provider":"MPESA-B2B"}'
+        r1 = self.client.post("/api/v1/intasend/callback/", data=body,
+                              content_type="application/json",
+                              HTTP_X_INTASEND_SIGNATURE=sig(body))
+        r2 = self.client.post("/api/v1/intasend/callback/", data=body,
+                              content_type="application/json",
+                              HTTP_X_INTASEND_SIGNATURE=sig(body))
+        assert r1.json().get("status") != "duplicate"
         assert r2.json()["status"] == "duplicate"
 
 

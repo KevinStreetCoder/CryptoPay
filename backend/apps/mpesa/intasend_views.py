@@ -139,10 +139,36 @@ def _verify_webhook(request, body_bytes: bytes, payload: dict) -> bool:
 
 
 def _dedup_key(payload: dict) -> str | None:
+    """Compose a Redis SETNX dedup key for a webhook delivery.
+
+    2026-05-16 · MUST include `state` in the key. IntaSend sends MULTIPLE
+    webhooks for the same tracking_id as the payment progresses:
+
+        QUEUED  → PROCESSING  → COMPLETED   (happy path)
+        QUEUED  → PROCESSING  → FAILED      (sad path)
+        QUEUED  → PROCESSING  → RETRY → COMPLETED   (intermittent)
+
+    Previously the key was just the tracking_id · the FIRST webhook
+    (usually a near-empty QUEUED notification with no `state` value)
+    won the SETNX, and every subsequent state transition for the SAME
+    tracking_id returned 200 "duplicate" before our handler ever saw
+    the COMPLETED / FAILED state. Saga stuck in CONFIRMING forever,
+    cron's 10-min compensate eventually refunded the user.
+
+    Composing (tracking_id, state) means each distinct state for a tx
+    is processed exactly once · genuine retries by IntaSend for the
+    SAME (tracking_id, state) still dedup correctly.
+
+    Falls back to (invoice_id, state) for collection events.
+    """
     tid = payload.get("tracking_id") or payload.get("invoice_id")
-    if isinstance(tid, str) and tid:
-        return f"intasend_callback_seen:{tid}"
-    return None
+    if not (isinstance(tid, str) and tid):
+        return None
+    # Normalise state · empty / missing → "no-state" sentinel so the
+    # first-webhook-with-no-state still gets ONE chance to fire (the
+    # send_money handler returns "noted" for unknown states; harmless).
+    state = (payload.get("state") or "no-state").strip().upper()
+    return f"intasend_callback_seen:{tid}:{state}"
 
 
 def _is_complete(state: str) -> bool:
