@@ -479,3 +479,132 @@ class TestWebhookClassification(TestCase):
         from apps.mpesa.intasend_views import _classify_event
         assert _classify_event({}) == "unknown"
         assert _classify_event({"random": "field"}) == "unknown"
+
+    # 2026-05-16 · classifier expansion · send-money intermediate states
+    # may omit `provider` but still carry `file_id` or a `transactions`
+    # array. Those used to misclassify as unknown_event and never
+    # transition the saga.
+
+    def test_classify_send_money_via_file_id(self):
+        from apps.mpesa.intasend_views import _classify_event
+        assert _classify_event({"file_id": "FF1234"}) == "send_money"
+
+    def test_classify_send_money_via_transactions_array(self):
+        from apps.mpesa.intasend_views import _classify_event
+        payload = {
+            "transactions": [
+                {"tracking_id": "t-1", "status": "Queued"},
+            ],
+        }
+        assert _classify_event(payload) == "send_money"
+
+    def test_classify_provider_still_wins_when_explicit(self):
+        # Even if `transactions` is present, an explicit provider should
+        # still resolve correctly.
+        from apps.mpesa.intasend_views import _classify_event
+        payload = {
+            "provider": "MPESA-B2C",
+            "transactions": [{"tracking_id": "x"}],
+        }
+        assert _classify_event(payload) == "send_money"
+
+
+# ── 2026-05-16 · query_transaction routes to the right endpoint ──────
+
+
+@override_settings(
+    INTASEND_API_SECRET=_TEST_SECRET,
+    INTASEND_PUBLISHABLE_KEY="ISPubKey_test_xxx",
+    INTASEND_ENVIRONMENT="test",
+)
+class TestQueryTransactionEndpointRouting(TestCase):
+    """Regression for the beta-launch stuck-paybill bug:
+
+    `IntaSendClient.query_transaction` previously hit
+    `/api/v1/payment/status/` for everything · that endpoint is for
+    COLLECTIONS (C2B) only. Send-money (B2B/B2C) needs
+    `/api/v1/send-money/status/`. Mismatch caused every send-money
+    status query to return "Invoice with specified id does not exist",
+    so the stuck-tx cron could never resolve a paybill.
+    """
+
+    @patch("requests.post")
+    def test_explicit_send_money_kind_hits_send_money_endpoint(self, post_mock):
+        post_mock.return_value.status_code = 200
+        post_mock.return_value.json.return_value = {"state": "COMPLETE"}
+        post_mock.return_value.raise_for_status = lambda: None
+
+        from apps.mpesa.intasend_client import IntaSendClient
+        IntaSendClient().query_transaction(
+            tracking_id="t-123", kind="send_money",
+        )
+
+        assert post_mock.called
+        url = post_mock.call_args.args[0] if post_mock.call_args.args else post_mock.call_args.kwargs.get("url", "")
+        assert "/send-money/status/" in url, (
+            f"send_money kind must hit /send-money/status/, got: {url}"
+        )
+
+    @patch("requests.post")
+    def test_explicit_collection_kind_hits_payment_endpoint(self, post_mock):
+        post_mock.return_value.status_code = 200
+        post_mock.return_value.json.return_value = {"state": "COMPLETE"}
+        post_mock.return_value.raise_for_status = lambda: None
+
+        from apps.mpesa.intasend_client import IntaSendClient
+        IntaSendClient().query_transaction(
+            invoice_id="inv-1", kind="collection",
+        )
+
+        url = post_mock.call_args.args[0] if post_mock.call_args.args else post_mock.call_args.kwargs.get("url", "")
+        assert "/payment/status/" in url
+        assert "/send-money/status/" not in url
+
+    @patch("requests.post")
+    def test_auto_kind_tries_send_money_first(self, post_mock):
+        # Auto with a tracking_id should hit send-money first ·
+        # send-money is where most beta traffic lives.
+        post_mock.return_value.status_code = 200
+        post_mock.return_value.json.return_value = {"state": "PENDING"}
+        post_mock.return_value.raise_for_status = lambda: None
+
+        from apps.mpesa.intasend_client import IntaSendClient
+        IntaSendClient().query_transaction(tracking_id="t-auto")
+
+        first_url = (
+            post_mock.call_args_list[0].args[0]
+            if post_mock.call_args_list[0].args
+            else post_mock.call_args_list[0].kwargs.get("url", "")
+        )
+        assert "/send-money/status/" in first_url
+
+    @patch("requests.post")
+    def test_auto_kind_falls_back_to_collection_on_send_money_404(self, post_mock):
+        # First call: send-money 404 with "does not exist"
+        # Second call: collection success
+        fail = MagicMock()
+        fail.ok = False
+        fail.status_code = 404
+        fail.text = '{"detail":"Invoice with specified id does not exist"}'
+        fail.json.return_value = {
+            "detail": "Invoice with specified id does not exist",
+        }
+
+        ok = MagicMock()
+        ok.ok = True
+        ok.status_code = 200
+        ok.json.return_value = {"state": "COMPLETE"}
+
+        post_mock.side_effect = [fail, ok]
+
+        from apps.mpesa.intasend_client import IntaSendClient
+        result = IntaSendClient().query_transaction(tracking_id="t-fb")
+
+        # Should have hit BOTH endpoints (send-money first, then collection).
+        urls = [
+            (call.args[0] if call.args else call.kwargs.get("url", ""))
+            for call in post_mock.call_args_list
+        ]
+        assert any("/send-money/status/" in u for u in urls), urls
+        assert any("/payment/status/" in u for u in urls), urls
+        assert result.get("state") == "COMPLETE"

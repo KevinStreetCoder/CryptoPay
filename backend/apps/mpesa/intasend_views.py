@@ -411,11 +411,28 @@ def _classify_event(payload: dict) -> str:
 
     IntaSend doesn't expose a single canonical event-type field across
     all webhooks · the safest route is to inspect the payload shape.
-    Send-money events carry a `provider` field (MPESA-B2C / MPESA-B2B /
-    PESALINK / etc) that incoming-payment events don't have.
+
+    Send-money events carry one of:
+      - `provider` in {MPESA-B2C, MPESA-B2B, PESALINK, INTASEND, AIRTIME}
+      - `file_id` (the send-money batch identifier)
+      - `transactions` array (per-tx breakdown of a batch)
+
+    Collection events carry:
+      - `invoice_id` (the C2B invoice)
+      - `mpesa_reference` (the customer's M-Pesa receipt)
+
+    2026-05-16 · expanded · the previous version only checked the
+    `provider` field, which is empty on some intermediate-state
+    webhooks (e.g. "QUEUED" before the rail is selected). Those were
+    misclassified as unknown_event and dropped silently. Now we also
+    recognise `file_id` / `transactions` as a send-money signal.
     """
     provider = (payload.get("provider") or "").upper()
     if provider in {"MPESA-B2C", "MPESA-B2B", "PESALINK", "INTASEND", "AIRTIME"}:
+        return "send_money"
+    # Send-money batch identifiers · IntaSend emits these on QUEUED /
+    # IN_PROGRESS / etc states where `provider` may still be empty.
+    if payload.get("file_id") or payload.get("transactions"):
         return "send_money"
     if payload.get("invoice_id") or payload.get("mpesa_reference"):
         return "collection"
@@ -482,14 +499,34 @@ def intasend_callback(request, token: str = ""):
 
     # 3 · Route by inferred event type.
     kind = _classify_event(payload)
+
+    # 2026-05-16 · log the structured-but-sanitised payload on EVERY
+    # accepted webhook so ops can trace why a tx didn't transition.
+    # Earlier we only logged on unknown_event · pending/intermediate
+    # states were silent and we couldn't see what IntaSend was
+    # actually sending. The summary keeps secret-bearing fields
+    # (like signatures / api keys) out of the log line · IntaSend
+    # never includes those in the body, but the explicit allow-list
+    # is belt-and-braces.
+    _SAFE_KEYS = (
+        "invoice_id", "tracking_id", "file_id", "state", "provider",
+        "api_ref", "mpesa_reference", "value", "net_amount", "charges",
+        "currency", "failed_reason", "failed_code", "account",
+    )
+    # The JSON formatter drops `extra=` · embed the summary in the
+    # message string so ops can grep for it in production.
+    _summary = " ".join(
+        f"{k}={payload.get(k)}" for k in _SAFE_KEYS if k in payload
+    )
+    logger.info("intasend.callback.received kind=%s %s", kind, _summary)
+
     if kind == "collection":
         result = _handle_collection_event(payload)
     elif kind == "send_money":
         result = _handle_send_money_event(payload)
     else:
         logger.info(
-            "intasend.callback.unknown_event",
-            extra={"payload_summary": {k: payload.get(k) for k in ("invoice_id", "tracking_id", "state", "provider")}},
+            "intasend.callback.unknown_event %s", _summary,
         )
         result = {"status": "ignored_unknown"}
 

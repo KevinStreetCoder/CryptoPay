@@ -455,6 +455,24 @@ class PaymentSaga:
 
         self.tx.saga_data["mpesa_conversation_id"] = result.get("ConversationID", "")
         self.tx.saga_data["mpesa_originator_id"] = result.get("OriginatorConversationID", "")
+        # 2026-05-16 · IntaSend send-money carries TWO IDs:
+        #   `tracking_id` is per-transaction (what the webhook delivers)
+        #   `file_id`     is the batch ID (what the status query needs)
+        # We persist both so the callback handler can match the row via
+        # `intasend_tracking_id` and the status-query cron has the file_id
+        # to call /send-money/status/. The adapter returns these on the
+        # result dict only when the IntaSendClient set them (i.e. send-
+        # money operations); SasaPay/Daraja results don't set them so
+        # the keys land as empty strings and the callback paths fall
+        # back to api_ref matching · same as today.
+        if result.get("intasend_tracking_id"):
+            self.tx.saga_data["intasend_tracking_id"] = result.get(
+                "intasend_tracking_id", "",
+            )
+        if result.get("intasend_file_id"):
+            self.tx.saga_data["intasend_file_id"] = result.get(
+                "intasend_file_id", "",
+            )
         self.tx.status = Transaction.Status.CONFIRMING
         self.tx.save(update_fields=["saga_data", "status", "updated_at"])
 

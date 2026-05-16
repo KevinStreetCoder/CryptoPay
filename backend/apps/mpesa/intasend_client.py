@@ -284,19 +284,34 @@ class IntaSendClient:
             payload["wallet_id"] = self.wallet_id
 
         data = self._post("/api/v1/send-money/initiate/", payload)
-        tracking_id = (
-            data.get("tracking_id")
-            or (data.get("file_id") or "")
-            or (data.get("transactions", [{}])[0] or {}).get("tracking_id", "")
-        )
+        # 2026-05-16 · pull tracking_id from the per-transaction entry FIRST.
+        # IntaSend's send-money response shape is:
+        #   { "file_id": "<batch>", "transactions": [{ "tracking_id": "...", ... }] }
+        # The top-level `tracking_id` field does NOT exist on send-money
+        # responses; the previous code's order put it first which always
+        # fell through to file_id. Webhooks deliver the PER-TRANSACTION
+        # tracking_id, so we must persist THAT for the callback path's
+        # `_find_pending_tx` lookup to match. We also keep file_id as a
+        # secondary identifier for the status query (which queries by
+        # file_id for send-money batches).
+        first_tx = (data.get("transactions") or [{}])[0] or {}
+        per_tx_tracking_id = first_tx.get("tracking_id") or ""
+        file_id = data.get("file_id") or ""
+        # Final fallback to the legacy field if the new shape isn't present
+        # (defensive · IntaSend has bumped shapes before).
+        tracking_id = per_tx_tracking_id or file_id or data.get("tracking_id", "")
         # Normalise to the provider-adapter contract: the saga reads
         # ConversationID + ResponseCode and persists ConversationID on
         # the Transaction so the callback path can re-resolve the row.
+        # `intasend_file_id` is exposed in the raw dict so the saga can
+        # stash it alongside the tracking_id for status-query use.
         return {
             "ConversationID": tracking_id,
             "OriginatorConversationID": api_ref,
             "ResponseCode": "0",
             "ResponseDescription": data.get("state", "QUEUED"),
+            "intasend_file_id": file_id,
+            "intasend_tracking_id": per_tx_tracking_id,
             "raw": data,
         }
 
@@ -306,19 +321,76 @@ class IntaSendClient:
         self,
         invoice_id: Optional[str] = None,
         tracking_id: Optional[str] = None,
+        *,
+        kind: str = "auto",
     ) -> dict:
-        """Poll a payment by invoice or tracking id. Used by the
-        check-pending sweep when no callback arrives within 60s."""
+        """Poll a payment by invoice or tracking id.
+
+        2026-05-16 · IntaSend uses TWO separate status endpoints:
+
+          - `/api/v1/payment/status/`      · COLLECTION (C2B) only.
+                                             Accepts {invoice_id, checkout_id}.
+          - `/api/v1/send-money/status/`   · SEND-MONEY (B2B/B2C/PESALINK).
+                                             Accepts {file_id, tracking_id}.
+
+        Previously we hit the collection endpoint for everything · the
+        send-money status query always returned `{"detail": "Invoice with
+        specified id does not exist"}` even when the tracking_id was a
+        valid in-flight send-money payment. That's why tx 1415369d and
+        af4b282b both showed "404 from IntaSend" → spurious failure.
+
+        `kind` controls the endpoint:
+          - "collection" / "c2b"  · forces /payment/status/
+          - "send_money" / "b2b" / "b2c"  · forces /send-money/status/
+          - "auto" (default) · best-effort: try send-money first if we
+            were passed a tracking_id (the param send-money status uses)
+            and fall back to collection. Send-money is the riskier case
+            for our beta cohort (every paybill goes through it).
+        """
         if not (invoice_id or tracking_id):
-            raise IntaSendError("query_transaction requires invoice_id or tracking_id")
+            raise IntaSendError(
+                "query_transaction requires invoice_id or tracking_id",
+            )
 
-        payload = {}
-        if invoice_id:
-            payload["invoice_id"] = invoice_id
-        if tracking_id:
-            payload["tracking_id"] = tracking_id
+        kind = (kind or "auto").lower()
+        send_money_aliases = {"send_money", "send-money", "b2b", "b2c", "payout"}
+        collection_aliases = {"collection", "c2b", "stk"}
 
-        return self._post("/api/v1/payment/status/", payload)
+        def _hit_send_money() -> dict:
+            payload = {}
+            if tracking_id:
+                payload["tracking_id"] = tracking_id
+            if invoice_id:
+                # IntaSend send-money status doesn't accept invoice_id ·
+                # we pass file_id under this name for callers that store
+                # the file batch ID as `invoice_id` (rare).
+                payload["file_id"] = invoice_id
+            return self._post("/api/v1/send-money/status/", payload)
+
+        def _hit_collection() -> dict:
+            payload = {}
+            if invoice_id:
+                payload["invoice_id"] = invoice_id
+            if tracking_id:
+                payload["tracking_id"] = tracking_id
+            return self._post("/api/v1/payment/status/", payload)
+
+        if kind in send_money_aliases:
+            return _hit_send_money()
+        if kind in collection_aliases:
+            return _hit_collection()
+
+        # Auto · try send-money first (most B2B/B2C beta traffic), fall
+        # back to collection on 404. The IntaSendError carries the body
+        # so we can sniff for the "does not exist" 404 sentinel.
+        try:
+            return _hit_send_money()
+        except IntaSendError as sm_err:
+            err_text = str(sm_err).lower()
+            if "does not exist" in err_text or "404" in err_text:
+                # Maybe it's actually a collection · second attempt.
+                return _hit_collection()
+            raise
 
     # ── Reversal · NOT SUPPORTED ─────────────────────────────────────
 

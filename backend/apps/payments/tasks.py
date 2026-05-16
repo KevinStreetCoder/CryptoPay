@@ -559,19 +559,57 @@ def _resolve_via_sasapay_status(tx, checkout_request_id: str) -> None:
 
 
 def _resolve_via_intasend_status(tx, tracking_id: str) -> None:
-    """Active-poll IntaSend's payment-status endpoint and resolve
-    the saga. Same rationale as the SasaPay path."""
+    """Active-poll IntaSend's status endpoint and resolve the saga.
+
+    2026-05-16 · routes by tx.type · paybill/till/b2c are SEND-MONEY
+    operations and need `/api/v1/send-money/status/`; BUY/DEPOSIT are
+    COLLECTION (C2B) operations and need `/api/v1/payment/status/`.
+    Prior to this fix the cron hit the collection endpoint for every
+    type and got "Invoice does not exist" for every send-money tx,
+    silently leaving them in CONFIRMING forever.
+
+    Also prefers `intasend_file_id` from saga_data for send-money txs,
+    since IntaSend's send-money/status endpoint is more reliable when
+    queried by file_id (the batch ID) than by per-transaction
+    tracking_id. Falls back to tracking_id when file_id wasn't stashed
+    (older txs predating the saga's `intasend_file_id` capture).
+    """
     from apps.mpesa.intasend_client import IntaSendClient, IntaSendError
     from .saga import PaymentSaga
 
+    send_money_types = {
+        Transaction.Type.PAYBILL_PAYMENT,
+        Transaction.Type.TILL_PAYMENT,
+        Transaction.Type.SEND_MPESA,
+    }
+    kind = "send_money" if tx.type in send_money_types else "collection"
+
+    sd = tx.saga_data or {}
+    file_id = sd.get("intasend_file_id") or ""
+    real_tracking_id = sd.get("intasend_tracking_id") or tracking_id
+
     try:
-        result = IntaSendClient().query_transaction(
-            tracking_id=tracking_id,
-        )
+        if kind == "send_money" and file_id:
+            # Prefer file_id for send-money status; falls back to
+            # tracking_id inside query_transaction if the endpoint
+            # complains.
+            result = IntaSendClient().query_transaction(
+                invoice_id=file_id, kind="send_money",
+            )
+        else:
+            result = IntaSendClient().query_transaction(
+                tracking_id=real_tracking_id, kind=kind,
+            )
     except IntaSendError as e:
         logger.warning(
             "intasend.status_query.error",
-            extra={"tx_id": str(tx.id), "error": str(e)},
+            extra={
+                "tx_id": str(tx.id),
+                "error": str(e),
+                "kind": kind,
+                "file_id": file_id,
+                "tracking_id": real_tracking_id,
+            },
         )
         return
 
