@@ -375,40 +375,55 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       const data = await login(phone, pendingPin, otp);
-      // 2026-05-16 · APK crash root cause was DOUBLE router.replace:
-      // (1) here, sync after login(), targeting /(tabs)
-      // (2) in _layout.tsx route guard, fired by the user-state flip
-      //     that login()'s notify() triggers · ALSO targeting /(tabs)
-      // Two concurrent navigation transitions on the Expo Router stack
-      // crash the Android view tree (user reported "APK crashes after
-      // entering new-device OTP and we have to reopen it"). Fix · let
-      // the route guard own the /(tabs) navigation (it's the
-      // authoritative redirect on user-state change), and only handle
-      // the SPECIAL case here (email-verify-required, which the guard
-      // would otherwise bounce back to /(tabs)).
+
+      // 2026-05-17 · post-OTP crash audit
+      // ──────────────────────────────────────────────────────────────
+      // Symptom · "after entering new-device OTP the APK crashes
+      // instead of going to dashboard". The vc22 fix removed an
+      // explicit `router.replace("/(tabs)")` here to avoid racing
+      // the auth-gate's own replace · but the crash kept happening
+      // because:
       //
-      // Earlier comment about "setTimeout(0) for reconciliation" was
-      // chasing symptoms · the real fix is to not double-fire navigate.
+      //   (a) the auth-gate fires synchronously inside the same
+      //       render that user-state flipped, AND
+      //   (b) the lastRouteRestore effect at _layout.tsx:99 ALSO
+      //       fires on user-flip → reads the saved last-route from
+      //       the previous session (e.g. a payment page) → tries
+      //       to navigate there before the auth-gate has settled.
+      //
+      // Fix · we now (1) clear lastRoute INSIDE login() so the
+      // restore is a no-op for fresh re-logins (auth.ts change),
+      // (2) defer the navigation one tick so the auth-gate's
+      // replace settles first, and (3) ALWAYS issue an explicit
+      // replace here (to /(tabs) or /auth/email-verify-required)
+      // so the user can never be stranded on the OTP screen if
+      // the auth-gate effect is delayed.
       const emailVerifyRequired = Boolean((data as any)?.email_verify_required);
-      if (emailVerifyRequired) {
+      setTimeout(() => {
         try {
-          router.replace("/auth/email-verify-required" as any);
+          if (emailVerifyRequired) {
+            router.replace("/auth/email-verify-required" as any);
+          } else {
+            router.replace("/(tabs)" as any);
+          }
         } catch (navErr) {
-          console.warn("login.replace_failed_falling_back_to_push", navErr);
+          // Last-resort fallback · if router.replace itself throws
+          // (rare · usually a runtime-mismatch between APK base
+          // bundle and OTA overlay), try push. The user is signed
+          // in regardless · this only affects which screen renders
+          // first.
           try {
-            router.push("/auth/email-verify-required" as any);
-          } catch (pushErr) {
-            console.error("login.navigation_failed_completely", pushErr);
+            router.push(emailVerifyRequired
+              ? "/auth/email-verify-required" as any
+              : "/(tabs)" as any);
+          } catch {
             toast.error(
               "Signed in",
-              "But couldn't open the email-verify screen. Please reopen the app.",
+              "Open the home tab manually · couldn't auto-navigate.",
             );
           }
         }
-      }
-      // Else · the route guard in app/_layout.tsx sees the user flip
-      // and routes us to /(tabs) on its own. We intentionally do NOT
-      // call replace here to avoid the double-navigate crash.
+      }, 0);
     } catch (err: unknown) {
       const appError = normalizeError(err);
       toast.error(appError.title, appError.message);

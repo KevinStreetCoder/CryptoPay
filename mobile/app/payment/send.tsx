@@ -194,23 +194,28 @@ export default function SendMpesaScreen() {
         : phone.startsWith("+254")
           ? phone
           : "+254" + phone;
-    router.push({
-      pathname: "/payment/confirm",
-      params: {
-        type: "send",
-        phone: fullPhone,
-        amount_kes: amount,
-        crypto_currency: selectedCrypto,
-        quote_id: quote.quote_id,
-        crypto_amount: quote.crypto_amount,
-        rate: quote.exchange_rate,
-        fee: quote.fee_kes,
-        excise_duty: quote.excise_duty_kes || "0",
-        // Forward the Pochi flag so the confirm screen can pass it
-        // through to /payments/send-mpesa/ as `context=pochi`.
-        ...(isPochi ? { context: "pochi" } : {}),
-      },
-    });
+    try {
+      router.push({
+        pathname: "/payment/confirm",
+        params: {
+          type: "send",
+          phone: String(fullPhone || ""),
+          amount_kes: String(amount || ""),
+          crypto_currency: String(selectedCrypto || ""),
+          quote_id: String(quote.quote_id || ""),
+          crypto_amount: String(quote.crypto_amount || ""),
+          rate: String(quote.exchange_rate || ""),
+          fee: String(quote.fee_kes || ""),
+          excise_duty: String(quote.excise_duty_kes || "0"),
+          // Forward the Pochi flag so the confirm screen can pass it
+          // through to /payments/send-mpesa/ as `context=pochi`.
+          ...(isPochi ? { context: "pochi" } : {}),
+        },
+      });
+    } catch (navErr) {
+      console.warn("[send] confirm-nav failed", navErr);
+      toast.error("Couldn't open confirm screen", "Please try again.");
+    }
   };
 
   const inputBorderColor = (field: string) =>

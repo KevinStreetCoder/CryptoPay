@@ -272,7 +272,7 @@ export default function BuyCryptoScreen() {
 
       if (finalStatus === "failed") {
         if (Platform.OS !== "web") {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)?.catch?.(() => {}); } catch {}
         }
         toast.error("Deposit Failed", "The M-Pesa transaction was not completed.");
         setPollingStatus(null);
@@ -281,27 +281,43 @@ export default function BuyCryptoScreen() {
       }
 
       if (Platform.OS !== "web") {
-        Haptics.notificationAsync(
-          finalStatus === "completed"
-            ? Haptics.NotificationFeedbackType.Success
-            : Haptics.NotificationFeedbackType.Warning
-        );
+        try {
+          Haptics.notificationAsync(
+            finalStatus === "completed"
+              ? Haptics.NotificationFeedbackType.Success
+              : Haptics.NotificationFeedbackType.Warning
+          )?.catch?.(() => {});
+        } catch {}
       }
-      router.replace({
-        pathname: "/payment/success",
-        params: {
-          amount_kes: quote.total_kes || quote.kes_amount || amountKES,
-          crypto_amount: quote.crypto_amount,
-          crypto_currency: selectedCrypto,
-          recipient: phone,
-          tx_status: finalStatus,
-          transaction_id: transactionId,
-        },
-      });
+      // 2026-05-17 · defensive nav · setTimeout(0) + try/catch +
+      // String() coercion on every param so a stray array / null
+      // doesn't crash success.tsx on mount.
+      setTimeout(() => {
+        try {
+          router.replace({
+            pathname: "/payment/success",
+            params: {
+              amount_kes: String(quote.total_kes || quote.kes_amount || amountKES || ""),
+              crypto_amount: String(quote.crypto_amount || ""),
+              crypto_currency: String(selectedCrypto || ""),
+              recipient: String(phone || ""),
+              tx_status: String(finalStatus || "processing"),
+              transaction_id: String(transactionId || ""),
+              payment_type: "buy",
+            },
+          });
+        } catch (navErr) {
+          console.warn("[buy-crypto] success-nav failed", navErr);
+          toast.success(
+            "Deposit submitted",
+            "Crypto will appear once M-Pesa confirms.",
+          );
+        }
+      }, 0);
     } catch (err: unknown) {
       setPinError(true);
       if (Platform.OS !== "web") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)?.catch?.(() => {}); } catch {}
       }
       const appError = normalizeError(err);
       toast.error(appError.title, appError.message);

@@ -422,7 +422,7 @@ export default function SendToCpayScreen() {
     } catch (err: unknown) {
       setPinError(true);
       if (Platform.OS !== "web") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)?.catch?.(() => {}); } catch {}
       }
       const appError = normalizeError(err);
       toast.error(appError.title, appError.message);

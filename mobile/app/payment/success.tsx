@@ -273,10 +273,10 @@ export default function PaymentSuccessScreen() {
           queryClient.invalidateQueries({ queryKey: ["wallets"] });
           queryClient.invalidateQueries({ queryKey: ["transactions"] });
           if (newStatus === "completed" && !isWeb) {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)?.catch?.(() => {}); } catch {}
           }
           if (newStatus === "failed" && !isWeb) {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)?.catch?.(() => {}); } catch {}
           }
         }
       } catch {}
@@ -297,14 +297,24 @@ export default function PaymentSuccessScreen() {
   const statusColor = isFailed ? colors.error : isCompleted ? colors.success : "#F59E0B";
 
   useEffect(() => {
+    // 2026-05-17 · defensive Haptics · this fires on initial mount
+    // of the success page. If the device lacks haptic support and
+    // the promise rejects, the prior fire-and-forget call leaked an
+    // unhandled rejection that crashed the page mid-mount on
+    // Hermes-built APKs (user report 2026-05-17 · send-to-cpay
+    // transfer committed but app crashed before success could
+    // render · ZERO status polls in nginx logs proves the mount
+    // never completed).
     if (!isWeb) {
-      Haptics.notificationAsync(
-        isFailed
-          ? Haptics.NotificationFeedbackType.Error
-          : isCompleted
-            ? Haptics.NotificationFeedbackType.Success
-            : Haptics.NotificationFeedbackType.Warning
-      );
+      try {
+        Haptics.notificationAsync(
+          isFailed
+            ? Haptics.NotificationFeedbackType.Error
+            : isCompleted
+              ? Haptics.NotificationFeedbackType.Success
+              : Haptics.NotificationFeedbackType.Warning
+        )?.catch?.(() => {});
+      } catch {}
     }
 
     // Stagger animations

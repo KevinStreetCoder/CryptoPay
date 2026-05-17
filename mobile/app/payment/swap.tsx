@@ -193,24 +193,33 @@ export default function SwapScreen() {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
 
       if (Platform.OS !== "web") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)?.catch?.(() => {}); } catch {}
       }
 
-      router.replace({
-        pathname: "/payment/success",
-        params: {
-          amount_kes: "0",
-          crypto_amount: destAmount.toFixed(toDecimals),
-          crypto_currency: toCurrency,
-          recipient: `${fromCurrency} → ${toCurrency}`,
-          transaction_id: txData?.id || "",
-          tx_status: "completed",
-        },
-      });
+      // 2026-05-17 · defensive nav · setTimeout(0) + try/catch
+      setTimeout(() => {
+        try {
+          router.replace({
+            pathname: "/payment/success",
+            params: {
+              amount_kes: "0",
+              crypto_amount: String(destAmount.toFixed(toDecimals)),
+              crypto_currency: String(toCurrency || ""),
+              recipient: String(`${fromCurrency} → ${toCurrency}`),
+              transaction_id: String(txData?.id || ""),
+              tx_status: "completed",
+              payment_type: "swap",
+            },
+          });
+        } catch (navErr) {
+          console.warn("[swap] success-nav failed", navErr);
+          toast.success("Swap complete", "Open History to view the receipt.");
+        }
+      }, 0);
     } catch (err: unknown) {
       setPinError(true);
       if (Platform.OS !== "web") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)?.catch?.(() => {}); } catch {}
       }
       const appError = normalizeError(err);
       toast.error(appError.title, appError.message);

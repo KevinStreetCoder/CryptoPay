@@ -83,11 +83,11 @@ function QuoteCountdown({ onExpired }: { onExpired: () => void }) {
         }
         // Per-second haptic tick (light) in last 30 seconds
         if (prev <= 31 && Platform.OS !== "web") {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)?.catch?.(() => {}); } catch {}
         }
         // Stronger haptic warning at 10 seconds left
         if (prev <= 11 && Platform.OS !== "web") {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)?.catch?.(() => {}); } catch {}
         }
         // Red flash at 10s
         if (prev === 11) {
@@ -255,7 +255,7 @@ export default function ConfirmPaymentScreen() {
   const handleQuoteExpired = useCallback(() => {
     setQuoteExpired(true);
     if (Platform.OS !== "web") {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)?.catch?.(() => {}); } catch {}
     }
     toast.error("Quote Expired", "The rate lock has expired. Please get a new quote.");
   }, [toast]);
@@ -337,7 +337,7 @@ export default function ConfirmPaymentScreen() {
 
       if (finalStatus === "failed") {
         if (Platform.OS !== "web") {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)?.catch?.(() => {}); } catch {}
         }
         toast.error("Payment Failed", "The transaction was not completed. Please try again.");
         setPollingStatus(null);
@@ -346,7 +346,7 @@ export default function ConfirmPaymentScreen() {
       }
 
       if (Platform.OS !== "web") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)?.catch?.(() => {}); } catch {}
       }
       // Track bank usage so the picker's "Frequent" section reflects
       // real behaviour. Fire-and-forget · the storage write never
@@ -456,7 +456,7 @@ export default function ConfirmPaymentScreen() {
     } catch (err: unknown) {
       setPinError(true);
       if (Platform.OS !== "web") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)?.catch?.(() => {}); } catch {}
       }
       const appError = normalizeError(err);
       toast.error(appError.title, appError.message);

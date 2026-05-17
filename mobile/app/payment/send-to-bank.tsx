@@ -471,22 +471,27 @@ export default function SendToBankScreen() {
 
   const handleConfirm = () => {
     if (!quote || !selectedBank) return;
-    router.push({
-      pathname: "/payment/confirm",
-      params: {
-        type: "bank",
-        bank_slug: selectedBank.slug,
-        bank_name: selectedBank.name,
-        account_number: accountNumber.trim(),
-        amount_kes: amount,
-        crypto_currency: selectedCrypto,
-        quote_id: quote.quote_id,
-        crypto_amount: quote.crypto_amount,
-        rate: quote.exchange_rate,
-        fee: quote.fee_kes,
-        excise_duty: quote.excise_duty_kes || "0",
-      },
-    });
+    try {
+      router.push({
+        pathname: "/payment/confirm",
+        params: {
+          type: "bank",
+          bank_slug: String(selectedBank.slug || ""),
+          bank_name: String(selectedBank.name || ""),
+          account_number: String((accountNumber || "").trim()),
+          amount_kes: String(amount || ""),
+          crypto_currency: String(selectedCrypto || ""),
+          quote_id: String(quote.quote_id || ""),
+          crypto_amount: String(quote.crypto_amount || ""),
+          rate: String(quote.exchange_rate || ""),
+          fee: String(quote.fee_kes || ""),
+          excise_duty: String(quote.excise_duty_kes || "0"),
+        },
+      });
+    } catch (navErr) {
+      console.warn("[send-to-bank] confirm-nav failed", navErr);
+      toast.error("Couldn't open confirm screen", "Please try again.");
+    }
   };
 
   const inputBorderColor = (field: string) =>

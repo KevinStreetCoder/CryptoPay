@@ -352,7 +352,7 @@ export default function WalletScreen() {
   const copyAddress = async (address: string, id: string) => {
     await Clipboard.setStringAsync(address);
     if (Platform.OS !== "web") {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)?.catch?.(() => {}); } catch {}
     }
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
@@ -593,7 +593,7 @@ export default function WalletScreen() {
               if (depositModal.address) {
                 Clipboard.setStringAsync(depositModal.address);
                 if (Platform.OS !== "web") {
-                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                  try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)?.catch?.(() => {}); } catch {}
                 }
                 setCopiedId("desktop-deposit");
                 setTimeout(() => setCopiedId(null), 2000);
@@ -996,7 +996,7 @@ export default function WalletScreen() {
               if (depositModal?.address) {
                 Clipboard.setStringAsync(depositModal.address);
                 if (Platform.OS !== "web") {
-                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                  try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)?.catch?.(() => {}); } catch {}
                 }
                 setCopiedId("mobile-deposit");
                 setTimeout(() => setCopiedId(null), 2000);

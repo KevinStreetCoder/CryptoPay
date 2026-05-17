@@ -210,7 +210,7 @@ export default function WithdrawScreen() {
 
       if (finalStatus === "failed") {
         if (Platform.OS !== "web") {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)?.catch?.(() => {}); } catch {}
         }
         toast.error(t("payment.withdrawalFailed"), t("payment.withdrawalFailedDesc"));
         setPollingStatus(null);
@@ -219,24 +219,41 @@ export default function WithdrawScreen() {
       }
 
       if (Platform.OS !== "web") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)?.catch?.(() => {}); } catch {}
       }
 
-      router.replace({
-        pathname: "/payment/success",
-        params: {
-          amount_kes: "0",
-          crypto_amount: amount,
-          crypto_currency: currency,
-          recipient: destinationAddress.slice(0, 12) + "...",
-          transaction_id: transactionId,
-          tx_status: finalStatus,
-        },
-      });
+      // 2026-05-17 · defensive nav · same pattern as confirm.tsx ·
+      // wrap router.replace in setTimeout(0) + try/catch so a
+      // synchronous throw in success-screen mount (e.g. unsafe
+      // params method call) surfaces as a toast, not a hard crash
+      // that leaves the user staring at the PIN screen with their
+      // withdrawal already broadcast to the chain.
+      setTimeout(() => {
+        try {
+          router.replace({
+            pathname: "/payment/success",
+            params: {
+              amount_kes: "0",
+              crypto_amount: String(amount || ""),
+              crypto_currency: String(currency || ""),
+              recipient: String((destinationAddress || "").slice(0, 12) + "..."),
+              transaction_id: String(transactionId || ""),
+              tx_status: String(finalStatus || "processing"),
+              payment_type: "withdraw",
+            },
+          });
+        } catch (navErr) {
+          console.warn("[withdraw] success-nav failed", navErr);
+          toast.success(
+            "Withdrawal submitted",
+            "Open the transaction in History to view status.",
+          );
+        }
+      }, 0);
     } catch (err: unknown) {
       setPinError(true);
       if (Platform.OS !== "web") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)?.catch?.(() => {}); } catch {}
       }
       const appError = normalizeError(err);
       toast.error(appError.title, appError.message);

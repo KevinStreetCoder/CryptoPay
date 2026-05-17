@@ -249,22 +249,30 @@ export default function PayBillScreen() {
 
   const handleConfirm = () => {
     if (!quote) return;
-    router.push({
-      pathname: "/payment/confirm",
-      params: {
-        type: "paybill",
-        paybill_number: paybillNumber,
-        account_number: accountNumber,
-        amount_kes: amount,
-        crypto_currency: selectedCrypto,
-        quote_id: quote.quote_id,
-        crypto_amount: quote.crypto_amount,
-        rate: quote.exchange_rate,
-        fee: quote.fee_kes,
-        excise_duty: quote.excise_duty_kes || "0",
-        save_label: saveLabel,
-      },
-    });
+    // 2026-05-17 · String() coerce every param + try/catch wrap
+    // router.push · Expo Router params with mixed types or numeric
+    // values can throw under certain runtime/bundle mismatches.
+    try {
+      router.push({
+        pathname: "/payment/confirm",
+        params: {
+          type: "paybill",
+          paybill_number: String(paybillNumber || ""),
+          account_number: String(accountNumber || ""),
+          amount_kes: String(amount || ""),
+          crypto_currency: String(selectedCrypto || ""),
+          quote_id: String(quote.quote_id || ""),
+          crypto_amount: String(quote.crypto_amount || ""),
+          rate: String(quote.exchange_rate || ""),
+          fee: String(quote.fee_kes || ""),
+          excise_duty: String(quote.excise_duty_kes || "0"),
+          save_label: String(saveLabel || ""),
+        },
+      });
+    } catch (navErr) {
+      console.warn("[paybill] confirm-nav failed", navErr);
+      toast.error("Couldn't open confirm screen", "Please try again.");
+    }
   };
 
   const inputBorderColor = (field: string) =>

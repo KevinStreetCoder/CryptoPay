@@ -101,6 +101,18 @@ function RootNavigator() {
     if (lastRouteRestoredRef.current) return;
     lastRouteRestoredRef.current = true;
     (async () => {
+      // 2026-05-17 · race-safe restore · the auth-gate effect below
+      // ALSO fires router.replace on user-state flip. Two concurrent
+      // replaces in the same React commit crashed the Android view
+      // tree (user report · "after OTP on new device the APK
+      // crashes"). Defer to the next tick so the auth-gate replace
+      // settles first; we land in /(tabs) before this can re-route.
+      //
+      // The login() flow also clears lastRoute up-front so a
+      // fresh re-login finds nothing to restore here · ONLY a
+      // cold-start with a hydrated user (process death + open)
+      // sees a non-empty saved route.
+      await new Promise<void>((r) => setTimeout(r, 0));
       const last = await getLastRouteIfFresh();
       if (!last?.pathname) return;
       // Don't restore if we're already on a non-tab route (user might

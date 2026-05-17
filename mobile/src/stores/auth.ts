@@ -222,6 +222,18 @@ export function useAuth() {
       try { await storage.setItemAsync("last_login_phone", phone); } catch {}
     }
     resetSessionExpired(); // Allow API requests again after re-login
+    // 2026-05-17 · clear last-route so a fresh re-login (session
+    // expired, new-device OTP, forgot-PIN flow) lands the user on
+    // the dashboard, NOT on whatever payment page they were on when
+    // the session died. App-lock unlock is a separate path
+    // (useAppLock.unlock · sets locked=false WITHOUT clearing
+    // last-route) so the bg→fg restore behaviour still works for
+    // ordinary lock screens. Only the FULL login flow zeroes the
+    // restore target.
+    try {
+      const { clearLastRoute } = require("../hooks/useLastRoute");
+      await clearLastRoute();
+    } catch {}
     _user = data.user;
     notify();
     return data;
