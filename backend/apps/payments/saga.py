@@ -710,6 +710,31 @@ class PaymentSaga:
                     extra={"transaction_id": str(self.tx.id)},
                 )
 
+        # 2026-05-17 · book revenue into the SystemWallet ledger.
+        #
+        # Before this block, paybill/till/B2C settlement only stamped
+        # `fee_amount` on the Transaction record · `SystemWallet(FEE)`
+        # was never credited. The /admin/revenue/ dashboard exposed
+        # the gap (earned 71.35 KES, booked 0 KES across all completed
+        # txs) which is exactly the C87DC5F2 audit finding.
+        #
+        # Split:
+        #   - `fee_amount = spread_revenue + flat_fee` → split into:
+        #     * provider_cost (IntaSend `charges` per webhook tx)
+        #     * net fee (the remainder · OUR true take)
+        #   - `excise_duty_amount` → booked to EXCISE wallet (owed KRA)
+        #
+        # All three calls are idempotent via FeeLedgerEntry's
+        # UniqueConstraint(transaction_id, system_wallet, entry_type)
+        # so the saga can be retried (callback + cron status query
+        # both calling complete()) without double-booking.
+        #
+        # Best-effort · a booking failure logs but does NOT roll back
+        # the COMPLETED status. The fee is already on the tx record;
+        # the admin reconciliation panel will surface the gap so ops
+        # can backfill via `python manage.py backfill_unbooked_fees`.
+        self._book_revenue_split()
+
         # Send all notifications (email, SMS, push, PDF receipt)
         try:
             from apps.core.email import send_transaction_notifications
@@ -726,3 +751,117 @@ class PaymentSaga:
             broadcast_user_balance(self.tx.user_id)
         except Exception as e:
             logger.warning(f"Balance broadcast failed for tx {self.tx.id}: {e}")
+
+    def _book_revenue_split(self) -> None:
+        """Credit FEE / PROVIDER_COST / EXCISE SystemWallets per the
+        completed transaction's fee_amount + excise_duty_amount.
+
+        Split logic:
+          - `provider_cost` = `saga_data.intasend_charges` (if present;
+            IntaSend's per-tx KES charge captured from the send-money
+            webhook by `_enrich_tx_from_send_money_payload`). For
+            paths without a captured charge (SasaPay, legacy txs),
+            provider_cost = 0 (under-report; better than over-claiming
+            revenue we didn't earn).
+          - `net_fee` = max(0, `tx.fee_amount` - `provider_cost`)
+            so a tx where the provider charge exceeded our fee
+            (BUY net-loss case · audit finding #5) books zero net
+            revenue rather than going negative.
+          - `excise` = `tx.excise_duty_amount` → KRA bucket
+            (NEVER our revenue; tracked separately so the next KRA
+            remittance has a single source of truth).
+
+        Best-effort · any booking failure is logged but doesn't
+        re-raise. The /admin/revenue/ dashboard's earned-vs-booked
+        panel surfaces the gap so ops can backfill manually.
+        """
+        from decimal import Decimal as _D
+        try:
+            fee_amount = _D(self.tx.fee_amount or 0)
+            excise = _D(self.tx.excise_duty_amount or 0)
+            fee_currency = (self.tx.fee_currency or "KES").upper()
+            sd = self.tx.saga_data or {}
+
+            # IntaSend captures the per-tx charge on the webhook · we
+            # stashed it under `intasend_charges` via
+            # `_enrich_tx_from_send_money_payload`. SasaPay doesn't
+            # currently surface this; treat as 0 and over-credit net
+            # fee · ops will see the discrepancy on the dashboard's
+            # provider_cost column and we can wire SasaPay later.
+            provider_cost = _D(str(sd.get("intasend_charges") or 0))
+
+            net_fee = fee_amount - provider_cost
+            if net_fee < 0:
+                # Provider charged us more than we charged the user.
+                # Book 0 net fee + the FULL provider_cost on the
+                # provider_cost bucket · the resulting NEGATIVE delta
+                # vs fee_amount is the loss-per-tx visible in admin.
+                net_fee = _D("0")
+
+            # Lazy import inside function · WalletService is a heavy
+            # module and lazy-loading keeps saga.complete idempotent
+            # on import-time failures.
+            from apps.wallets.services import (
+                WalletService,
+                FeeWalletMissingError,
+            )
+
+            if net_fee > 0:
+                try:
+                    WalletService.book_fee(
+                        currency=fee_currency,
+                        amount=net_fee,
+                        transaction_id=self.tx.id,
+                        description=(
+                            f"{self.tx.type} net fee · {net_fee} "
+                            f"{fee_currency} (gross {fee_amount} − "
+                            f"provider {provider_cost})"
+                        ),
+                    )
+                except FeeWalletMissingError as e:
+                    logger.error(
+                        "saga.complete.book_fee_missing_wallet",
+                        extra={"tx_id": str(self.tx.id), "err": str(e)},
+                    )
+
+            if provider_cost > 0:
+                try:
+                    WalletService.book_provider_cost(
+                        currency=fee_currency,
+                        amount=provider_cost,
+                        transaction_id=self.tx.id,
+                        description=(
+                            f"{self.tx.type} provider cost · {provider_cost} "
+                            f"{fee_currency} · {sd.get('intasend_provider') or 'IntaSend'}"
+                        ),
+                    )
+                except FeeWalletMissingError as e:
+                    logger.error(
+                        "saga.complete.book_provider_cost_missing_wallet",
+                        extra={"tx_id": str(self.tx.id), "err": str(e)},
+                    )
+
+            if excise > 0:
+                try:
+                    WalletService.book_excise(
+                        currency=fee_currency,
+                        amount=excise,
+                        transaction_id=self.tx.id,
+                        description=(
+                            f"{self.tx.type} excise duty · {excise} "
+                            f"{fee_currency} · owed to KRA"
+                        ),
+                    )
+                except FeeWalletMissingError as e:
+                    logger.error(
+                        "saga.complete.book_excise_missing_wallet",
+                        extra={"tx_id": str(self.tx.id), "err": str(e)},
+                    )
+        except Exception:
+            # Total failure of the revenue-split block must NOT crash
+            # the saga · the tx is already COMPLETED. Ops will see the
+            # gap on the dashboard and can backfill.
+            logger.exception(
+                "saga.complete.book_revenue_split_failed",
+                extra={"tx_id": str(self.tx.id)},
+            )

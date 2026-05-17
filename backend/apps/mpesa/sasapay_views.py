@@ -948,6 +948,95 @@ def _process_successful_payment(
         except Exception:
             logger.exception("Failed to credit crypto for tx %s", tx.id)
 
+    # 2026-05-17 · book BUY-side revenue into SystemWallet ledger.
+    #
+    # SasaPay's STK callback delivers `transaction_charges` (their
+    # cut) on success · we subtract it from our gross fee to derive
+    # net revenue. Excise goes to KRA. Idempotent via
+    # FeeLedgerEntry's unique constraint (re-fired callback is safe).
+    #
+    # BUY direction note: with current rates math the user effectively
+    # pays raw_rate for crypto (no markup), so `tx.fee_amount` (= spread
+    # + flat) is our only margin. After subtracting SasaPay's tx
+    # charges and the M-Pesa C2B tariff, this can be NEGATIVE — the
+    # audit's "BUY may be net-loss" finding. Booking it surfaces the
+    # exact amount per tx; we then decide whether to raise spread or
+    # absorb.
+    if tx.type == "BUY" and tx.fee_amount and tx.fee_amount > 0:
+        try:
+            from decimal import Decimal as _D
+            from apps.wallets.services import WalletService, FeeWalletMissingError
+            fee_amount = _D(tx.fee_amount or 0)
+            excise = _D(tx.excise_duty_amount or 0)
+            # SasaPay surfaces `TransactionCharges` (or `transactionCharges`
+            # in lowercase variants) on STK callback. Empty / missing
+            # treated as 0.
+            sasapay_charges_keys = (
+                "TransactionCharges", "transaction_charges",
+                "transactionCharges", "charges",
+            )
+            payload = tx.saga_data.get("sasapay_callback_payload") or {} \
+                if tx.saga_data else {}
+            provider_cost = _D("0")
+            for k in sasapay_charges_keys:
+                v = payload.get(k) if isinstance(payload, dict) else None
+                if v not in (None, ""):
+                    try:
+                        provider_cost = _D(str(v))
+                        break
+                    except Exception:
+                        continue
+
+            net_fee = max(_D("0"), fee_amount - provider_cost)
+
+            if net_fee > 0:
+                try:
+                    WalletService.book_fee(
+                        currency="KES",
+                        amount=net_fee,
+                        transaction_id=tx.id,
+                        description=(
+                            f"BUY net fee · {net_fee} KES (gross {fee_amount} "
+                            f"− SasaPay charges {provider_cost})"
+                        ),
+                    )
+                except FeeWalletMissingError as e:
+                    logger.error(
+                        "sasapay.buy.book_fee_missing_wallet · %s", e,
+                        extra={"tx_id": str(tx.id)},
+                    )
+            if provider_cost > 0:
+                try:
+                    WalletService.book_provider_cost(
+                        currency="KES",
+                        amount=provider_cost,
+                        transaction_id=tx.id,
+                        description=f"BUY · SasaPay STK charges · tx {tx.id}",
+                    )
+                except FeeWalletMissingError as e:
+                    logger.error(
+                        "sasapay.buy.book_provider_cost_missing_wallet · %s", e,
+                        extra={"tx_id": str(tx.id)},
+                    )
+            if excise > 0:
+                try:
+                    WalletService.book_excise(
+                        currency="KES",
+                        amount=excise,
+                        transaction_id=tx.id,
+                        description=f"BUY excise · {excise} KES · KRA",
+                    )
+                except FeeWalletMissingError as e:
+                    logger.error(
+                        "sasapay.buy.book_excise_missing_wallet · %s", e,
+                        extra={"tx_id": str(tx.id)},
+                    )
+        except Exception:
+            logger.exception(
+                "sasapay.buy.revenue_split_failed",
+                extra={"tx_id": str(tx.id)},
+            )
+
     try:
         from apps.core.email import send_transaction_notifications
         send_transaction_notifications(tx.user, tx)

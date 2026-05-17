@@ -65,27 +65,37 @@ class SpreadCalculationTest(TestCase):
     @patch.object(RateService, "get_usd_kes_rate", return_value=Decimal("129.50"))
     @patch.object(RateService, "get_crypto_usd_rate", return_value=Decimal("1.0002"))
     def test_spread_applied_correctly(self, mock_crypto, mock_forex):
-        """Final rate should be raw_rate * (1 - spread_percent/100)."""
+        """2026-05-17 · Option A · final_rate == raw_rate.
+
+        Spread is now charged as an additive `spread_revenue` term in
+        `lock_rate()` rather than baked into the rate. Pinning that
+        the rate the user sees IS the market rate."""
         result = RateService.get_crypto_kes_rate("USDT")
 
         raw_rate = Decimal("1.0002") * Decimal("129.50")
-        spread = Decimal("1.5") / Decimal("100")
-        expected_final = raw_rate * (Decimal("1") - spread)
 
-        self.assertEqual(Decimal(result["final_rate"]), expected_final.quantize(Decimal("0.01")))
+        # Option A · final_rate equals raw_rate (no in-rate spread).
+        self.assertEqual(
+            Decimal(result["final_rate"]),
+            raw_rate.quantize(Decimal("0.01")),
+        )
         self.assertEqual(result["spread_percent"], settings.PLATFORM_SPREAD_PERCENT)
         self.assertEqual(result["flat_fee_kes"], settings.FLAT_FEE_KES)
 
     @patch.object(RateService, "get_usd_kes_rate", return_value=Decimal("129.50"))
     @patch.object(RateService, "get_crypto_usd_rate", return_value=Decimal("65000"))
     def test_spread_on_btc(self, mock_crypto, mock_forex):
-        """Spread should work for high-value currencies like BTC."""
+        """Option A holds across currencies: BTC rate is the raw rate
+        too · the spread is added per-quote in `lock_rate()` not baked
+        into the displayed rate."""
         result = RateService.get_crypto_kes_rate("BTC")
 
         raw_rate = Decimal("65000") * Decimal("129.50")
-        expected_final = raw_rate * (Decimal("1") - Decimal("0.015"))
 
-        self.assertEqual(Decimal(result["final_rate"]), expected_final.quantize(Decimal("0.01")))
+        self.assertEqual(
+            Decimal(result["final_rate"]),
+            raw_rate.quantize(Decimal("0.01")),
+        )
 
 
 class QuoteLockingTest(TestCase):
@@ -124,6 +134,7 @@ class QuoteLockingTest(TestCase):
 
     @patch.object(RateService, "get_crypto_kes_rate")
     def test_quote_calculates_crypto_amount(self, mock_rate):
+        """2026-05-17 · Option A · total_kes now ADDS spread_revenue."""
         mock_rate.return_value = {
             "currency": "USDT",
             "crypto_usd": "1.0",
@@ -137,14 +148,17 @@ class QuoteLockingTest(TestCase):
 
         quote = RateService.lock_rate("USDT", Decimal("1300"))
 
-        # spread_revenue = 1300 * 1.5% (from settings) = 19.50
-        # platform_fee = 19.50 + 10 = 29.50
-        # excise_duty = 29.50 * 10% = 2.95
-        # total_kes = 1300 + 10 + 2.95 = 1312.95
-        # crypto_amount = 1312.95 / 130
-        expected = (Decimal("1312.95") / Decimal("130")).quantize(Decimal("0.00000001"))
+        # spread_revenue = 1300 × 1.5% (settings) = 19.50
+        # platform_fee   = 19.50 + 10 (flat)      = 29.50
+        # excise_duty    = 29.50 × 10%            = 2.95
+        # total_kes      = 1300 + 19.50 + 10 + 2.95 = 1332.45  (Option A)
+        # crypto_amount  = 1332.45 / 130
+        expected = (Decimal("1332.45") / Decimal("130")).quantize(Decimal("0.00000001"))
         self.assertEqual(Decimal(quote["crypto_amount"]), expected)
         self.assertEqual(quote["excise_duty_kes"], "2.95")
+        # The new spread_revenue breakdown is surfaced for receipts.
+        self.assertEqual(quote["spread_revenue_kes"], "19.50")
+        self.assertEqual(quote["total_kes"], "1332.45")
 
 
 # ===========================================================================

@@ -203,7 +203,16 @@ class RateService:
     @staticmethod
     def get_crypto_kes_rate(currency: str) -> dict:
         """
-        Compose the full crypto/KES rate with platform spread.
+        Compose the crypto/KES rate breakdown.
+
+        2026-05-17 · spread mechanic flipped to OPTION A (additive
+        spread_revenue). Previously `final_rate = raw_rate × (1 - spread)`
+        baked the spread INTO the rate · users saw a confusing rate
+        below market and the books had to reverse-engineer the spread
+        from `crypto_amount × raw_rate - kes_amount` to know our true
+        take. The new mechanic returns `final_rate == raw_rate` and
+        adds `spread_revenue` to `total_kes` in `lock_rate()`. Same
+        net total paid by the user · cleaner explanation, cleaner books.
 
         Returns:
             {
@@ -212,7 +221,7 @@ class RateService:
                 "usd_kes": 129.50,
                 "raw_rate": 129.53,
                 "spread_percent": 1.5,
-                "final_rate": 131.47,
+                "final_rate": 129.53,   # == raw_rate now (no in-rate spread)
                 "flat_fee_kes": 10,
             }
         """
@@ -220,8 +229,10 @@ class RateService:
         usd_kes = RateService.get_usd_kes_rate()
 
         raw_rate = crypto_usd * usd_kes
-        spread = Decimal(str(settings.PLATFORM_SPREAD_PERCENT)) / Decimal("100")
-        final_rate = raw_rate * (Decimal("1") - spread)  # User gets less KES per crypto
+        # 2026-05-17 · Option A · keep final_rate == raw_rate so the
+        # rate the user sees IS the market rate. Spread is charged as
+        # an explicit additive line in lock_rate(), not baked in here.
+        final_rate = raw_rate
 
         is_stale = bool(cache.get("rate:stale"))
 
@@ -265,8 +276,14 @@ class RateService:
         excise_rate = Decimal(str(settings.EXCISE_DUTY_PERCENT)) / Decimal("100")
         excise_duty = (platform_fee * excise_rate).quantize(Decimal("0.01"))
 
-        # Calculate crypto amount needed (includes fee + excise)
-        total_kes = kes_amount + flat_fee + excise_duty
+        # 2026-05-17 · OPTION A spread mechanic · total_kes now ADDS
+        # spread_revenue alongside the flat fee + excise. Previously
+        # `final_rate = raw_rate × (1 - spread)` baked the spread into
+        # the rate and `total_kes` didn't include `spread_revenue` ·
+        # users were charged the spread (via the reduced rate) but the
+        # books only reflected it indirectly. Net total paid by the
+        # user is identical to before; the breakdown is now transparent.
+        total_kes = kes_amount + spread_revenue + flat_fee + excise_duty
         crypto_amount = (total_kes / final_rate).quantize(Decimal("0.00000001"))
 
         quote_id = str(uuid.uuid4())

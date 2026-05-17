@@ -100,11 +100,22 @@ class SystemWallet(models.Model):
         HOT = "hot"
         WARM = "warm"
         COLD = "cold"
-        FEE = "fee"
+        FEE = "fee"          # net revenue · what we keep after provider + excise
         FLOAT = "float"
+        # 2026-05-17 · split out provider take + KRA-owed excise + on-chain
+        # gas reserve so the FEE bucket is clean net-revenue. Before this
+        # split, paybill/till revenue (when finally booked) would have
+        # commingled our income with IntaSend's cut and KRA's excise.
+        # ── New buckets ───────────────────────────────────────────────
+        PROVIDER_COST = "provider_cost"  # IntaSend/SasaPay/Daraja charges
+        EXCISE = "excise"                # 16 % of (spread+flat) · owed to KRA
+        GAS_RESERVE = "gas_reserve"      # TRX/ETH/SOL gas for withdrawal broadcast
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    wallet_type = models.CharField(max_length=10, choices=WalletType.choices)
+    # 2026-05-17 · max_length raised 10 → 20 so the new wallet_types
+    # ("provider_cost", "gas_reserve") fit. Existing rows are untouched
+    # by the column-widen migration.
+    wallet_type = models.CharField(max_length=20, choices=WalletType.choices)
     currency = models.CharField(max_length=10, choices=Currency.choices)
     chain = models.CharField(
         max_length=20,
@@ -160,6 +171,83 @@ class SystemWallet(models.Model):
     def __str__(self):
         tier_label = f" [{self.tier}]" if self.tier else ""
         return f"System {self.wallet_type}{tier_label} - {self.currency}: {self.balance}"
+
+
+class FeeLedgerEntry(models.Model):
+    """Double-entry bookkeeping for SystemWallet movements.
+
+    2026-05-17 · before this table, SystemWallet was mutated by direct
+    `.balance += amount` (SWAP path, `payments/views.py:1410-1411`) ·
+    no audit trail, no idempotency. Every other tx type didn't book
+    revenue at all (the earned-vs-booked gap surfaced by the
+    /admin/revenue/ dashboard).
+
+    `FeeLedgerEntry` mirrors `LedgerEntry` but targets SystemWallet
+    rows instead of user-owned `Wallet` rows. Same idempotency
+    contract via UniqueConstraint(transaction_id, system_wallet,
+    entry_type), same check that amounts are positive.
+
+    Why a separate table (and not a nullable FK on LedgerEntry)
+    ─────────────────────────────────────────────────────────────
+    LedgerEntry.wallet is FK to user-owned Wallet. Making it nullable
+    and adding a sibling FK to SystemWallet would require:
+      - migration to drop the existing NOT NULL
+      - a new XOR check constraint
+      - updating every existing query that joins LedgerEntry.wallet
+    None of that buys us anything · SystemWallet movements are
+    semantically distinct from user movements (different reporting,
+    different reconciliation, different audit owner). A separate
+    table makes the distinction explicit and avoids touching the
+    100% production-critical user ledger.
+
+    Usage · always via `WalletService.book_fee()` so callers don't
+    handle the SystemWallet lookup or LedgerEntry creation themselves.
+    """
+
+    class EntryType(models.TextChoices):
+        DEBIT = "DEBIT"    # reduces SystemWallet balance (e.g. payout)
+        CREDIT = "CREDIT"  # increases SystemWallet balance (e.g. fee collected)
+
+    id = models.BigAutoField(primary_key=True)
+    transaction_id = models.UUIDField(
+        db_index=True,
+        help_text=(
+            "Source Transaction.id whose completion booked this entry. "
+            "Used for idempotency (same tx_id + same system_wallet + same "
+            "entry_type cannot create two entries)."
+        ),
+    )
+    system_wallet = models.ForeignKey(
+        SystemWallet,
+        on_delete=models.PROTECT,
+        related_name="fee_ledger_entries",
+        help_text="Which SystemWallet (fee / provider_cost / excise / gas_reserve) this movement targets.",
+    )
+    entry_type = models.CharField(max_length=10, choices=EntryType.choices)
+    amount = models.DecimalField(max_digits=28, decimal_places=8)
+    balance_after = models.DecimalField(max_digits=28, decimal_places=8)
+    description = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "fee_ledger_entries"
+        ordering = ["-created_at"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(amount__gt=0),
+                name="fee_ledger_amount_positive",
+            ),
+            models.UniqueConstraint(
+                fields=["transaction_id", "system_wallet", "entry_type"],
+                name="fee_ledger_idempotent_entry",
+            ),
+        ]
+
+    def __str__(self):
+        return (
+            f"{self.entry_type} {self.amount} {self.system_wallet.currency} "
+            f"to {self.system_wallet.wallet_type} → {self.balance_after}"
+        )
 
 
 class CustodyTransfer(models.Model):

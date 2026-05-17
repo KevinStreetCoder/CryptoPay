@@ -302,9 +302,17 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": 15.0,  # Every 15 seconds
     },
     # Stuck payment reconciliation
+    # 2026-05-17 · cut to 15s after the C87DC5F2 incident · with the
+    # dedup + status-query fixes live, the cron's active-poll path is
+    # the dropped-callback safety net. Cutting from 30s → 15s means
+    # worst-case detection time on a dropped callback is ~15s instead
+    # of 30s. Combined with IntaSend/SasaPay's typical 5-30s settlement
+    # window, end-to-end M-Pesa rail latency stays under 60s. (The
+    # historical 29-min was the dedup bug dropping the terminal
+    # callback entirely · not a cron-frequency issue.)
     "check-pending-mpesa-payments": {
         "task": "apps.payments.tasks.check_pending_mpesa_payments",
-        "schedule": 30.0,  # Every 30 seconds — catches stuck CONFIRMING txns
+        "schedule": 15.0,  # Every 15 seconds — dropped-callback safety net
     },
     # Rebalancing
     "check-and-trigger-rebalance": {

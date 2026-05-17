@@ -381,6 +381,31 @@ def _handle_collection_event(payload: dict) -> dict:
         if tx_locked.status == Transaction.Status.COMPLETED:
             return {"status": "already_completed"}
 
+        # 2026-05-17 · capture IntaSend's STK collection charge onto
+        # saga_data so the saga's _book_revenue_split can subtract it
+        # from our gross fee. IntaSend collection callbacks deliver
+        # `value` (gross KES customer paid) and `net_amount` (KES
+        # actually credited to our wallet · gross minus IntaSend's
+        # take). The diff is the provider cost.
+        try:
+            from decimal import Decimal as _D
+            gross = _D(str(payload.get("value") or "0"))
+            net = _D(str(payload.get("net_amount") or "0"))
+            charges = gross - net
+            if charges > 0:
+                sd = dict(tx_locked.saga_data or {})
+                sd["intasend_charges"] = str(charges)
+                sd["intasend_provider"] = "MPESA-STK"
+                tx_locked.saga_data = sd
+                # Persist BEFORE saga.complete so its _book_revenue_split
+                # reads the freshest saga_data.
+                tx_locked.save(update_fields=["saga_data", "updated_at"])
+        except Exception:
+            logger.exception(
+                "intasend.collection.charge_capture_failed",
+                extra={"tx_id": str(tx_locked.id)},
+            )
+
         tx_locked.status = Transaction.Status.COMPLETED
         tx_locked.mpesa_receipt = payload.get("mpesa_reference") or ""
         tx_locked.completed_at = timezone.now()
@@ -389,6 +414,9 @@ def _handle_collection_event(payload: dict) -> dict:
         ])
 
         # BUY flow: credit the user's crypto wallet now that fiat is in.
+        # PaymentSaga.complete() also books the revenue split into
+        # SystemWallet (FEE / PROVIDER_COST / EXCISE) using the
+        # saga_data["intasend_charges"] we just stamped above.
         try:
             from apps.payments.saga import PaymentSaga
             PaymentSaga(tx_locked).complete(mpesa_receipt=tx_locked.mpesa_receipt)

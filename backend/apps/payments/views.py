@@ -1385,30 +1385,54 @@ class SwapView(APIView):
                 # go live. Failing loud is safer than silently losing
                 # revenue the customer already paid.
                 if fee_amount > 0:
-                    from apps.wallets.models import SystemWallet
-                    fee_wallet = SystemWallet.objects.select_for_update().filter(
-                        wallet_type=SystemWallet.WalletType.FEE,
-                        currency=from_currency,
-                        is_active=True,
-                    ).first()
-                    if fee_wallet is None:
-                        # No revenue wallet → do NOT silently swallow. The
-                        # user has already been debited; we must either
-                        # book the revenue or abort the swap. Aborting
-                        # inside `transaction.atomic()` rolls back every
-                        # change above and the caller sees a clean error.
+                    # 2026-05-17 · refactored to use the idempotent
+                    # WalletService.book_fee() helper. The OLD code did
+                    # `fee_wallet.balance += fee_amount` directly with no
+                    # FeeLedgerEntry · two latent bugs:
+                    #   (a) no audit trail per booking (the dashboard
+                    #       couldn't prove what each balance increment
+                    #       came from)
+                    #   (b) NOT idempotent · if this code path ever
+                    #       re-entered for the same tx (e.g. saga
+                    #       refactor adds a retry, callback fires the
+                    #       complete path twice), the fee would
+                    #       double-book.
+                    # book_fee guards both via UniqueConstraint
+                    # (tx_id, system_wallet, entry_type) on
+                    # FeeLedgerEntry · same tx booking the same wallet
+                    # twice silently returns the prior entry.
+                    from apps.wallets.services import (
+                        WalletService,
+                        FeeWalletMissingError,
+                    )
+                    try:
+                        WalletService.book_fee(
+                            currency=from_currency,
+                            amount=fee_amount,
+                            transaction_id=tx.id,
+                            description=(
+                                f"Swap fee · {fee_amount} {from_currency} · "
+                                f"tx {tx.id}"
+                            ),
+                        )
+                    except FeeWalletMissingError:
+                        # No revenue wallet → do NOT silently swallow.
+                        # The user has already been debited; we must
+                        # either book the revenue or abort the swap.
+                        # Aborting inside `transaction.atomic()` rolls
+                        # back every change above so the user is not
+                        # charged a fee we cannot account for.
                         logger.critical(
-                            f"Swap fee revenue wallet missing for {from_currency}. "
-                            f"Aborting tx {tx.id} so the user is not charged a "
-                            f"fee we cannot account for."
+                            f"Swap fee revenue wallet missing for "
+                            f"{from_currency}. Aborting tx {tx.id} so "
+                            f"the user is not charged a fee we cannot "
+                            f"account for."
                         )
                         raise RuntimeError(
                             f"Revenue wallet (fee/{from_currency}) is not "
                             f"configured. Seed SystemWallet rows before "
                             f"enabling swaps."
                         )
-                    fee_wallet.balance += fee_amount
-                    fee_wallet.save(update_fields=["balance"])
 
                 # Mark completed
                 tx.status = Transaction.Status.COMPLETED

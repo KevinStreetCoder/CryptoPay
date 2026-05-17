@@ -2,11 +2,21 @@ from decimal import Decimal
 
 from django.db import transaction as db_transaction
 
-from .models import LedgerEntry, Wallet
+from .models import FeeLedgerEntry, LedgerEntry, SystemWallet, Wallet
 
 
 class InsufficientBalanceError(Exception):
     pass
+
+
+class FeeWalletMissingError(RuntimeError):
+    """Raised when book_fee/book_provider_cost/book_excise/book_gas_reserve
+    can't locate the destination SystemWallet for the given currency.
+
+    Failing LOUD beats silently swallowing revenue. The seed_system_wallets
+    management command creates every (wallet_type × currency) row at
+    deploy time; this error means someone bypassed it OR deactivated a
+    row that's now in the hot path. Ops should re-run the seed."""
 
 
 class WalletService:
@@ -186,3 +196,153 @@ class WalletService:
             )
             wallets.append(wallet)
         return wallets
+
+    # ── System-wallet bookkeeping (2026-05-17) ─────────────────────
+    #
+    # Four destination buckets · all share the same idempotent
+    # double-entry pattern via FeeLedgerEntry. Callers MUST go through
+    # these helpers · NEVER mutate `SystemWallet.balance` directly
+    # (the old SWAP path did and that's why every retry would have
+    # double-booked).
+    #
+    # Idempotency contract · FeeLedgerEntry has
+    #     UniqueConstraint(transaction_id, system_wallet, entry_type)
+    # so the same source-tx booking the same destination twice will
+    # silently return the FIRST entry instead of raising. Callers can
+    # call these helpers from BOTH the webhook handler AND the cron
+    # safety-net without fear of double-credit.
+
+    @staticmethod
+    @db_transaction.atomic
+    def _book_to_system_wallet(
+        wallet_type: str,
+        currency: str,
+        amount: Decimal,
+        transaction_id,
+        description: str = "",
+        chain: str = "",
+    ) -> FeeLedgerEntry:
+        """Internal · credit a SystemWallet(wallet_type, currency)
+        atomically with idempotency.
+
+        - `wallet_type` is one of `SystemWallet.WalletType.*` values
+          (e.g. "fee", "provider_cost", "excise", "gas_reserve").
+        - `currency` is the SystemWallet currency (KES for fiat
+          buckets, "USDT"/"TRX" etc. for gas reserves).
+        - `transaction_id` is the SOURCE Transaction whose completion
+          triggered this booking. Used for the idempotency key.
+        - `chain` is an optional filter when more than one wallet
+          exists per (wallet_type, currency) · e.g. GAS_RESERVE/TRX
+          would always live under chain=tron. Defaults to empty string
+          which matches the canonical "single wallet per type+currency"
+          deployment.
+
+        Returns the FeeLedgerEntry (new or existing).
+        Raises `FeeWalletMissingError` if no active SystemWallet matches.
+        """
+        if amount is None or Decimal(str(amount)) <= 0:
+            raise ValueError(
+                f"book amount must be positive, got {amount!r}"
+            )
+        amount = Decimal(str(amount))
+
+        # Lookup the destination · respect (wallet_type, currency)
+        # uniqueness from SystemWallet.Meta.unique_together. The
+        # `chain` filter is optional · empty string means "any chain"
+        # which works because the seed creates rows with chain="" for
+        # the fiat-side wallets.
+        qs = SystemWallet.objects.select_for_update().filter(
+            wallet_type=wallet_type,
+            currency=currency,
+            is_active=True,
+        )
+        if chain:
+            qs = qs.filter(chain=chain)
+        sw = qs.first()
+        if sw is None:
+            raise FeeWalletMissingError(
+                f"No active SystemWallet for wallet_type={wallet_type!r} "
+                f"currency={currency!r} chain={chain!r}. Run "
+                f"`python manage.py seed_system_wallets` to create the "
+                f"missing rows."
+            )
+
+        # Idempotency check · same (tx, sw, type) returns the prior
+        # entry without re-crediting.
+        existing = FeeLedgerEntry.objects.filter(
+            transaction_id=transaction_id,
+            system_wallet=sw,
+            entry_type=FeeLedgerEntry.EntryType.CREDIT,
+        ).first()
+        if existing:
+            return existing
+
+        sw.balance += amount
+        sw.save(update_fields=["balance", "updated_at"])
+
+        return FeeLedgerEntry.objects.create(
+            transaction_id=transaction_id,
+            system_wallet=sw,
+            entry_type=FeeLedgerEntry.EntryType.CREDIT,
+            amount=amount,
+            balance_after=sw.balance,
+            description=description or "",
+        )
+
+    @staticmethod
+    def book_fee(currency: str, amount: Decimal, transaction_id,
+                 description: str = "") -> FeeLedgerEntry:
+        """Credit the FEE SystemWallet · this is OUR net revenue
+        AFTER provider cost + excise duty are split out.
+
+        Call from saga.complete() (paybill/till/B2C/buy) AFTER you've
+        already booked the provider cost separately via
+        `book_provider_cost`. The fee amount passed here should be:
+            tx.fee_amount - intasend_charges_kes
+        for M-Pesa rail txs, or `tx.fee_amount` for paths with no
+        provider cost (e.g. internal swap fee).
+        """
+        return WalletService._book_to_system_wallet(
+            SystemWallet.WalletType.FEE, currency, amount,
+            transaction_id, description,
+        )
+
+    @staticmethod
+    def book_provider_cost(currency: str, amount: Decimal, transaction_id,
+                           description: str = "") -> FeeLedgerEntry:
+        """Credit the PROVIDER_COST SystemWallet · the cost-of-revenue
+        line for IntaSend / SasaPay / Daraja charges. Reported as a
+        cost on the income statement; cumulatively shows how much we
+        pay each rail provider over time."""
+        return WalletService._book_to_system_wallet(
+            SystemWallet.WalletType.PROVIDER_COST, currency, amount,
+            transaction_id, description,
+        )
+
+    @staticmethod
+    def book_excise(currency: str, amount: Decimal, transaction_id,
+                    description: str = "") -> FeeLedgerEntry:
+        """Credit the EXCISE SystemWallet · 16% (or whatever the
+        EXCISE_DUTY_PERCENT setting says) tax we collect on behalf of
+        KRA. NEVER counted as our revenue; the EXCISE wallet balance
+        is what we owe KRA on the next remittance cycle."""
+        return WalletService._book_to_system_wallet(
+            SystemWallet.WalletType.EXCISE, currency, amount,
+            transaction_id, description,
+        )
+
+    @staticmethod
+    def book_gas_reserve(currency: str, amount: Decimal, transaction_id,
+                         description: str = "", chain: str = "") -> FeeLedgerEntry:
+        """Credit the GAS_RESERVE SystemWallet · the portion of a
+        crypto-withdrawal fee earmarked to fund the next on-chain
+        broadcast (TRX for TRC-20, ETH for ERC-20, SOL gas for
+        Solana). Currently `Transaction.fee_amount` covers BOTH our
+        margin AND the on-chain gas · ops decides the split via
+        `WITHDRAWAL_NETWORK_FEES` setting. The gas_reserve helper
+        gives us visibility into how much we should keep aside vs how
+        much is true revenue."""
+        return WalletService._book_to_system_wallet(
+            SystemWallet.WalletType.GAS_RESERVE, currency, amount,
+            transaction_id, description, chain=chain,
+        )

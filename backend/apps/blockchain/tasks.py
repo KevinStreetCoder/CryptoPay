@@ -536,6 +536,61 @@ def broadcast_withdrawal_task(self, transaction_id: str):
             f"to {destination_address[:16]}... tx_hash={tx_hash[:24]}..."
         )
 
+        # 2026-05-17 · Book the withdrawal fee revenue.
+        #
+        # The user was debited `locked_amount = amount + fee_amount`
+        # but only `tx.source_amount` (without the fee) was broadcast
+        # on-chain. The extra `fee_amount` crypto sits in the platform
+        # hot wallet · before this block it was invisible to revenue
+        # reporting. Audit finding #4 estimated ~KES 130/withdrawal
+        # for TRC-20, ~KES 650 for ERC-20.
+        #
+        # Split between gas_reserve + fee:
+        #   - In an ideal world we'd subtract the on-chain gas paid
+        #     (e.g. TRX for TRC-20) from the fee and book the rest as
+        #     revenue. Since on-chain gas comes from a SEPARATE TRX
+        #     reserve wallet (not tracked in our DB yet) and varies
+        #     per broadcast, we book the FULL fee_amount to FEE here
+        #     and leave gas-reserve accounting as a follow-up.
+        #   - When gas-reserve tracking ships, this hook gets a split
+        #     based on settings.WITHDRAWAL_GAS_PORTION (or similar).
+        #
+        # Idempotent · FeeLedgerEntry's unique constraint guards against
+        # double-booking if the celery retry kicks in.
+        try:
+            from decimal import Decimal as _D
+            from apps.wallets.services import (
+                WalletService,
+                FeeWalletMissingError,
+            )
+            fee_crypto = _D(tx.fee_amount or 0)
+            if fee_crypto > 0:
+                fee_ccy = (tx.fee_currency or tx.source_currency or "").upper()
+                try:
+                    WalletService.book_fee(
+                        currency=fee_ccy,
+                        amount=fee_crypto,
+                        transaction_id=tx.id,
+                        description=(
+                            f"WITHDRAWAL network fee · {fee_crypto} "
+                            f"{fee_ccy} · chain={network} · tx_hash={tx_hash[:24]}"
+                        ),
+                    )
+                except FeeWalletMissingError as e:
+                    logger.error(
+                        "withdrawal.book_fee_missing_wallet · %s", e,
+                        extra={"tx_id": str(tx.id)},
+                    )
+        except Exception:
+            # NEVER fail the withdrawal because revenue booking
+            # crashed · the broadcast already happened, the user's
+            # funds are gone. Log and let the backfill command pick
+            # this up later.
+            logger.exception(
+                "withdrawal.book_fee_failed",
+                extra={"tx_id": str(tx.id)},
+            )
+
     except Exception as e:
         logger.error(f"Withdrawal broadcast failed for tx {tx.id}: {e}")
 
