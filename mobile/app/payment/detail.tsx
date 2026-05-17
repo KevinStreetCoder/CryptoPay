@@ -411,7 +411,7 @@ export default function TransactionDetailScreen() {
                 )}
               </View>
               {/* Label */}
-              <View style={{ paddingTop: 2, paddingBottom: i < steps.length - 1 ? 14 : 0 }}>
+              <View style={{ flex: 1, minWidth: 0, paddingTop: 2, paddingBottom: i < steps.length - 1 ? 14 : 0 }}>
                 <Text
                   style={{
                     color: step.reached ? tc.textPrimary : tc.textMuted,
@@ -443,7 +443,12 @@ export default function TransactionDetailScreen() {
                   <Ionicons name="close" size={12} color={colors.error} />
                 </View>
               </View>
-              <View style={{ paddingTop: 2 }}>
+              {/* 2026-05-17 · `flex: 1` + `minWidth: 0` so the long
+                  `failure_reason` paragraph wraps INSIDE the timeline
+                  column instead of bleeding past the card's right
+                  edge. The bottom Failure Reason banner already does
+                  this; this column was the regression. */}
+              <View style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
                 <Text
                   style={{
                     color: colors.error,
@@ -461,6 +466,8 @@ export default function TransactionDetailScreen() {
                       fontSize: 12,
                       fontFamily: "DMSans_400Regular",
                       marginTop: 2,
+                      lineHeight: 17,
+                      flexShrink: 1,
                     }}
                   >
                     {tx.failure_reason}
