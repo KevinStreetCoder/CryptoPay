@@ -7,6 +7,7 @@ import { useBiometricAuth } from "../hooks/useBiometricAuth";
 import { PinInput } from "./PinInput";
 import { Spinner } from "./brand/Spinner";
 import { authApi } from "../api/auth";
+import { SessionExpiredError } from "../api/client";
 
 // Brand mark used on the lock screens (PIN + biometric mode) so the
 // gate matches the rest of the app chrome instead of generic
@@ -55,11 +56,45 @@ export function AppLockScreen({ onUnlock, userPhone, onForgotPin }: AppLockScree
     }
 
     const success = await authenticate("Unlock Cpay");
-    if (success) {
-      setBiometricFailed(false);
-      onUnlock();
-    } else {
+    if (!success) {
       setBiometricFailed(true);
+      return;
+    }
+
+    setBiometricFailed(false);
+
+    // 2026-05-17 · biometric-unlock token-validity guard
+    // ──────────────────────────────────────────────────
+    // User report · "unlocking with biometric everything is empty".
+    // Root cause · biometric auth ONLY verifies device ownership;
+    // it does NOT verify the JWT tokens are still valid with the
+    // backend. After 30+ days inactive (refresh-token TTL hit) the
+    // user's tokens are blacklisted, but biometric still passes, so
+    // we'd unmount AppLockScreen and reveal the dashboard · which
+    // then fires wallets/profile queries that ALL 401 → forceLogout
+    // → user briefly sees empty data before being bounced to login.
+    //
+    // Fix · proactively probe /auth/profile/ AFTER biometric passes.
+    // If the call succeeds, tokens are valid → proceed to onUnlock.
+    // If it 401s and refresh ALSO fails, the interceptor raises
+    // SessionExpiredError + has already triggered forceLogout. We
+    // just need to NOT call onUnlock (which would race the auth-gate
+    // redirect). Other errors (network blip, 5xx) · be lenient and
+    // unlock anyway · the user can refresh once they're in.
+    try {
+      await authApi.getProfile();
+      onUnlock();
+    } catch (err: any) {
+      if (err instanceof SessionExpiredError) {
+        // forceLogout already fired in the interceptor · user state
+        // is null, auth gate will route to /auth/login automatically.
+        // Don't call onUnlock here · that would dismiss the lock
+        // screen first, causing a flash of empty dashboard.
+        return;
+      }
+      // Network/5xx · proceed to unlock so a flaky 4G blip at the
+      // exact unlock moment doesn't trap the user behind biometric.
+      onUnlock();
     }
   }, [authenticate, isAvailable, onUnlock]);
 
@@ -119,12 +154,36 @@ export function AppLockScreen({ onUnlock, userPhone, onForgotPin }: AppLockScree
       onUnlock();
     } catch (err: any) {
       clearWatchdog();
+      // 2026-05-17 · session-expiry FIRST · the interceptor in
+      // client.ts attempts a token refresh on 401-with-no-error-body
+      // (which is what the DRF auth middleware sends for an expired
+      // JWT). If the refresh ALSO fails (refresh token blacklisted
+      // / 30-day TTL hit), it rejects with SessionExpiredError + has
+      // already called forceLogout to clear tokens + user state.
+      //
+      // The pre-fix code at this catch saw err.response = undefined
+      // (SessionExpiredError is a plain Error) and treated that as
+      // a "network error" · which flipped pinError=true, showing
+      // the user "Incorrect PIN" even though they typed correctly.
+      // User report 2026-05-17 · "I am entering correct PIN and we
+      // are getting incorrect PIN always" while their refresh token
+      // was actually expired.
+      //
+      // Now we detect SessionExpiredError specifically. forceLogout
+      // already ran inside the interceptor · user state is null, so
+      // the auth gate in _layout.tsx will bounce to /auth/login on
+      // the next tick. We just need to NOT flash a wrong-PIN error
+      // before that happens.
+      if (err instanceof SessionExpiredError) {
+        setPinError(false);
+        setPinLoading(false);
+        return;
+      }
+
       // Distinguish "wrong PIN" (status 401 + verified:false) from
       // a token-refresh failure that bubbled up. Both arrive here as
       // a thrown error, but only the first should put the user back
-      // into the retry state · a refresh failure means the parent
-      // forceLogout has already fired and AppLockScreen is about to
-      // unmount, so we deliberately don't flag pinError there.
+      // into the retry state.
       const status = err?.response?.status;
       const body = err?.response?.data;
       const isWrongPin =
@@ -135,7 +194,9 @@ export function AppLockScreen({ onUnlock, userPhone, onForgotPin }: AppLockScree
       // landed) should also surface as "try again" rather than a
       // silent stall · same UX path as wrong-PIN, just with a
       // different cause.
-      const isNetworkError = !err?.response;
+      // Defensive · SessionExpiredError is handled above; any other
+      // missing-response is a genuine network error.
+      const isNetworkError = !err?.response && !(err instanceof SessionExpiredError);
 
       if (isWrongPin || isRateLimited || isNetworkError) {
         setPinError(true);
