@@ -27,10 +27,15 @@ const EXCLUDED_PREFIXES = [
   "auth",
   "onboarding",
 ];
+// 2026-05-17 · `/payment/detail` REMOVED from this list. The user
+// wants the lock screen → unlock to drop them back on the tx detail
+// screen so they can see the live status. Excluded paths are those
+// that are transient by design (confirm = quote-locked, success =
+// one-shot) · the detail page is durable + benefits from auto-
+// refresh via react-query on remount.
 const EXCLUDED_PATHS = [
   "/payment/confirm",
   "/payment/success",
-  "/payment/detail",
 ];
 
 interface LastRouteEnvelope {
