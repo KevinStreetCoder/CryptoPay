@@ -140,10 +140,15 @@ class TestIntasendCollectionClearsStaleFailureReason(TestCase):
         # the collection completion block. Fragile but it's the
         # cleanest pin for a contract whose full integration test
         # would require ~20 mocks.
+        #
+        # 2026-05-17 · path fix · use the module's __file__ rather than
+        # a hard-coded `/app/...` path · CI checks out the repo to
+        # `/home/runner/work/CryptoPay/CryptoPay/backend/` and the
+        # absolute path is brittle across environments. Module
+        # introspection is portable.
         import pathlib
-        src = pathlib.Path(
-            "/app/apps/mpesa/intasend_views.py"
-        ).read_text(encoding="utf-8")
+        from apps.mpesa import intasend_views
+        src = pathlib.Path(intasend_views.__file__).read_text(encoding="utf-8")
 
         # Look for the collection-specific completion line. We use
         # the unique assignment `tx_locked.status = Transaction.Status.COMPLETED`
