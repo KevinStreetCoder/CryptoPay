@@ -2,7 +2,15 @@
   "expo": {
     "name": "Cpay",
     "slug": "cryptopay",
-    "version": "1.1.13",
+    "version": "1.1.14",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/3ca5c56b-30ff-454d-ad81-801f8d888db8",
+      "fallbackToCacheTimeout": 0,
+      "checkAutomatically": "ON_LOAD"
+    },
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -67,7 +75,7 @@
     },
     "android": {
       "package": "ke.co.cryptopay.app",
-      "versionCode": 22,
+      "versionCode": 23,
       "adaptiveIcon": {
         "backgroundColor": "#0B1220",
         "foregroundImage": "./assets/android-icon-foreground.png",
