@@ -519,11 +519,17 @@ def broadcast_withdrawal_task(self, transaction_id: str):
             tx.save(update_fields=["saga_data"])
 
         # Step 2: Broadcast to blockchain
+        # 2026-05-17 · N8 fix · pass fee_amount so the EVM gas-cap
+        # pre-flight inside _broadcast_to_chain can abort if the
+        # estimated on-chain gas would exceed 70% of our collected
+        # fee · prevents an ETH gas spike from turning every
+        # ERC-20 withdrawal into a net-loss.
         tx_hash = _broadcast_to_chain(
             network=network,
             currency=tx.source_currency,
             destination_address=destination_address,
             amount=tx.source_amount,
+            fee_amount_crypto=tx.fee_amount,
         )
 
         # Step 3: Update transaction with tx_hash
@@ -640,7 +646,13 @@ def broadcast_withdrawal_task(self, transaction_id: str):
             raise self.retry(exc=e)
 
 
-def _broadcast_to_chain(network: str, currency: str, destination_address: str, amount: Decimal) -> str:
+def _broadcast_to_chain(
+    network: str,
+    currency: str,
+    destination_address: str,
+    amount: Decimal,
+    fee_amount_crypto: Decimal | None = None,
+) -> str:
     """
     Broadcast a withdrawal transaction to the appropriate blockchain.
 
@@ -873,6 +885,94 @@ def _broadcast_evm(network: str, currency: str, destination_address: str, amount
                 "nonce": nonce,
                 **_build_fee_params(),
             }
+
+        # 2026-05-17 · N8 fix · gas-cap pre-flight.
+        #
+        # Estimate the on-chain gas cost (gas_units × max_fee_per_gas)
+        # and abort the broadcast if it would consume more than 70%
+        # of the fee_amount we collected from the user. Without this,
+        # an ETH gas spike (Mar-2026 hit $40+) turns a 5 USDT
+        # ERC-20 withdrawal fee into a net loss · we'd send the
+        # crypto at our own cost. 70% leaves a 30% margin for slippage
+        # between estimate and the block we actually land in.
+        #
+        # Disable via WITHDRAWAL_GAS_CAP_CHECK=false in .env if a
+        # transient spike legitimately needs to be paid through (rare
+        # · ops decision). Default ON for safety.
+        if (
+            fee_amount_crypto is not None
+            and Decimal(str(fee_amount_crypto)) > 0
+            and getattr(
+                django_settings, "WITHDRAWAL_GAS_CAP_CHECK", True
+            )
+        ):
+            try:
+                fee_params = _build_fee_params()
+                # Effective max gas price per unit · EIP-1559 uses
+                # maxFeePerGas (worst case); legacy uses gasPrice.
+                max_gas_price = (
+                    fee_params.get("maxFeePerGas")
+                    or fee_params.get("gasPrice")
+                    or 0
+                )
+                gas_units = int(tx.get("gas", 0))
+                gas_cost_wei = max_gas_price * gas_units
+                # Convert wei → native units of the chain · for
+                # cost comparison we compare the GAS cost (in native
+                # ETH/MATIC) against fee_amount converted at a fixed
+                # crude conversion ratio · safer to use the actual
+                # crypto/KES rate via RateService but that imports
+                # the rates app from blockchain which we want to
+                # avoid coupling. So we use a conservative comparison:
+                # gas_cost_native (wei → ether) × an estimated
+                # native_to_token_rate vs fee_amount.
+                #
+                # Simpler safer check: for token withdrawals (USDT/USDC)
+                # the fee_amount is already in the SAME unit as `amount`
+                # (USDT). The gas is in native ETH. We compare the
+                # crude USD-equivalent · 1 ETH ≈ 3000 USDT today.
+                # For native ETH withdrawals: gas IS in ETH so we
+                # compare directly.
+                gas_cost_native = Decimal(str(gas_cost_wei)) / Decimal("1e18")
+                fee_crypto_dec = Decimal(str(fee_amount_crypto))
+                if currency in ("USDT", "USDC"):
+                    # 1 ETH ≈ 3000 USDT crude ceiling for the cap
+                    # check · raises false-positives at 1000 ETH/USDT
+                    # but real prices are well above that.
+                    eth_per_token = Decimal(str(
+                        getattr(
+                            django_settings,
+                            "WITHDRAWAL_ETH_PER_TOKEN_CEILING",
+                            "3000",
+                        )
+                    ))
+                    gas_cost_in_token = gas_cost_native * eth_per_token
+                else:
+                    # Native ETH/MATIC · gas is in same unit.
+                    gas_cost_in_token = gas_cost_native
+                threshold = fee_crypto_dec * Decimal("0.7")
+                if gas_cost_in_token > threshold:
+                    raise RuntimeError(
+                        f"ABORT: estimated gas {gas_cost_in_token:.6f} "
+                        f"{currency}-equivalent exceeds 70% of collected "
+                        f"fee {fee_crypto_dec} {currency} "
+                        f"(threshold {threshold:.6f}). Likely gas spike. "
+                        f"Set WITHDRAWAL_GAS_CAP_CHECK=false to bypass."
+                    )
+            except RuntimeError:
+                raise
+            except Exception as gas_check_err:
+                # Estimation itself failed · log + proceed (fail-open
+                # so a temporary RPC blip doesn't permanently block
+                # withdrawals). Sentry will pick this up.
+                logger.warning(
+                    "withdrawal.gas_cap_check.skipped",
+                    extra={
+                        "network": network,
+                        "currency": currency,
+                        "error": str(gas_check_err)[:160],
+                    },
+                )
 
         signed_tx = w3.eth.account.sign_transaction(tx, private_key)
         tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)

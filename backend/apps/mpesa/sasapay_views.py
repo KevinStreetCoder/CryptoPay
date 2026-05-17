@@ -691,6 +691,32 @@ def _process_successful_payment(
     # was missing the same logic.
     if tx.failure_reason:
         tx.failure_reason = ""
+
+    # 2026-05-17 · N1 fix · stash the raw SasaPay callback payload onto
+    # saga_data so the revenue-split block below can extract
+    # `TransactionCharges` (their per-tx cut). Audit finding · prior code
+    # READ `sasapay_callback_payload` but never WROTE it, so BUY
+    # provider_cost was permanently 0 and the FEE wallet over-credited
+    # by the entire SasaPay STK tariff. Stamping happens BEFORE the
+    # booking block reads it · same `tx.save` below.
+    if isinstance(data, dict) and data:
+        sd = dict(tx.saga_data or {})
+        # Strip header dict if SasaPay nested the body weirdly; only
+        # keep flat JSON-safe scalars / nested dicts (drop callables /
+        # bytes). dict() copy avoids mutating the live callback view.
+        try:
+            import json as _json
+            # Round-trip validates it's JSON-safe; falls back to a
+            # filtered shallow-copy on TypeError.
+            sd["sasapay_callback_payload"] = _json.loads(
+                _json.dumps(dict(data), default=str)
+            )
+        except Exception:
+            sd["sasapay_callback_payload"] = {
+                k: str(v) for k, v in data.items()
+                if isinstance(v, (str, int, float, bool))
+            }
+        tx.saga_data = sd
     # 2026-05-09 · the B2B/B2C result callback carries `RecipientName`
     # · the actual business / phone holder name as recorded by M-Pesa.
     # If our pre-flight `account-validation` lookup missed (e.g. SasaPay
@@ -701,7 +727,7 @@ def _process_successful_payment(
     # entity name M-Pesa registered).
     update_fields = [
         "mpesa_receipt", "status", "completed_at",
-        "failure_reason", "updated_at",
+        "failure_reason", "saga_data", "updated_at",
     ]
     callback_recipient = (data.get("RecipientName") or "").strip()
     if callback_recipient and not tx.merchant_name:

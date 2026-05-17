@@ -15,6 +15,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# 2026-05-17 · N3 fix · stamp the git commit SHA into the image so
+# /health/ can return it and ops can detect deploy drift between
+# web/celery/beat containers. The SHA is passed in as a build arg
+# from CI; falls back to "unknown" when built outside CI.
+ARG GIT_SHA=unknown
+RUN echo "$GIT_SHA" > /app/.git-sha
+
 # Create non-root user and ensure writable dirs
 RUN addgroup --system app && adduser --system --ingroup app app && \
     mkdir -p /app/staticfiles /app/media /app/logs && \

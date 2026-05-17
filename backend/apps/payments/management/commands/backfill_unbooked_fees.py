@@ -2,6 +2,23 @@
 Backfill the SystemWallet FEE / PROVIDER_COST / EXCISE balances for
 completed transactions that pre-date the 2026-05-17 fee-booking work.
 
+Known residual not addressed by this backfill (audit N9):
+  Transactions completed before the Spread Option A flip (commit
+  f4f6d25, 2026-05-17 05:46 UTC) baked a 1.5 % spread into
+  `final_rate` rather than adding it explicitly to `total_kes`.
+  `Transaction.fee_amount` for those legacy rows therefore
+  under-reports the true platform take by ~0.15 KES on a KES 1000
+  tx (= 1.5 % × flat_fee). Across the ~5 pre-flip rows the total
+  residual is < KES 1, so we forgive it rather than running a
+  reverse-engineered backfill. If volume grows we'd compute it via:
+
+      true_take = (source_amount × undiscounted_raw_rate)
+                  - (dest_amount + fee_amount + excise_duty_amount)
+      undiscounted_raw_rate = exchange_rate / (1 - 0.015)
+
+  See docs/research/REVENUE-AUDIT-2026-05-17.md (the agent report)
+  for the worked example.
+
 Before 2026-05-17, only the SWAP path booked revenue into
 `SystemWallet(FEE)` · paybill/till/B2C/buy/withdrawal completed but
 stamped `fee_amount` + `excise_duty_amount` only on the Transaction
@@ -76,10 +93,15 @@ class Command(BaseCommand):
         dry_run = options["dry_run"]
         limit = options["limit"]
 
+        # 2026-05-17 · N4 fix · include SWAP transactions whose fees
+        # were never booked into FeeLedgerEntry (the pre-refactor
+        # SWAP path used direct `.balance +=` on SystemWallet with
+        # no ledger entry · audit found 0.03945 USDT stranded).
+        # `book_fee` is idempotent · re-running on already-booked
+        # SWAP txs is a no-op via the LedgerEntry unique constraint.
         candidates = (
             Transaction.objects
             .filter(status="completed", fee_amount__gt=0)
-            .exclude(type="SWAP")  # SWAP path bookings now use book_fee · check
             .order_by("created_at")
         )
         if limit > 0:

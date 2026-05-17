@@ -332,6 +332,132 @@ class WalletService:
         )
 
     @staticmethod
+    @db_transaction.atomic
+    def reverse_system_wallet_booking(
+        wallet_type: str,
+        currency: str,
+        transaction_id,
+        description: str = "",
+        chain: str = "",
+    ) -> FeeLedgerEntry | None:
+        """Reverse a prior credit to a SystemWallet via a balanced
+        DEBIT FeeLedgerEntry · idempotent + audited.
+
+        2026-05-17 · N2 fix · `compensate_convert` runs when the saga
+        unwinds a tx that already booked revenue (e.g. callback fired
+        complete() → fee booked → late anomaly triggers
+        compensate_convert). Without an inverse, FEE / PROVIDER_COST /
+        EXCISE SystemWallet balances would drift higher than the actual
+        net revenue.
+
+        Strategy · look up the prior CREDIT FeeLedgerEntry for this
+        (transaction_id, system_wallet). If found, create a balancing
+        DEBIT entry for the same amount + decrement the SystemWallet
+        balance. Returns the new DEBIT entry, or None if no prior
+        credit existed (no-op · safe to call eagerly).
+
+        Idempotency · the DEBIT shares `transaction_id` but uses a
+        different `entry_type`, so FeeLedgerEntry's UniqueConstraint
+        (tx_id, system_wallet, entry_type) admits both CREDIT and
+        DEBIT once each. Repeated calls return the existing DEBIT
+        without re-debiting.
+        """
+        qs = SystemWallet.objects.select_for_update().filter(
+            wallet_type=wallet_type,
+            currency=currency,
+            is_active=True,
+        )
+        if chain:
+            qs = qs.filter(chain=chain)
+        sw = qs.first()
+        if sw is None:
+            # No wallet · can't have booked, so nothing to reverse.
+            return None
+
+        # Find the prior CREDIT entry (the one we're reversing).
+        credit_entry = FeeLedgerEntry.objects.filter(
+            transaction_id=transaction_id,
+            system_wallet=sw,
+            entry_type=FeeLedgerEntry.EntryType.CREDIT,
+        ).first()
+        if credit_entry is None:
+            # Nothing to reverse · the tx never booked here.
+            return None
+
+        # Idempotency check · DEBIT already exists from a prior call?
+        existing_debit = FeeLedgerEntry.objects.filter(
+            transaction_id=transaction_id,
+            system_wallet=sw,
+            entry_type=FeeLedgerEntry.EntryType.DEBIT,
+        ).first()
+        if existing_debit:
+            return existing_debit
+
+        # Reverse · decrement the SystemWallet by the credited amount,
+        # log a DEBIT entry that closes the loop.
+        amount = credit_entry.amount
+        if sw.balance < amount:
+            # Defensive · shouldn't happen unless an op manually
+            # adjusted the wallet. Log + skip rather than negative.
+            import logging as _logging
+            _logging.getLogger(__name__).error(
+                "wallet.reverse_booking.balance_below_credit",
+                extra={
+                    "tx_id": str(transaction_id),
+                    "wallet_type": wallet_type,
+                    "currency": currency,
+                    "balance": str(sw.balance),
+                    "credit_amount": str(amount),
+                },
+            )
+            return None
+
+        sw.balance -= amount
+        sw.save(update_fields=["balance", "updated_at"])
+        return FeeLedgerEntry.objects.create(
+            transaction_id=transaction_id,
+            system_wallet=sw,
+            entry_type=FeeLedgerEntry.EntryType.DEBIT,
+            amount=amount,
+            balance_after=sw.balance,
+            description=description or (
+                f"Reversal of prior credit · "
+                f"original ledger entry id={credit_entry.id}"
+            ),
+        )
+
+    @staticmethod
+    def unbook_fee(currency: str, transaction_id,
+                   description: str = "") -> FeeLedgerEntry | None:
+        """Reverse a prior `book_fee` credit for the given tx."""
+        return WalletService.reverse_system_wallet_booking(
+            SystemWallet.WalletType.FEE, currency, transaction_id, description,
+        )
+
+    @staticmethod
+    def unbook_provider_cost(currency: str, transaction_id,
+                             description: str = "") -> FeeLedgerEntry | None:
+        return WalletService.reverse_system_wallet_booking(
+            SystemWallet.WalletType.PROVIDER_COST, currency, transaction_id, description,
+        )
+
+    @staticmethod
+    def unbook_excise(currency: str, transaction_id,
+                      description: str = "") -> FeeLedgerEntry | None:
+        return WalletService.reverse_system_wallet_booking(
+            SystemWallet.WalletType.EXCISE, currency, transaction_id, description,
+        )
+
+    @staticmethod
+    def unbook_gas_reserve(currency: str, transaction_id,
+                           description: str = "",
+                           chain: str = "") -> FeeLedgerEntry | None:
+        return WalletService.reverse_system_wallet_booking(
+            SystemWallet.WalletType.GAS_RESERVE, currency, transaction_id,
+            description, chain=chain,
+        )
+
+    @staticmethod
     def book_gas_reserve(currency: str, amount: Decimal, transaction_id,
                          description: str = "", chain: str = "") -> FeeLedgerEntry:
         """Credit the GAS_RESERVE SystemWallet · the portion of a

@@ -156,6 +156,14 @@ class PaymentSaga:
                 self.tx.id,
                 f"Reversal: conversion for tx {self.tx.id}",
             )
+            # 2026-05-17 · N2 fix · if `_book_revenue_split` had already
+            # credited FEE / PROVIDER_COST / EXCISE SystemWallets (e.g.
+            # the callback completed THEN a later anomaly fired
+            # compensate_convert), reverse those bookings here so the
+            # SystemWallet balances don't drift. Idempotent via the new
+            # `WalletService.unbook_fee*` helpers · safe to call even if
+            # no booking ever happened.
+            self._unbook_revenue_split()
             logger.info("compensate_convert.ok_sync", extra={
                 "transaction_id": str(self.tx.id),
                 "wallet_id": str(wallet_id),
@@ -779,7 +787,19 @@ class PaymentSaga:
         try:
             fee_amount = _D(self.tx.fee_amount or 0)
             excise = _D(self.tx.excise_duty_amount or 0)
-            fee_currency = (self.tx.fee_currency or "KES").upper()
+            # 2026-05-17 · N7 fix · empty fee_currency must NOT silently
+            # default to KES · for crypto-side fees (SWAP, withdrawal)
+            # that would mis-route the booking to the KES wallet which
+            # has no balance to credit and silently over-states KES
+            # revenue. Default to `source_currency` (the wallet we
+            # debited the fee from) which is the canonical answer for
+            # ALL tx types except SEND_MPESA where source might be
+            # crypto and the fee was in KES.
+            fee_currency = (
+                self.tx.fee_currency
+                or self.tx.source_currency
+                or "KES"
+            ).upper()
             sd = self.tx.saga_data or {}
 
             # IntaSend captures the per-tx charge on the webhook · we
@@ -863,5 +883,52 @@ class PaymentSaga:
             # gap on the dashboard and can backfill.
             logger.exception(
                 "saga.complete.book_revenue_split_failed",
+                extra={"tx_id": str(self.tx.id)},
+            )
+
+    def _unbook_revenue_split(self) -> None:
+        """Reverse FEE / PROVIDER_COST / EXCISE bookings that the
+        callback's `_book_revenue_split` may have already credited.
+
+        2026-05-17 · N2 fix · called from `compensate_convert` so a
+        late-arriving compensation (e.g. double-settlement reversal)
+        doesn't leave the SystemWallet balances inflated above the
+        true net revenue. Idempotent via the
+        `WalletService.unbook_*` helpers · each looks up the prior
+        CREDIT FeeLedgerEntry and creates a balancing DEBIT only when
+        the credit exists + no prior DEBIT is found. Safe to call
+        eagerly · no-ops when nothing was booked.
+
+        Best-effort wrap · a failure here logs but does NOT re-raise.
+        The compensate path's user-facing crypto credit has already
+        succeeded; surfacing an exception would block the saga and
+        leave the user with a "compensating..." spinner.
+        """
+        try:
+            fee_currency = (self.tx.fee_currency or "KES").upper()
+            tx_id = self.tx.id
+            from apps.wallets.services import WalletService  # noqa: PLC0415
+
+            desc_suffix = (
+                f"· compensate_convert for tx {tx_id} ({self.tx.type})"
+            )
+            WalletService.unbook_fee(
+                currency=fee_currency,
+                transaction_id=tx_id,
+                description=f"Reverse FEE booking {desc_suffix}",
+            )
+            WalletService.unbook_provider_cost(
+                currency=fee_currency,
+                transaction_id=tx_id,
+                description=f"Reverse PROVIDER_COST {desc_suffix}",
+            )
+            WalletService.unbook_excise(
+                currency=fee_currency,
+                transaction_id=tx_id,
+                description=f"Reverse EXCISE {desc_suffix}",
+            )
+        except Exception:
+            logger.exception(
+                "saga.compensate.unbook_revenue_split_failed",
                 extra={"tx_id": str(self.tx.id)},
             )

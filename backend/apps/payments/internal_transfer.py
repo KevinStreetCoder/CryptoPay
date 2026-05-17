@@ -5,7 +5,12 @@ another Cpay user's wallet WITHOUT touching SasaPay or M-Pesa.
 
 Why:
   - Instant settlement · no callback wait
-  - Zero biller fees · just our platform fee
+  - Zero biller fees AND zero platform fee today · the sender's
+    full crypto amount is moved to the recipient (2026-05-17 audit
+    finding N6 · prior docstring said "just our platform fee" but
+    the code charges nothing). Intentional for the Beta cohort to
+    reduce user friction; revisit when volume justifies the
+    margin.
   - Works for cross-Cpay payments where both sides have wallets
   - Privacy · the recipient sees a Cpay-internal flag, not a phone
 

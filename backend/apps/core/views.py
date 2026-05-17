@@ -73,10 +73,32 @@ class HealthCheckView(APIView):
 
         status_code = 200 if overall_healthy else 503
 
+        # 2026-05-17 · N3 fix · expose git commit SHA + image fingerprint
+        # so deploys can be SHA-pinned + a CI assert can fail the
+        # rollout if web/celery containers report different SHAs.
+        # `/app/.git-sha` is written by the Dockerfile RUN step at
+        # image build time; falls back to "unknown" in dev or when
+        # the file is absent.
+        deploy = {}
+        try:
+            import os as _os
+            sha_path = "/app/.git-sha"
+            if _os.path.exists(sha_path):
+                with open(sha_path, "r") as f:
+                    deploy["git_sha"] = f.read().strip()[:40]
+            else:
+                deploy["git_sha"] = "unknown"
+            deploy["fingerprint_path"] = sha_path if _os.path.exists(sha_path) else None
+            # Process role · helps ops compare web vs celery vs beat.
+            deploy["role"] = _os.environ.get("CPAY_ROLE", "web")
+        except Exception as e:
+            deploy["error"] = str(e)[:160]
+
         return Response(
             {
                 "status": "healthy" if overall_healthy else "degraded",
                 "checks": checks,
+                "deploy": deploy,
             },
             status=status_code,
         )

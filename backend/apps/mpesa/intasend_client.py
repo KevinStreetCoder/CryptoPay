@@ -477,6 +477,72 @@ class IntaSendClient:
                 return _hit_collection()
             raise
 
+    # ── Pre-flight account-name lookup ───────────────────────────────
+
+    def lookup_paybill(self, paybill: str, account: str = "") -> dict:
+        """Validate a paybill + (optional) account number BEFORE
+        initiating a B2B disbursement.
+
+        2026-05-17 · N5 fix · audit found we never pre-flight a
+        paybill / till. A user typing the wrong number hits the B2B
+        path, IntaSend charges us ~KES 10 for the failed attempt,
+        and we eat the loss while they wait for the M-Pesa
+        reversal. Calling this BEFORE `pay_paybill` returns the
+        merchant's M-Pesa-registered name (so the mobile PIN modal
+        can show "Paying KENYA POWER PREPAID" not "Paying 888880").
+
+        Returns a dict with at least:
+            {"account_name": "KENYA POWER PREPAID", "valid": True}
+        Raises `IntaSendError` on a 4xx · caller should treat that
+        as "paybill invalid · user mistyped".
+
+        Cached 300s in Redis · the same paybill/account is queried
+        on every payment of the same biller, and IntaSend rate-limits
+        the validation endpoint at ~30 req/min.
+        """
+        from django.core.cache import cache as _cache  # noqa: PLC0415
+        cache_key = f"intasend:paybill_lookup:{paybill}:{account or 'noacc'}"
+        cached = _cache.get(cache_key)
+        if cached is not None:
+            return cached
+        payload = {"account_number": str(paybill)}
+        if account:
+            payload["account_reference"] = str(account)
+        # The validation endpoint path · IntaSend docs name it
+        # `/api/v1/send-money/validate/` (synonyms: `account-validate/`
+        # in some tier docs). Try the canonical one first.
+        try:
+            resp = self._post("/api/v1/send-money/validate/", payload)
+        except IntaSendError as e:
+            if "404" in str(e) or "not found" in str(e).lower():
+                resp = self._post("/api/v1/send-money/account-validate/", payload)
+            else:
+                raise
+        # Normalise the shape · IntaSend returns
+        #   {"account_name": "...", "is_valid": true, "provider": "MPESA-B2B"}
+        # or in some legacy tiers {"name": "...", "valid": true}.
+        out = {
+            "account_name": (
+                resp.get("account_name")
+                or resp.get("name")
+                or ""
+            ),
+            "valid": bool(
+                resp.get("is_valid", resp.get("valid", True))
+            ),
+            "provider": resp.get("provider") or "MPESA-B2B",
+            "raw": resp,
+        }
+        _cache.set(cache_key, out, timeout=300)
+        return out
+
+    def lookup_till(self, till: str) -> dict:
+        """Same shape as `lookup_paybill` but for a till number.
+
+        Returns `{"account_name": "...", "valid": ..., ...}`.
+        """
+        return self.lookup_paybill(paybill=till)
+
     # ── Reversal · NOT SUPPORTED ─────────────────────────────────────
 
     def reversal(self, transaction_id: str, amount: int = 0, remarks: str = "") -> dict:
