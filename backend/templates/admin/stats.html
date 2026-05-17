@@ -433,10 +433,11 @@
         <div class="kpi green">
             <div class="kpi-header">
                 <div class="kpi-icon"><i data-lucide="banknote" style="color:var(--primary)"></i></div>
+                <span class="trend flat">{{ fee_ledger_count }} bookings</span>
             </div>
-            <div class="kpi-value" style="font-size:22px">KES {{ total_revenue|floatformat:0 }}</div>
-            <div class="kpi-label">Total Revenue (Fees)</div>
-            <div class="kpi-sub">24h: KES {{ rev_24h|floatformat:0 }} · 7d: KES {{ rev_7d|floatformat:0 }}</div>
+            <div class="kpi-value" style="font-size:22px">KES {{ rev_kes_equivalent|floatformat:2 }}</div>
+            <div class="kpi-label">Revenue (KES equiv · all currencies)</div>
+            <div class="kpi-sub">24h: KES {{ rev_24h|floatformat:0 }} · 7d: KES {{ rev_7d|floatformat:0 }} · 30d: KES {{ rev_30d|floatformat:0 }}</div>
         </div>
 
         <div class="kpi red">
@@ -507,6 +508,77 @@
     <div class="milestone-section">
         <div class="milestone-title"><i data-lucide="target" style="width:18px;height:18px;color:var(--primary)"></i> Growth Milestones</div>
         <div class="milestone-grid" id="milestones"></div>
+    </div>
+
+    <!-- ═══ REVENUE ANALYSIS (2026-05-17 · merged from /admin/revenue/) ═══ -->
+    <div class="milestone-section" style="margin-top:24px">
+        <div class="milestone-title">
+            <i data-lucide="trending-up" style="width:18px;height:18px;color:var(--primary)"></i>
+            Revenue Analysis · earned-vs-booked, per currency, per period
+        </div>
+
+        <!-- Revenue KPI strip · period totals + KRA excise + reconciliation health -->
+        <div class="kpi-grid" style="margin-top:16px">
+            <div class="kpi green">
+                <div class="kpi-header">
+                    <div class="kpi-icon"><i data-lucide="receipt-text" style="color:var(--primary)"></i></div>
+                </div>
+                <div class="kpi-value" style="font-size:22px">KES <span id="rev-headline-kes">—</span></div>
+                <div class="kpi-label">Lifetime Revenue (KES equivalent)</div>
+                <div class="kpi-sub" id="rev-headline-sub">—</div>
+            </div>
+
+            <div class="kpi amber">
+                <div class="kpi-header">
+                    <div class="kpi-icon"><i data-lucide="landmark" style="color:var(--accent)"></i></div>
+                </div>
+                <div class="kpi-value" style="font-size:22px">KES <span id="rev-excise-kes">—</span></div>
+                <div class="kpi-label">Excise duty owed to KRA</div>
+                <div class="kpi-sub">10 % of (spread + flat) on every fiat tx · remit per VASP Act 2025</div>
+            </div>
+
+            <div class="kpi blue">
+                <div class="kpi-header">
+                    <div class="kpi-icon"><i data-lucide="check-circle-2" style="color:var(--info)"></i></div>
+                    <span class="trend" id="rev-recon-badge"></span>
+                </div>
+                <div class="kpi-value" style="font-size:22px" id="rev-recon-status">—</div>
+                <div class="kpi-label">Earned-vs-booked reconciliation</div>
+                <div class="kpi-sub" id="rev-recon-sub">—</div>
+            </div>
+
+            <div class="kpi purple">
+                <div class="kpi-header">
+                    <div class="kpi-icon"><i data-lucide="layers-3" style="color:var(--purple)"></i></div>
+                </div>
+                <div class="kpi-value" style="font-size:22px"><span id="rev-tx-count">—</span></div>
+                <div class="kpi-label">Revenue-generating txs</div>
+                <div class="kpi-sub" id="rev-tx-count-sub">—</div>
+            </div>
+        </div>
+
+        <!-- Per-currency table + per-tx-type chart -->
+        <div class="charts-grid" style="margin-top:18px">
+            <div class="chart-card">
+                <div class="chart-title"><span class="dot green"></span>Revenue by Currency · lifetime</div>
+                <div class="table-wrap" id="rev-by-currency-table"></div>
+            </div>
+
+            <div class="chart-card">
+                <div class="chart-title"><span class="dot blue"></span>Revenue by Tx Type · with per-tx margin</div>
+                <div class="chart-container" id="rev-by-type-chart"></div>
+            </div>
+
+            <div class="chart-card full-width">
+                <div class="chart-title"><span class="dot amber"></span>Revenue Trend · 24h vs 7d vs 30d</div>
+                <div class="chart-container" id="rev-trend-chart"></div>
+            </div>
+
+            <div class="chart-card full-width">
+                <div class="chart-title"><span class="dot purple"></span>Reconciliation · earned vs booked per currency</div>
+                <div class="table-wrap" id="rev-reconciliation-table"></div>
+            </div>
+        </div>
     </div>
 
     <!-- ═══ CHARTS ════════════════════════════════════════════ -->
@@ -623,6 +695,14 @@ const typeBreakdown      = {{ type_breakdown_json|safe }};
 const aumByTier          = {{ aum_by_tier_json|safe }};
 const highVelocityUsers  = {{ high_velocity_json|safe }};
 
+// 2026-05-17 · revenue analytics (folded from former /admin/revenue/)
+const revLifetime        = {{ rev_lifetime_json|safe }};
+const revPeriods         = {{ rev_periods_json|safe }};
+const revByType          = {{ rev_by_type_json|safe }};
+const revReconciliation  = {{ rev_reconciliation_json|safe }};
+const revKesEquivalent   = {{ rev_kes_equivalent }};
+const feeLedgerCount     = {{ fee_ledger_count }};
+
 // Render AUM-by-tier row — simple data pills, no chart library needed.
 (function renderAumByTier() {
   const row = document.getElementById('aum-by-tier-row');
@@ -645,6 +725,260 @@ const highVelocityUsers  = {{ high_velocity_json|safe }};
   `).join('');
 })();
 
+// 2026-05-17 · revenue renderer DEFERRED to after `C` palette +
+// showTip/hideTip declarations below. See `renderRevenueAnalysis()`
+// near the bottom of this script.
+function renderRevenueAnalysis() {
+  const fmtKES = v => 'KES ' + Number(v).toLocaleString('en-KE', {
+    maximumFractionDigits: 2, minimumFractionDigits: 2,
+  });
+  const fmtNum = v => Number(v).toLocaleString('en-KE', {
+    maximumFractionDigits: 8,
+  });
+
+  // ── KPI tiles ───────────────────────────────────────────────
+  const kesBlock = revLifetime['KES'] || { fee: 0, excise: 0, tx_count: 0 };
+  let totalTxCount = 0;
+  Object.values(revLifetime || {}).forEach(b => totalTxCount += (b.tx_count || 0));
+
+  document.getElementById('rev-headline-kes').textContent =
+    Number(revKesEquivalent).toLocaleString('en-KE', {
+      maximumFractionDigits: 2, minimumFractionDigits: 2,
+    });
+  const ccyCount = Object.keys(revLifetime).filter(c => c !== 'UNKNOWN').length;
+  document.getElementById('rev-headline-sub').textContent =
+    ccyCount + ' currencies · ' + feeLedgerCount + ' ledger entries';
+
+  document.getElementById('rev-excise-kes').textContent =
+    Number(kesBlock.excise || 0).toLocaleString('en-KE', {
+      maximumFractionDigits: 2, minimumFractionDigits: 2,
+    });
+
+  // Reconciliation health · gap=0 across all currencies = green.
+  let maxGap = 0;
+  let gappedCcy = null;
+  (revReconciliation || []).forEach(r => {
+    const gap = Math.abs(Number(r.gap || 0));
+    if (gap > maxGap) { maxGap = gap; gappedCcy = r.currency; }
+  });
+  const reconStatus = document.getElementById('rev-recon-status');
+  const reconBadge = document.getElementById('rev-recon-badge');
+  const reconSub = document.getElementById('rev-recon-sub');
+  if (maxGap < 0.0001) {
+    reconStatus.textContent = 'CLOSED';
+    reconStatus.style.color = 'var(--primary)';
+    reconBadge.className = 'trend up';
+    reconBadge.textContent = '✓ balanced';
+    reconSub.textContent = 'every currency · earned == booked';
+  } else {
+    reconStatus.textContent = 'GAP';
+    reconStatus.style.color = 'var(--danger)';
+    reconBadge.className = 'trend down';
+    reconBadge.textContent = '⚠ gap';
+    reconSub.textContent = 'largest: ' + fmtNum(maxGap) + ' ' + (gappedCcy || '');
+  }
+
+  document.getElementById('rev-tx-count').textContent = totalTxCount;
+  const last24h = revPeriods.last_24h || {};
+  let count24h = 0;
+  Object.values(last24h).forEach(b => count24h += (b.tx_count || 0));
+  document.getElementById('rev-tx-count-sub').textContent =
+    count24h + ' in last 24h · ' + (kesBlock.tx_count || 0) + ' KES-denominated';
+
+  // ── Per-currency table ──────────────────────────────────────
+  const ccyTable = document.getElementById('rev-by-currency-table');
+  const ccyRows = Object.entries(revLifetime)
+    .filter(([ccy]) => ccy !== 'UNKNOWN')
+    .map(([ccy, b]) => `
+      <tr>
+        <td style="font-weight:600;color:var(--text)">${ccy}</td>
+        <td style="font-variant-numeric:tabular-nums">${fmtNum(b.fee)}</td>
+        <td style="font-variant-numeric:tabular-nums;color:var(--accent)">${fmtNum(b.excise)}</td>
+        <td style="font-variant-numeric:tabular-nums;color:var(--primary)">${fmtNum(b.total)}</td>
+        <td style="text-align:right">${b.tx_count}</td>
+      </tr>
+    `).join('');
+  ccyTable.innerHTML = ccyRows
+    ? `<table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead style="background:rgba(255,255,255,0.03)">
+          <tr>
+            <th style="text-align:left;padding:8px 10px;color:var(--text-muted);font-size:11px;letter-spacing:0.5px;text-transform:uppercase">Currency</th>
+            <th style="text-align:left;padding:8px 10px;color:var(--text-muted);font-size:11px;letter-spacing:0.5px;text-transform:uppercase">Net Fee</th>
+            <th style="text-align:left;padding:8px 10px;color:var(--text-muted);font-size:11px;letter-spacing:0.5px;text-transform:uppercase">Excise (KRA)</th>
+            <th style="text-align:left;padding:8px 10px;color:var(--text-muted);font-size:11px;letter-spacing:0.5px;text-transform:uppercase">Total</th>
+            <th style="text-align:right;padding:8px 10px;color:var(--text-muted);font-size:11px;letter-spacing:0.5px;text-transform:uppercase">Txs</th>
+          </tr>
+        </thead>
+        <tbody>${ccyRows}</tbody>
+      </table>`
+    : '<div style="color:var(--text-muted);padding:14px;font-size:12px">No revenue yet.</div>';
+
+  // ── Per-tx-type bar chart ────────────────────────────────────
+  (function chartByType() {
+    const data = (revByType || []).filter(r => r.tx_type !== 'INTERNAL_TRANSFER' && Number(r.fee || 0) > 0);
+    if (!data.length) return;
+    const container = d3.select('#rev-by-type-chart');
+    container.selectAll('*').remove();
+    const width = container.node().clientWidth || 400;
+    const height = 240;
+    const margin = { top: 12, right: 18, bottom: 56, left: 56 };
+    const w = width - margin.left - margin.right;
+    const h = height - margin.top - margin.bottom;
+    const svg = container.append('svg').attr('width', width).attr('height', height)
+      .append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+    const x = d3.scaleBand()
+      .domain(data.map(d => d.tx_type))
+      .range([0, w]).padding(0.35);
+    const y = d3.scaleLinear()
+      .domain([0, d3.max(data, d => Number(d.total_revenue)) * 1.15])
+      .nice().range([h, 0]);
+    svg.append('g').attr('class', 'grid')
+      .call(d3.axisLeft(y).ticks(5).tickSize(-w).tickFormat(''));
+    svg.selectAll('rect.bar')
+      .data(data).enter().append('rect')
+      .attr('class', 'bar')
+      .attr('x', d => x(d.tx_type))
+      .attr('width', x.bandwidth())
+      .attr('y', d => y(Number(d.total_revenue)))
+      .attr('height', d => h - y(Number(d.total_revenue)))
+      .attr('fill', C.primary)
+      .attr('rx', 4)
+      .style('cursor', 'pointer')
+      .on('mouseover', (e, d) => {
+        const avgPerTx = Number(d.total_revenue) / Math.max(1, d.tx_count);
+        showTip(e,
+          `<div class="tooltip-label">${d.tx_type}</div>` +
+          `<div class="tooltip-value">${fmtNum(d.total_revenue)} ${d.fee_currency}</div>` +
+          `<div style="color:var(--text-muted);font-size:12px">${d.tx_count} txs · ${fmtNum(avgPerTx)}/tx avg</div>` +
+          `<div style="color:var(--text-muted);font-size:11px">Volume: ${fmtNum(d.dest_volume)}</div>`
+        );
+      })
+      .on('mouseout', hideTip);
+    svg.append('g').attr('class', 'axis')
+      .attr('transform', `translate(0,${h})`)
+      .call(d3.axisBottom(x))
+      .selectAll('text').attr('transform', 'rotate(-30)')
+      .style('text-anchor', 'end').style('font-size', '10px');
+    svg.append('g').attr('class', 'axis')
+      .call(d3.axisLeft(y).ticks(5).tickFormat(d => Number(d).toLocaleString('en-KE')));
+  })();
+
+  // ── Period trend chart · 24h vs 7d vs 30d (grouped bars) ────
+  (function chartTrend() {
+    const series = ['last_24h', 'last_7d', 'last_30d'];
+    const ccys = ['KES', 'USDT', 'USDC', 'BTC', 'ETH', 'SOL'];
+    // Stack data: for each currency, the fee in each period.
+    const data = ccys
+      .map(ccy => ({
+        ccy,
+        last_24h: Number((revPeriods.last_24h[ccy] || {}).fee || 0),
+        last_7d:  Number((revPeriods.last_7d[ccy] || {}).fee || 0),
+        last_30d: Number((revPeriods.last_30d[ccy] || {}).fee || 0),
+      }))
+      .filter(d => d.last_24h + d.last_7d + d.last_30d > 0);
+
+    const container = d3.select('#rev-trend-chart');
+    container.selectAll('*').remove();
+    if (!data.length) {
+      container.html('<div style="color:var(--text-muted);padding:14px;font-size:12px">No revenue in any period.</div>');
+      return;
+    }
+    const width = container.node().clientWidth || 700;
+    const height = 260;
+    const margin = { top: 18, right: 18, bottom: 50, left: 64 };
+    const w = width - margin.left - margin.right;
+    const h = height - margin.top - margin.bottom;
+    const svg = container.append('svg').attr('width', width).attr('height', height)
+      .append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+    const x0 = d3.scaleBand().domain(data.map(d => d.ccy)).range([0, w]).padding(0.2);
+    const x1 = d3.scaleBand().domain(series).range([0, x0.bandwidth()]).padding(0.06);
+    const yMax = d3.max(data, d => Math.max(d.last_24h, d.last_7d, d.last_30d));
+    const y = d3.scaleLinear().domain([0, yMax * 1.15]).nice().range([h, 0]);
+    const periodColors = { last_24h: C.primary, last_7d: C.info, last_30d: C.purple };
+    const periodLabels = { last_24h: '24h', last_7d: '7d', last_30d: '30d' };
+
+    svg.append('g').attr('class', 'grid')
+      .call(d3.axisLeft(y).ticks(5).tickSize(-w).tickFormat(''));
+
+    const groups = svg.selectAll('g.group').data(data).enter().append('g')
+      .attr('class', 'group')
+      .attr('transform', d => `translate(${x0(d.ccy)},0)`);
+
+    series.forEach(key => {
+      groups.append('rect')
+        .attr('x', x1(key))
+        .attr('width', x1.bandwidth())
+        .attr('y', d => y(d[key]))
+        .attr('height', d => h - y(d[key]))
+        .attr('fill', periodColors[key])
+        .attr('rx', 3)
+        .style('cursor', 'pointer')
+        .on('mouseover', (e, d) => showTip(e,
+          `<div class="tooltip-label">${d.ccy} · ${periodLabels[key]}</div>` +
+          `<div class="tooltip-value">${fmtNum(d[key])}</div>`))
+        .on('mouseout', hideTip);
+    });
+
+    svg.append('g').attr('class', 'axis')
+      .attr('transform', `translate(0,${h})`)
+      .call(d3.axisBottom(x0));
+    svg.append('g').attr('class', 'axis')
+      .call(d3.axisLeft(y).ticks(5).tickFormat(d => Number(d).toLocaleString('en-KE')));
+
+    // Legend.
+    const legend = svg.append('g').attr('transform', `translate(0,${h + 32})`);
+    series.forEach((key, i) => {
+      const g = legend.append('g').attr('transform', `translate(${i * 80},0)`);
+      g.append('rect').attr('width', 10).attr('height', 10).attr('fill', periodColors[key]).attr('rx', 2);
+      g.append('text').attr('x', 16).attr('y', 9)
+        .style('font-size', '11px').style('fill', 'var(--text-muted)')
+        .text(periodLabels[key]);
+    });
+  })();
+
+  // ── Reconciliation table ────────────────────────────────────
+  const reconTable = document.getElementById('rev-reconciliation-table');
+  const reconRows = (revReconciliation || [])
+    .filter(r => r.currency !== 'UNKNOWN')
+    .map(r => {
+      const gap = Number(r.gap || 0);
+      const isClosed = Math.abs(gap) < 0.0001;
+      return `
+        <tr>
+          <td style="font-weight:600">${r.currency}</td>
+          <td style="font-variant-numeric:tabular-nums">${fmtNum(r.earned)}</td>
+          <td style="font-variant-numeric:tabular-nums">${fmtNum(r.booked_fee)}</td>
+          <td style="font-variant-numeric:tabular-nums;color:${isClosed ? 'var(--primary)' : 'var(--danger)'}">${fmtNum(gap)}</td>
+          <td style="font-variant-numeric:tabular-nums;color:var(--accent)">${fmtNum(r.excise_owed)}</td>
+          <td style="font-variant-numeric:tabular-nums;color:var(--info)">${fmtNum(r.excise_booked)}</td>
+          <td style="font-variant-numeric:tabular-nums;color:var(--text-muted)">${fmtNum(r.provider_cost_booked)}</td>
+          <td>
+            <span class="trend ${isClosed ? 'up' : 'down'}" style="font-size:10px">
+              ${isClosed ? '✓ balanced' : '⚠ gap'}
+            </span>
+          </td>
+        </tr>`;
+    }).join('');
+  reconTable.innerHTML = reconRows
+    ? `<table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead style="background:rgba(255,255,255,0.03)">
+          <tr>
+            <th style="text-align:left;padding:8px 10px;color:var(--text-muted);font-size:11px;letter-spacing:0.5px;text-transform:uppercase">Currency</th>
+            <th style="text-align:left;padding:8px 10px;color:var(--text-muted);font-size:11px;letter-spacing:0.5px;text-transform:uppercase">Earned (tx records)</th>
+            <th style="text-align:left;padding:8px 10px;color:var(--text-muted);font-size:11px;letter-spacing:0.5px;text-transform:uppercase">Booked (fee wallet)</th>
+            <th style="text-align:left;padding:8px 10px;color:var(--text-muted);font-size:11px;letter-spacing:0.5px;text-transform:uppercase">Gap</th>
+            <th style="text-align:left;padding:8px 10px;color:var(--text-muted);font-size:11px;letter-spacing:0.5px;text-transform:uppercase">Excise owed</th>
+            <th style="text-align:left;padding:8px 10px;color:var(--text-muted);font-size:11px;letter-spacing:0.5px;text-transform:uppercase">Excise booked</th>
+            <th style="text-align:left;padding:8px 10px;color:var(--text-muted);font-size:11px;letter-spacing:0.5px;text-transform:uppercase">Provider cost</th>
+            <th style="text-align:left;padding:8px 10px;color:var(--text-muted);font-size:11px;letter-spacing:0.5px;text-transform:uppercase">Status</th>
+          </tr>
+        </thead>
+        <tbody>${reconRows}</tbody>
+      </table>`
+    : '<div style="color:var(--text-muted);padding:14px;font-size:12px">No reconciliation data.</div>';
+}
+
 // ── Colors ────────────────────────────────────────────────────────────
 const C = { primary: '#10B981', accent: '#F59E0B', danger: '#EF4444', info: '#3B82F6', purple: '#8B5CF6', teal: '#14B8A6', pink: '#EC4899', orange: '#F97316', cyan: '#06B6D4' };
 const PALETTE = [C.primary, C.accent, C.info, C.purple, C.teal, C.pink, C.orange, C.danger, C.cyan];
@@ -662,6 +996,10 @@ function hideTip() { tooltip.classed('visible', false); }
 
 function fmt(n) { return Number(n).toLocaleString('en-KE', { maximumFractionDigits: 2 }); }
 function fmtShort(n) { return n >= 1e6 ? (n/1e6).toFixed(1)+'M' : n >= 1e3 ? (n/1e3).toFixed(1)+'K' : n.toString(); }
+
+// 2026-05-17 · Now that C / showTip / hideTip are declared, kick off
+// the Revenue Analysis renderer that was deferred above.
+try { renderRevenueAnalysis(); } catch (e) { console.error('renderRevenueAnalysis failed', e); }
 
 // ── Trend Cards ───────────────────────────────────────────────────────
 function renderTrend(id, data, label) {

@@ -11,7 +11,6 @@ from apps.core.admin_views import (
     admin_stats_dashboard,
     admin_sms_health,
     admin_float_balances,
-    admin_revenue_dashboard,
 )
 from apps.core.admin_totp_views import admin_totp_setup, admin_totp_verify
 from apps.core.media_views import ProtectedMediaView, public_media_forbidden
@@ -89,16 +88,9 @@ urlpatterns = [
         admin_float_balances,
         name="admin-float-balances",
     ),
-    # 2026-05-17 · revenue dashboard. Sums Transaction.fee_amount +
-    # excise_duty across completed txs, grouped by period / type /
-    # currency. Surfaces the "earned-vs-booked" gap (Transaction
-    # records show revenue that wasn't moved into SystemWallet.FEE
-    # because only the SWAP path is wired into the fee ledger today).
-    path(
-        f"{_admin_prefix}revenue/",
-        admin_revenue_dashboard,
-        name="admin-revenue",
-    ),
+    # 2026-05-17 · /admin/revenue/ retired · folded into /admin/stats/
+    # as the "Revenue Analysis" section. One canonical admin dashboard
+    # instead of two siblings.
     # D10 · admin TOTP enrolment + verify pages. Mounted OUTSIDE the
     # obfuscated admin prefix so the AdminTOTPRequiredMiddleware can
     # redirect to them without bouncing the user through the IP allow-
