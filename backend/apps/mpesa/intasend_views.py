@@ -409,9 +409,14 @@ def _handle_collection_event(payload: dict) -> dict:
         tx_locked.status = Transaction.Status.COMPLETED
         tx_locked.mpesa_receipt = payload.get("mpesa_reference") or ""
         tx_locked.completed_at = timezone.now()
-        tx_locked.save(update_fields=[
-            "status", "mpesa_receipt", "completed_at", "updated_at",
-        ])
+        # 2026-05-17 · clear stale failure_reason from in-flight
+        # status-poll · same fix as sasapay_views (tx 052fc840 showed
+        # "Completed" + red "Failure Reason" simultaneously).
+        update_fields = ["status", "mpesa_receipt", "completed_at", "updated_at"]
+        if tx_locked.failure_reason:
+            tx_locked.failure_reason = ""
+            update_fields.append("failure_reason")
+        tx_locked.save(update_fields=update_fields)
 
         # BUY flow: credit the user's crypto wallet now that fiat is in.
         # PaymentSaga.complete() also books the revenue split into

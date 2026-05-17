@@ -682,6 +682,15 @@ def _process_successful_payment(
     tx.mpesa_receipt = trans_code
     tx.status = Transaction.Status.COMPLETED
     tx.completed_at = timezone.now()
+    # 2026-05-17 · clear any stale failure_reason from the in-flight
+    # status-poll path. Tx 052fc840 surfaced this · the screen showed
+    # "Completed" alongside a red "Failure Reason: SasaPay: [404] no
+    # description" because the cron's 404 poll wrote failure_reason
+    # before the actual completion callback overrode status. The
+    # saga.complete() path clears this; this direct-completion path
+    # was missing the same logic.
+    if tx.failure_reason:
+        tx.failure_reason = ""
     # 2026-05-09 · the B2B/B2C result callback carries `RecipientName`
     # · the actual business / phone holder name as recorded by M-Pesa.
     # If our pre-flight `account-validation` lookup missed (e.g. SasaPay
@@ -690,7 +699,10 @@ def _process_successful_payment(
     # overwrite a value we already resolved · the pre-flight name is
     # often more recognisable to the customer (trade name vs the legal
     # entity name M-Pesa registered).
-    update_fields = ["mpesa_receipt", "status", "completed_at", "updated_at"]
+    update_fields = [
+        "mpesa_receipt", "status", "completed_at",
+        "failure_reason", "updated_at",
+    ]
     callback_recipient = (data.get("RecipientName") or "").strip()
     if callback_recipient and not tx.merchant_name:
         tx.merchant_name = callback_recipient[:120]
