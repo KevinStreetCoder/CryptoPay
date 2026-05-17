@@ -96,11 +96,28 @@ def auto_rebalance_utility():
         if needed <= 0:
             return {"error": "working_account_empty", "utility": str(util_bal)}
 
+    # 2026-05-17 · SasaPay's fund-movement endpoint REJECTS amounts
+    # with more than 2 decimal places (`{"error":{"amount":["Ensure
+    # that there are no more than 2 decimal places."]}}`). Floor (not
+    # round-half-up) so we never accidentally move 0.01 KES more than
+    # Working actually has. Using ROUND_DOWN on the Decimal preserves
+    # the value through float() without binary-fraction artefacts.
+    from decimal import ROUND_DOWN as _RD
+    needed_2dp = needed.quantize(Decimal("0.01"), rounding=_RD)
+    if needed_2dp <= 0:
+        return {
+            "skipped": "rounded_to_zero",
+            "raw_needed": str(needed),
+            "utility": str(util_bal),
+        }
+
     try:
-        result = client.move_funds_to_utility(amount=float(needed))
+        result = client.move_funds_to_utility(amount=float(needed_2dp))
     except Exception as e:
-        logger.exception("auto_rebalance.move_failed amount=%s", needed)
-        return {"error": str(e)[:200], "amount": str(needed)}
+        logger.exception("auto_rebalance.move_failed amount=%s", needed_2dp)
+        return {"error": str(e)[:200], "amount": str(needed_2dp)}
+    # Update `needed` so the log line below reflects what we actually moved
+    needed = needed_2dp
 
     logger.info(
         "auto_rebalance.moved · amount=%s working_was=%s utility_was=%s",

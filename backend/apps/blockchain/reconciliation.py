@@ -142,6 +142,45 @@ def reconcile_deposit_addresses(chain: str) -> list[dict]:
 
         if abs(diff) > tolerance:
             disc_type = "SURPLUS" if diff > 0 else "DEFICIT"
+
+            # 2026-05-17 · awaiting-sweep guard · downgrade the CRITICAL
+            # alert when the "deficit" is just a deposit that hasn't
+            # been swept yet. Without this, a healthy deposit-then-
+            # sweep cycle fires a CRITICAL "possible unauthorized
+            # outflow" alert every 5 min for the ~few-minute gap
+            # between deposit confirmation and SweepOrder reaching
+            # CREDITED status (user report 2026-05-17 ·
+            # `TXJcvi7wqe2sUYjK83bEFMQ8GHG1QbrU4q` user
+            # `500602d8-...` got flagged repeatedly while the 7.8797
+            # USDT awaited sweep).
+            #
+            # Detection · an in-flight SweepOrder (PENDING / ESTIMATING /
+            # SUBMITTED / CONFIRMING / CONFIRMED) whose amount equals
+            # the diff means the funds are accounted for, just not
+            # yet in their final home. Downgrade to INFO + tag the
+            # discrepancy so the dashboard can render it differently.
+            awaiting_sweep = False
+            if disc_type == "DEFICIT":
+                pending_amount = (
+                    SweepOrder.objects.filter(
+                        chain=chain,
+                        from_address=address,
+                        currency=currency,
+                        status__in=[
+                            SweepOrder.Status.PENDING,
+                            SweepOrder.Status.ESTIMATING,
+                            SweepOrder.Status.SUBMITTED,
+                            SweepOrder.Status.CONFIRMING,
+                            SweepOrder.Status.CONFIRMED,
+                        ],
+                    ).aggregate(total=Sum("amount"))["total"]
+                    or Decimal("0")
+                )
+                # Allow tolerance · sweep amounts can differ slightly
+                # from the original deposit (gas-debit on EVM, etc.).
+                if pending_amount > 0 and abs(pending_amount - abs(diff)) <= tolerance:
+                    awaiting_sweep = True
+
             discrepancy = {
                 "type": disc_type,
                 "chain": chain,
@@ -151,9 +190,24 @@ def reconcile_deposit_addresses(chain: str) -> list[dict]:
                 "expected": str(expected_balance),
                 "actual": str(actual_balance),
                 "difference": str(diff),
+                "awaiting_sweep": awaiting_sweep,
             }
-            discrepancies.append(discrepancy)
 
+            # Only add to discrepancies + page ops on REAL deficits ·
+            # awaiting-sweep cases log at INFO level so ops can audit
+            # via Grafana but don't get paged.
+            if awaiting_sweep:
+                logger.info(
+                    f"RECONCILIATION DEFICIT (awaiting-sweep · benign): "
+                    f"{chain} {currency} address={address[:12]}... "
+                    f"expected={expected_balance}, actual={actual_balance}, "
+                    f"diff={diff} · in-flight sweep covers it"
+                )
+                # Skip adding to discrepancies · prevents the per-tick
+                # CRITICAL alert pipeline from firing for this case.
+                continue
+
+            discrepancies.append(discrepancy)
             log_fn = logger.critical if disc_type == "DEFICIT" else logger.warning
             log_fn(
                 f"RECONCILIATION {disc_type}: {chain} {currency} "
