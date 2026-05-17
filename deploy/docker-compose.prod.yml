@@ -129,6 +129,13 @@ services:
     build:
       context: ../backend
       dockerfile: Dockerfile
+      args:
+        # 2026-05-17 · M3 BLOCKER fix · stamp the git SHA into the image
+        # so /health/ can return it and CI can SHA-pin web/celery/beat
+        # to the same commit. CI must export GIT_SHA before
+        # `docker compose up --build`:
+        #   GIT_SHA=$(git rev-parse HEAD) docker compose -f deploy/docker-compose.prod.yml up -d --build
+        GIT_SHA: ${GIT_SHA:-unknown}
     container_name: cryptopay_web
     # On boot: run migrations, collect static, warm the rate cache (non-strict
     # so a slow provider can't block startup), then launch daphne. Warming
@@ -175,6 +182,8 @@ services:
       - .env.production
     environment:
       - DJANGO_SETTINGS_MODULE=config.settings.production
+      # 2026-05-17 · M3 fix · role tag for /health/ drift detection.
+      - CPAY_ROLE=web
       # Pooled connection · Django runtime traffic flows through
       # PgBouncer so 4 gunicorn × N requests don't blow Postgres'
       # max_connections at peak.
@@ -223,6 +232,8 @@ services:
     build:
       context: ../backend
       dockerfile: Dockerfile
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
     container_name: cryptopay_celery
     command: >
       celery -A config worker
@@ -243,6 +254,7 @@ services:
       - .env.production
     environment:
       - DJANGO_SETTINGS_MODULE=config.settings.production
+      - CPAY_ROLE=celery
       # Pooled connection · Django runtime traffic flows through
       # PgBouncer so 4 gunicorn × N requests don't blow Postgres'
       # max_connections at peak.
@@ -286,6 +298,8 @@ services:
     build:
       context: ../backend
       dockerfile: Dockerfile
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
     container_name: cryptopay_beat
     command: >
       celery -A config beat
@@ -297,6 +311,7 @@ services:
       - .env.production
     environment:
       - DJANGO_SETTINGS_MODULE=config.settings.production
+      - CPAY_ROLE=beat
       # Pooled connection · beat reads/writes the schedule table
       # through pgbouncer for connection-pool sharing with web/celery.
       - DATABASE_URL=postgres://${POSTGRES_USER:-cryptopay}:${POSTGRES_PASSWORD}@pgbouncer:5432/${POSTGRES_DB:-cryptopay}

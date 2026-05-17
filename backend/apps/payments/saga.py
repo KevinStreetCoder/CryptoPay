@@ -146,6 +146,26 @@ class PaymentSaga:
         if not self.tx.saga_data.get("conversion_completed"):
             return
 
+        # 2026-05-17 · A1 fix · row-lock the tx during compensate so a
+        # concurrent saga.complete() call (rare race · callback +
+        # cron status-query firing within microseconds) can't credit
+        # the user a second time. WalletService.credit is already
+        # idempotent per (tx_id, wallet, entry_type) but the
+        # `compensated_at` timestamp + `_unbook_revenue_split` need
+        # to run exactly once.
+        with db_transaction.atomic():
+            locked_tx = (
+                Transaction.objects
+                .select_for_update()
+                .get(pk=self.tx.pk)
+            )
+            if (locked_tx.saga_data or {}).get("compensated_at"):
+                logger.info(
+                    "compensate_convert.already_compensated",
+                    extra={"tx_id": str(self.tx.id)},
+                )
+                return
+
         wallet_id = self.tx.saga_data["locked_wallet_id"]
         amount = Decimal(self.tx.saga_data["locked_amount"])
 
@@ -585,8 +605,28 @@ class PaymentSaga:
         B23: when a success callback arrives AFTER compensation (user's
         crypto was already credited back because the tx was assumed
         failed), we must NOT silently drop it · we need ops to reconcile
-        the double-settlement (M-Pesa paid + crypto returned)."""
-        self.tx.refresh_from_db(fields=["status", "saga_data"])
+        the double-settlement (M-Pesa paid + crypto returned).
+
+        2026-05-17 · A1 fix · select_for_update WITHIN atomic() to
+        serialize concurrent complete() calls (e.g. callback + cron
+        status-query both fire for the same tx). Without the row
+        lock, both workers could read status=CONFIRMING, both flip
+        to COMPLETED, both fire user notifications · user gets two
+        receipt emails. The lock guarantees that the LOSER sees the
+        winner's COMPLETED state on its first read + returns early.
+        `_book_revenue_split` is independently idempotent via the
+        FeeLedgerEntry unique constraint so even a lock failure
+        couldn't double-book the SystemWallets.
+        """
+        with db_transaction.atomic():
+            locked_tx = (
+                Transaction.objects
+                .select_for_update()
+                .get(pk=self.tx.pk)
+            )
+            self.tx.status = locked_tx.status
+            self.tx.saga_data = locked_tx.saga_data
+            self.tx.failure_reason = locked_tx.failure_reason
         if self.tx.status == Transaction.Status.COMPLETED:
             logger.info(f"Payment already completed: tx {self.tx.id} (duplicate callback)")
             return

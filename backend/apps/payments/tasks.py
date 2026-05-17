@@ -558,6 +558,21 @@ def _resolve_via_sasapay_status(tx, checkout_request_id: str) -> None:
         })
 
 
+def _is_uuid_like(s) -> bool:
+    """True if `s` looks like a UUID4 string · cheap regex check that
+    catches IntaSend's per-tx tracking_id format (`a-b-c-d-e` hex)
+    vs the file_id format (alphanumeric · `0LVRPJN`, `Y95DPDB`).
+    """
+    if not isinstance(s, str):
+        return False
+    import re as _re  # noqa: PLC0415
+    return bool(_re.match(
+        r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+        r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+        s.strip(),
+    ))
+
+
 def _resolve_via_intasend_status(tx, tracking_id: str) -> None:
     """Active-poll IntaSend's status endpoint and resolve the saga.
 
@@ -587,6 +602,58 @@ def _resolve_via_intasend_status(tx, tracking_id: str) -> None:
     sd = tx.saga_data or {}
     file_id = sd.get("intasend_file_id") or ""
     real_tracking_id = sd.get("intasend_tracking_id") or tracking_id
+
+    # 2026-05-17 · STUCK-TX RECOVERY · if the initiate response didn't
+    # carry a per-tx tracking_id (observed on prod tx 5f816ed3 ·
+    # paybill 888880 stuck for 25 min before the 10-min compensate
+    # fired), recover it via the send-money batch list endpoint. The
+    # file_id IS present; we just couldn't poll the status endpoint
+    # without the UUID tracking_id. This lookup gives us the
+    # tracking_id back so the cron can resolve the tx normally.
+    if (
+        kind == "send_money"
+        and not real_tracking_id
+        and file_id
+        and not _is_uuid_like(real_tracking_id)
+    ):
+        try:
+            client = IntaSendClient()
+            tx_list = client.list_transactions_by_file_id(file_id)
+            if tx_list:
+                # For Cpay we always send 1 tx per file; if multi-tx
+                # files happen the first slot is correct for our flow.
+                first = tx_list[0] if isinstance(tx_list[0], dict) else {}
+                recovered = (first.get("tracking_id") or "").strip()
+                if recovered:
+                    real_tracking_id = recovered
+                    # Persist so future cron ticks + the saga's
+                    # complete-path enrichment can use the recovered
+                    # tracking_id directly.
+                    sd_copy = dict(sd)
+                    sd_copy["intasend_tracking_id"] = recovered
+                    sd_copy["tracking_id_recovered_at"] = timezone.now().isoformat()
+                    tx.saga_data = sd_copy
+                    tx.save(update_fields=["saga_data", "updated_at"])
+                    logger.info(
+                        "intasend.tracking_id.recovered",
+                        extra={
+                            "tx_id": str(tx.id),
+                            "file_id": file_id,
+                            "tracking_id": recovered,
+                        },
+                    )
+        except IntaSendError as e:
+            logger.warning(
+                "intasend.tracking_id.recovery_failed",
+                extra={
+                    "tx_id": str(tx.id),
+                    "file_id": file_id,
+                    "error": str(e),
+                },
+            )
+            # Fall through · we'll hit the same error in the status
+            # query below and the cron's 10-min timeout will fire as
+            # before.
 
     try:
         if kind == "send_money":

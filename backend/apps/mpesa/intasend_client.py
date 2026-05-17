@@ -477,6 +477,86 @@ class IntaSendClient:
                 return _hit_collection()
             raise
 
+    # ── Send-money batch lookup (by file_id) ─────────────────────────
+
+    def list_transactions_by_file_id(self, file_id: str) -> list[dict]:
+        """Fetch all per-tx records for a send-money batch by file_id.
+
+        2026-05-17 · CRITICAL · fixes the "stuck-tx-no-tracking_id"
+        class. The initiate response for `pay_paybill / pay_till`
+        sometimes returns a `file_id` but no per-tx `tracking_id`
+        (observed on prod tx 5f816ed3, paybill 888880). The cron's
+        status-query path needs a UUID tracking_id to call
+        `/api/v1/send-money/status/` · without it, the tx hits the
+        10-min compensate timeout while IntaSend may still be
+        processing.
+
+        This method calls IntaSend's list endpoint with the file_id
+        filter to recover the per-tx tracking_ids. Saga can then
+        stamp them onto saga_data + the cron polls successfully.
+
+        Returns a list of transaction dicts (each containing
+        `tracking_id`, `status`, `provider_reference`, `amount`,
+        `account`, etc.) · empty list if IntaSend has no record.
+
+        Endpoint: `/api/v1/send-money/?file_id=<...>` (IntaSend's
+        send-money list endpoint). 30s timeout. Cached 60s in Redis
+        to avoid re-fetching the same file repeatedly during cron
+        ticks.
+        """
+        from django.core.cache import cache as _cache  # noqa: PLC0415
+        cache_key = f"intasend:send_money_list:{file_id}"
+        cached = _cache.get(cache_key)
+        if cached is not None:
+            return cached
+        try:
+            resp = self._get(
+                f"/api/v1/send-money/?file_id={file_id}"
+            )
+        except IntaSendError as e:
+            # Some IntaSend tiers expose the endpoint as
+            # `/api/v1/payment-files/<file_id>/transactions/` ·
+            # fall back on 404.
+            if "404" in str(e) or "not found" in str(e).lower():
+                resp = self._get(
+                    f"/api/v1/payment-files/{file_id}/transactions/"
+                )
+            else:
+                raise
+        # Response shape varies by tier:
+        #   - {"results": [...]} · paginated list
+        #   - {"transactions": [...]} · file detail
+        #   - [...] · raw list (rare)
+        txs = (
+            resp.get("results")
+            if isinstance(resp, dict) else resp
+        ) or resp.get("transactions") if isinstance(resp, dict) else []
+        if not isinstance(txs, list):
+            txs = []
+        _cache.set(cache_key, txs, timeout=60)
+        return txs
+
+    def _get(self, path: str, *, timeout: int = 30) -> dict:
+        """GET helper · mirrors `_post` for endpoints that return data.
+        Some IntaSend list endpoints use GET with query params instead
+        of POST. Used by `list_transactions_by_file_id` + the new
+        settlement/statement helpers."""
+        import requests as _requests  # noqa: PLC0415
+        url = f"{self.base_url}{path}"
+        try:
+            resp = _requests.get(url, headers=self._headers(), timeout=timeout)
+        except _requests.RequestException as e:
+            raise IntaSendError(f"network error: {e}") from e
+        if resp.status_code >= 400:
+            logger.warning("intasend.api_error")
+            raise IntaSendError(
+                f"IntaSend {resp.status_code} on {path}: {resp.text[:300]}"
+            )
+        try:
+            return resp.json()
+        except ValueError as e:
+            raise IntaSendError(f"non-JSON response from {path}") from e
+
     # ── Pre-flight account-name lookup ───────────────────────────────
 
     def lookup_paybill(self, paybill: str, account: str = "") -> dict:
@@ -542,6 +622,150 @@ class IntaSendClient:
         Returns `{"account_name": "...", "valid": ..., ...}`.
         """
         return self.lookup_paybill(paybill=till)
+
+    # ── Pesalink · bank transfer (Kenya banks) ───────────────────────
+
+    def pesalink_send(
+        self,
+        bank_code: str,
+        account_number: str,
+        amount: float,
+        account_name: str = "",
+        narrative: str = "Cpay bank transfer",
+        reference: str = "",
+    ) -> dict:
+        """Send to a Kenyan bank account via Pesalink rails (instant
+        intra-bank settlement). Same shape as `pay_paybill` but with
+        `provider=PESALINK` + bank-code routing. Pesalink supports
+        36+ Kenyan banks (KCB / Equity / Co-op / NCBA / DTB / etc.).
+
+        `bank_code` is the IntaSend bank code (e.g. "01" for KCB).
+        Use `list_banks()` to discover.
+        """
+        return self._send_money(
+            provider="PESALINK",
+            transactions=[{
+                "name": (account_name or reference or "Cpay")[:32],
+                "account": str(account_number),
+                "account_type": "Bank",
+                "account_reference": str(bank_code),
+                "amount": int(round(float(amount))),
+                "narrative": narrative[:64],
+            }],
+            reference=reference,
+        )
+
+    def list_banks(self) -> list[dict]:
+        """Return the bank-code → bank-name map IntaSend supports for
+        Pesalink. Cached 24h · banks rarely change.
+        """
+        from django.core.cache import cache as _cache  # noqa: PLC0415
+        cache_key = "intasend:banks"
+        cached = _cache.get(cache_key)
+        if cached is not None:
+            return cached
+        try:
+            resp = self._get("/api/v1/send-money/banks/")
+        except IntaSendError:
+            return []
+        banks = resp.get("results") if isinstance(resp, dict) else resp
+        if not isinstance(banks, list):
+            banks = []
+        _cache.set(cache_key, banks, timeout=86400)
+        return banks
+
+    # ── Airtime ──────────────────────────────────────────────────────
+
+    def buy_airtime(
+        self,
+        phone: str,
+        amount: float,
+        carrier: str = "auto",
+        reference: str = "",
+    ) -> dict:
+        """Purchase airtime for any Kenyan number (Safaricom / Airtel /
+        Telkom · `carrier=auto` detects from the prefix). Disburses
+        from the IntaSend KES wallet.
+
+        `phone` accepts the same formats as `send_to_mobile` (E.164,
+        local 07X, etc. · normalised by `_normalise_phone`).
+        """
+        return self._send_money(
+            provider="AIRTIME",
+            transactions=[{
+                "name": (reference or "Cpay airtime")[:32],
+                "account": _normalise_phone(phone),
+                "account_type": "Phone",
+                "amount": int(round(float(amount))),
+                "narrative": "Airtime purchase",
+            }],
+            reference=reference,
+        )
+
+    # ── Customer profile / KYC ──────────────────────────────────────
+
+    def customer_profile(self, phone: str = "", email: str = "") -> dict:
+        """Look up a customer's profile by phone OR email. Returns the
+        IntaSend-resolved customer record (name, KYC tier, last-seen).
+        Useful for ops triage when a user reports an issue and we want
+        to confirm IntaSend has them on file.
+
+        Returns `{}` on 404 (no record) rather than raising.
+        """
+        if not (phone or email):
+            raise IntaSendError("customer_profile requires phone or email")
+        params = []
+        if phone:
+            params.append(f"phone={_normalise_phone(phone)}")
+        if email:
+            params.append(f"email={email}")
+        try:
+            return self._get(f"/api/v1/customers/?{'&'.join(params)}")
+        except IntaSendError as e:
+            if "404" in str(e):
+                return {}
+            raise
+
+    # ── Settlements + transactions history ───────────────────────────
+
+    def list_settlements(self, since: str = "", limit: int = 50) -> list[dict]:
+        """Return settlement entries (IntaSend's batched payouts to our
+        bank account). Useful for reconciliation · what they OWE us
+        vs what's in our settlement bank account.
+
+        `since` is YYYY-MM-DD. Empty = last 30 days.
+        """
+        path = f"/api/v1/settlements/?limit={limit}"
+        if since:
+            path += f"&created_at__gte={since}"
+        try:
+            resp = self._get(path)
+        except IntaSendError:
+            return []
+        out = resp.get("results") if isinstance(resp, dict) else resp
+        return out if isinstance(out, list) else []
+
+    def list_recent_transactions(
+        self,
+        kind: str = "send_money",
+        limit: int = 50,
+    ) -> list[dict]:
+        """Recent IntaSend transactions for ops reconciliation.
+
+        `kind` · "send_money" for our disbursements OR "collection"
+        for incoming STK pushes.
+        """
+        path_map = {
+            "send_money": f"/api/v1/send-money/?limit={limit}",
+            "collection": f"/api/v1/payment/?limit={limit}",
+        }
+        path = path_map.get(kind, path_map["send_money"])
+        try:
+            resp = self._get(path)
+        except IntaSendError:
+            return []
+        out = resp.get("results") if isinstance(resp, dict) else resp
+        return out if isinstance(out, list) else []
 
     # ── Reversal · NOT SUPPORTED ─────────────────────────────────────
 

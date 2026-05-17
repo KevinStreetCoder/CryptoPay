@@ -94,6 +94,25 @@ class HealthCheckView(APIView):
         except Exception as e:
             deploy["error"] = str(e)[:160]
 
+        # 2026-05-17 · G21 fix · migration state check. Returns the
+        # count of unapplied migrations · 0 means the schema is in
+        # sync with the codebase. > 0 means a `manage.py migrate`
+        # needs to run · CI can assert this is 0 before declaring a
+        # deploy healthy.
+        try:
+            from django.db.migrations.executor import MigrationExecutor
+            from django.db import connections
+            connection = connections["default"]
+            executor = MigrationExecutor(connection)
+            targets = executor.loader.graph.leaf_nodes()
+            plan = executor.migration_plan(targets)
+            deploy["unapplied_migrations"] = len(plan)
+            if plan:
+                # Don't leak full migration names · log just the count.
+                deploy["unapplied_app_labels"] = sorted({m[0].app_label for m in plan})
+        except Exception as e:
+            deploy["migration_check_error"] = str(e)[:160]
+
         return Response(
             {
                 "status": "healthy" if overall_healthy else "degraded",

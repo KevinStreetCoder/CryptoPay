@@ -46,7 +46,13 @@ services:
       retries: 5
 
   web:
-    build: ./backend
+    build:
+      context: ./backend
+      args:
+        # 2026-05-17 · G19 fix · pass git SHA into the image so
+        # /health/ can return it. CI sets `GIT_SHA=$(git rev-parse HEAD)`
+        # in the environment before `docker compose build`.
+        GIT_SHA: ${GIT_SHA:-unknown}
     command: gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 120
     volumes:
       - ./backend:/app
@@ -57,6 +63,7 @@ services:
       - ./backend/.env
     environment:
       - DJANGO_SETTINGS_MODULE=config.settings.production
+      - CPAY_ROLE=web
     depends_on:
       db:
         condition: service_healthy
@@ -71,7 +78,10 @@ services:
       start_period: 30s
 
   celery:
-    build: ./backend
+    build:
+      context: ./backend
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
     command: celery -A config worker -l info -Q default,blockchain --concurrency=4
     volumes:
       - ./backend:/app
@@ -80,6 +90,7 @@ services:
       - ./backend/.env
     environment:
       - DJANGO_SETTINGS_MODULE=config.settings.production
+      - CPAY_ROLE=celery
     depends_on:
       db:
         condition: service_healthy
@@ -94,7 +105,10 @@ services:
       start_period: 30s
 
   celery-beat:
-    build: ./backend
+    build:
+      context: ./backend
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
     command: celery -A config beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
     volumes:
       - ./backend:/app
@@ -102,6 +116,7 @@ services:
       - ./backend/.env
     environment:
       - DJANGO_SETTINGS_MODULE=config.settings.production
+      - CPAY_ROLE=beat
     depends_on:
       db:
         condition: service_healthy

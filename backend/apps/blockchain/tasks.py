@@ -563,8 +563,16 @@ def broadcast_withdrawal_task(self, transaction_id: str):
         #
         # Idempotent · FeeLedgerEntry's unique constraint guards against
         # double-booking if the celery retry kicks in.
+        # 2026-05-17 · F18 fix · split the fee between FEE (our net
+        # revenue) and GAS_RESERVE (the portion earmarked for the next
+        # broadcast's on-chain gas). The split ratio is
+        # `WITHDRAWAL_GAS_RESERVE_PORTION` (default 0.30 · keep 30% of
+        # the fee aside for gas, recognise 70% as revenue). When the
+        # gas reserve gets used to fund a broadcast, the gas-spend
+        # path debits the reserve.
         try:
             from decimal import Decimal as _D
+            from django.conf import settings as _django_settings
             from apps.wallets.services import (
                 WalletService,
                 FeeWalletMissingError,
@@ -572,21 +580,52 @@ def broadcast_withdrawal_task(self, transaction_id: str):
             fee_crypto = _D(tx.fee_amount or 0)
             if fee_crypto > 0:
                 fee_ccy = (tx.fee_currency or tx.source_currency or "").upper()
-                try:
-                    WalletService.book_fee(
-                        currency=fee_ccy,
-                        amount=fee_crypto,
-                        transaction_id=tx.id,
-                        description=(
-                            f"WITHDRAWAL network fee · {fee_crypto} "
-                            f"{fee_ccy} · chain={network} · tx_hash={tx_hash[:24]}"
-                        ),
-                    )
-                except FeeWalletMissingError as e:
-                    logger.error(
-                        "withdrawal.book_fee_missing_wallet · %s", e,
-                        extra={"tx_id": str(tx.id)},
-                    )
+                gas_portion = _D(str(
+                    getattr(_django_settings, "WITHDRAWAL_GAS_RESERVE_PORTION", "0.30")
+                ))
+                gas_share = (fee_crypto * gas_portion).quantize(_D("0.00000001"))
+                fee_share = (fee_crypto - gas_share).quantize(_D("0.00000001"))
+
+                # Book the net revenue portion.
+                if fee_share > 0:
+                    try:
+                        WalletService.book_fee(
+                            currency=fee_ccy,
+                            amount=fee_share,
+                            transaction_id=tx.id,
+                            description=(
+                                f"WITHDRAWAL net fee · {fee_share} "
+                                f"{fee_ccy} · gross {fee_crypto} - gas_reserve "
+                                f"{gas_share} · chain={network} · "
+                                f"tx_hash={tx_hash[:24]}"
+                            ),
+                        )
+                    except FeeWalletMissingError as e:
+                        logger.error(
+                            "withdrawal.book_fee_missing_wallet · %s", e,
+                            extra={"tx_id": str(tx.id)},
+                        )
+
+                # Book the gas reserve portion.
+                if gas_share > 0:
+                    try:
+                        WalletService.book_gas_reserve(
+                            currency=fee_ccy,
+                            amount=gas_share,
+                            transaction_id=tx.id,
+                            description=(
+                                f"WITHDRAWAL gas reserve · {gas_share} "
+                                f"{fee_ccy} · {gas_portion * 100}% of "
+                                f"{fee_crypto} fee · chain={network}"
+                            ),
+                            chain=network,
+                        )
+                    except FeeWalletMissingError as e:
+                        logger.error(
+                            "withdrawal.book_gas_reserve_missing_wallet · %s",
+                            e,
+                            extra={"tx_id": str(tx.id)},
+                        )
         except Exception:
             # NEVER fail the withdrawal because revenue booking
             # crashed · the broadcast already happened, the user's
@@ -936,17 +975,46 @@ def _broadcast_evm(network: str, currency: str, destination_address: str, amount
                 gas_cost_native = Decimal(str(gas_cost_wei)) / Decimal("1e18")
                 fee_crypto_dec = Decimal(str(fee_amount_crypto))
                 if currency in ("USDT", "USDC"):
-                    # 1 ETH ≈ 3000 USDT crude ceiling for the cap
-                    # check · raises false-positives at 1000 ETH/USDT
-                    # but real prices are well above that.
-                    eth_per_token = Decimal(str(
-                        getattr(
-                            django_settings,
-                            "WITHDRAWAL_ETH_PER_TOKEN_CEILING",
-                            "3000",
-                        )
-                    ))
-                    gas_cost_in_token = gas_cost_native * eth_per_token
+                    # 2026-05-17 · M5 BLOCKER fix · audit found the
+                    # previous variable name was reversed (claimed
+                    # ETH_PER_TOKEN but math used it as TOKENS_PER_ETH)
+                    # AND a hardcoded 3000 silently under-estimated gas
+                    # whenever ETH > 3000 USDT (i.e. always, in 2026).
+                    # Now we look up the LIVE ETH/USDT rate from
+                    # RateService at check time. Fail-SAFE on rate
+                    # lookup error · abort the withdrawal rather than
+                    # fall through with stale assumptions.
+                    try:
+                        from apps.rates.services import RateService as _RS  # noqa: PLC0415
+                        eth_kes = Decimal(str(
+                            _RS.get_crypto_kes_rate("ETH").get("raw_rate") or 0
+                        ))
+                        # KES per token (USDT/USDC ≈ same)
+                        token_kes = Decimal(str(
+                            _RS.get_crypto_kes_rate(currency).get("raw_rate") or 0
+                        ))
+                        if eth_kes <= 0 or token_kes <= 0:
+                            raise RuntimeError(
+                                "ABORT: rate provider returned 0 for "
+                                "ETH/KES or token/KES · cannot compute "
+                                "gas-cap. Set WITHDRAWAL_GAS_CAP_CHECK=false "
+                                "to bypass."
+                            )
+                        # gas_cost_in_token = gas_cost_native (ETH) ×
+                        # (eth_kes / token_kes) · this is the dynamic
+                        # ratio audit recommended.
+                        tokens_per_eth = eth_kes / token_kes
+                        gas_cost_in_token = gas_cost_native * tokens_per_eth
+                    except Exception as rate_err:
+                        # Fail-SAFE · don't broadcast if we can't price
+                        # the gas. Better to delay one withdrawal than
+                        # eat a $40 gas spike silently.
+                        raise RuntimeError(
+                            f"ABORT: rate lookup failed for gas-cap check · "
+                            f"{rate_err}. Aborting broadcast to prevent a "
+                            f"silent net-loss. Set WITHDRAWAL_GAS_CAP_CHECK="
+                            f"false to bypass if ops accepts the risk."
+                        ) from rate_err
                 else:
                     # Native ETH/MATIC · gas is in same unit.
                     gas_cost_in_token = gas_cost_native

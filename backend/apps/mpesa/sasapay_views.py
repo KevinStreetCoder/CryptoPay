@@ -1,6 +1,25 @@
 """
 SasaPay callback handlers.
 
+2026-05-17 · DEPRECATED IN PRODUCTION · ops confirmed SasaPay does NOT
+deliver reliable webhooks for our tier · they use IP allowlisting on
+OUTBOUND traffic (our calls to them) instead. Cpay's source-of-truth
+for SasaPay tx status is the POLLING path at
+`apps.payments.tasks._resolve_via_sasapay_status` which runs every 15s
+via the `check_pending_mpesa_payments` cron.
+
+These callback handlers REMAIN registered as a defensive fallback ·
+if SasaPay ever does deliver a webhook (e.g. a future tier upgrade
+or sandbox traffic), the dedup + IP-allowlist + HMAC layers below
+will accept and process it the same as the polling path. The
+behaviour-defining contract is `_process_successful_payment` which
+is invoked from BOTH paths · keep that idempotent.
+
+Set `SASAPAY_WEBHOOK_DISABLED=true` in production env to make these
+endpoints return 410 Gone immediately on any incoming request · use
+this for the canonical production deploy where SasaPay genuinely
+won't fire them. The polling path is unaffected.
+
 Receives payment results from SasaPay for B2B, B2C, and C2B transactions.
 Processes results the same way as Daraja callbacks: updates transaction
 status, credits wallets, and sends notifications.
@@ -207,6 +226,20 @@ def _verify_url_token(token: str, body_bytes: bytes) -> tuple[bool, str | None]:
     if not hmac.compare_digest(expected_mac, received_mac):
         return False, None
 
+    # 2026-05-17 · M2 fix · enforce token freshness · without this, a
+    # leaked token replays forever (modulo the Redis one-shot below
+    # · but that lasts only 24h after FIRST use, not after issue).
+    # SasaPay's documented retry window is 1-2h · we allow 4h (14400s)
+    # to absorb any clock skew + retry queue backlog.
+    try:
+        ts_int = int(ts)
+        import time as _time  # noqa: PLC0415
+        max_age = int(getattr(settings, "SASAPAY_TOKEN_MAX_AGE_SEC", 14400))
+        if abs(int(_time.time()) - ts_int) > max_age:
+            return False, None
+    except (ValueError, TypeError):
+        return False, None
+
     # One-shot consumption · same Redis pattern as Daraja
     used_key = f"sasapay_token_used:{token}"
     if not cache.add(used_key, "1", timeout=24 * 3600):
@@ -332,7 +365,33 @@ def sasapay_callback(request, token: str | None = None):
     URL forms supported (declared in apps/mpesa/sasapay_urls.py):
       * /api/v1/sasapay/callback/                 (header-signed only)
       * /api/v1/sasapay/callback/<token>/         (URL-token + optional header)
+
+    2026-05-17 · gated by `SASAPAY_WEBHOOK_DISABLED` setting · when
+    true (production default once ops confirms polling-only), returns
+    410 Gone immediately so any stray webhook hits are visible in
+    monitoring without consuming worker resources. The polling path
+    (`check_pending_mpesa_payments` cron) remains the source of truth.
     """
+    from django.conf import settings as _settings  # noqa: PLC0415
+    if getattr(_settings, "SASAPAY_WEBHOOK_DISABLED", False):
+        logger.info(
+            "sasapay_callback.disabled · returning 410 Gone "
+            "(polling cron is source of truth)"
+        )
+        return JsonResponse(
+            {
+                "error": "gone",
+                "detail": (
+                    "SasaPay webhooks are disabled on this deployment. "
+                    "Cpay polls SasaPay status every 15s via the "
+                    "`check_pending_mpesa_payments` cron. If you see "
+                    "this message, your callback URL should be removed "
+                    "from the SasaPay dashboard."
+                ),
+            },
+            status=410,
+        )
+
     body_bytes = request.body or b""
 
     ok, url_tx_id = _authenticated(request, body_bytes)
@@ -1075,6 +1134,63 @@ def _process_successful_payment(
                 extra={"tx_id": str(tx.id)},
             )
 
+    # 2026-05-17 · M1 FIX (audit BLOCKER) · for non-BUY paths
+    # (PAYBILL/TILL/SEND_MPESA via SasaPay), invoke saga.complete() so
+    # `_book_revenue_split` runs + the FEE / PROVIDER_COST / EXCISE
+    # SystemWallets get credited. Previously this function set
+    # status=COMPLETED directly + only ran the BUY-only block above,
+    # leaving every SasaPay B2C / paybill / till revenue UNBOOKED.
+    #
+    # Stamp SasaPay's `TransactionCharge` field onto saga_data so the
+    # saga's `_book_revenue_split` reads it as the provider cost
+    # (mirrors how IntaSend's `intasend_charges` is captured).
+    if tx.type in ("PAYBILL_PAYMENT", "TILL_PAYMENT", "SEND_MPESA"):
+        try:
+            from decimal import Decimal as _D
+            # SasaPay B2B/B2C result callback uses `TransactionCharge`
+            # (singular · different from STK's `TransactionCharges`).
+            # Try multiple shapes for resilience across product tiers.
+            charge_keys = (
+                "TransactionCharge", "TransactionCharges",
+                "transaction_charge", "transactionCharge",
+                "Charge", "charges",
+            )
+            sasapay_charge = _D("0")
+            for k in charge_keys:
+                v = data.get(k) if isinstance(data, dict) else None
+                if v not in (None, ""):
+                    try:
+                        sasapay_charge = _D(str(v))
+                        break
+                    except Exception:
+                        continue
+            if sasapay_charge > 0:
+                sd = dict(tx.saga_data or {})
+                # Reuse the same key the saga's _book_revenue_split
+                # reads · stamps as `intasend_charges` for codepath
+                # compatibility. (The field name is historical; the
+                # value is provider-agnostic.)
+                sd["intasend_charges"] = str(sasapay_charge)
+                sd["sasapay_provider_charge"] = str(sasapay_charge)
+                tx.saga_data = sd
+                tx.save(update_fields=["saga_data", "updated_at"])
+        except Exception:
+            logger.exception(
+                "sasapay.charge_capture_failed",
+                extra={"tx_id": str(tx.id)},
+            )
+
+        # Hand off to the saga · this is where the revenue split,
+        # platform-limits recording, and notifications happen.
+        try:
+            from apps.payments.saga import PaymentSaga
+            PaymentSaga(tx).complete(mpesa_receipt=trans_code)
+        except Exception:
+            logger.exception(
+                "sasapay.saga_complete_failed",
+                extra={"tx_id": str(tx.id)},
+            )
+
     try:
         from apps.core.email import send_transaction_notifications
         send_transaction_notifications(tx.user, tx)
@@ -1762,6 +1878,51 @@ def _credit_crypto_via_c2b(
             "sasapay C2B auto-buy: %s KES → %s %s for %s (tx %s)",
             kes_amount, crypto_amount, currency, user.phone, trans_id,
         )
+
+        # 2026-05-17 · M4 fix · book the C2B auto-buy fee revenue.
+        # Audit found this path created the Transaction with
+        # `fee_amount=platform_fee` + `excise_duty_amount=excise_duty`
+        # but never moved them into SystemWallet(FEE/EXCISE). Provider
+        # cost is 0 on C2B (the customer's M-Pesa send pays SasaPay's
+        # tariff out-of-pocket before we receive the net amount).
+        # Idempotent via FeeLedgerEntry's unique constraint.
+        try:
+            from decimal import Decimal as _D
+            from apps.wallets.services import WalletService, FeeWalletMissingError
+            if platform_fee and _D(str(platform_fee)) > 0:
+                try:
+                    WalletService.book_fee(
+                        currency="KES",
+                        amount=_D(str(platform_fee)),
+                        transaction_id=tx.id,
+                        description=(
+                            f"SasaPay C2B auto-buy net fee · "
+                            f"{platform_fee} KES · trans {trans_id}"
+                        ),
+                    )
+                except FeeWalletMissingError as e:
+                    logger.error(
+                        "sasapay.c2b.book_fee_missing_wallet · %s", e,
+                        extra={"tx_id": str(tx.id)},
+                    )
+            if excise_duty and _D(str(excise_duty)) > 0:
+                try:
+                    WalletService.book_excise(
+                        currency="KES",
+                        amount=_D(str(excise_duty)),
+                        transaction_id=tx.id,
+                        description=f"SasaPay C2B excise · {excise_duty} KES · KRA",
+                    )
+                except FeeWalletMissingError as e:
+                    logger.error(
+                        "sasapay.c2b.book_excise_missing_wallet · %s", e,
+                        extra={"tx_id": str(tx.id)},
+                    )
+        except Exception:
+            logger.exception(
+                "sasapay.c2b.revenue_split_failed",
+                extra={"tx_id": str(tx.id)},
+            )
 
         try:
             from apps.core.email import send_transaction_notifications
