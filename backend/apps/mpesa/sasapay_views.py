@@ -1191,11 +1191,24 @@ def _process_successful_payment(
                 extra={"tx_id": str(tx.id)},
             )
 
-    try:
-        from apps.core.email import send_transaction_notifications
-        send_transaction_notifications(tx.user, tx)
-    except Exception:
-        logger.warning("sasapay notification dispatch failed for tx %s", tx.id)
+    # 2026-05-17 · M12 fix · gate via the same Redis SETNX guard the
+    # saga uses so we never double-fire (saga.complete + this handler
+    # would otherwise both dispatch on the non-BUY path). The lock key
+    # is per-tx-uuid · whichever caller arrives first wins; the loser
+    # logs and skips. BUY tx are NOT routed through saga.complete and
+    # therefore typically reach this branch as the lock-winner.
+    from apps.payments.saga import _try_acquire_notify_lock
+    if _try_acquire_notify_lock(tx.id):
+        try:
+            from apps.core.email import send_transaction_notifications
+            send_transaction_notifications(tx.user, tx)
+        except Exception:
+            logger.warning("sasapay notification dispatch failed for tx %s", tx.id)
+    else:
+        logger.info(
+            "sasapay.notifications_already_dispatched_by_saga",
+            extra={"tx_id": str(tx.id)},
+        )
 
     AuditLog.objects.create(
         user=tx.user,

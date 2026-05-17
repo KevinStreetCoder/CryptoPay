@@ -527,10 +527,19 @@ class IntaSendClient:
         #   - {"results": [...]} · paginated list
         #   - {"transactions": [...]} · file detail
         #   - [...] · raw list (rare)
-        txs = (
-            resp.get("results")
-            if isinstance(resp, dict) else resp
-        ) or resp.get("transactions") if isinstance(resp, dict) else []
+        #
+        # 2026-05-17 · M15 fix · the previous ternary expression had a
+        # subtle operator-precedence bug · it evaluated as
+        #   ((results-or-resp) or transactions) if isinstance(resp, dict) else []
+        # which meant the raw-list tier (`resp` IS a list) silently
+        # returned []. Rewrote as explicit branches so every tier is
+        # handled.
+        if isinstance(resp, dict):
+            txs = resp.get("results") or resp.get("transactions") or []
+        elif isinstance(resp, list):
+            txs = resp
+        else:
+            txs = []
         if not isinstance(txs, list):
             txs = []
         _cache.set(cache_key, txs, timeout=60)

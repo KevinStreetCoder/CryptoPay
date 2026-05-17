@@ -518,6 +518,48 @@ def _resolve_via_sasapay_status(tx, checkout_request_id: str) -> None:
 
     if _is_sasapay_success(result_code):
         try:
+            # 2026-05-17 · M11 fix · stamp SasaPay's per-tx charge from
+            # the status-query response onto saga_data BEFORE calling
+            # saga.complete. Without this, the cron path races the
+            # webhook · cron sees `intasend_charges` missing (since the
+            # webhook stamps it inline), calls `_book_revenue_split`
+            # which over-credits FEE = full fee_amount and under-credits
+            # PROVIDER_COST = 0. Subsequent webhook fires also can't
+            # correct the booking (FeeLedgerEntry unique constraint).
+            # Stamping here gives the cron equal access to the same
+            # charge value the webhook would have used.
+            try:
+                from decimal import Decimal as _D
+                charge_keys = (
+                    "TransactionCharge", "TransactionCharges",
+                    "transaction_charge", "transactionCharge",
+                    "Charge", "charges",
+                )
+                sasapay_charge = _D("0")
+                src = inner if isinstance(inner, dict) else {}
+                for k in charge_keys:
+                    v = src.get(k)
+                    if v not in (None, ""):
+                        try:
+                            sasapay_charge = _D(str(v))
+                            break
+                        except Exception:
+                            continue
+                if sasapay_charge > 0:
+                    sd = dict(tx.saga_data or {})
+                    # Reuse the `intasend_charges` key for codepath
+                    # compatibility · `_book_revenue_split` reads from
+                    # this single key for both providers.
+                    sd["intasend_charges"] = str(sasapay_charge)
+                    sd["sasapay_provider_charge"] = str(sasapay_charge)
+                    tx.saga_data = sd
+                    tx.save(update_fields=["saga_data", "updated_at"])
+            except Exception:
+                logger.exception(
+                    "sasapay.status_query.charge_capture_failed",
+                    extra={"tx_id": str(tx.id)},
+                )
+
             # Order matters · saga.complete flips status=COMPLETED and
             # records the receipt; AFTER that we credit crypto for BUY
             # so the wallet write is keyed against the now-completed tx.
@@ -629,19 +671,58 @@ def _resolve_via_intasend_status(tx, tracking_id: str) -> None:
                     # Persist so future cron ticks + the saga's
                     # complete-path enrichment can use the recovered
                     # tracking_id directly.
-                    sd_copy = dict(sd)
-                    sd_copy["intasend_tracking_id"] = recovered
-                    sd_copy["tracking_id_recovered_at"] = timezone.now().isoformat()
-                    tx.saga_data = sd_copy
-                    tx.save(update_fields=["saga_data", "updated_at"])
-                    logger.info(
-                        "intasend.tracking_id.recovered",
-                        extra={
-                            "tx_id": str(tx.id),
-                            "file_id": file_id,
-                            "tracking_id": recovered,
-                        },
-                    )
+                    #
+                    # 2026-05-17 · M16 fix · compare-and-swap under
+                    # select_for_update so two concurrent cron ticks
+                    # for the same file_id can't lost-update other
+                    # saga_data keys. Previously each tick read sd
+                    # un-locked then overwrote · idempotent-by-
+                    # coincidence (same recovered value) but unsafe
+                    # if another writer was concurrently updating
+                    # other saga_data keys (e.g. saga step
+                    # checkpoint). Lock + check-then-set inside
+                    # atomic guarantees a single writer wins.
+                    from django.db import transaction as _db_tx
+                    with _db_tx.atomic():
+                        locked = (
+                            Transaction.objects
+                            .select_for_update()
+                            .get(pk=tx.pk)
+                        )
+                        locked_sd = dict(locked.saga_data or {})
+                        if not locked_sd.get("intasend_tracking_id"):
+                            locked_sd["intasend_tracking_id"] = recovered
+                            locked_sd["tracking_id_recovered_at"] = (
+                                timezone.now().isoformat()
+                            )
+                            locked.saga_data = locked_sd
+                            locked.save(update_fields=[
+                                "saga_data", "updated_at",
+                            ])
+                            # Refresh local copy so downstream reads
+                            # see the recovered tracking_id.
+                            tx.saga_data = locked_sd
+                            logger.info(
+                                "intasend.tracking_id.recovered",
+                                extra={
+                                    "tx_id": str(tx.id),
+                                    "file_id": file_id,
+                                    "tracking_id": recovered,
+                                },
+                            )
+                        else:
+                            # Another worker beat us · adopt theirs.
+                            real_tracking_id = locked_sd[
+                                "intasend_tracking_id"
+                            ]
+                            tx.saga_data = locked_sd
+                            logger.info(
+                                "intasend.tracking_id.adopted_winner",
+                                extra={
+                                    "tx_id": str(tx.id),
+                                    "tracking_id": real_tracking_id,
+                                },
+                            )
         except IntaSendError as e:
             logger.warning(
                 "intasend.tracking_id.recovery_failed",

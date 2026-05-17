@@ -980,31 +980,47 @@ def _broadcast_evm(network: str, currency: str, destination_address: str, amount
                     # ETH_PER_TOKEN but math used it as TOKENS_PER_ETH)
                     # AND a hardcoded 3000 silently under-estimated gas
                     # whenever ETH > 3000 USDT (i.e. always, in 2026).
-                    # Now we look up the LIVE ETH/USDT rate from
-                    # RateService at check time. Fail-SAFE on rate
-                    # lookup error · abort the withdrawal rather than
-                    # fall through with stale assumptions.
+                    # Now we look up the LIVE rate from RateService at
+                    # check time. Fail-SAFE on rate lookup error · abort
+                    # the withdrawal rather than fall through with stale
+                    # assumptions.
+                    #
+                    # 2026-05-17 · M14 fix · on Polygon, gas is paid in
+                    # MATIC, NOT ETH. Look up the correct native-token
+                    # rate per network. Previously the math hard-coded
+                    # ETH/KES which over-estimated gas by ~3000× on
+                    # Polygon (1 ETH ≈ 3000 USDT ≈ 1500 MATIC), causing
+                    # legitimate USDC withdrawals to fail the cap check.
+                    # Fail-SAFE direction (rejects valid txs) but
+                    # operationally annoying · fix selects the right
+                    # native token per network.
+                    native_token = (
+                        "MATIC" if network == "polygon"
+                        else "BNB" if network in ("bsc", "binance-smart-chain")
+                        else "ETH"
+                    )
                     try:
                         from apps.rates.services import RateService as _RS  # noqa: PLC0415
-                        eth_kes = Decimal(str(
-                            _RS.get_crypto_kes_rate("ETH").get("raw_rate") or 0
+                        native_kes = Decimal(str(
+                            _RS.get_crypto_kes_rate(native_token).get("raw_rate") or 0
                         ))
                         # KES per token (USDT/USDC ≈ same)
                         token_kes = Decimal(str(
                             _RS.get_crypto_kes_rate(currency).get("raw_rate") or 0
                         ))
-                        if eth_kes <= 0 or token_kes <= 0:
+                        if native_kes <= 0 or token_kes <= 0:
                             raise RuntimeError(
-                                "ABORT: rate provider returned 0 for "
-                                "ETH/KES or token/KES · cannot compute "
-                                "gas-cap. Set WITHDRAWAL_GAS_CAP_CHECK=false "
-                                "to bypass."
+                                f"ABORT: rate provider returned 0 for "
+                                f"{native_token}/KES or {currency}/KES · "
+                                f"cannot compute gas-cap. Set "
+                                f"WITHDRAWAL_GAS_CAP_CHECK=false to bypass."
                             )
-                        # gas_cost_in_token = gas_cost_native (ETH) ×
-                        # (eth_kes / token_kes) · this is the dynamic
-                        # ratio audit recommended.
-                        tokens_per_eth = eth_kes / token_kes
-                        gas_cost_in_token = gas_cost_native * tokens_per_eth
+                        # gas_cost_in_token = gas_cost_native ×
+                        # (native_kes / token_kes) · this is the dynamic
+                        # ratio audit recommended, with the correct
+                        # native token for the current chain.
+                        tokens_per_native = native_kes / token_kes
+                        gas_cost_in_token = gas_cost_native * tokens_per_native
                     except Exception as rate_err:
                         # Fail-SAFE · don't broadcast if we can't price
                         # the gas. Better to delay one withdrawal than

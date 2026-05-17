@@ -28,6 +28,36 @@ class SagaError(Exception):
     pass
 
 
+def _try_acquire_notify_lock(tx_id, ttl_seconds: int = 86400) -> bool:
+    """Redis SETNX-style guard so transaction notifications fire EXACTLY
+    ONCE per tx regardless of caller (saga.complete vs webhook handler
+    vs cron). Returns True if THIS caller won the race and should
+    dispatch; False if someone else already did.
+
+    Key TTL is 24h · long enough that any retry/cron will see the lock,
+    short enough that the key set doesn't grow unbounded. Tx
+    notifications are a one-shot event so a stale lock can never harm
+    a future tx (the key is per-tx-uuid).
+
+    2026-05-17 · M12 fix. Same Redis cache backend that the rest of the
+    app uses for rate-limiting + idempotency keys. Fails open on
+    Redis outage (dispatches the notification rather than blocking)
+    · the worst case is a duplicate email which is recoverable; the
+    fail-CLOSED alternative would silently swallow real notifications.
+    """
+    try:
+        from django.core.cache import cache
+        return bool(cache.add(f"tx:notify_lock:{tx_id}", "1", timeout=ttl_seconds))
+    except Exception as e:
+        logger.warning(
+            "saga.notify_lock.redis_unavailable",
+            extra={"tx_id": str(tx_id), "error": str(e)},
+        )
+        # Fail-open · still dispatch. Better a possible duplicate than
+        # a silently missed receipt.
+        return True
+
+
 class PaymentSaga:
     """Orchestrates a crypto-to-Paybill/Till payment."""
 
@@ -146,13 +176,25 @@ class PaymentSaga:
         if not self.tx.saga_data.get("conversion_completed"):
             return
 
-        # 2026-05-17 · A1 fix · row-lock the tx during compensate so a
+        # 2026-05-17 · A1+M9 fix · row-lock the tx during compensate so a
         # concurrent saga.complete() call (rare race · callback +
         # cron status-query firing within microseconds) can't credit
         # the user a second time. WalletService.credit is already
         # idempotent per (tx_id, wallet, entry_type) but the
         # `compensated_at` timestamp + `_unbook_revenue_split` need
         # to run exactly once.
+        #
+        # M9 fix · stamp `compensated_at` INSIDE the atomic block so the
+        # row lock truly serializes concurrent callers. Previously the
+        # stamp was set by the CALLER (`cleanup_stuck_payments`) AFTER
+        # this method returned · two concurrent calls could both pass
+        # the already-compensated check, both run WalletService.credit
+        # (idempotent so money-safe) but both also run
+        # `_unbook_revenue_split` (also idempotent but unnecessary).
+        # Stamping inside the lock means the LOSER sees the winner's
+        # stamp on its select_for_update and returns cleanly.
+        wallet_id = self.tx.saga_data["locked_wallet_id"]
+        amount = Decimal(self.tx.saga_data["locked_amount"])
         with db_transaction.atomic():
             locked_tx = (
                 Transaction.objects
@@ -165,9 +207,16 @@ class PaymentSaga:
                     extra={"tx_id": str(self.tx.id)},
                 )
                 return
-
-        wallet_id = self.tx.saga_data["locked_wallet_id"]
-        amount = Decimal(self.tx.saga_data["locked_amount"])
+            # Stamp the timestamp BEFORE releasing the row lock · this is
+            # the actual serialization point. Persist saga_data so the
+            # next caller sees it on its own select_for_update read.
+            sd = dict(locked_tx.saga_data or {})
+            sd["compensated_at"] = timezone.now().isoformat()
+            locked_tx.saga_data = sd
+            locked_tx.save(update_fields=["saga_data", "updated_at"])
+            # Refresh in-memory tx so downstream callers (cleanup_stuck_
+            # payments) don't write a stale saga_data back over ours.
+            self.tx.saga_data = sd
 
         try:
             WalletService.credit(
@@ -617,7 +666,23 @@ class PaymentSaga:
         `_book_revenue_split` is independently idempotent via the
         FeeLedgerEntry unique constraint so even a lock failure
         couldn't double-book the SystemWallets.
+
+        2026-05-17 · CRITICAL FIX · `_book_revenue_split` must run even
+        when this method is called with status ALREADY COMPLETED. The
+        webhook handlers (sasapay_views / intasend_views) flip the
+        status to COMPLETED + save BEFORE invoking saga.complete · so
+        the old "if COMPLETED: return" guard prevented every webhook
+        from booking revenue, silently. All current SystemWallet
+        balances were ONLY booked via the manual `backfill_unbooked_fees`
+        management command. After this fix, the webhook path books in
+        real time. The FeeLedgerEntry unique constraint
+        (transaction_id, system_wallet, entry_type) prevents
+        double-booking even when called repeatedly · re-entry is safe.
+        Notifications + balance broadcasts are gated by Redis SETNX
+        (`_try_acquire_notify_lock`) so they fire EXACTLY ONCE per tx
+        regardless of how many callers reach this point.
         """
+        first_completion = False
         with db_transaction.atomic():
             locked_tx = (
                 Transaction.objects
@@ -627,9 +692,11 @@ class PaymentSaga:
             self.tx.status = locked_tx.status
             self.tx.saga_data = locked_tx.saga_data
             self.tx.failure_reason = locked_tx.failure_reason
-        if self.tx.status == Transaction.Status.COMPLETED:
-            logger.info(f"Payment already completed: tx {self.tx.id} (duplicate callback)")
-            return
+            # Track whether THIS call is the one flipping CONFIRMING→COMPLETED.
+            # Drives notification dispatch + platform-limits recording so they
+            # run once per real completion, not once per saga.complete call.
+            if self.tx.status != Transaction.Status.COMPLETED:
+                first_completion = True
         if self.tx.status == Transaction.Status.FAILED:
             compensated = bool(self.tx.saga_data and self.tx.saga_data.get("compensated_at"))
             if compensated:
@@ -700,71 +767,84 @@ class PaymentSaga:
                 logger.warning(f"Cannot complete already-failed tx {self.tx.id}")
             return
 
-        self.tx.mpesa_receipt = mpesa_receipt
-        self.tx.status = Transaction.Status.COMPLETED
-        self.tx.completed_at = timezone.now()
-        # 2026-05-09 · clear any in-flight diagnostic note on
-        # `failure_reason` (e.g. "Pending: awaiting M-Pesa callback
-        # (>3 min)" stamped by the cleanup cron at the 3-min mark).
-        # The field is meant for terminal FAILED state · leaving the
-        # stale text on a COMPLETED tx made the customer's
-        # transaction-detail screen render a red "Failure Reason"
-        # block alongside the green "Completed" badge, which read as
-        # contradictory.
-        if self.tx.failure_reason:
-            self.tx.failure_reason = ""
-            self.tx.save(update_fields=[
-                "mpesa_receipt", "status", "completed_at",
-                "failure_reason", "updated_at",
-            ])
-        else:
-            self.tx.save(update_fields=[
-                "mpesa_receipt", "status", "completed_at", "updated_at",
-            ])
-        logger.info(f"Payment completed: tx {self.tx.id}, receipt {mpesa_receipt}")
+        # 2026-05-17 · status flip + platform-limits recording happen
+        # ONLY on `first_completion` (i.e. when the prior DB state was
+        # CONFIRMING/PROCESSING, NOT already COMPLETED). The webhook
+        # handlers (sasapay_views / intasend_views) commonly pre-flip
+        # the status before calling saga.complete · in that case we
+        # skip the flip but STILL run `_book_revenue_split` below
+        # (which is what was silently broken before this fix).
+        if first_completion:
+            self.tx.mpesa_receipt = mpesa_receipt
+            self.tx.status = Transaction.Status.COMPLETED
+            self.tx.completed_at = timezone.now()
+            # 2026-05-09 · clear any in-flight diagnostic note on
+            # `failure_reason` (e.g. "Pending: awaiting M-Pesa callback
+            # (>3 min)" stamped by the cleanup cron at the 3-min mark).
+            # The field is meant for terminal FAILED state · leaving the
+            # stale text on a COMPLETED tx made the customer's
+            # transaction-detail screen render a red "Failure Reason"
+            # block alongside the green "Completed" badge, which read as
+            # contradictory.
+            if self.tx.failure_reason:
+                self.tx.failure_reason = ""
+                self.tx.save(update_fields=[
+                    "mpesa_receipt", "status", "completed_at",
+                    "failure_reason", "updated_at",
+                ])
+            else:
+                self.tx.save(update_fields=[
+                    "mpesa_receipt", "status", "completed_at", "updated_at",
+                ])
+            logger.info(f"Payment completed: tx {self.tx.id}, receipt {mpesa_receipt}")
 
-        # Record this outflow against the platform-limits sliding windows
-        # so the next caller sees an accurate "outgoing in last hour/day"
-        # reading.
-        #
-        # 2026-05-09 audit fix · WITHDRAWAL was in this list. Withdrawal
-        # transactions have `dest_currency = USDT/BTC/ETH/...`, NOT KES,
-        # and the fallback branch recorded `source_amount` (a CRYPTO
-        # quantity, e.g. `100` for 100 USDT) into a Redis ZSET that the
-        # rest of the system treats as KES. After a few withdrawals the
-        # per-hour / per-day caps in `platform_limits.enforce_outgoing()`
-        # saw massively understated outgoing KES (100 KES for a
-        # ~13,000-KES-equivalent withdrawal) and stopped blocking real
-        # KES drains. Withdrawals are a SEPARATE crypto-egress rail and
-        # already have their own limits (per-currency / address-whitelist
-        # / blockchain-fee bounds). Removing them from this list fixes
-        # the platform-limits accuracy. If we want to enforce a unified
-        # "outgoing value in KES equivalent" limit later, compute
-        # `kes_estimate = source_amount * latest_rate` BEFORE recording.
-        if self.tx.type in (
-            Transaction.Type.PAYBILL_PAYMENT,
-            Transaction.Type.TILL_PAYMENT,
-            Transaction.Type.SEND_MPESA,
-        ):
-            try:
-                from .platform_limits import record_outgoing
-                from decimal import Decimal as _D
-                amount_kes = _D(self.tx.dest_amount or 0) if self.tx.dest_currency == "KES" \
-                    else _D(self.tx.source_amount or 0)
-                record_outgoing(amount_kes, str(self.tx.id))
-            except Exception:
-                logger.exception(
-                    "platform_limits.record_outgoing_failed_in_saga",
-                    extra={"transaction_id": str(self.tx.id)},
-                )
+            # Record this outflow against the platform-limits sliding windows
+            # so the next caller sees an accurate "outgoing in last hour/day"
+            # reading.
+            #
+            # 2026-05-09 audit fix · WITHDRAWAL was in this list. Withdrawal
+            # transactions have `dest_currency = USDT/BTC/ETH/...`, NOT KES,
+            # and the fallback branch recorded `source_amount` (a CRYPTO
+            # quantity, e.g. `100` for 100 USDT) into a Redis ZSET that the
+            # rest of the system treats as KES. After a few withdrawals the
+            # per-hour / per-day caps in `platform_limits.enforce_outgoing()`
+            # saw massively understated outgoing KES (100 KES for a
+            # ~13,000-KES-equivalent withdrawal) and stopped blocking real
+            # KES drains. Withdrawals are a SEPARATE crypto-egress rail and
+            # already have their own limits (per-currency / address-whitelist
+            # / blockchain-fee bounds). Removing them from this list fixes
+            # the platform-limits accuracy. If we want to enforce a unified
+            # "outgoing value in KES equivalent" limit later, compute
+            # `kes_estimate = source_amount * latest_rate` BEFORE recording.
+            if self.tx.type in (
+                Transaction.Type.PAYBILL_PAYMENT,
+                Transaction.Type.TILL_PAYMENT,
+                Transaction.Type.SEND_MPESA,
+            ):
+                try:
+                    from .platform_limits import record_outgoing
+                    from decimal import Decimal as _D
+                    amount_kes = _D(self.tx.dest_amount or 0) if self.tx.dest_currency == "KES" \
+                        else _D(self.tx.source_amount or 0)
+                    record_outgoing(amount_kes, str(self.tx.id))
+                except Exception:
+                    logger.exception(
+                        "platform_limits.record_outgoing_failed_in_saga",
+                        extra={"transaction_id": str(self.tx.id)},
+                    )
 
         # 2026-05-17 · book revenue into the SystemWallet ledger.
         #
-        # Before this block, paybill/till/B2C settlement only stamped
-        # `fee_amount` on the Transaction record · `SystemWallet(FEE)`
-        # was never credited. The /admin/revenue/ dashboard exposed
-        # the gap (earned 71.35 KES, booked 0 KES across all completed
-        # txs) which is exactly the C87DC5F2 audit finding.
+        # ALWAYS RUNS (not gated by first_completion) so that webhook
+        # paths that pre-flipped tx.status=COMPLETED still get their
+        # revenue booked. Before this refactor, the early-return guard
+        # at the top of complete() short-circuited the entire method
+        # when status was already COMPLETED · all webhook bookings
+        # silently leaked. All 3 underlying WalletService.book_*
+        # methods are idempotent via FeeLedgerEntry's
+        # UniqueConstraint(transaction_id, system_wallet, entry_type)
+        # so re-entry from any path (callback retry, cron poll,
+        # double-callback) is safe.
         #
         # Split:
         #   - `fee_amount = spread_revenue + flat_fee` → split into:
@@ -772,33 +852,39 @@ class PaymentSaga:
         #     * net fee (the remainder · OUR true take)
         #   - `excise_duty_amount` → booked to EXCISE wallet (owed KRA)
         #
-        # All three calls are idempotent via FeeLedgerEntry's
-        # UniqueConstraint(transaction_id, system_wallet, entry_type)
-        # so the saga can be retried (callback + cron status query
-        # both calling complete()) without double-booking.
-        #
         # Best-effort · a booking failure logs but does NOT roll back
         # the COMPLETED status. The fee is already on the tx record;
         # the admin reconciliation panel will surface the gap so ops
         # can backfill via `python manage.py backfill_unbooked_fees`.
         self._book_revenue_split()
 
-        # Send all notifications (email, SMS, push, PDF receipt)
-        try:
-            from apps.core.email import send_transaction_notifications
+        # 2026-05-17 · M12 fix · notification dispatch gated by Redis
+        # SETNX so EXACTLY ONE caller fires the email/SMS/push/PDF
+        # chain regardless of how many times complete() is invoked.
+        # Without this guard, BOTH the webhook handler's own
+        # notification call AND saga.complete's call could fire,
+        # double-billing the user with 2× email/SMS/push.
+        if _try_acquire_notify_lock(self.tx.id):
+            try:
+                from apps.core.email import send_transaction_notifications
 
-            send_transaction_notifications(self.tx.user, self.tx)
-        except Exception as e:
-            # Notifications are non-critical — log but don't fail the payment
-            logger.error(f"Notification dispatch failed for tx {self.tx.id}: {e}")
+                send_transaction_notifications(self.tx.user, self.tx)
+            except Exception as e:
+                # Notifications are non-critical — log but don't fail the payment
+                logger.error(f"Notification dispatch failed for tx {self.tx.id}: {e}")
 
-        # Broadcast updated wallet balance via WebSocket
-        try:
-            from apps.core.broadcast import broadcast_user_balance
+            # Broadcast updated wallet balance via WebSocket
+            try:
+                from apps.core.broadcast import broadcast_user_balance
 
-            broadcast_user_balance(self.tx.user_id)
-        except Exception as e:
-            logger.warning(f"Balance broadcast failed for tx {self.tx.id}: {e}")
+                broadcast_user_balance(self.tx.user_id)
+            except Exception as e:
+                logger.warning(f"Balance broadcast failed for tx {self.tx.id}: {e}")
+        else:
+            logger.info(
+                "saga.complete.notifications_already_dispatched",
+                extra={"tx_id": str(self.tx.id)},
+            )
 
     def _book_revenue_split(self) -> None:
         """Credit FEE / PROVIDER_COST / EXCISE SystemWallets per the
