@@ -8,6 +8,14 @@ from decimal import Decimal
 from celery import shared_task
 from django.conf import settings
 
+# 2026-05-17 · side-effect import · register sibling-module tasks with
+# Celery's autodiscovery (which only walks `<app>/tasks.py` by default).
+# Without this, beat-scheduled `apps.mpesa.sasapay_tasks.<func>` calls
+# land in the worker as "unregistered task" errors every 5 min. Mirror
+# of the pattern in `apps/blockchain/tasks.py`. `noqa: F401` because
+# the import is intentional side-effect, not direct reference.
+from . import sasapay_tasks as _sasapay_tasks  # noqa: F401
+
 logger = logging.getLogger(__name__)
 
 # Float balance thresholds (KES) — used by check_float_balance
@@ -22,8 +30,24 @@ def check_float_balance():
     Check M-Pesa float balance via Daraja Account Balance API.
     Results arrive async via callback — see process_balance_callback().
     Also updates the circuit breaker with the latest float level.
+
+    2026-05-17 · provider-aware skip · this task is Daraja-specific
+    (uses the M-Pesa Account Balance API which requires a Safaricom
+    Daraja merchant certificate). When PAYMENT_PROVIDER is set to
+    `sasapay` or `intasend`, the dedicated `sasapay_tasks.sync_sasapay_balance`
+    (or the IntaSend wallets API · pulled live by the rebalance flow)
+    is the source of truth · this task would log a noisy
+    "certificate not found" ERROR every minute. Skip cleanly.
     """
     from .client import MpesaClient, MpesaError
+
+    provider = (getattr(settings, "PAYMENT_PROVIDER", "daraja") or "daraja").lower()
+    if provider != "daraja":
+        logger.debug(
+            "M-Pesa float check skipped · provider=%s (Daraja-only task)",
+            provider,
+        )
+        return
 
     if not settings.MPESA_CONSUMER_KEY:
         logger.debug("M-Pesa not configured, skipping float check")

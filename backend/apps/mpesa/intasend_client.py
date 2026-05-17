@@ -735,6 +735,67 @@ class IntaSendClient:
                 return {}
             raise
 
+    # ── Wallets · KES float balance ──────────────────────────────────
+
+    def list_wallets(self) -> list[dict]:
+        """Return all IntaSend wallets attached to this merchant account.
+
+        Endpoint: `GET /api/v1/wallets/` · returns a paginated list of
+        wallets with `wallet_id`, `currency`, `current_balance`,
+        `available_balance`, `can_disburse`, `label`.
+
+        Used by the admin float-management view + the rebalance flow's
+        "current_float_kes" lookup. Cached at the caller's level (60s
+        TTL) so we don't hammer IntaSend on every dashboard load.
+
+        Returns [] on any error · the caller decides whether to fail
+        OPEN (treat as 0 float, refuse new payouts) or fail CLOSED
+        (assume last-known-good cached value).
+        """
+        try:
+            resp = self._get("/api/v1/wallets/")
+        except IntaSendError as e:
+            logger.warning(
+                "intasend.list_wallets.error",
+                extra={"error": str(e)},
+            )
+            return []
+        out = resp.get("results") if isinstance(resp, dict) else resp
+        return out if isinstance(out, list) else []
+
+    def get_kes_float_balance(self) -> Optional[float]:
+        """Sum of `available_balance` across all KES wallets that have
+        `can_disburse=True`. This is the actual disbursable KES float ·
+        what we'd see if we initiated a B2B/B2C right now.
+
+        Returns `None` if the API call failed OR no can_disburse KES
+        wallet exists (so the caller can render "Unknown" instead of
+        a misleading 0).
+        """
+        wallets = self.list_wallets()
+        if not wallets:
+            return None
+        disbursable = [
+            w for w in wallets
+            if (w.get("currency") or "").upper() == "KES"
+            and bool(w.get("can_disburse"))
+        ]
+        if not disbursable:
+            return None
+        total = 0.0
+        for w in disbursable:
+            # Prefer `available_balance` (clears pending holds) over
+            # `current_balance` (raw running total). When IntaSend
+            # doesn't surface available_balance, fall back to current.
+            bal = w.get("available_balance")
+            if bal in (None, ""):
+                bal = w.get("current_balance") or 0
+            try:
+                total += float(bal)
+            except (TypeError, ValueError):
+                continue
+        return total
+
     # ── Settlements + transactions history ───────────────────────────
 
     def list_settlements(self, since: str = "", limit: int = 50) -> list[dict]:

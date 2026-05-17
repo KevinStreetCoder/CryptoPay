@@ -337,21 +337,56 @@ def _float_source_label() -> str:
     return f"M-Pesa via {provider}"
 
 
+FLOAT_LIVE_CACHE_KEY = "float:live_kes"
+FLOAT_LIVE_CACHE_TTL_SEC = 60  # 60s ttl · IntaSend/SasaPay can be slow under load
+
+
 def get_current_float_kes() -> Optional[Decimal]:
     """
     Get the current M-Pesa float balance.
 
     Sources (in priority order):
-    1. Redis cache (set by circuit breaker from M-Pesa callback)
-    2. SystemWallet FLOAT/KES (manual tracking)
-    3. None (unknown)
+    1. Redis cache (set by circuit breaker from M-Pesa callback) ·
+       authoritative because the callback gives us the post-debit
+       balance straight from M-Pesa
+    2. Live API · IntaSend `/api/v1/wallets/` OR SasaPay
+       `/payments/check-balance/`, depending on `PAYMENT_PROVIDER`.
+       Cached 60s in Redis to avoid hammering the provider on
+       every dashboard load.
+    3. SystemWallet FLOAT/KES (manual tracking · last resort)
+    4. None (unknown)
+
+    2026-05-17 · live-API path added. Previously the function ONLY
+    checked the callback cache + SystemWallet, so when no callback had
+    fired since the last container restart AND no manual SystemWallet
+    seed existed, the admin Float Management page showed "Unknown".
+    Now we actively probe the configured payment provider.
     """
     from apps.payments.circuit_breaker import BREAKER_LAST_FLOAT_KEY
 
+    # Layer 1 · callback cache (most recent · post-debit value)
     cached = cache.get(BREAKER_LAST_FLOAT_KEY)
     if cached is not None:
         return Decimal(str(cached))
 
+    # Layer 2 · live provider API (cached 60s)
+    live_cached = cache.get(FLOAT_LIVE_CACHE_KEY)
+    if live_cached is not None:
+        return Decimal(str(live_cached))
+
+    live_balance = _fetch_live_float_kes()
+    if live_balance is not None:
+        try:
+            cache.set(
+                FLOAT_LIVE_CACHE_KEY,
+                str(live_balance),
+                timeout=FLOAT_LIVE_CACHE_TTL_SEC,
+            )
+        except Exception:
+            pass
+        return live_balance
+
+    # Layer 3 · manual SystemWallet float tracker
     try:
         sw = SystemWallet.objects.get(wallet_type="float", currency="KES")
         if sw.balance > 0:
@@ -360,6 +395,215 @@ def get_current_float_kes() -> Optional[Decimal]:
         pass
 
     return None
+
+
+def _fetch_live_float_kes() -> Optional[Decimal]:
+    """Probe the configured M-Pesa provider's wallet API.
+
+    Routes by `PAYMENT_PROVIDER`. Falls back to trying BOTH providers
+    (IntaSend primary, SasaPay secondary) if individual API calls fail
+    · this gives the admin dashboard a reliable balance even during a
+    single-provider outage. Returns the SUM if both succeed (giving a
+    "total available float" picture for ops · the rebalance flow's
+    trigger threshold is checked against this sum so we don't pause
+    payouts while one rail still has float).
+
+    Returns None on hard failure (both providers down or unconfigured)
+    · the caller renders "Unknown" rather than a misleading 0.
+    """
+    provider = (getattr(settings, "PAYMENT_PROVIDER", "daraja") or "daraja").lower()
+
+    totals: list[Decimal] = []
+
+    # IntaSend probe · run when provider == intasend OR PAYMENT_PROVIDER
+    # is mixed/multi-rail (we treat both providers as eligible float
+    # sources for the admin combined view).
+    if provider in ("intasend", "mixed", "both") or getattr(
+        settings, "INTASEND_API_SECRET", ""
+    ):
+        try:
+            from apps.mpesa.intasend_client import IntaSendClient
+
+            bal = IntaSendClient().get_kes_float_balance()
+            if bal is not None:
+                totals.append(Decimal(str(bal)))
+        except Exception as e:
+            logger.warning(
+                "rebalance.intasend_float_probe_failed",
+                extra={"error": str(e)},
+            )
+
+    # SasaPay probe · same dual-eligible logic. Working+Utility because
+    # B2B/B2C debits Utility, C2B collects to Working, and the merchant
+    # can shuffle between them with the fund-movement endpoint · ops
+    # cares about the COMBINED disbursable surface.
+    if provider == "sasapay" or getattr(
+        settings, "SASAPAY_CLIENT_ID", ""
+    ):
+        try:
+            from apps.mpesa.sasapay_client import SasaPayClient
+
+            resp = SasaPayClient().check_balance()
+            # Response shape · `{status:true, customMessage:{...},
+            # responseData:[{AccountType:"Working|Utility|Bulk",
+            # AccountBalance:"..."}, ...]}` per SasaPay docs.
+            accounts = []
+            if isinstance(resp, dict):
+                accounts = resp.get("responseData") or resp.get("ResponseData") or []
+            for a in accounts:
+                if not isinstance(a, dict):
+                    continue
+                acc_type = (a.get("AccountType") or a.get("accountType") or "").lower()
+                # Only sum the disbursable accounts (Working + Utility).
+                # Bulk Payment is a separate B2C bulk rail with its
+                # own withdrawal mechanics; exclude to avoid double-
+                # counting once it's promoted.
+                if acc_type not in ("working", "utility"):
+                    continue
+                raw_bal = a.get("AccountBalance") or a.get("accountBalance") or 0
+                try:
+                    totals.append(Decimal(str(raw_bal)))
+                except Exception:
+                    continue
+        except Exception as e:
+            logger.warning(
+                "rebalance.sasapay_float_probe_failed",
+                extra={"error": str(e)},
+            )
+
+    if not totals:
+        return None
+    return sum(totals, Decimal("0"))
+
+
+def get_live_float_breakdown() -> dict:
+    """Return a per-provider breakdown of live KES float for the admin
+    dashboard. Each entry has:
+        {
+            "provider": "intasend" | "sasapay",
+            "balance_kes": "12345.67" | "unknown",
+            "label": "M-Pesa via IntaSend",
+            "details": {...provider-specific account breakdown...},
+        }
+
+    Cached 60s alongside the aggregate `_fetch_live_float_kes()` so the
+    admin page can render BOTH the total AND the split with a single
+    round-trip to each provider.
+
+    Returns `{"providers": [...], "total_kes": "...", "as_of": iso}` ·
+    UI can iterate over `providers` and show per-rail tiles.
+    """
+    breakdown_cache_key = "float:live_breakdown"
+    cached = cache.get(breakdown_cache_key)
+    if cached is not None:
+        return cached
+
+    out = {
+        "providers": [],
+        "total_kes": "0",
+        "as_of": timezone.now().isoformat(),
+    }
+
+    total = Decimal("0")
+    any_known = False
+
+    # IntaSend ────────────────────────────────────────────────────────
+    if getattr(settings, "INTASEND_API_SECRET", ""):
+        entry = {
+            "provider": "intasend",
+            "balance_kes": "unknown",
+            "label": "M-Pesa via IntaSend",
+            "wallets": [],
+        }
+        try:
+            from apps.mpesa.intasend_client import IntaSendClient
+
+            client = IntaSendClient()
+            wallets = client.list_wallets()
+            kes_wallets = [
+                w for w in wallets
+                if (w.get("currency") or "").upper() == "KES"
+            ]
+            running = Decimal("0")
+            for w in kes_wallets:
+                bal_raw = w.get("available_balance")
+                if bal_raw in (None, ""):
+                    bal_raw = w.get("current_balance") or 0
+                try:
+                    bal = Decimal(str(bal_raw))
+                except Exception:
+                    bal = Decimal("0")
+                entry["wallets"].append({
+                    "wallet_id": w.get("wallet_id") or "",
+                    "label": w.get("label") or "",
+                    "balance_kes": str(bal),
+                    "can_disburse": bool(w.get("can_disburse")),
+                })
+                if bool(w.get("can_disburse")):
+                    running += bal
+            if kes_wallets:
+                entry["balance_kes"] = str(running)
+                total += running
+                any_known = True
+        except Exception as e:
+            entry["error"] = str(e)[:200]
+            logger.warning(
+                "rebalance.intasend_breakdown_failed",
+                extra={"error": str(e)},
+            )
+        out["providers"].append(entry)
+
+    # SasaPay ─────────────────────────────────────────────────────────
+    if getattr(settings, "SASAPAY_CLIENT_ID", ""):
+        entry = {
+            "provider": "sasapay",
+            "balance_kes": "unknown",
+            "label": "M-Pesa via SasaPay",
+            "accounts": [],
+        }
+        try:
+            from apps.mpesa.sasapay_client import SasaPayClient
+
+            resp = SasaPayClient().check_balance()
+            accounts = []
+            if isinstance(resp, dict):
+                accounts = resp.get("responseData") or resp.get("ResponseData") or []
+            running = Decimal("0")
+            for a in accounts:
+                if not isinstance(a, dict):
+                    continue
+                acc_type = (a.get("AccountType") or a.get("accountType") or "").strip()
+                raw_bal = a.get("AccountBalance") or a.get("accountBalance") or 0
+                try:
+                    bal = Decimal(str(raw_bal))
+                except Exception:
+                    bal = Decimal("0")
+                entry["accounts"].append({
+                    "type": acc_type,
+                    "balance_kes": str(bal),
+                })
+                if acc_type.lower() in ("working", "utility"):
+                    running += bal
+            if accounts:
+                entry["balance_kes"] = str(running)
+                total += running
+                any_known = True
+        except Exception as e:
+            entry["error"] = str(e)[:200]
+            logger.warning(
+                "rebalance.sasapay_breakdown_failed",
+                extra={"error": str(e)},
+            )
+        out["providers"].append(entry)
+
+    out["total_kes"] = str(total) if any_known else "unknown"
+
+    try:
+        cache.set(breakdown_cache_key, out, timeout=FLOAT_LIVE_CACHE_TTL_SEC)
+    except Exception:
+        pass
+
+    return out
 
 
 def get_available_crypto_for_sell(currency: str = "USDT") -> Decimal:
@@ -932,6 +1176,14 @@ def get_rebalance_status() -> dict:
         # Was hardcoded to "Safaricom Daraja" even when PAYMENT_PROVIDER
         # had been flipped to sasapay or intasend.
         "float_source": _float_source_label(),
+        # 2026-05-17 · per-provider breakdown so the admin Float
+        # Management page can show "IntaSend: KES X · SasaPay: KES Y"
+        # tiles instead of a single Unknown when one provider's API is
+        # transient-failing. UI uses `providers[].balance_kes` for the
+        # split, falls back to top-level `current_float_kes` for the
+        # summary. Cached 60s alongside the aggregate so a single
+        # dashboard load = 1 round-trip per provider.
+        "float_breakdown": get_live_float_breakdown(),
         "float_last_synced": float_wallet_updated,
         "execution_mode": getattr(settings, "REBALANCE_EXECUTION_MODE", "manual"),
         # Hot wallet

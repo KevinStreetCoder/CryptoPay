@@ -833,6 +833,68 @@ export default function AdminRebalanceScreen() {
                   {data.current_float_kes === "unknown" ? "Unknown" : formatKES(floatBal)}
                 </Animated.Text>
 
+                {/* 2026-05-17 · per-provider breakdown chips (IntaSend + SasaPay)
+                    rendered when both rails are configured. Lets ops see at a
+                    glance "IntaSend KES 35,200 · SasaPay KES 12,400" instead of
+                    a single aggregated number that hides which rail is short. */}
+                {(data.float_breakdown?.providers || []).length > 0 && (
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      flexWrap: "wrap",
+                      gap: 8,
+                      marginTop: 12,
+                    }}
+                  >
+                    {data.float_breakdown.providers.map((p: any) => {
+                      const isUnknown = p.balance_kes === "unknown" || p.error;
+                      const bal = isUnknown ? 0 : parseKES(p.balance_kes);
+                      return (
+                        <View
+                          key={p.provider}
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 6,
+                            paddingVertical: 6,
+                            paddingHorizontal: 10,
+                            backgroundColor: tc.dark.elevated,
+                            borderRadius: 10,
+                            borderWidth: 1,
+                            borderColor: tc.glass.border,
+                          }}
+                        >
+                          <Ionicons
+                            name={p.error ? "alert-circle" : "checkmark-circle"}
+                            size={12}
+                            color={p.error ? colors.error : colors.success}
+                          />
+                          <Text
+                            style={{
+                              color: tc.textSecondary,
+                              fontSize: 11,
+                              fontFamily: "DMSans_600SemiBold",
+                              textTransform: "uppercase",
+                              letterSpacing: 0.5,
+                            }}
+                          >
+                            {p.provider}
+                          </Text>
+                          <Text
+                            style={{
+                              color: tc.textPrimary,
+                              fontSize: 12,
+                              fontFamily: "DMSans_500Medium",
+                            }}
+                          >
+                            {isUnknown ? "—" : formatKES(bal)}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
+
                 {/* Progress bar */}
                 <View
                   style={{
