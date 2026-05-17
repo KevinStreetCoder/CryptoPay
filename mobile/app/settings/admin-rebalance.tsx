@@ -95,6 +95,21 @@ interface HDWalletInfo {
 }
 
 /** Full response from /wallets/admin/rebalance/status/ */
+interface FloatProviderEntry {
+  provider: string;
+  balance_kes: string;
+  label: string;
+  wallets?: Array<{ wallet_id: string; label: string; balance_kes: string; can_disburse: boolean }>;
+  accounts?: Array<{ type: string; balance_kes: string }>;
+  error?: string;
+}
+
+interface FloatBreakdown {
+  providers: FloatProviderEntry[];
+  total_kes: string;
+  as_of: string;
+}
+
 interface FloatStatus {
   current_float_kes: string;
   target_float_kes: string;
@@ -104,6 +119,7 @@ interface FloatStatus {
   daily_outflow_kes: string;
   days_of_coverage: number | null;
   float_source: string;
+  float_breakdown?: FloatBreakdown;
   float_last_synced: string | null;
   execution_mode: string;
   available_crypto: Record<string, CryptoBalance>;
@@ -846,7 +862,7 @@ export default function AdminRebalanceScreen() {
                       marginTop: 12,
                     }}
                   >
-                    {data.float_breakdown.providers.map((p: any) => {
+                    {(data.float_breakdown?.providers || []).map((p: any) => {
                       const isUnknown = p.balance_kes === "unknown" || p.error;
                       const bal = isUnknown ? 0 : parseKES(p.balance_kes);
                       return (

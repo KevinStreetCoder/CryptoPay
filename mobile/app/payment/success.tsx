@@ -160,10 +160,22 @@ function DetailRow({
 /* ═══════════════════════════════════════════════════════════════════════════════
    Main Screen
    ═══════════════════════════════════════════════════════════════════════════════ */
+// 2026-05-17 · Expo Router param values are typed `string | string[]`
+// because URL queries can be multi-value (`?recipient=A&recipient=B`).
+// Programmatic router.replace shouldn't produce arrays, but defensive
+// coercion eliminates the entire class of "X.startsWith is not a
+// function" crashes when an array sneaks in. Returns "" for arrays so
+// downstream string methods just no-op rather than crash.
+const asString = (v: string | string[] | undefined): string => {
+  if (typeof v === "string") return v;
+  if (Array.isArray(v) && v.length > 0 && typeof v[0] === "string") return v[0];
+  return "";
+};
+
 export default function PaymentSuccessScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const params = useLocalSearchParams<{
+  const rawParams = useLocalSearchParams<{
     amount_kes: string;
     crypto_amount: string;
     crypto_currency: string;
@@ -179,6 +191,26 @@ export default function PaymentSuccessScreen() {
     // copy on the "Sent To" / "Paid To" row.
     payment_type?: string;
   }>();
+  // 2026-05-17 · normalised params · always strings, never arrays /
+  // undefined. The PRE-FIX render did `params.recipient?.startsWith(...)`
+  // which crashed when an array sneaked in (because Array has no
+  // .startsWith · `.startsWith` → undefined → call → TypeError). User
+  // report 2026-05-17: send-to-cpay transfer committed (backend 201)
+  // but app crashed before /payment/success could mount · no status
+  // polls observed in nginx logs between success POST and the email
+  // deep-link click 42s later.
+  const params = {
+    amount_kes: asString(rawParams.amount_kes),
+    crypto_amount: asString(rawParams.crypto_amount),
+    crypto_currency: asString(rawParams.crypto_currency),
+    recipient: asString(rawParams.recipient),
+    transaction_id: asString(rawParams.transaction_id),
+    status: asString(rawParams.status),
+    error_message: asString(rawParams.error_message),
+    tx_status: asString(rawParams.tx_status),
+    merchant_name: asString(rawParams.merchant_name),
+    payment_type: asString(rawParams.payment_type),
+  };
 
   const { isDark } = useThemeMode();
   const tc = getThemeColors(isDark);
@@ -292,10 +324,19 @@ export default function PaymentSuccessScreen() {
 
   const toast = useToast();
   const amountKES = parseFloat(params.amount_kes || "0");
+  // 2026-05-17 · cpay = ledger-only internal transfer · explicit
+  // payment_type so the screen renders the "Sent to Cpay user" copy
+  // instead of mis-classifying as a BUY (crypto received) because the
+  // recipient field starts with +254.
+  const isCpay = params.payment_type === "cpay";
   // Detect transaction type from params
-  const isSwap = params.recipient?.includes("→") || false;
+  const isSwap = !isCpay && params.recipient.includes("→");
   // Detect if this is a deposit/buy flow (crypto received) vs payment flow (crypto spent)
-  const isBuyFlow = !isSwap && (!params.recipient || params.recipient?.startsWith("+254") || params.recipient?.startsWith("0"));
+  const isBuyFlow = !isCpay && !isSwap && (
+    !params.recipient
+    || params.recipient.startsWith("+254")
+    || params.recipient.startsWith("0")
+  );
 
   const handleDownloadReceipt = async () => {
     const txId = params.transaction_id;

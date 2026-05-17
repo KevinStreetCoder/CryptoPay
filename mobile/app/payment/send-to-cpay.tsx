@@ -345,7 +345,17 @@ export default function SendToCpayScreen() {
       });
 
       if (Platform.OS !== "web") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        // 2026-05-17 · wrap Haptics in try · returns a Promise that can
+        // reject on Android devices without haptic motor support. Was
+        // throwing an UnhandledPromiseRejection that, combined with the
+        // RN runtime's crash-on-unhandled-rejection setting, killed the
+        // app between PIN-success and the success-screen mount. The
+        // transfer COMMITTED on the backend (201) but the user saw the
+        // app freeze / blank-screen with no success page · then had to
+        // open the email "View in App" link to find their transaction.
+        try {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+        } catch {}
       }
 
       // Clear persisted form so next visit starts fresh.
@@ -354,20 +364,61 @@ export default function SendToCpayScreen() {
         await clearPersistedFields(Object.values(PERSIST_KEYS));
       } catch {}
 
-      // Reuse existing /payment/success screen.
-      router.replace({
-        pathname: "/payment/success",
-        params: {
-          amount_kes: amount,
-          crypto_amount: amount,
-          crypto_currency: selectedCrypto,
-          recipient: data.recipient.phone_masked || data.recipient.username || "",
-          merchant_name: data.merchant_name || "",
-          transaction_id: data.id,
-          tx_status: data.status,
-          payment_type: "cpay",
-        },
-      });
+      // 2026-05-17 · defensive param normalisation. Every value MUST be
+      // a string (or undefined) · Expo Router stringifies via JSON and
+      // mixed types in the params object can throw during URL build on
+      // some web engines + native bridges. Pulling values via small
+      // helpers ALSO guards against the backend changing shape mid-
+      // release · a missing field renders as "" rather than crashing
+      // the success page on first paint.
+      const recipientObj = (data && (data.recipient as any)) || {};
+      const recipientLabel =
+        (typeof recipientObj.phone_masked === "string" && recipientObj.phone_masked) ||
+        (typeof recipientObj.display_name === "string" && recipientObj.display_name) ||
+        (typeof recipientObj.full_name === "string" && recipientObj.full_name) ||
+        (typeof recipientObj.username === "string" && recipientObj.username) ||
+        "";
+      const successParams: Record<string, string> = {
+        amount_kes: String(amount || ""),
+        crypto_amount: String(amount || ""),
+        crypto_currency: String(selectedCrypto || ""),
+        recipient: String(recipientLabel || ""),
+        merchant_name: String((data && data.merchant_name) || ""),
+        transaction_id: String((data && data.id) || ""),
+        tx_status: String((data && data.status) || "completed"),
+        payment_type: "cpay",
+      };
+
+      // 2026-05-17 · wrap router.replace · if the navigation itself
+      // throws (router-state corruption, expo-router runtime mismatch),
+      // we'd otherwise leave the user staring at the PIN screen with
+      // their transfer already settled. Fallback: jump straight to
+      // the canonical /payment/detail by tx id.
+      try {
+        router.replace({
+          pathname: "/payment/success",
+          params: successParams,
+        });
+      } catch (navErr) {
+        try {
+          if (successParams.transaction_id) {
+            router.replace({
+              pathname: "/payment/detail",
+              params: { id: successParams.transaction_id },
+            });
+          } else {
+            router.replace("/(tabs)" as any);
+          }
+        } catch {
+          // Last resort · toast + leave the user on the PIN screen
+          // (which is now "form" step after our setStep below).
+          toast.success(
+            "Sent!",
+            "Transfer complete. Open the transaction in History to see details.",
+          );
+          setStep("form");
+        }
+      }
     } catch (err: unknown) {
       setPinError(true);
       if (Platform.OS !== "web") {
