@@ -9,6 +9,7 @@ Polygon PoS: ~2s block time, 128 confirmations recommended (~4-5 minutes).
 
 import logging
 from decimal import Decimal
+from typing import Optional
 
 import requests
 from celery import shared_task
@@ -38,31 +39,87 @@ POLYGON_ERC20_CONTRACTS = {
 TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
 
 
+def _get_polygon_rpc_urls() -> list[str]:
+    """Get the ordered list of Polygon RPC URLs to try.
+
+    Primary is `POLYGON_RPC_URL` (env-configured · Alchemy/Infura).
+    Fallbacks are well-known free public endpoints in case the
+    primary is rate-limiting or having timeouts. Trying each in
+    order means a single endpoint outage doesn't block all of
+    Cpay's Polygon deposit-listener traffic.
+
+    2026-05-17 · added because `polygon-bor-rpc.publicnode.com` was
+    timing out every 15s read in production, spamming ERROR logs
+    every minute. Fallback chain keeps the listener working through
+    transient endpoint issues.
+    """
+    primary = getattr(settings, "POLYGON_RPC_URL", "") or ""
+    chain = [
+        primary if primary else None,
+        # Public fallbacks · ordered by historical reliability.
+        # `polygon-rpc.com` is the official Polygon Foundation RPC.
+        "https://polygon-rpc.com",
+        "https://polygon-bor-rpc.publicnode.com",
+        "https://polygon.drpc.org",
+        # Ankr free endpoint · last-resort if everything else fails
+        "https://rpc.ankr.com/polygon",
+    ]
+    # Dedupe while preserving order + drop None/empty
+    seen: set[str] = set()
+    out: list[str] = []
+    for u in chain:
+        if not u or u in seen:
+            continue
+        seen.add(u)
+        out.append(u)
+    return out
+
+
 def _get_polygon_rpc_url() -> str:
-    """Get Polygon RPC URL. Supports Alchemy, Infura, or any JSON-RPC endpoint."""
-    url = getattr(settings, "POLYGON_RPC_URL", "")
-    if url:
-        return url
-    # Fallback to public endpoint (rate-limited, not for production)
-    return "https://polygon-rpc.com"
+    """Backwards-compatible single-URL accessor · returns the primary."""
+    return _get_polygon_rpc_urls()[0]
 
 
 def _polygon_rpc_call(method: str, params: list) -> dict:
-    """Make a JSON-RPC call to the Polygon node."""
-    url = _get_polygon_rpc_url()
+    """Make a JSON-RPC call to the Polygon node with endpoint failover.
+
+    Iterates through `_get_polygon_rpc_urls()` · returns on the first
+    successful response. Raises only when ALL endpoints fail (network
+    error AND RPC error counted as failures). Each endpoint gets a
+    15s timeout; the chain has 4-5 endpoints so the worst-case is
+    ~60-75s before the caller sees a hard failure · still within the
+    Celery task timeout but slow enough that the dashboard would feel
+    sluggish. In practice the primary almost always succeeds.
+    """
     payload = {
         "jsonrpc": "2.0",
         "id": 1,
         "method": method,
         "params": params,
     }
-    response = requests.post(url, json=payload, timeout=15)
-    result = response.json()
-    if "error" in result:
-        raise Exception(f"Polygon RPC error: {result['error']}")
-    if response.status_code != 200:
-        response.raise_for_status()
-    return result.get("result")
+    last_err: Optional[Exception] = None
+    for url in _get_polygon_rpc_urls():
+        try:
+            response = requests.post(url, json=payload, timeout=15)
+            if response.status_code != 200:
+                last_err = Exception(
+                    f"Polygon RPC HTTP {response.status_code} via {url[:50]}..."
+                )
+                continue
+            result = response.json()
+            if "error" in result:
+                last_err = Exception(
+                    f"Polygon RPC error via {url[:50]}...: {result['error']}"
+                )
+                continue
+            return result.get("result")
+        except Exception as e:
+            last_err = e
+            continue
+    # All endpoints failed · raise with the last error so the caller
+    # can log + decide (this matches the prior single-endpoint
+    # behavior · listener tasks just log and skip the tick).
+    raise last_err or Exception("All Polygon RPC endpoints unreachable")
 
 
 def _get_current_block() -> int:

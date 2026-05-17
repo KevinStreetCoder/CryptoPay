@@ -54,9 +54,20 @@ class RateService:
     def refresh_all_crypto_rates():
         """Batch-fetch all crypto/USD rates in a single API call.
         This replaces individual per-currency calls and saves API quota.
-        CoinGecko free tier: 10K calls/month, 30/min."""
-        # Check if we recently refreshed (debounce)
-        if cache.get("rate:batch:lock"):
+        CoinGecko free tier: 10K calls/month, 30/min.
+
+        2026-05-17 · atomic SETNX debounce lock · the previous
+        `cache.get/cache.set` pattern was racy · multiple concurrent
+        callers could all read lock=None and all proceed to hit
+        CoinGecko, causing 429 storms (observed 4× same-ms 429s in
+        prod logs). Use `cache.add` (SETNX) to atomically claim the
+        slot · only ONE worker per 55s window calls the upstream.
+        """
+        # Atomically try to grab the refresh slot. cache.add returns
+        # True only if the key didn't exist (SETNX semantics). If
+        # False, another worker is currently fetching · we return
+        # immediately rather than piling on.
+        if not cache.add("rate:batch:lock", "1", timeout=55):
             return
 
         all_ids = ",".join(COINGECKO_IDS.values())
