@@ -75,14 +75,7 @@ git add -A
 git commit -qm "build" 2>&1 | tail -3 || true
 
 echo "Installing dependencies..."
-# 2026-05-17 · use `npm install --legacy-peer-deps` instead of `npm ci`.
-# `npm ci` is strict about lockfile-vs-package.json match · after
-# `npx expo install expo-updates` the lockfile carried peer-dep
-# entries that `npm ci` rejected. `npm install --legacy-peer-deps`
-# is more permissive and produces an identical node_modules tree
-# for our SDK-pinned dependency set. EAS's own build pipeline also
-# runs `npm install`, not `npm ci`.
-npm install --legacy-peer-deps --no-audit --no-fund 2>&1 | tail -5
+npm ci --no-audit --no-fund 2>&1 | tail -5
 
 # ── Pre-build keystore sanity ───────────────────────────────────────
 # 2026-05-17 · Play Console rejected our vc 22 upload because we'd
